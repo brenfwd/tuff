@@ -12,7 +12,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-
 use tuff_vanilla_data::registry::DataComponentType;
 use tuff_vanilla_data::{BlockState, Item};
 

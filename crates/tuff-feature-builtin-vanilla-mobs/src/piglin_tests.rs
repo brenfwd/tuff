@@ -87,7 +87,7 @@ fn arming_a_zombified_piglin_keeps_a_handed_item() {
     crate::tests::with_context(|core, cx| {
         let fungus = ItemStack::mint(Item::WarpedFungusOnAStick, 1, MintReason::Test);
         core.equipment
-            .set(EquipmentSlot::Mainhand, Some(fungus.dup_unchecked()));
+            .set(EquipmentSlot::Mainhand, Some(fungus.test_copy()));
         arm_zombified(core, cx);
         assert_eq!(core.equipment.get(EquipmentSlot::Mainhand), Some(&fungus));
         core.equipment.set(EquipmentSlot::Mainhand, None);

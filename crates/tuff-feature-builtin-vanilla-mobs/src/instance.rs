@@ -380,12 +380,7 @@ impl<S: Species> Mob<S> {
                         equipment: damage
                             .weapon
                             .iter()
-                            .map(|w| {
-                                (
-                                    tuff_vanilla_data::item::EquipmentSlot::Mainhand,
-                                    w.clone(),
-                                )
-                            })
+                            .map(|w| (tuff_vanilla_data::item::EquipmentSlot::Mainhand, w.clone()))
                             .collect(),
                         ..kind_only(kind)
                     })

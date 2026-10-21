@@ -5,7 +5,6 @@ use tuff_core::world::advancement::SessionAdvancements;
 use tuff_feature_builtin_example::{
     DIAMOND_FROM_DIRT, ExampleFeature, GOLD_REPORT_TRIGGER, TICK_COUNTER_ID, gold_placed,
 };
-use tuff_item::item::DupUnchecked;
 use tuff_test_support::*;
 
 async fn world_with_a_viewer(
@@ -202,7 +201,7 @@ async fn picking_up_dirt_teaches_the_dirt_recipe_and_the_book_fills_the_grid() {
         slots[1..5]
             .iter()
             .flatten()
-            .map(DupUnchecked::dup_unchecked)
+            .map(tuff_item::item::ItemStack::test_copy)
             .collect::<Vec<_>>(),
         vec![ItemStack::mint(Item::Dirt, 1, MintReason::Test)],
         "the book moved one dirt into the grid"

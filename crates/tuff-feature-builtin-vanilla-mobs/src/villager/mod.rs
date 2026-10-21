@@ -265,7 +265,9 @@ impl Villager {
             .retain_mut(|(answer, offer)| match poll(answer) {
                 None => true,
                 Some(Some(map)) => {
-                    offer.sell.edit_components(|components| map.apply(components));
+                    offer
+                        .sell
+                        .edit_components(|components| map.apply(components));
                     offers.push(offer.clone());
                     false
                 }

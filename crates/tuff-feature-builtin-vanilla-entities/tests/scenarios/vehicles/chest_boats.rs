@@ -64,13 +64,13 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
 
     let contents = sneak_open(&region, &player, &mut events, boat).await;
     assert_eq!(contents.len(), 27);
-    assert_eq!(contents[4], Some(diamond.dup_unchecked()));
+    assert_eq!(contents[4], Some(diamond.test_copy()));
     sneak_open(&region, &other, &mut other_events, boat).await;
 
     let take = vec![
         EntitySlotChange {
             slot: 4,
-            expected: Some(diamond.dup_unchecked()),
+            expected: Some(diamond.test_copy()),
             new: None,
         },
         EntitySlotChange {
@@ -97,7 +97,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
         PlayerEvent::EntitySlots { entity, slots, .. } if entity == boat => Some(
             slots
                 .into_iter()
-                .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
                 .collect::<Vec<_>>(),
         ),
         _ => None,

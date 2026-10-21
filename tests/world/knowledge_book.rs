@@ -29,7 +29,9 @@ async fn read(player: &mut PlayerSession, stack: ItemStack) -> Option<ItemStack>
             sequence: 1,
         })
         .await;
-    player.inventory_mut().slots()[Inventory::hotbar_slot(0)].dup_unchecked()
+    player.inventory_mut().slots()[Inventory::hotbar_slot(0)]
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
 }
 
 #[tuff_core::watchdog]

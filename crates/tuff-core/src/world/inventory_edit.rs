@@ -6,8 +6,8 @@
 
 use crate::world::inventory::{Inventory, SLOTS};
 use tuff_item::item::BurnReason;
-use tuff_item::item::{ItemSnapshot, ItemStack};
 use tuff_item::item::MintReason;
+use tuff_item::item::{ItemSnapshot, ItemStack};
 
 /// Slots an edit looks at: armor, main, hotbar and off hand (never the
 /// crafting grid or the cursor).

@@ -88,7 +88,8 @@ impl RegionActor {
                     else {
                         continue;
                     };
-                    let Some(stack) = container.get_mut(slot).filter(|s| waiting(s.as_ref())) else {
+                    let Some(stack) = container.get_mut(slot).filter(|s| waiting(s.as_ref()))
+                    else {
                         continue;
                     };
                     finish_map(stack, found);

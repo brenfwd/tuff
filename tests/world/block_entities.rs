@@ -712,7 +712,7 @@ async fn brewing_stands_brew_with_blaze_powder_and_show_their_bottles() {
             Some(
                 slots
                     .into_iter()
-                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
                     .collect::<Vec<_>>(),
             )
         }

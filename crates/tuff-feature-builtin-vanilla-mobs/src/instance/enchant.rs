@@ -2,8 +2,8 @@
 //! tick and `location_changed` when it changes block or gear.
 
 use std::collections::BTreeSet;
-use tuff_item::item::ItemSnapshot;
 use tuff_item::item::DupUnchecked;
+use tuff_item::item::ItemSnapshot;
 
 use tuff_core::world::entity::TickContext;
 use tuff_core::world::predicate::EntityFacts;

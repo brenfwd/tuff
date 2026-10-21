@@ -385,7 +385,7 @@ fn creative_slot_decoding_matches_the_game() {
         let mut r = bytes_reader(&unhex(case.creative));
         assert_eq!(
             r.read_creative_slot().unwrap(),
-            CreativeSlot::Stack(case.stack.dup_unchecked()),
+            CreativeSlot::Stack(case.stack.test_copy()),
             "{}",
             case.creative
         );
@@ -428,7 +428,7 @@ fn slot_components_round_trip_through_the_creative_decoder() {
     let mut r = reader(write_creative_slot(&stack));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(stack.dup_unchecked())
+        CreativeSlot::Stack(stack.test_copy())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -489,7 +489,7 @@ fn bundle_contents_round_trip_on_the_wire_nested() {
     let mut r = reader(write_creative_slot(&outer));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(outer.dup_unchecked())
+        CreativeSlot::Stack(outer.test_copy())
     );
     assert_eq!(
         ItemStack::mint_from_nbt(&outer.to_nbt(), MintReason::Test).unwrap(),
@@ -508,7 +508,7 @@ fn ominous_bottle_amplifiers_round_trip_on_the_wire() {
     let mut r = reader(write_creative_slot(&bottle));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(bottle.dup_unchecked())
+        CreativeSlot::Stack(bottle.test_copy())
     );
     assert_eq!(r.remaining(), 0);
     let saved = bottle.components.to_nbt();
@@ -574,7 +574,7 @@ fn display_components_round_trip_on_the_wire() {
     let mut r = reader(write_creative_slot(&stack));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(stack.dup_unchecked())
+        CreativeSlot::Stack(stack.test_copy())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -582,7 +582,7 @@ fn display_components_round_trip_on_the_wire() {
     w.write_item_template(stack.view());
     assert_eq!(
         reader(w).read_item_template(0).unwrap(),
-        Some(stack.dup_unchecked())
+        Some(stack.test_copy())
     );
 
     let mut short = ItemStack::mint(Item::Paper, 1, MintReason::Test);
@@ -599,7 +599,7 @@ fn display_components_round_trip_on_the_wire() {
         Some("minecraft:ruby")
     );
 
-    let mut over = stack.dup_unchecked();
+    let mut over = stack.test_copy();
     over.resize(17, MintReason::Test, BurnReason::Test);
     let mut r = reader(write_creative_slot(&over));
     assert_eq!(r.read_creative_slot().unwrap(), CreativeSlot::Invalid);
@@ -651,7 +651,7 @@ fn charged_crossbows_round_trip_their_projectiles_as_templates() {
     let mut r = reader(write_creative_slot(&crossbow));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(crossbow.dup_unchecked())
+        CreativeSlot::Stack(crossbow.test_copy())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -697,7 +697,7 @@ fn pot_decorations_are_sent_as_optional_templates_per_side() {
     let mut r = reader(write_creative_slot(&pot));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(pot.dup_unchecked())
+        CreativeSlot::Stack(pot.test_copy())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -805,7 +805,7 @@ fn container_components_round_trip_and_bound_their_nesting() {
     let mut r = reader(write_creative_slot(&shulker));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(shulker.dup_unchecked())
+        CreativeSlot::Stack(shulker.test_copy())
     );
     assert_eq!(r.remaining(), 0);
 

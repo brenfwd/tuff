@@ -245,7 +245,12 @@ fn loaded(player: &PlayerSession) -> Vec<ItemStack> {
     player
         .inventory()
         .hand(false)
-        .and_then(|s| s.components.charged_projectiles.dup_unchecked())
+        .and_then(|s| {
+            s.components
+                .charged_projectiles
+                .as_ref()
+                .map(|p| p.iter().map(ItemStack::test_copy).collect())
+        })
         .unwrap_or_default()
 }
 

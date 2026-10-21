@@ -90,7 +90,11 @@ impl ItemSnapshot {
     }
 
     /// A picture of `count` of `item` with `components`, never a real item.
-    pub fn describe(item: tuff_vanilla_data::Item, count: u8, components: super::Components) -> Self {
+    pub fn describe(
+        item: tuff_vanilla_data::Item,
+        count: u8,
+        components: super::Components,
+    ) -> Self {
         Self(Arc::new(ItemStack {
             item,
             count,

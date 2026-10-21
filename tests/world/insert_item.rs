@@ -164,7 +164,7 @@ async fn inserting_into_a_chest_stores_and_a_full_chest_refuses() {
     set(&region, chest, "minecraft:chest", None).await;
     let stone = ItemStack::mint(Item::Stone, 10, MintReason::Test);
     assert_eq!(
-        insert(&region, chest, None, stone.dup_unchecked()).await,
+        insert(&region, chest, None, stone.test_copy()).await,
         Insert::Stored
     );
     assert_eq!(slots(&region, chest).await, 1);
@@ -176,7 +176,7 @@ async fn inserting_into_a_chest_stores_and_a_full_chest_refuses() {
     )
     .await;
     assert_eq!(
-        insert(&region, chest, None, stone.dup_unchecked()).await,
+        insert(&region, chest, None, stone.test_copy()).await,
         Insert::Refused(stone)
     );
     world.shutdown().await;
@@ -224,7 +224,7 @@ async fn a_furnace_refuses_ingredients_from_below_but_takes_them_from_above() {
     set(&region, furnace, "minecraft:furnace", None).await;
     let ore = ItemStack::mint(Item::IronOre, 1, MintReason::Test);
     assert!(matches!(
-        insert(&region, furnace, Some(Facing::Down), ore.dup_unchecked()).await,
+        insert(&region, furnace, Some(Facing::Down), ore.test_copy()).await,
         Insert::Refused(_)
     ));
     assert_eq!(
@@ -258,7 +258,7 @@ async fn a_port_block_takes_one_item_and_no_target_returns_the_stack() {
     let air = BlockPos::new(X + 5, Y, Z);
     let stick = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     assert_eq!(
-        insert(&region, air, None, stick.dup_unchecked()).await,
+        insert(&region, air, None, stick.test_copy()).await,
         Insert::Nothing(stick)
     );
     world.shutdown().await;

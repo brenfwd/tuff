@@ -293,7 +293,11 @@ impl PlayerSession {
                     .zip(inputs.iter())
                     .any(|(&slot, seen)| menu.container[slot].as_ref() != seen.as_deref());
                 if changed {
-                    **inputs = slots.map(|slot| menu.container[slot].as_ref().map(tuff_item::item::ItemSnapshot::of));
+                    **inputs = slots.map(|slot| {
+                        menu.container[slot]
+                            .as_ref()
+                            .map(tuff_item::item::ItemSnapshot::of)
+                    });
                     *stale = inputs.iter().all(Option::is_some);
                     if let Some(old) = menu.container[cartography::RESULT].take() {
                         old.burn(tuff_item::item::BurnReason::Template);
@@ -848,8 +852,11 @@ impl PlayerSession {
         };
         let state_id = menu.next_state_id();
         let window_id = menu.window_id;
-        let mut slots: Vec<Option<tuff_item::item::ItemView<'_>>> =
-            menu.container.iter().map(|slot| slot.as_ref().map(ItemStack::view)).collect();
+        let mut slots: Vec<Option<tuff_item::item::ItemView<'_>>> = menu
+            .container
+            .iter()
+            .map(|slot| slot.as_ref().map(ItemStack::view))
+            .collect();
         for slot in 0..menu.kind.player_section() {
             let index = menu
                 .kind

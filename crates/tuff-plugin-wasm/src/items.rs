@@ -125,7 +125,9 @@ fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdi
 
 fn craft(session: &mut PlayerSession, window: i32, slot: i16) -> Verdict {
     let result = match session.menu_kind() {
-        None if window == 0 && slot == 0 => session.inventory.slots()[0].as_ref().map(ItemSnapshot::of),
+        None if window == 0 && slot == 0 => {
+            session.inventory.slots()[0].as_ref().map(ItemSnapshot::of)
+        }
         Some(kind)
             if session.window_id() == Some(window)
                 && kind.result_slot().is_some_and(|r| r as i16 == slot) =>

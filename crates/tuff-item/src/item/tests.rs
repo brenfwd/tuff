@@ -19,7 +19,7 @@ fn stacks_without_components_stay_small_and_unallocated() {
     assert_eq!(size_of::<Components>(), size_of::<usize>());
     let stone = ItemStack::mint(Item::Stone, 64, MintReason::Test);
     assert!(!stone.components.is_allocated());
-    assert!(!stone.dup_unchecked().components.is_allocated());
+    assert!(!stone.test_copy().components.is_allocated());
     assert!(!Components::from_nbt(&Compound::new()).is_allocated());
     assert!(!Components::from(ComponentPatch::default()).is_allocated());
     assert!(
@@ -311,7 +311,7 @@ fn gear_components_are_typed_and_round_trip() {
     let saved = stack.to_nbt();
     assert_eq!(
         ItemStack::mint_from_nbt(&saved, MintReason::Test),
-        Some(stack.dup_unchecked())
+        Some(stack.test_copy())
     );
     assert_eq!(stack.weapon(), Some(samples::weapon()));
     assert_eq!(stack.attribute_modifiers().len(), 3);
@@ -434,7 +434,7 @@ fn hurt_damages_and_breaks_at_max_damage() {
 fn repair_with_experience_spends_two_durability_per_point_capped_by_damage() {
     let stack = pickaxe(10);
     assert!(!stack.wants_mending(), "not enchanted yet");
-    let mut stack = enchanted(stack.dup_unchecked(), MENDING, 1);
+    let mut stack = enchanted(stack.test_copy(), MENDING, 1);
     assert!(stack.wants_mending());
     assert_eq!(
         stack.repair_with_experience(3),
@@ -470,7 +470,7 @@ fn unbreaking_skips_points_at_the_vanilla_rate() {
         let mut rng = StdRng::seed_from_u64(7);
         let taken: u32 = (0..trials)
             .map(|_| {
-                let mut probe = stack.dup_unchecked();
+                let mut probe = stack.test_copy();
                 probe.set_damage(0);
                 u32::from(probe.hurt(1, &mut rng) == Hurt::Damaged)
             })
@@ -579,9 +579,9 @@ fn dropped_points_normal_approximation_matches_binomial_mean_and_variance() {
 #[test]
 fn stacks_merge_only_with_equal_components() {
     let plain = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
-    assert!(plain.stacks_with(&plain.dup_unchecked()));
+    assert!(plain.stacks_with(&plain.test_copy()));
     assert!(!plain.stacks_with(&pickaxe(3)));
-    assert!(!plain.stacks_with(&enchanted(plain.dup_unchecked(), UNBREAKING, 1)));
+    assert!(!plain.stacks_with(&enchanted(plain.test_copy(), UNBREAKING, 1)));
     assert!(pickaxe(3).stacks_with(&pickaxe(3)));
     let mut sized = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
     assert_eq!(sized.max_stack_size(), 64);
@@ -744,7 +744,7 @@ fn death_protection_comes_from_the_component_not_the_item() {
     let totem = ItemStack::mint(Item::TotemOfUndying, 1, MintReason::Test);
     assert_eq!(totem.death_protection().map(|e| e.len()), Some(4));
 
-    let mut removed = totem.dup_unchecked();
+    let mut removed = totem.test_copy();
     removed
         .components
         .removed

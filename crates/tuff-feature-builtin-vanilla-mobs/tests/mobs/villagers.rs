@@ -208,7 +208,6 @@ async fn babies_and_jobless_villagers_do_not_trade() {
 
 mod screen {
     //! The merchant screen on a real session, trading with a real villager.
-    use tuff_item::item::DupUnchecked;
 
     use super::session_with_outbound;
     use super::*;
@@ -292,7 +291,7 @@ mod screen {
             .menu_container()
             .unwrap()
             .iter()
-            .map(DupUnchecked::dup_unchecked)
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
             .collect::<Vec<_>>();
         assert_eq!(
             slots[merchant::PAYMENT_A],
@@ -323,7 +322,7 @@ mod screen {
             .menu_container()
             .unwrap()
             .iter()
-            .map(DupUnchecked::dup_unchecked)
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
             .collect::<Vec<_>>();
         assert_eq!(
             slots[merchant::PAYMENT_A],
@@ -357,7 +356,7 @@ mod screen {
             .menu_container()
             .unwrap()
             .iter()
-            .map(DupUnchecked::dup_unchecked)
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
             .collect::<Vec<_>>();
         assert_eq!(slots[merchant::PAYMENT_A], None, "all the wheat is spent");
         assert_eq!(slots[merchant::RESULT], None);
@@ -448,7 +447,7 @@ mod screen {
             .menu_container()
             .unwrap()
             .iter()
-            .map(DupUnchecked::dup_unchecked)
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
             .collect::<Vec<_>>();
         assert_eq!(
             slots[merchant::PAYMENT_A],

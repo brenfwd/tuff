@@ -735,7 +735,7 @@ fn a_copper_golem_takes_the_whole_stack_and_holds_only_what_the_chest_gives() {
         MintReason::Test
     )));
     let items: &'static [Option<ItemStack>] =
-        Box::leak(vec![Some(pick.dup_unchecked())].into_boxed_slice());
+        Box::leak(vec![Some(pick.test_copy())].into_boxed_slice());
     run_with_chest(Block::Air, |goal, core, cx| {
         cx.container = Box::leak(Box::new(move |_| {
             Some(tuff_item::item::SlotsCow::Borrowed(items))
@@ -750,13 +750,13 @@ fn a_copper_golem_takes_the_whole_stack_and_holds_only_what_the_chest_gives() {
             .effects
             .iter()
             .filter_map(|e| match e {
-                Effect::CopperGolemTake { stack, .. } => Some(stack.dup_unchecked()),
+                Effect::CopperGolemTake { stack, .. } => Some(stack.test_copy()),
                 _ => None,
             })
             .collect();
-        assert_eq!(taken, vec![pick.dup_unchecked()], "components ride along");
+        assert_eq!(taken, vec![pick.test_copy()], "components ride along");
         let mut golem = CopperGolem::default();
-        golem.took_item(core, pick.dup_unchecked());
+        golem.took_item(core, pick.test_copy());
         assert_eq!(core.equipment.get(EquipmentSlot::Mainhand), Some(&pick));
     });
 }

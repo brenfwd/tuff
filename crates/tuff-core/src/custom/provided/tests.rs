@@ -120,7 +120,7 @@ fn recipes_name_custom_items_and_advancements_join_the_tree() {
     let ruby = merged.custom.item("mine:ruby").unwrap().stack(1);
     let mut slots = (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     for slot in [0, 1, 3, 4] {
-        slots[slot] = Some(ruby.dup_unchecked());
+        slots[slot] = Some(ruby.test_copy());
     }
     let (name, recipe) = merged.recipes.find(&grid(slots)).unwrap();
     assert_eq!(&**name, "mine:ruby_block");
@@ -141,7 +141,7 @@ fn recipes_name_custom_items_and_advancements_join_the_tree() {
     let gem = merged.custom.item("core:gem").unwrap().stack(1);
     let plain = ItemStack::mint(Item::OakPlanks, 1, MintReason::Test);
     let mut slots = (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>();
-    slots[4] = Some(plain.dup_unchecked());
+    slots[4] = Some(plain.test_copy());
     slots[8] = Some(gem);
     let (name, _) = merged.recipes.find(&grid(slots)).unwrap();
     assert_eq!(&**name, "mine:ruby");

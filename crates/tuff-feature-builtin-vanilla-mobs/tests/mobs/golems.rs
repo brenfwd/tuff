@@ -4,7 +4,6 @@
 use super::*;
 use crate::world::entity::EntityAttack;
 use crate::world::messages::HandEffect;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::EntityType;
 
 async fn entity_nbt(region: &RegionHandle, id: i32) -> Compound {
@@ -37,7 +36,7 @@ async fn seed_chest(
     expect(events, container_menu).await;
     let changes = slots
         .iter()
-        .flat_map(|(slot, stack)| set_slot(pos, *slot, None, Some(stack.dup_unchecked())))
+        .flat_map(|(slot, stack)| set_slot(pos, *slot, None, Some(stack.test_copy())))
         .collect();
     region
         .request(RegionRequest::ContainerTransaction {

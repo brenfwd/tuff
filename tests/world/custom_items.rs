@@ -4,7 +4,6 @@
 
 use super::*;
 use std::sync::Mutex;
-use tuff_item::item::DupUnchecked;
 
 use crate::world::inventory::Inventory;
 
@@ -360,11 +359,9 @@ async fn creative_clients_get_private_data_back() {
         .get_compound_mut("minecraft:custom_data")
         .unwrap()
         .insert("secret", 42);
-    player
-        .inventory_mut()
-        .set_slot(36, Some(held.dup_unchecked()));
+    player.inventory_mut().set_slot(36, Some(held.test_copy()));
     let client_view = |stack: &ItemStack| {
-        let mut view = stack.dup_unchecked();
+        let mut view = stack.test_copy();
         for component in stack.components.network_added() {
             if let tuff_item::item::NetworkComponent::ClientData(data) = component {
                 view.components
@@ -386,7 +383,7 @@ async fn creative_clients_get_private_data_back() {
     player
         .handle_packet(Serverbound::SetCreativeModeSlot {
             slot: 40,
-            stack: CreativeSlot::Stack(seen.dup_unchecked()),
+            stack: CreativeSlot::Stack(seen.test_copy()),
         })
         .await;
     assert_eq!(player.inventory().slots()[40].as_ref(), Some(&held));
@@ -399,7 +396,10 @@ async fn creative_clients_get_private_data_back() {
             stack: CreativeSlot::Stack(client_view(&stack(&world, CHARM, 1))),
         })
         .await;
-    let fresh = other.inventory().slots()[41].dup_unchecked().unwrap();
+    let fresh = other.inventory().slots()[41]
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
+        .unwrap();
     assert_eq!(
         fresh,
         stack(&world, CHARM, 1),
@@ -470,7 +470,7 @@ async fn item_arguments_name_custom_items() {
         .slots()
         .iter()
         .flatten()
-        .map(DupUnchecked::dup_unchecked)
+        .map(tuff_item::item::ItemStack::test_copy)
         .collect();
     assert_eq!(given, [stack(&world, CHARM, 2)]);
     world.shutdown().await;

@@ -306,7 +306,11 @@ mod tests {
         assert_eq!(records[1].amount, 5);
         assert_eq!(
             stack_of(records[1].data.as_ref()),
-            Some(tuff_item::item::ItemSnapshot::describe(Item::Dirt, 1, Default::default()))
+            Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Dirt,
+                1,
+                Default::default()
+            ))
         );
     }
 

@@ -673,7 +673,11 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             Some(result)
         }
         Recipe::CraftingDecoratedPot(pot) => {
-            let side = |x, y| input.get(x, y).map(|stack| ItemStack::mint_like(stack, 1, MintReason::Crafting));
+            let side = |x, y| {
+                input
+                    .get(x, y)
+                    .map(|stack| ItemStack::mint_like(stack, 1, MintReason::Crafting))
+            };
             let mut result = result_stack(&pot.result);
             result.components.other.insert(
                 "minecraft:pot_decorations",

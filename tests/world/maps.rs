@@ -499,7 +499,6 @@ mod tables {
     use tuff_core::world::messages::{MenuOpen, MenuSource};
     use tuff_core::world::session::PlayerSession;
     use tuff_feature_builtin_vanilla_maps::crafted::post_processing;
-    use tuff_item::item::DupUnchecked;
 
     async fn open_table(world: &TestWorld, session: &mut PlayerSession) -> i32 {
         let region = world.region(ChunkPos::new(0, 0).region()).await;
@@ -541,7 +540,9 @@ mod tables {
     }
 
     fn result(session: &PlayerSession) -> Option<ItemStack> {
-        session.menu_container().unwrap()[cartography::RESULT].dup_unchecked()
+        session.menu_container().unwrap()[cartography::RESULT]
+            .as_ref()
+            .map(tuff_item::item::ItemStack::test_copy)
     }
 
     #[tuff_core::watchdog]
@@ -579,7 +580,7 @@ mod tables {
         );
         assert!(session.inventory().carried().is_some());
         session.run_session_tick_hooks(SessionTick::Late).await;
-        let carried = session.inventory().carried().unwrap().dup_unchecked();
+        let carried = session.inventory().carried().unwrap().test_copy();
         assert_eq!(post_processing(&carried), None);
         let new = carried.components.map_id.unwrap();
         assert_ne!(new, id);
@@ -611,7 +612,7 @@ mod tables {
         .await;
         session.handle_packet(take(window)).await;
         session.run_session_tick_hooks(SessionTick::Late).await;
-        let locked = session.inventory().carried().unwrap().dup_unchecked();
+        let locked = session.inventory().carried().unwrap().test_copy();
         let locked_id = locked.components.map_id.unwrap();
         assert_ne!(locked_id, id);
         assert!(service(&world).data(locked_id).await.unwrap().locked);
@@ -621,7 +622,7 @@ mod tables {
         session.inventory_mut().set_carried(None);
         put(
             &mut session,
-            locked.dup_unchecked(),
+            locked.test_copy(),
             ItemStack::mint(Item::GlassPane, 1, MintReason::Test),
         )
         .await;
@@ -661,7 +662,10 @@ mod tables {
         );
         session.inventory_mut().set_slot(12, Some(crafted));
         session.run_session_tick_hooks(SessionTick::Late).await;
-        let made = session.inventory().slots()[12].dup_unchecked().unwrap();
+        let made = session.inventory().slots()[12]
+            .as_ref()
+            .map(tuff_item::item::ItemStack::test_copy)
+            .unwrap();
         assert_eq!(post_processing(&made), None);
         let data = service(&world)
             .data(made.components.map_id.unwrap())

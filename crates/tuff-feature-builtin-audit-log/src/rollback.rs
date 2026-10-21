@@ -375,7 +375,9 @@ fn undo_containers(
                 undo.entity.is_none() && world.container_items(pos).is_none() && is_pot(world, pos);
             let working = |slots: &mut dyn Iterator<Item = Option<&ItemStack>>| {
                 slots
-                    .map(|slot| slot.map(|s| ItemStack::mint_like(s, s.count(), MintReason::Command)))
+                    .map(|slot| {
+                        slot.map(|s| ItemStack::mint_like(s, s.count(), MintReason::Command))
+                    })
                     .collect::<Vec<_>>()
             };
             let items = match undo.entity {

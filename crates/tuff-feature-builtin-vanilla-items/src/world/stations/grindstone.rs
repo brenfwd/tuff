@@ -4,8 +4,8 @@ use super::anvil::{crafting_enchantments, increased_repair_cost, set_enchantment
 use rand::Rng;
 use tuff_core::world::menu::holds_enchantments;
 use tuff_item::enchantment;
-use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::item::enchanting::Choice;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::Item;
 
 const REPAIR_BONUS_PERCENT: u32 = 5;
@@ -91,9 +91,13 @@ pub fn compute(input: Option<&ItemStack>, additional: Option<&ItemStack>) -> Opt
     }
     match (input, additional) {
         (Some(input), Some(additional)) => merged(input, additional),
-        (Some(only), None) | (None, Some(only)) => {
-            holds_enchantments(only).then(|| without_non_curses(ItemStack::mint_like(only, only.count(), MintReason::Crafting)))
-        }
+        (Some(only), None) | (None, Some(only)) => holds_enchantments(only).then(|| {
+            without_non_curses(ItemStack::mint_like(
+                only,
+                only.count(),
+                MintReason::Crafting,
+            ))
+        }),
         (None, None) => None,
     }
 }

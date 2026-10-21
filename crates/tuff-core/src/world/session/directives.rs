@@ -590,7 +590,12 @@ impl PlayerSession {
 
     /// `/item` on this player: how many of `ids` the player has, and how
     /// many of them changed.
-    pub fn set_game_slots(&mut self, ids: &[i32], stack: &ItemSnapshot, mode: SlotFill) -> (i32, i32) {
+    pub fn set_game_slots(
+        &mut self,
+        ids: &[i32],
+        stack: &ItemSnapshot,
+        mode: SlotFill,
+    ) -> (i32, i32) {
         let (mut selected, mut changed) = (0, 0);
         for id in ids {
             let Some(slot) = self.game_slot(*id) else {
@@ -776,7 +781,11 @@ impl PlayerSession {
             let take = count.min(budget);
             budget -= take;
             removed += take;
-            ItemStack::burn_from(self.inventory.slot_mut(slot), take as u8, BurnReason::Command);
+            ItemStack::burn_from(
+                self.inventory.slot_mut(slot),
+                take as u8,
+                BurnReason::Command,
+            );
             if budget == 0 {
                 break;
             }
@@ -791,7 +800,11 @@ impl PlayerSession {
             } else {
                 let take = count.min(budget);
                 removed += take;
-                ItemStack::burn_from(self.inventory.carried_mut(), take as u8, BurnReason::Command);
+                ItemStack::burn_from(
+                    self.inventory.carried_mut(),
+                    take as u8,
+                    BurnReason::Command,
+                );
             }
         }
         if !counting {

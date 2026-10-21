@@ -89,9 +89,9 @@ async fn granted_plugin_content_joins_the_world_at_start() {
     let ruby = ruby.stack(1);
     let recipes = world.shared.recipes();
     let input = shapeless(vec![
-        ruby.dup_unchecked(),
+        ruby.test_copy(),
         ItemStack::mint(Item::Redstone, 1, MintReason::Test),
-        ruby.dup_unchecked(),
+        ruby.test_copy(),
     ]);
     let (name, recipe) = recipes.find(&input).expect("the recipe crafts");
     assert_eq!(&**name, "gems:ruby_block");
