@@ -4,7 +4,6 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use tuff_item::item::DupUnchecked;
 
 use tuff_core::protocol::play::{self, PlayerActionStatus, Serverbound};
 use tuff_core::world::commands::text;
@@ -404,7 +403,8 @@ impl PacketInterceptor for Clicks {
             }
             let held = session.inventory.slots()
                 [Inventory::hotbar_slot(session.inventory.selected())]
-            .dup_unchecked();
+            .as_ref()
+            .map(tuff_item::item::ItemSnapshot::of);
             let Some(held) = held else {
                 return Verdict::Allow;
             };

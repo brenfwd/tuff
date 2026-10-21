@@ -630,7 +630,7 @@ impl PlayerSession {
         let packet = play::ContainerSetContent {
             window_id: 0,
             state_id,
-            slots: self.inventory.slots(),
+            slots: self.inventory.slots().into(),
             carried: self.inventory.carried().map(ItemStack::view),
         };
         let bytes = framed(&packet);
@@ -846,13 +846,14 @@ impl PlayerSession {
         };
         let state_id = menu.next_state_id();
         let window_id = menu.window_id;
-        let mut slots = menu.container.dup_unchecked();
+        let mut slots: Vec<Option<tuff_item::item::ItemView<'_>>> =
+            menu.container.iter().map(|slot| slot.as_ref().map(ItemStack::view)).collect();
         for slot in 0..menu.kind.player_section() {
             let index = menu
                 .kind
                 .inventory_slot(menu.container.len() + slot)
                 .expect("player section slot");
-            slots.push(self.inventory.slots()[index].dup_unchecked());
+            slots.push(self.inventory.slots()[index].as_ref().map(ItemStack::view));
         }
         if menu.kind == MenuKind::Crafter {
             let preview = slots.remove(menu::crafter::PREVIEW);
@@ -861,7 +862,7 @@ impl PlayerSession {
         let packet = play::ContainerSetContent {
             window_id,
             state_id,
-            slots: &slots,
+            slots: slots.as_slice().into(),
             carried: self.inventory.carried().map(ItemStack::view),
         };
         let bytes = framed(&packet);

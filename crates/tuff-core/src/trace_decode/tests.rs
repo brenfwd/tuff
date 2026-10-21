@@ -548,7 +548,7 @@ fn container_packets_round_trip() {
         &play(&ContainerSetContent {
             window_id: 1,
             state_id: 2,
-            slots: &[Some(stack.dup_unchecked()), None],
+            slots: [Some(stack.view()), None].as_slice().into(),
             carried: None,
         }),
         &["slots: [minecraft:stone x3, empty], carried: empty"],

@@ -3,7 +3,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use tuff_item::item::DupUnchecked;
+use tuff_item::item::ItemSnapshot;
 
 use tuff_core::protocol::play::{PlayerActionStatus, Serverbound};
 use tuff_core::world::inventory::Inventory;
@@ -93,7 +93,8 @@ impl PacketInterceptor for Actions {
 
 fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdict {
     let main = session.inventory.slots()[Inventory::hotbar_slot(session.inventory.selected())]
-        .dup_unchecked();
+        .as_ref()
+        .map(ItemSnapshot::of);
     let cancel = match status {
         PlayerActionStatus::DropItem | PlayerActionStatus::DropAllItems => {
             let Some(stack) = main else {
@@ -107,12 +108,8 @@ fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdi
             act(session, ItemActionKind::Drop, stack.view(), count)
         }
         PlayerActionStatus::SwapItemWithOffhand => {
-            let Some(stack) = main.or_else(|| {
-                session
-                    .inventory
-                    .hand(true)
-                    .map(DupUnchecked::dup_unchecked)
-            }) else {
+            let Some(stack) = main.or_else(|| session.inventory.hand(true).map(ItemSnapshot::of))
+            else {
                 return Verdict::Allow;
             };
             act(session, ItemActionKind::Swap, stack.view(), stack.count())
@@ -128,7 +125,7 @@ fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdi
 
 fn craft(session: &mut PlayerSession, window: i32, slot: i16) -> Verdict {
     let result = match session.menu_kind() {
-        None if window == 0 && slot == 0 => session.inventory.slots()[0].dup_unchecked(),
+        None if window == 0 && slot == 0 => session.inventory.slots()[0].as_ref().map(ItemSnapshot::of),
         Some(kind)
             if session.window_id() == Some(window)
                 && kind.result_slot().is_some_and(|r| r as i16 == slot) =>
@@ -136,7 +133,8 @@ fn craft(session: &mut PlayerSession, window: i32, slot: i16) -> Verdict {
             session.menu_container().and_then(|container| {
                 container
                     .get(slot as usize)
-                    .and_then(DupUnchecked::dup_unchecked)
+                    .and_then(Option::as_ref)
+                    .map(ItemSnapshot::of)
             })
         }
         _ => return Verdict::Allow,
