@@ -83,16 +83,20 @@ impl PlayerSession {
                 self.items_taken_hooks(item, count, count.min(held) - remaining);
             }
             InventoryOp::Clear => {
-                self.inventory.clear();
-                for slot in 5..crate::world::inventory::SLOTS {
-                    self.inventory.set_slot(slot, None);
+                for stack in self.inventory.clear() {
+                    stack.burn(tuff_item::item::BurnReason::Plugin);
                 }
                 self.send_inventory();
             }
             InventoryOp::SetSlot { slot, stack } => {
                 if (5..crate::world::inventory::SLOTS).contains(&usize::from(slot)) {
-                    self.inventory.set_slot(usize::from(slot), stack);
+                    let old = std::mem::replace(self.inventory.slot_mut(usize::from(slot)), stack);
+                    if let Some(old) = old {
+                        old.burn(tuff_item::item::BurnReason::Plugin);
+                    }
                     self.send_inventory();
+                } else if let Some(stack) = stack {
+                    stack.burn(tuff_item::item::BurnReason::Plugin);
                 }
             }
             InventoryOp::KeepInventory(keep) => match keep {
