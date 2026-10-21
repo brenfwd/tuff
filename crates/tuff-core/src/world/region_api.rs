@@ -561,7 +561,7 @@ pub trait RegionWorld: GrowthLevel {
             .handle
             .send(crate::world::messages::PlayerEvent::DispenserEquip {
                 slot: equippable.slot,
-                stack: stack.dup_count_unchecked(1),
+                stack: ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
             });
         Some(DispenseOutcome::Dispensed)
     }

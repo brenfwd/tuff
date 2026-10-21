@@ -166,7 +166,7 @@ pub struct DestroyTick {
     pub event: i32,
     pub data: i32,
     pub ticks: u64,
-    pub tool: Option<ItemStack>,
+    pub tool: Option<tuff_item::item::ItemSnapshot>,
     pub miner: crate::world::player::Miner,
     pub eye: [f64; 3],
 }
@@ -193,7 +193,7 @@ pub enum BreakMode {
     },
 }
 
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Place {
     pub player: PlayerHandle,
     pub eye: [f64; 3],

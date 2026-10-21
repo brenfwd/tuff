@@ -703,7 +703,11 @@ async fn breaking_a_bee_nest_reports_the_bees_inside() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: nest,
-            tool: Some(ItemStack::mint(Item::Shears, 1, MintReason::Test)),
+            tool: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Shears,
+                1,
+                Default::default(),
+            )),
             mode: BreakMode::Finish,
             sequence: 1,
         })

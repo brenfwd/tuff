@@ -4,7 +4,6 @@ use super::*;
 use crate::protocol::play::{self, GameMode, PlayerActionStatus};
 use rand::Rng;
 use tokio::sync::oneshot;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::{ItemStack, LodestoneTracker, MintReason, StackCooldown};
 use tuff_storage::admin::PermissionLevel;
 use tuff_vanilla_data::damage_type;
@@ -176,7 +175,10 @@ impl PlayerSession {
         match self.region_of(position) {
             Some(handle) if self.may_destroy(position) => {
                 let player = self.conn.handle.clone();
-                let tool = self.inventory.hand(false).map(DupUnchecked::dup_unchecked);
+                let tool = self
+                    .inventory
+                    .hand(false)
+                    .map(tuff_item::item::ItemSnapshot::of);
                 let request = if self.mode.abilities.may_build {
                     RegionRequest::Break {
                         player,
@@ -723,12 +725,7 @@ impl PlayerSession {
             if !gone {
                 continue;
             }
-            let Some(mut stack) = self
-                .inventory
-                .slots()
-                .get(slot)
-                .and_then(DupUnchecked::dup_unchecked)
-            else {
+            let Some(stack) = self.inventory.slot_mut(slot).as_mut() else {
                 continue;
             };
             stack.components.other.insert(
@@ -739,7 +736,6 @@ impl PlayerSession {
                 }
                 .to_nbt(),
             );
-            self.inventory.set_slot(slot, Some(stack));
         }
     }
 
@@ -995,15 +991,18 @@ impl PlayerSession {
         ];
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.3, eye[2]];
-        let kept = stack.dup_unchecked();
-        let item = self.thrown_item(stack, position, velocity);
+        let mut item = self.thrown_item(stack, position, velocity);
         let region = ChunkPos::of_position(position).region();
-        let spawned = match self.region(region).await {
-            Some(handle) => handle.request(RegionRequest::SpawnEntity(item)).await,
-            None => false,
+        let back = match self.region(region).await {
+            Some(handle) => match handle.try_request(RegionRequest::SpawnEntity(item)).await {
+                Ok(()) => Vec::new(),
+                Err(RegionRequest::SpawnEntity(mut item)) => item.take_items(),
+                Err(_) => Vec::new(),
+            },
+            None => item.take_items(),
         };
-        if !spawned {
-            self.keep_unspawned(kept);
+        for stack in back {
+            self.keep_unspawned(stack);
         }
     }
 
@@ -1048,22 +1047,24 @@ impl PlayerSession {
         pickup_delay: u32,
     ) {
         let region = ChunkPos::of_position(position).region();
-        let kept = stack.dup_unchecked();
-        let spawned = match self.region(region).await {
+        let back = match self.region(region).await {
             Some(handle) => {
-                handle
-                    .request(RegionRequest::SpawnItem {
-                        stack,
-                        position,
-                        velocity,
-                        pickup_delay,
-                    })
-                    .await
+                let request = RegionRequest::SpawnItem {
+                    stack,
+                    position,
+                    velocity,
+                    pickup_delay,
+                };
+                match handle.try_request(request).await {
+                    Ok(()) => None,
+                    Err(RegionRequest::SpawnItem { stack, .. }) => Some(stack),
+                    Err(_) => None,
+                }
             }
-            None => false,
+            None => Some(stack),
         };
-        if !spawned {
-            self.keep_unspawned(kept);
+        if let Some(stack) = back {
+            self.keep_unspawned(stack);
         }
     }
 
@@ -1150,7 +1151,10 @@ impl PlayerSession {
                 event,
                 data,
                 ticks: destroying.ticks(self.tick),
-                tool: self.inventory.hand(false).map(DupUnchecked::dup_unchecked),
+                tool: self
+                    .inventory
+                    .hand(false)
+                    .map(tuff_item::item::ItemSnapshot::of),
                 miner: self.miner(),
                 eye: self.eye(),
             })))

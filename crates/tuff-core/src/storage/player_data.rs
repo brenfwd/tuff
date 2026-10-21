@@ -3,8 +3,8 @@
 //! advancements-adjacent state, abilities and the like
 //! survive untouched.
 
+use std::borrow::Borrow;
 use std::io;
-use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::version::DATA_VERSION;
 
@@ -166,9 +166,10 @@ impl WardenTracker {
 /// Where the player file keeps the entities on the left and right shoulder.
 pub const SHOULDER_KEYS: [&str; 2] = ["ShoulderEntityLeft", "ShoulderEntityRight"];
 
-/// The fields of a player file this server simulates.
+/// The fields of a player file this server simulates. A loaded state owns
+/// its stacks; a state being saved borrows them (`PlayerState<&ItemStack>`).
 #[derive(Debug, PartialEq)]
-pub struct PlayerState {
+pub struct PlayerState<S = ItemStack> {
     pub dimension: String,
     pub position: [f64; 3],
     pub yaw: f32,
@@ -192,9 +193,9 @@ pub struct PlayerState {
     pub food: FoodSave,
     pub selected: usize,
     /// `(window slot, stack)` in the survival inventory window's numbering.
-    pub slots: Vec<(usize, ItemStack)>,
+    pub slots: Vec<(usize, S)>,
     /// `(slot, stack)` of the player's ender chest, slots `0..27`.
-    pub ender_items: Vec<(usize, ItemStack)>,
+    pub ender_items: Vec<(usize, S)>,
     pub game_mode: GameMode,
     pub previous_game_mode: Option<GameMode>,
     pub flying: bool,
@@ -480,7 +481,7 @@ impl PlayerRecord {
         (Self { raw }, state)
     }
 
-    pub fn encode(&self, uuid: u128, state: &PlayerState) -> Compound {
+    pub fn encode<S: Borrow<ItemStack>>(&self, uuid: u128, state: &PlayerState<S>) -> Compound {
         let mut root = self.raw.clone();
         let (inventory, equipment) = slot_lists(&root, &state.slots);
         let ender_items: Vec<Compound> = state
@@ -488,7 +489,7 @@ impl PlayerRecord {
             .iter()
             .map(|(slot, stack)| {
                 let mut nbt = Compound::new().with("Slot", *slot as i8);
-                for (key, value) in stack.to_nbt() {
+                for (key, value) in stack.borrow().to_nbt() {
                     nbt.insert(key, value);
                 }
                 nbt
@@ -650,7 +651,10 @@ fn stored_slots(raw: &Compound) -> Vec<(usize, ItemStack)> {
 
 /// The `Inventory` list and `equipment` compound storing `slots`, keeping
 /// equipment entries of `root` this server does not model.
-fn slot_lists(root: &Compound, slots: &[(usize, ItemStack)]) -> (Vec<Compound>, Compound) {
+fn slot_lists<S: Borrow<ItemStack>>(
+    root: &Compound,
+    slots: &[(usize, S)],
+) -> (Vec<Compound>, Compound) {
     let mut inventory = Vec::new();
     let mut equipment = root.get_compound("equipment").cloned().unwrap_or_default();
     for (key, _) in EQUIPMENT {
@@ -659,12 +663,12 @@ fn slot_lists(root: &Compound, slots: &[(usize, ItemStack)]) -> (Vec<Compound>, 
     for (window, stack) in slots {
         if let Some(slot) = list_slot(*window) {
             let mut nbt = Compound::new().with("Slot", slot as u8 as i8);
-            for (key, value) in stack.to_nbt() {
+            for (key, value) in stack.borrow().to_nbt() {
                 nbt.insert(key, value);
             }
             inventory.push(nbt);
         } else if let Some((key, _)) = EQUIPMENT.iter().find(|(_, w)| *w == *window) {
-            equipment.insert(*key, stack.to_nbt());
+            equipment.insert(*key, stack.borrow().to_nbt());
         }
     }
     (inventory, equipment)
@@ -693,7 +697,7 @@ pub fn edit_inventory(
         .slots()
         .iter()
         .enumerate()
-        .filter_map(|(slot, stack)| stack.dup_unchecked().map(|s| (slot, s)))
+        .filter_map(|(slot, stack)| stack.as_ref().map(|s| (slot, s)))
         .collect();
     let (list, equipment) = slot_lists(raw, &slots);
     raw.insert("Inventory", Tag::from(list));
@@ -1017,7 +1021,7 @@ mod tests {
                 .slots
                 .iter()
                 .find(|(w, _)| *w == window)
-                .map(|(_, s)| s.dup_unchecked())
+                .map(|(_, s)| s.test_copy())
         };
         assert_eq!(
             slot(&state, 36),

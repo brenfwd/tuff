@@ -3,7 +3,6 @@
 //! `block_entities` list with the game's schema; block entities of other
 //! kinds pass through as raw NBT.
 
-use tuff_item::item::DupUnchecked;
 pub mod analog;
 pub mod editors;
 pub mod raw;
@@ -892,18 +891,14 @@ pub fn scatter(
     drops
 }
 
-/// The items to drop when a container block breaks: its contents, or for
-/// shulker boxes nothing (they keep their contents in the item).
-pub fn spilled(entity: &BlockEntity) -> Vec<ItemStack> {
+/// Takes out the items to drop when a container block breaks: its
+/// contents, or for shulker boxes nothing (they keep their contents in
+/// the item).
+pub fn spilled(entity: &mut BlockEntity) -> Vec<ItemStack> {
     if entity.kind == ContainerKind::ShulkerBox {
         return Vec::new();
     }
-    entity
-        .items
-        .iter()
-        .flatten()
-        .map(DupUnchecked::dup_unchecked)
-        .collect()
+    entity.items.iter_mut().filter_map(Option::take).collect()
 }
 
 /// Splits a chunk's stored `block_entities` into the modeled ones and the

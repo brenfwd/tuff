@@ -288,7 +288,7 @@ impl Profile {
 
 /// A mount's chest, behind the saddle and body slots its screen shows,
 /// which are the mob's own equipment (never a second copy of it).
-#[derive(tuff_item::item::DupClone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct MountInventory {
     chest: Vec<Option<ItemStack>>,
     worn: [Option<Item>; 2],
@@ -372,7 +372,7 @@ fn equip_sound(slot: EquipmentSlot, stack: &ItemStack) -> Option<SoundEvent> {
 }
 
 /// The state every abstract horse shares.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct Equine {
     pub temper: i32,
     pub bred: bool,

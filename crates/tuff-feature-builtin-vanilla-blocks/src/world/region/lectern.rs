@@ -142,7 +142,7 @@ impl RegionHooks for Lecterns {
             let item = place
                 .held
                 .filter(|item| item_tags::LECTERN_BOOKS.contains(item))?;
-            let book = ItemStack::mint(item, 1, MintReason::CrossActor)
+            let book = ItemStack::mint(item, 1, MintReason::Transform)
                 .with_components(place.components.clone());
             place_book(world, place.target, state, book);
             world.play_sound(SoundEvent::ItemBookPut, place.target, 1.0, 1.0, None);

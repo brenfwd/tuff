@@ -60,12 +60,15 @@ pub fn slot_range(name: &str) -> Option<Vec<i32>> {
 
 /// The stacks an entity holds by slot id: its equipment, and from its
 /// saved form its inventory, ender chest or displayed item.
-fn slot_items(entity: &EntityFacts) -> Vec<(i32, ItemStack)> {
-    let mut items: Vec<(i32, ItemStack)> = entity
+fn slot_items(entity: &EntityFacts) -> Vec<(i32, tuff_item::item::ItemSnapshot)> {
+    let mut items: Vec<(i32, tuff_item::item::ItemSnapshot)> = entity
         .equipment
         .iter()
-        .map(|(slot, stack)| (equipment_slot_id(*slot), stack.dup_unchecked()))
+        .map(|(slot, stack)| (equipment_slot_id(*slot), stack.clone()))
         .collect();
+    let template = |nbt: &Compound| {
+        ItemStack::mint_from_nbt(nbt, MintReason::Template).map(ItemStack::into_template)
+    };
     let Some(saved) = &entity.nbt else {
         return items;
     };
@@ -84,21 +87,14 @@ fn slot_items(entity: &EntityFacts) -> Vec<(i32, ItemStack)> {
             (true, _) => continue,
             (false, _) => 300 + index as i32,
         };
-        items
-            .extend(ItemStack::mint_from_nbt(stack, MintReason::Template).map(|item| (slot, item)));
+        items.extend(template(stack).map(|item| (slot, item)));
     }
     for stack in stacks("EnderItems") {
         if let Some(slot) = stack.get_byte("Slot") {
-            items.extend(
-                ItemStack::mint_from_nbt(stack, MintReason::Template)
-                    .map(|item| (200 + i32::from(slot), item)),
-            );
+            items.extend(template(stack).map(|item| (200 + i32::from(slot), item)));
         }
     }
-    if let Some(item) = saved
-        .get_compound("Item")
-        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
-    {
+    if let Some(item) = saved.get_compound("Item").and_then(template) {
         items.push((0, item));
     }
     items

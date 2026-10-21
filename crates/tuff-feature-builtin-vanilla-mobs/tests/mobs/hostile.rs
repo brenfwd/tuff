@@ -1936,7 +1936,7 @@ async fn infested_blocks_release_silverfish_unless_mined_with_silk_touch() {
             .request(RegionRequest::Break {
                 player: player.clone(),
                 pos,
-                tool,
+                tool: tool.as_ref().map(tuff_item::item::ItemSnapshot::of),
                 mode: BreakMode::Finish,
                 sequence,
             })

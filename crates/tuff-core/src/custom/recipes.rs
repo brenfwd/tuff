@@ -346,7 +346,6 @@ mod tests {
     use crate::custom::Definitions;
     use crate::world::crafting::RecipeSet;
     use std::sync::Arc;
-    use tuff_item::item::DupUnchecked;
     use tuff_item::item::MintReason;
 
     fn grid(cells: &[Option<ItemStack>], width: usize) -> CraftingInput<'_> {
@@ -366,7 +365,7 @@ mod tests {
             "ex:crown",
             &["GRG", "G G"],
             &[('G', Item::GoldIngot.into()), ('R', (&ruby).into())],
-            crown.dup_unchecked(),
+            crown.test_copy(),
         )
         .unwrap();
         let gold = || Some(ItemStack::mint(Item::GoldIngot, 1, MintReason::Test));
@@ -383,10 +382,16 @@ mod tests {
         ];
         assert!(recipe.matches(&grid(&cells, 3)));
         assert_eq!(recipe.assemble(&grid(&cells, 3)), Some(crown));
-        let mut plain = cells.dup_unchecked();
+        let mut plain = cells
+            .iter()
+            .map(|s| s.as_ref().map(ItemStack::test_copy))
+            .collect::<Vec<_>>();
         plain[1] = Some(ItemStack::mint(Item::Emerald, 1, MintReason::Test));
         assert!(!recipe.matches(&grid(&plain, 3)));
-        let mut custom_gold = cells.dup_unchecked();
+        let mut custom_gold = cells
+            .iter()
+            .map(|s| s.as_ref().map(ItemStack::test_copy))
+            .collect::<Vec<_>>();
         custom_gold[0] = Some(CustomItemDef::new("ex:fool", Item::GoldIngot).stack(1));
         assert!(!recipe.matches(&grid(&custom_gold, 3)));
         assert!(recipe.placement().is_none());

@@ -238,7 +238,7 @@ impl RegionActor {
             }
             return Some(nbt);
         }
-        let entity = column.meta.block_entities.remove(&pos)?;
+        let mut entity = column.meta.block_entities.remove(&pos)?;
         column.blocks_dirty = true;
         self.menus.ticking.remove(&pos);
         self.menus.hopper_ticks.remove(&pos);
@@ -254,9 +254,9 @@ impl RegionActor {
                 .orphans
                 .entry(key)
                 .or_default()
-                .push((pos, entity.items.dup_unchecked()));
+                .push((pos, entity.items.iter_mut().map(Option::take).collect()));
         } else if spill.is_some() {
-            let stacks = block_entity::spilled(&entity);
+            let stacks = block_entity::spilled(&mut entity);
             let drops = block_entity::scatter(pos, stacks, &mut self.rng);
             for (stack, position, velocity) in drops {
                 self.spawn_item_at(stack, position, velocity, items::BLOCK_DROP_PICKUP_DELAY);

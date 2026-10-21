@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::DupUnchecked;
 
 /// What viewers, the coordinator, scoreboards and the client were last
 /// told about this player, so only changes go out.
@@ -32,7 +31,8 @@ pub struct Published {
     pub last_score: i32,
     pub last_stuck_arrows: i32,
     /// The equipment as others last saw it, by [`EQUIPMENT_SLOTS`].
-    pub last_equipment: [Option<ItemStack>; 6],
+    pub last_equipment: [Option<tuff_item::item::ItemSnapshot>; 6],
+    pub last_feet: Option<tuff_item::item::ItemSnapshot>,
     /// The synced attribute values last sent to this player, by
     /// [`attributes::synced_attributes`] order.
     pub last_synced_attributes: Vec<f64>,
@@ -74,6 +74,7 @@ impl Default for Published {
             last_score: 0,
             last_stuck_arrows: 0,
             last_equipment: Default::default(),
+            last_feet: None,
             last_synced_attributes: Vec::new(),
             last_blast_state: (0.0, false),
             last_looks: crate::world::messages::PlayerLooks::default(),
@@ -447,15 +448,24 @@ impl PlayerSession {
             self.send_raw(data.clone());
             update.push(data);
         }
-        let equipment = self.equipment_snapshot();
         let mut blast_state = self.published.last_blast_state;
         blast_state.1 = self.mode.abilities.flying && self.mode.abilities.instabuild;
-        if self.published.last_equipment != equipment || force {
+        let equipment_changed = EQUIPMENT_SLOTS
+            .into_iter()
+            .zip(&self.published.last_equipment)
+            .any(|(slot, last)| self.inventory.equipped(slot) != last.as_deref());
+        if equipment_changed || force {
+            let equipment = self.equipment_snapshot();
             blast_state.0 = self.attribute(Attribute::ExplosionKnockbackResistance);
             let items: Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> = EQUIPMENT_SLOTS
                 .into_iter()
                 .zip(&equipment)
-                .map(|(slot, stack)| (equipment_slot_id(slot), stack.as_ref().map(ItemStack::view)))
+                .map(|(slot, stack)| {
+                    (
+                        equipment_slot_id(slot),
+                        stack.as_ref().map(tuff_item::item::ItemSnapshot::view),
+                    )
+                })
                 .collect();
             update.push(framed(&play::SetEquipment {
                 entity_id: self.id,
@@ -517,10 +527,11 @@ impl PlayerSession {
         self.published.last_looks = looks;
         self.published.seq += 1;
         let grounded = self.pose.on_ground && !self.is_dead() && self.ride.riding.is_none();
-        let feet = self
-            .inventory
-            .equipped(EquipmentSlot::Feet)
-            .map(DupUnchecked::dup_unchecked);
+        let feet_now = self.inventory.equipped(EquipmentSlot::Feet);
+        if feet_now != self.published.last_feet.as_deref() {
+            self.published.last_feet = feet_now.map(tuff_item::item::ItemSnapshot::of);
+        }
+        let feet = self.published.last_feet.clone();
         let moves = relative.then(|| {
             movement
                 .into_iter()
