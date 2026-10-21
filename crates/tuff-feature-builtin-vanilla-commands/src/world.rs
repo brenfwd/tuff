@@ -3,7 +3,6 @@
 //! chunks, split per region and summed.
 
 use std::collections::BTreeMap;
-use tuff_item::item::DupUnchecked;
 
 use tokio::sync::oneshot;
 use tuff_vanilla_data::registry::EntityType;
@@ -88,7 +87,7 @@ async fn per_region(
     ctx: &mut Context<'_>,
     dimension: DimensionId,
     groups: BTreeMap<(i32, i32), Vec<usize>>,
-    make: impl Fn(&[usize]) -> BlockOp,
+    mut make: impl FnMut(&[usize]) -> BlockOp,
 ) -> Result<Vec<(Vec<usize>, BlockOpResult)>, CommandError> {
     let mut results = Vec::new();
     for ((x, z), indices) in groups {
@@ -367,12 +366,12 @@ pub async fn replace_port_item(
     ctx: &mut Context<'_>,
     dimension: DimensionId,
     pos: [i32; 3],
-    stack: Option<tuff_item::item::ItemStack>,
+    mut stack: Option<tuff_item::item::ItemStack>,
 ) -> Result<bool, CommandError> {
     let groups = group_by_region(&[pos]);
     let results = per_region(ctx, dimension, groups, |_| BlockOp::ReplacePortItem {
         pos: to_block_pos(pos),
-        stack: stack.dup_unchecked(),
+        stack: stack.take(),
     })
     .await?;
     Ok(results

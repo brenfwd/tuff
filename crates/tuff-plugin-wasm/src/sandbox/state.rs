@@ -132,13 +132,14 @@ impl State {
         nbt.insert("id", tuff_nbt::Tag::String(item.name().to_owned()));
         nbt.insert("count", tuff_nbt::Tag::Int(1));
         nbt.insert("components", tuff_nbt::Tag::Compound(components));
-        let stack =
-            tuff_item::item::ItemStack::mint_from_nbt(&nbt, tuff_item::item::MintReason::Plugin)
-                .ok_or(WorldError::InvalidState)?;
+        let stack = tuff_item::item::ItemStack::mint_from_nbt(&nbt, tuff_item::item::MintReason::Template)
+            .ok_or(WorldError::InvalidState)?;
+        let template = tuff_item::item::ItemSnapshot::of(&stack);
+        stack.burn(tuff_item::item::BurnReason::Template);
         self.queue_inventory(
             player,
             InventoryOp::Give {
-                stack,
+                stack: template,
                 count: count as i32,
             },
         )

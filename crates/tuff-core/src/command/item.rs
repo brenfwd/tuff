@@ -24,6 +24,11 @@ impl ItemInput {
         ItemStack::mint(self.item, count, MintReason::Command)
             .with_components(self.components.clone())
     }
+
+    /// What `/give` and `/item` hand to each target, which mints its own.
+    pub fn template(&self, count: u8) -> tuff_item::item::ItemSnapshot {
+        tuff_item::item::ItemSnapshot::describe(self.item, count, self.components.clone())
+    }
 }
 
 /// One test of an item predicate.

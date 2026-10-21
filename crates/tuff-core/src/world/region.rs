@@ -801,7 +801,11 @@ impl RegionActor {
                 let mut item = crate::world::items::ItemEntity::new(
                     id,
                     uuid,
-                    stack,
+                    tuff_item::item::ItemStack::mint_like(
+                        &stack,
+                        stack.count(),
+                        tuff_item::item::MintReason::Template,
+                    ),
                     position,
                     [0.0; 3],
                     crate::world::items::NEVER_PICKUP,

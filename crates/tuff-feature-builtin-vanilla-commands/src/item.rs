@@ -4,7 +4,7 @@
 //! files or inline JSON-like functions.
 
 use std::sync::Arc;
-use tuff_item::item::DupUnchecked;
+use tuff_item::item::{BurnReason, ItemSnapshot};
 
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -444,20 +444,15 @@ async fn source_data(
 }
 
 fn spread(mode: SlotFill, ids: &[i32], stack: &ItemStack) -> Vec<(i32, Option<ItemStack>)> {
-    let value = (stack.count() > 0).then(|| stack.dup_unchecked());
+    let value = || {
+        (stack.count() > 0).then(|| ItemStack::mint_like(stack, stack.count(), MintReason::Command))
+    };
     ids.iter()
         .enumerate()
         .filter_map(|(index, id)| match mode {
-            SlotFill::Fill => Some((*id, value.dup_unchecked())),
-            SlotFill::Replace => (index == 0).then(|| (*id, value.dup_unchecked())),
-            SlotFill::Override => Some((
-                *id,
-                if index == 0 {
-                    value.dup_unchecked()
-                } else {
-                    None
-                },
-            )),
+            SlotFill::Fill => Some((*id, value())),
+            SlotFill::Replace => (index == 0).then(|| (*id, value())),
+            SlotFill::Override => Some((*id, if index == 0 { value() } else { None })),
         })
         .collect()
 }
@@ -499,6 +494,9 @@ impl Executor for ItemCommand {
                 };
                 input.stack(count)
             };
+            let template = ItemSnapshot::of(&stack);
+            stack.burn(BurnReason::Template);
+            let stack = template;
             let item = item_name(stack.item, &stack.components);
             if is_block {
                 return set_block(ctx, mode, &slot, &stack, item).await;
@@ -596,7 +594,7 @@ impl Executor for ItemCommand {
                 |player| Directive::SetSlots {
                     ids: ids_for(&players, &player_ids, player),
                     name: name.clone(),
-                    stack: stack.dup_unchecked(),
+                    stack: stack.clone(),
                     mode,
                 },
                 messages,
@@ -826,8 +824,11 @@ mod tests {
             MintReason::Test,
         );
         assert!(stack.is_some());
-        write_slot(&mut nbt, 302, Holder::Mob, stack.dup_unchecked());
-        write_slot(&mut nbt, 503, Holder::Mob, stack.dup_unchecked());
+        let other = stack
+            .as_ref()
+            .map(|stack| ItemStack::mint_like(stack, stack.count(), MintReason::Test));
+        write_slot(&mut nbt, 302, Holder::Mob, stack);
+        write_slot(&mut nbt, 503, Holder::Mob, other);
         assert!(nbt.get_list("Inventory").is_some());
         assert!(nbt.get_list("Items").is_some());
         assert!(read_slot(&nbt, 302, Holder::Mob).flatten().is_some());

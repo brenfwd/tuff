@@ -158,8 +158,7 @@ impl PlayerSession {
                     };
                     let drops = loot.entity_drops(table, &facts, &mut self.rng);
                     for stack in drops {
-                        let count = i32::from(stack.count());
-                        self.give_items(stack, count).await;
+                        self.give_stack(stack).await;
                     }
                 }
                 if let Some(function) = &reward.function {

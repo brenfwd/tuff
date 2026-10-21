@@ -57,7 +57,7 @@ pub enum Directive {
     /// Gives `count` items of `stack`, split into stacks and dropped when
     /// the inventory is full.
     Give {
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         count: i32,
     },
     /// Removes matching items, up to `max_count` (`-1` for all; `0` only
@@ -118,7 +118,7 @@ pub enum Directive {
     SetSlots {
         ids: Vec<i32>,
         name: String,
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         mode: SlotFill,
     },
     /// `/item modify`: runs item modifier `functions` over the player's
@@ -362,13 +362,13 @@ pub enum EnchantAnswer {
     NotLiving,
 }
 
-/// `stack` with `enchantment` set to `level` (removed at 0), or the
-/// reason it cannot be.
+/// The enchantments of `stack` with `enchantment` set to `level`
+/// (removed at 0), or the reason it cannot be.
 pub fn enchant_stack(
     stack: &ItemStack,
     enchantment: &str,
     level: i32,
-) -> Result<ItemStack, EnchantAnswer> {
+) -> Result<Option<tuff_item::item::Enchantments>, EnchantAnswer> {
     let registry = tuff_item::enchantment::current();
     let Some(definition) = registry.get(enchantment) else {
         return Err(EnchantAnswer::NotLiving);
@@ -393,10 +393,7 @@ pub fn enchant_stack(
     if level > 0 {
         entries.push((enchantment.to_owned(), level));
     }
-    let mut updated = stack.dup_unchecked();
-    updated.components.enchantments =
-        (!entries.is_empty()).then(|| tuff_item::item::Enchantments::new(entries));
-    Ok(updated)
+    Ok((!entries.is_empty()).then(|| tuff_item::item::Enchantments::new(entries)))
 }
 
 /// The dialog a `/dialog show` opens.
