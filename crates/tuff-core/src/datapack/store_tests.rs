@@ -505,7 +505,9 @@ fn an_offline_world_restores_the_last_complete_save_first() {
     let save = |value: i32, finish: bool| {
         let backend = JournaledBackend::open(
             Arc::new(VanillaBackend::new(&world)),
-            Box::new(DirStore::new(world.join(tuff_storage::vanilla::JOURNAL_DIR))),
+            Box::new(DirStore::new(
+                world.join(tuff_storage::vanilla::JOURNAL_DIR),
+            )),
         )
         .unwrap();
         let barrier = backend.journal().barrier();

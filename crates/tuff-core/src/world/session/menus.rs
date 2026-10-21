@@ -957,6 +957,10 @@ impl PlayerSession {
             return;
         }
         let mut menu = self.menus.menu.take().unwrap();
+        if let Some(split) = menu.split.take() {
+            self.abandon_split(split, &menu.region, menu.remote.as_ref())
+                .await;
+        }
         self.menu_closed_hooks(menu.kind);
         let positions = menu.backing.positions();
         let mut returned = Vec::new();

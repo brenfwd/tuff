@@ -389,24 +389,4 @@ impl RegionActor {
         }
         self.spill_orphans(orphans);
     }
-
-    /// Drops every prepared share of `player` (its menu closed).
-    pub(in crate::world::region) fn drop_prepared(&mut self, player: PlayerId) {
-        self.menus.prepared.retain(|(owner, _), _| *owner != player);
-        let keys: Vec<_> = self
-            .menus
-            .orphans
-            .keys()
-            .filter(|(owner, _)| *owner == player)
-            .copied()
-            .collect();
-        for key in keys {
-            if let Some(orphans) = self.menus.orphans.remove(&key) {
-                self.spill_orphans(orphans);
-            }
-        }
-        self.menus
-            .container_locks
-            .retain(|_, (owner, _)| *owner != player);
-    }
 }

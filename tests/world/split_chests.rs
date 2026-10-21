@@ -1122,3 +1122,176 @@ async fn a_world_save_snapshots_the_player_only_between_transactions() {
     split.world.shutdown().await;
     drop(split.dir);
 }
+
+/// Every slot of `pos` as `viewer` sees it after a refresh.
+async fn refreshed(
+    region: &RegionHandle,
+    viewer: &PlayerHandle,
+    events: &mut mpsc::UnboundedReceiver<PlayerEvent>,
+    pos: BlockPos,
+) -> Vec<Option<ItemStack>> {
+    region
+        .request(RegionRequest::RefreshContainer {
+            player: viewer.clone(),
+            pos,
+        })
+        .await;
+    expect(events, |event| match event {
+        PlayerEvent::ContainerSlots { pos: at, slots, .. } if at == pos && slots.len() == 27 => {
+            Some(
+                slots
+                    .into_iter()
+                    .map(|(_, s)| s.as_deref().map(ItemStack::test_copy))
+                    .collect::<Vec<_>>(),
+            )
+        }
+        _ => None,
+    })
+    .await
+}
+
+/// Moves gold from one half to the other with a two-region click, lets the
+/// session take `votes` of the regions' votes and then disconnects it: the
+/// gold ends in exactly one slot, never in the player's inventory, and both
+/// halves unlock.
+async fn disconnect_mid_transfer(votes: usize) {
+    let (bob, mut bob_events) = PlayerHandle::new(101);
+    let (outbound, _outbound_rx) = mpsc::unbounded_channel();
+    let (handle, events) = PlayerHandle::new(200);
+    let (_packets, packets_rx) = mpsc::channel(8);
+    let profile = crate::auth::GameProfile {
+        id: 200,
+        name: "Leaver".to_owned(),
+        properties: Vec::new(),
+    };
+    let split = split_chest(&mut [(&bob, &mut bob_events)]).await;
+    let mut session = crate::world::session::PlayerSession::new(
+        split.world.shared.clone(),
+        200,
+        profile,
+        crate::protocol::configuration::ClientInformation::default(),
+        outbound,
+        handle.clone(),
+        events,
+        packets_rx,
+        tuff_storage::admin::PermissionLevel::All,
+    );
+    split
+        .west
+        .request(RegionRequest::Place(place(
+            &bob,
+            split.west_pos,
+            Item::Torch,
+            1,
+        )))
+        .await;
+    expect(&mut bob_events, container_menu).await;
+    split
+        .east
+        .request(RegionRequest::Place(place(
+            &handle,
+            split.east_pos,
+            Item::Torch,
+            1,
+        )))
+        .await;
+    let open = expect(&mut session.conn.events, container_menu).await;
+    session.on_event(PlayerEvent::MenuOpen(open)).await;
+
+    let gold = ItemStack::mint(Item::GoldIngot, 4, MintReason::Test);
+    let [right, left] = right_first(&split);
+    let right_slot = 2;
+    let left_slot = 27 + 5;
+    session.inventory.set_slot(36, Some(gold.test_copy()));
+    click(&mut session, |sim| {
+        sim.inventory.set_slot(36, None);
+        sim.container[right_slot] = Some(gold.test_copy());
+    })
+    .await;
+    let answered = expect(&mut session.conn.events, |event| match event {
+        event @ PlayerEvent::Transaction { .. } => Some(event),
+        _ => None,
+    })
+    .await;
+    session.on_event(answered).await;
+    assert_eq!(session.inventory.slots()[36], None);
+
+    click(&mut session, |sim| {
+        sim.container[right_slot] = None;
+        sim.container[left_slot] = Some(gold.test_copy());
+    })
+    .await;
+    for _ in 0..votes {
+        let event = expect(&mut session.conn.events, |event| match event {
+            event @ PlayerEvent::TransactionPrepared { .. } => Some(event),
+            _ => None,
+        })
+        .await;
+        session.on_event(event).await;
+    }
+    session.leave().await;
+    assert!(
+        session.inventory.slots().iter().all(Option::is_none),
+        "nothing from the chest reached the leaving player"
+    );
+
+    let near = refreshed(&split.east, &bob, &mut bob_events, right).await;
+    let far = refreshed(&split.west, &bob, &mut bob_events, left).await;
+    let golds: Vec<_> = near
+        .iter()
+        .chain(&far)
+        .filter_map(|slot| slot.as_ref())
+        .collect();
+    assert_eq!(
+        golds,
+        vec![&gold],
+        "the gold is neither lost nor duplicated"
+    );
+    if votes == 2 {
+        assert_eq!(far[5], Some(gold.test_copy()), "a resolved move stays");
+    } else {
+        assert_eq!(
+            near[right_slot],
+            Some(gold.test_copy()),
+            "an unresolved move goes back"
+        );
+    }
+
+    let dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
+    for (region, pos) in [(&split.east, right), (&split.west, left)] {
+        let changes = set_slot(pos, 0, None, Some(dirt.test_copy()));
+        region
+            .request(RegionRequest::ContainerTransaction {
+                player: bob.clone(),
+                window_id: 1,
+                pool: pool_for(&changes),
+                changes,
+                took_result: false,
+            })
+            .await;
+        assert!(
+            expect(&mut bob_events, transaction_answer).await.0,
+            "both halves unlocked"
+        );
+    }
+    split.world.shutdown().await;
+    drop(split.dir);
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn disconnecting_before_any_vote_returns_the_items_in_flight() {
+    disconnect_mid_transfer(0).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn disconnecting_after_one_vote_returns_the_items_in_flight() {
+    disconnect_mid_transfer(1).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn disconnecting_after_both_votes_keeps_the_resolved_move() {
+    disconnect_mid_transfer(2).await;
+}
