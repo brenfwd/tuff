@@ -6,7 +6,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use tuff_item::item::DupUnchecked;
 
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
@@ -18,7 +17,7 @@ use tuff_core::world::messages::RegionHandle;
 use tuff_core::world::messages::{BlockOp, CoordinatorMessage, ManagerMessage, RegionRequest};
 use tuff_core::world::region_api::{BlockCause, ContainerHolder, RegionTask, RegionWorld};
 use tuff_core::world::{Shared, framed};
-use tuff_item::item::{ItemStack, MintReason, dup_slice_unchecked};
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::BlockState;
 use tuff_vanilla_data::Item;
@@ -319,10 +318,10 @@ pub fn container_undo(row: &Row, restore: bool, strict: bool) -> Option<containe
     let (stack, any_components) = match container::stack_of(row.block_entity().as_ref()) {
         Some(stack) => (stack, false),
         None if !add => (
-            ItemStack::mint(
+            ItemSnapshot::describe(
                 Item::from_name(row.material.as_deref()?)?,
                 1,
-                MintReason::Command,
+                Default::default(),
             ),
             true,
         ),
@@ -374,29 +373,37 @@ fn undo_containers(
                 .is_some();
             let pot =
                 undo.entity.is_none() && world.container_items(pos).is_none() && is_pot(world, pos);
+            let working = |slots: &mut dyn Iterator<Item = Option<&ItemStack>>| {
+                slots
+                    .map(|slot| slot.map(|s| ItemStack::mint_like(s, s.count(), MintReason::Command)))
+                    .collect::<Vec<_>>()
+            };
             let items = match undo.entity {
-                Some(uuid) if held => world.entity_held_items(uuid).map(|items| {
-                    items
-                        .into_iter()
-                        .map(|item| item.map(|item| item.get().dup_unchecked()))
-                        .collect()
-                }),
+                Some(uuid) if held => world
+                    .entity_held_items(uuid)
+                    .map(|items| working(&mut items.into_iter().map(|item| item.map(|i| i.get())))),
                 Some(uuid) => world
                     .entity_container_items(uuid)
-                    .map(|slots| slots.iter().map(DupUnchecked::dup_unchecked).collect()),
+                    .map(|slots| working(&mut slots.iter().map(Option::as_ref))),
                 None if pot => Some(vec![pot_item(world, pos)]),
-                None => world.container_items(pos).map(dup_slice_unchecked),
+                None => world
+                    .container_items(pos)
+                    .map(|slots| working(&mut slots.iter().map(Option::as_ref))),
             };
-            let Some(before) = items else {
+            let Some(mut after) = items else {
                 continue;
             };
-            let mut after = before.dup_unchecked();
+            let before: Vec<Option<ItemSnapshot>> = after
+                .iter()
+                .map(|slot| slot.as_ref().map(ItemSnapshot::of))
+                .collect();
             let count = container::apply(&mut after, &undo);
             if count == 0 {
+                burn_all(after);
                 continue;
             }
             if pot {
-                let (old, new) = (before[0].dup_unchecked(), after[0].dup_unchecked());
+                let new = after.pop().flatten();
                 if let Some(nbt) = world.raw_block_entity_mut(pos) {
                     match &new {
                         Some(stack) => {
@@ -410,18 +417,22 @@ fn undo_containers(
                 world.block_entity_changed(pos);
                 world.report_container_edit(
                     ContainerHolder::Block(pos),
-                    &[(0, old.as_ref(), new.as_ref())],
+                    &[(0, before[0].as_deref(), new.as_ref())],
                 );
+                if let Some(new) = new {
+                    new.burn(BurnReason::Command);
+                }
                 done.push((undo.id, count));
                 continue;
             }
-            let slots: Vec<_> = before
-                .iter()
-                .zip(after)
-                .enumerate()
-                .filter(|(_, (old, new))| *old != new)
-                .map(|(slot, (_, new))| (slot, new))
-                .collect();
+            let mut slots = Vec::new();
+            for (slot, (old, new)) in before.iter().zip(after).enumerate() {
+                if old.as_deref() == new.as_ref() {
+                    burn_all([new]);
+                } else {
+                    slots.push((slot, new));
+                }
+            }
             let set = match undo.entity {
                 Some(uuid) if held => world.set_entity_held_items(uuid, slots),
                 Some(uuid) => world.set_entity_container_items(uuid, slots),
@@ -433,6 +444,12 @@ fn undo_containers(
         }
     });
     done
+}
+
+fn burn_all(slots: impl IntoIterator<Item = Option<ItemStack>>) {
+    for stack in slots.into_iter().flatten() {
+        stack.burn(BurnReason::Command);
+    }
 }
 
 /// Runs the container undos of one region, chunk by chunk with each
@@ -589,7 +606,7 @@ async fn take_from_players(
             continue;
         };
         let edit = InventoryEdit::Take {
-            stack: undo.stack.dup_unchecked(),
+            stack: undo.stack.clone(),
             count,
         };
         if apply_inventory(
