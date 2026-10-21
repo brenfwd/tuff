@@ -7,7 +7,7 @@ use tuff_vanilla_data::registry::{EntityType, StatType};
 
 use super::{EntityFacts, bounds, bounds_sqr, flag, in_set, in_tag, item, nbt_matches, qualified};
 use crate::world::stats::Stat;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 fn equipment_slot_id(slot: EquipmentSlot) -> i32 {
@@ -64,7 +64,7 @@ fn slot_items(entity: &EntityFacts) -> Vec<(i32, ItemStack)> {
     let mut items: Vec<(i32, ItemStack)> = entity
         .equipment
         .iter()
-        .map(|(slot, stack)| (equipment_slot_id(*slot), stack.clone()))
+        .map(|(slot, stack)| (equipment_slot_id(*slot), stack.dup_unchecked()))
         .collect();
     let Some(saved) = &entity.nbt else {
         return items;
@@ -84,14 +84,21 @@ fn slot_items(entity: &EntityFacts) -> Vec<(i32, ItemStack)> {
             (true, _) => continue,
             (false, _) => 300 + index as i32,
         };
-        items.extend(ItemStack::from_nbt(stack).map(|item| (slot, item)));
+        items
+            .extend(ItemStack::mint_from_nbt(stack, MintReason::Template).map(|item| (slot, item)));
     }
     for stack in stacks("EnderItems") {
         if let Some(slot) = stack.get_byte("Slot") {
-            items.extend(ItemStack::from_nbt(stack).map(|item| (200 + i32::from(slot), item)));
+            items.extend(
+                ItemStack::mint_from_nbt(stack, MintReason::Template)
+                    .map(|item| (200 + i32::from(slot), item)),
+            );
         }
     }
-    if let Some(item) = saved.get_compound("Item").and_then(ItemStack::from_nbt) {
+    if let Some(item) = saved
+        .get_compound("Item")
+        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
+    {
         items.push((0, item));
     }
     items
@@ -532,7 +539,7 @@ pub(super) fn item_component(id: &str, predicate: &Value, stack: &ItemStack) -> 
                 .iter()
                 .flatten()
                 .flatten()
-                .filter(|stack| stack.count > 0)
+                .filter(|stack| stack.count() > 0)
                 .collect();
             predicate
                 .get("items")
@@ -713,15 +720,18 @@ mod tests {
     #[test]
     fn slots_cover_equipment_inventory_and_ender_chest() {
         let mut saved = Compound::new();
-        let mut stone = ItemStack::new(Item::Stone, 3).to_nbt();
+        let mut stone = ItemStack::mint(Item::Stone, 3, MintReason::Test).to_nbt();
         stone.insert("Slot", 4i8);
-        let mut pearl = ItemStack::new(Item::EnderPearl, 1).to_nbt();
+        let mut pearl = ItemStack::mint(Item::EnderPearl, 1, MintReason::Test).to_nbt();
         pearl.insert("Slot", 2i8);
         saved.insert("Inventory", Tag::List(vec![Tag::Compound(stone)]));
         saved.insert("EnderItems", Tag::List(vec![Tag::Compound(pearl)]));
         let facts = EntityFacts {
             kind: Some(EntityType::Player),
-            equipment: vec![(EquipmentSlot::Head, ItemStack::new(Item::IronHelmet, 1))],
+            equipment: vec![(
+                EquipmentSlot::Head,
+                ItemStack::mint(Item::IronHelmet, 1, MintReason::Test),
+            )],
             nbt: Some(saved),
             ..EntityFacts::default()
         };
@@ -844,11 +854,11 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn item_component_predicates() {
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
         shulker.components.container = Some(vec![
-            Some(ItemStack::new(Item::Diamond, 2)),
+            Some(ItemStack::mint(Item::Diamond, 2, MintReason::Test)),
             None,
-            Some(ItemStack::new(Item::Diamond, 1)),
+            Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test)),
         ]);
         let check = |predicate: Value, stack: &ItemStack| item(&predicate, stack);
         assert!(check(
@@ -861,7 +871,7 @@ mod tests {
             json!({"predicates": {"container": {"items": {"contains": [{"items": "dirt"}]}}}}),
             &shulker
         ));
-        let mut tagged = ItemStack::new(Item::Stick, 1);
+        let mut tagged = ItemStack::mint(Item::Stick, 1, MintReason::Test);
         tagged.components.other.insert(
             "minecraft:custom_data",
             Compound::new().with("magic", 1).with("other", 2),

@@ -2,6 +2,8 @@
 //! else ever touches its state.
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::SoundEvent;
 
@@ -595,16 +597,16 @@ impl PlayerSession {
                 continue;
             };
             let value = match mode {
-                SlotFill::Fill => Some(Some(stack.clone())),
-                SlotFill::Replace if selected == 0 => Some(Some(stack.clone())),
-                SlotFill::Override => Some((selected == 0).then(|| stack.clone())),
+                SlotFill::Fill => Some(Some(stack.dup_unchecked())),
+                SlotFill::Replace if selected == 0 => Some(Some(stack.dup_unchecked())),
+                SlotFill::Override => Some((selected == 0).then(|| stack.dup_unchecked())),
                 SlotFill::Replace => None,
             };
             selected += 1;
             let Some(value) = value else {
                 continue;
             };
-            self.write_game_slot(slot, value.filter(|stack| stack.count > 0));
+            self.write_game_slot(slot, value.filter(|stack| stack.count() > 0));
             changed += 1;
         }
         if changed > 0 {
@@ -615,8 +617,12 @@ impl PlayerSession {
 
     fn read_game_slot(&self, slot: GameSlot) -> Option<ItemStack> {
         match slot {
-            GameSlot::Window(slot) => self.inventory.slots().get(slot).cloned().flatten(),
-            GameSlot::Cursor => self.inventory.carried().cloned(),
+            GameSlot::Window(slot) => self
+                .inventory
+                .slots()
+                .get(slot)
+                .and_then(DupUnchecked::dup_unchecked),
+            GameSlot::Cursor => self.inventory.carried().map(DupUnchecked::dup_unchecked),
             GameSlot::Ender(index) => {
                 let container = match &self.menus.menu {
                     Some(OpenMenu {
@@ -626,7 +632,7 @@ impl PlayerSession {
                     }) => container,
                     _ => &self.menus.ender_items,
                 };
-                container.get(index).cloned().flatten()
+                container.get(index).and_then(DupUnchecked::dup_unchecked)
             }
         }
     }
@@ -645,12 +651,10 @@ impl PlayerSession {
             let Some(slot) = self.game_slot(*id) else {
                 continue;
             };
-            let stack = self
-                .read_game_slot(slot)
-                .unwrap_or_else(|| ItemStack::new(tuff_vanilla_data::registry::Item::Air, 0));
+            let stack = self.read_game_slot(slot).unwrap_or_else(ItemStack::empty);
             selected += 1;
             let result = loot.modify_item(functions, stack, &mut rng);
-            self.write_game_slot(slot, Some(result).filter(|stack| stack.count > 0));
+            self.write_game_slot(slot, Some(result).filter(|stack| stack.count() > 0));
             changed += 1;
         }
         if changed > 0 {
@@ -688,7 +692,7 @@ impl PlayerSession {
         while remaining > 0 {
             let size = remaining.min(max);
             remaining -= size;
-            let part = stack.clone().with_count(size as u8);
+            let part = stack.dup_count_unchecked(size as u8);
             match self.inventory.add(part) {
                 Some(leftover) => {
                     let eye = self.eye();
@@ -704,7 +708,7 @@ impl PlayerSession {
             if let Some(handle) = self.region(region).await {
                 handle
                     .request(RegionRequest::SpawnFakeItem {
-                        stack: stack.clone().with_count(1),
+                        stack: stack.dup_count_unchecked(1),
                         position: [eye[0], eye[1] - 0.3, eye[2]],
                     })
                     .await;
@@ -736,13 +740,13 @@ impl PlayerSession {
         let matches = |stack: &ItemStack| predicate.is_none_or(|predicate| predicate.test(stack));
         let slots = self.inventory.slots().len();
         for slot in 0..slots {
-            let Some(stack) = self.inventory.slots()[slot].clone() else {
+            let Some(stack) = self.inventory.slots()[slot].dup_unchecked() else {
                 continue;
             };
             if !matches(&stack) {
                 continue;
             }
-            let count = i32::from(stack.count);
+            let count = i32::from(stack.count());
             if counting {
                 removed += count;
                 continue;
@@ -753,17 +757,17 @@ impl PlayerSession {
             let left = count - take;
             self.inventory.set_slot(
                 slot,
-                (left > 0).then(|| stack.clone().with_count(left as u8)),
+                (left > 0).then(|| stack.dup_count_unchecked(left as u8)),
             );
             if budget == 0 {
                 break;
             }
         }
-        if let Some(carried) = self.inventory.carried().cloned()
+        if let Some(carried) = self.inventory.carried().map(DupUnchecked::dup_unchecked)
             && matches(&carried)
             && budget > 0
         {
-            let count = i32::from(carried.count);
+            let count = i32::from(carried.count());
             if counting {
                 removed += count;
             } else {
@@ -771,7 +775,7 @@ impl PlayerSession {
                 removed += take;
                 let left = count - take;
                 self.inventory
-                    .set_carried((left > 0).then(|| carried.with_count(left as u8)));
+                    .set_carried((left > 0).then(|| carried.keep(left as u8, BurnReason::Command)));
             }
         }
         if !counting {
@@ -784,7 +788,7 @@ impl PlayerSession {
     /// `/enchant`: puts an enchantment on the main-hand item if the item
     /// takes it and nothing on it conflicts.
     pub fn enchant_hand(&mut self, enchantment: &str, level: i32) -> DirectiveReply {
-        let Some(stack) = self.inventory.hand(false).cloned() else {
+        let Some(stack) = self.inventory.hand(false).map(DupUnchecked::dup_unchecked) else {
             return self.reply(
                 0,
                 false,

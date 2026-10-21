@@ -1,5 +1,7 @@
 //! Crafters: a rising edge of power schedules a craft four ticks later.
 
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::{Block, BlockState, Frozen};
 
@@ -116,16 +118,23 @@ pub(crate) fn craft(world: &mut dyn RegionWorld, pos: BlockPos) {
     let Some(items) = world.container_items(pos) else {
         return;
     };
-    let before = items.to_vec();
-    let mut grid = before.clone();
-    let ingredients: Vec<ItemStack> = before.iter().flatten().cloned().collect();
+    let before = items
+        .iter()
+        .map(DupUnchecked::dup_unchecked)
+        .collect::<Vec<_>>();
+    let mut grid = before.dup_unchecked();
+    let ingredients: Vec<ItemStack> = before
+        .iter()
+        .flatten()
+        .map(DupUnchecked::dup_unchecked)
+        .collect();
     let Some(crafted) = world.shared().recipes().crafter_craft(&mut grid) else {
         world.level_event(LEVEL_EVENT_FAIL, pos, 0);
         return;
     };
     let changed: Vec<(usize, Option<ItemStack>)> = (0..CRAFTER_SLOTS)
         .filter(|slot| before[*slot] != grid[*slot])
-        .map(|slot| (slot, grid[slot].clone()))
+        .map(|slot| (slot, grid[slot].dup_unchecked()))
         .collect();
     if !changed.is_empty() && !world.set_container_items(pos, changed) {
         return;
@@ -158,18 +167,18 @@ fn dispense(
         let one_at_a_time = kind == ContainerKind::Crafter
             || remaining
                 .as_ref()
-                .is_some_and(|stack| stack.count > stack.max_stack_size());
+                .is_some_and(|stack| stack.count() > stack.max_stack_size());
         let by = Porter::Dropper(pos);
         if one_at_a_time {
             while let Some(stack) = remaining.take() {
-                let one = stack.clone().with_count(1);
+                let one = stack.dup_count_unchecked(1);
                 if !matches!(world.insert_item(target, face, one, by), Insert::Stored) {
                     remaining = Some(stack);
                     break;
                 }
-                if stack.count > 1 {
-                    let left = stack.count - 1;
-                    remaining = Some(stack.with_count(left));
+                if stack.count() > 1 {
+                    let left = stack.count() - 1;
+                    remaining = Some(stack.keep(left, BurnReason::CraftingInput));
                 }
             }
         } else if let Some(stack) = remaining.take() {
@@ -208,7 +217,10 @@ fn report_crafted(
             player.handle.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::CrafterRecipeCrafted {
                     recipe: recipe.clone(),
-                    ingredients: ingredients.to_vec(),
+                    ingredients: ingredients
+                        .iter()
+                        .map(DupUnchecked::dup_unchecked)
+                        .collect::<Vec<_>>(),
                 },
             )));
         }

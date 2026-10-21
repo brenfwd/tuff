@@ -392,7 +392,7 @@ impl Components {
             {
                 added.push(NetworkComponent::ClientData(view));
             } else if TEMPLATE_ON_WIRE.contains(&kind) {
-                if let Some(stack) = value.as_compound().and_then(ItemStack::from_nbt) {
+                if let Some(stack) = value.as_compound().and_then(ItemStack::decode_nbt) {
                     added.push(NetworkComponent::Template(kind, Box::new(stack)));
                 }
             } else if NBT_ON_WIRE.contains(&kind) {
@@ -439,12 +439,14 @@ impl Components {
                 self.ominous_bottle_amplifier = Some(amplifier)
             }
             NetworkComponent::MapId(id) => self.map_id = Some(id),
-            NetworkComponent::Container(contents) => self.container = Some(contents.to_vec()),
+            NetworkComponent::Container(contents) => {
+                self.container = Some(dup_slice_unchecked(contents))
+            }
             NetworkComponent::ChargedProjectiles(projectiles) => {
-                self.charged_projectiles = Some(projectiles.to_vec())
+                self.charged_projectiles = Some(dup_slice_unchecked(projectiles))
             }
             NetworkComponent::BundleContents(contents) => {
-                self.bundle_contents = Some(Box::new(contents.clone()))
+                self.bundle_contents = Some(Box::new(contents.dup_unchecked()))
             }
             NetworkComponent::DyedColor(rgb) => self.dyed_color = Some(rgb),
             NetworkComponent::BaseColor(color) => self.base_color = Some(color),

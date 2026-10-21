@@ -667,7 +667,7 @@ impl Species for HappyGhast {
         if is_harness(stack) && !harnessed(core) {
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Body,
-                Some(stack.clone().with_count(1)),
+                Some(stack.dup_count_unchecked(1)),
             );
             core.sound(SoundEvent::EntityHappyGhastEquip, 1.0, 1.0, cx);
             return Some(HandEffect::Consume(1));
@@ -818,7 +818,11 @@ mod tests {
             player_uuid: 7,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(tuff_item::item::ItemStack::new(stack, 1)),
+            stack: Some(tuff_item::item::ItemStack::mint(
+                stack,
+                1,
+                tuff_item::item::MintReason::Test,
+            )),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -855,9 +859,10 @@ mod tests {
             assert_eq!(ghast.seats(), 4);
             assert!(ghast.rideable_by_input() && ghast.flying_vehicle());
             assert!(
-                ghast.mount_refused_by(Some(&tuff_item::item::ItemStack::new(
+                ghast.mount_refused_by(Some(&tuff_item::item::ItemStack::mint(
                     tuff_vanilla_data::Item::Snowball,
-                    1
+                    1,
+                    tuff_item::item::MintReason::Test
                 )))
             );
             assert_eq!(

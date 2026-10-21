@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use tuff_vanilla_data::registry::{BlockEntityType, DataComponentType};
 
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -262,7 +262,7 @@ fn get(kind: BlockEntityType, nbt: &Compound, field: Field) -> Option<Tag> {
                     let slot = entry.get_byte("Slot")?;
                     let mut item = entry.clone();
                     item.remove("Slot");
-                    ItemStack::from_nbt(&item)?;
+                    ItemStack::mint_from_nbt(&item, MintReason::Template)?;
                     Some(Tag::Compound(
                         Compound::new().with("slot", slot as i32).with("item", item),
                     ))
@@ -272,7 +272,7 @@ fn get(kind: BlockEntityType, nbt: &Compound, field: Field) -> Option<Tag> {
         }
         Field::SingleItem(key) => {
             let item = nbt.get_compound(key)?;
-            ItemStack::from_nbt(item)?;
+            ItemStack::mint_from_nbt(item, MintReason::Template)?;
             Some(Tag::List(vec![Tag::Compound(
                 Compound::new().with("slot", 0).with("item", item.clone()),
             )]))
@@ -427,11 +427,9 @@ pub fn contents(kind: BlockEntityType, nbt: &Compound) -> Vec<ItemStack> {
         let Some(Tag::List(entries)) = get(kind, nbt, field) else {
             continue;
         };
-        stacks.extend(
-            entries.iter().filter_map(|entry| {
-                ItemStack::from_nbt(entry.as_compound()?.get_compound("item")?)
-            }),
-        );
+        stacks.extend(entries.iter().filter_map(|entry| {
+            ItemStack::from_storage(entry.as_compound()?.get_compound("item")?)
+        }));
     }
     stacks
 }
@@ -451,7 +449,7 @@ pub fn held_drop(
     let (x, y, z) = (pos.x as f64 + 0.5, pos.y as f64, pos.z as f64 + 0.5);
     let (stack, position) = match kind {
         BlockEntityType::Jukebox => {
-            let stack = ItemStack::from_nbt(nbt.get_compound("RecordItem")?)?;
+            let stack = ItemStack::from_storage(nbt.get_compound("RecordItem")?)?;
             let dx = (rng.r#gen::<f32>() - 0.5) * 0.7;
             let dz = (rng.r#gen::<f32>() - 0.5) * 0.7;
             (stack, [x + dx as f64, y + 1.01, z + dz as f64])
@@ -460,7 +458,7 @@ pub fn held_drop(
             if state.get("has_book") != Some("true") {
                 return None;
             }
-            let stack = ItemStack::from_nbt(nbt.get_compound("Book")?)?;
+            let stack = ItemStack::from_storage(nbt.get_compound("Book")?)?;
             let (sx, sz) = match state.get("facing")? {
                 "north" => (0.0, -0.25),
                 "south" => (0.0, 0.25),
@@ -507,7 +505,7 @@ mod tests {
         let spilled = contents(BlockEntityType::Piston, &piston);
         assert_eq!(spilled.len(), 1);
         assert_eq!(spilled[0].item, Item::Diamond);
-        assert_eq!(spilled[0].count, 4);
+        assert_eq!(spilled[0].count(), 4);
     }
 
     #[tuff_core::watchdog]
@@ -630,13 +628,13 @@ mod tests {
         let mut shelf = new(BlockEntityType::ChiseledBookshelf, BlockPos::default());
         let components = Components::from(ComponentPatch {
             container: Some(vec![
-                Some(ItemStack::new(Item::Book, 1)),
+                Some(ItemStack::mint(Item::Book, 1, MintReason::Test)),
                 None,
                 None,
                 None,
                 None,
                 None,
-                Some(ItemStack::new(Item::Book, 1)),
+                Some(ItemStack::mint(Item::Book, 1, MintReason::Test)),
             ]),
             ..Default::default()
         });
@@ -648,7 +646,7 @@ mod tests {
         );
         assert_eq!(
             contents(BlockEntityType::ChiseledBookshelf, &shelf),
-            vec![ItemStack::new(Item::Book, 1)]
+            vec![ItemStack::mint(Item::Book, 1, MintReason::Test)]
         );
 
         let mut skull = new(BlockEntityType::Skull, BlockPos::default());

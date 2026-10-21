@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::recipe::{CraftingCategory, Ingredient};
@@ -7,7 +8,7 @@ use tuff_vanilla_data::registry::{RecipeBookCategory, TriggerType};
 use super::{Cooking, Shaped, Shapeless, SmithingTransform, Stonecutting};
 use tuff_core::protocol::recipe::RecipeDisplay;
 use tuff_core::world::crafting::*;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::Frozen;
 
 const DIRT: Ingredient = Ingredient::Item(Item::Dirt);
@@ -23,7 +24,7 @@ const HOE: Shaped = Shaped::new(
 .category(CraftingCategory::Equipment);
 
 fn stack(item: Item, count: u8) -> Option<ItemStack> {
-    Some(ItemStack::new(item, count))
+    Some(ItemStack::mint(item, count, MintReason::Test))
 }
 
 fn set(recipes: Vec<(&'static str, Arc<dyn Recipe>)>) -> RecipeSet {
@@ -45,14 +46,14 @@ impl Recipe for KeepsBook {
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(ItemStack::new(Item::Stick, 2))
+        Some(ItemStack::mint(Item::Stick, 2, MintReason::Test))
     }
 
     fn remainders(&self, input: &CraftingInput) -> Vec<Option<ItemStack>> {
         input
             .items
             .iter()
-            .map(|slot| slot.clone().filter(|s| s.item == Item::Book))
+            .map(|slot| slot.dup_unchecked().filter(|s| s.item == Item::Book))
             .collect()
     }
 }
@@ -66,21 +67,21 @@ impl Recipe for Torch {
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(ItemStack::new(Item::Torch, 1))
+        Some(ItemStack::mint(Item::Torch, 1, MintReason::Test))
     }
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn shaped_recipes_match_anywhere_and_mirrored() {
-    let mut grid = vec![None; 9];
+    let mut grid = (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     grid[1] = stack(Item::Dirt, 1);
     grid[2] = stack(Item::Dirt, 1);
     grid[5] = stack(Item::Stick, 1);
     grid[8] = stack(Item::Stick, 1);
     let set = set(vec![("test:hoe", Arc::new(HOE))]);
     assert_eq!(set.grid_recipe(&grid, 3, 3), Some("test:hoe"));
-    let mut flipped = vec![None; 9];
+    let mut flipped = (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     flipped[0] = stack(Item::Dirt, 1);
     flipped[1] = stack(Item::Dirt, 1);
     flipped[3] = stack(Item::Stick, 1);
@@ -99,10 +100,10 @@ fn shaped_recipes_match_anywhere_and_mirrored() {
 #[test]
 fn shapeless_recipes_ignore_position() {
     let set = set(vec![("test:diamond", Arc::new(DIAMOND.count(2)))]);
-    let mut grid = vec![None; 4];
+    let mut grid = (0..4).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     grid[3] = stack(Item::Dirt, 5);
     let result = set.grid_result(&grid, 2, 2).unwrap();
-    assert_eq!((result.item, result.count), (Item::Diamond, 2));
+    assert_eq!((result.item, result.count()), (Item::Diamond, 2));
     grid[0] = stack(Item::Dirt, 1);
     assert!(set.grid_result(&grid, 2, 2).is_none());
 }
@@ -114,7 +115,7 @@ fn taking_a_result_uses_one_of_each_ingredient() {
         ("test:diamond", Arc::new(DIAMOND)),
         ("test:torch", Arc::new(Torch)),
     ]);
-    let mut grid = vec![None; 4];
+    let mut grid = (0..4).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     grid[0] = stack(Item::Dirt, 2);
     assert!(set.take_result(&mut grid, 2, 2).is_empty());
     assert_eq!(grid[0], stack(Item::Dirt, 1));
@@ -134,7 +135,7 @@ fn code_recipes_choose_what_stays_in_the_grid() {
     let mut grid = vec![stack(Item::Book, 1), stack(Item::Stick, 1), None, None];
     assert_eq!(
         set.grid_result(&grid, 2, 2),
-        Some(ItemStack::new(Item::Stick, 2))
+        Some(ItemStack::mint(Item::Stick, 2, MintReason::Test))
     );
     assert!(set.take_result(&mut grid, 2, 2).is_empty());
     assert_eq!(grid, vec![stack(Item::Book, 1), None, None, None]);
@@ -226,7 +227,7 @@ fn registering_twice_conflicts_unless_replaced() {
         .unwrap();
     let set = RecipeSet::from_registry(&registry);
     let grid = vec![stack(Item::Dirt, 1)];
-    assert_eq!(set.grid_result(&grid, 1, 1).map(|s| s.count), Some(3));
+    assert_eq!(set.grid_result(&grid, 1, 1).map(|s| s.count()), Some(3));
     registry.freeze();
     assert!(registry.register("a", "test:late", DIAMOND).is_err());
 }
@@ -343,7 +344,10 @@ fn stonecutter_options_number_its_recipes_in_name_order() {
     assert!(set.stonecutter_accepts(Item::Stone));
     assert_eq!(
         set.stonecutter_recipe(0),
-        Some(("test:slab", ItemStack::new(Item::StoneSlab, 2)))
+        Some((
+            "test:slab",
+            ItemStack::mint(Item::StoneSlab, 2, MintReason::Test)
+        ))
     );
     assert_eq!(
         set.stonecutter_recipe(1).map(|(name, _)| name),
@@ -359,8 +363,8 @@ fn smithing_transforms_without_template_or_addition_match_empty_slots() {
     transform.recipe.template = None;
     transform.recipe.addition = None;
     let set = set(vec![("test:bare", Arc::new(transform))]);
-    let sword = ItemStack::new(Item::IronSword, 1);
-    let diamond = ItemStack::new(Item::Diamond, 1);
+    let sword = ItemStack::mint(Item::IronSword, 1, MintReason::Test);
+    let diamond = ItemStack::mint(Item::Diamond, 1, MintReason::Test);
     let (name, result) = set.smithing(None, Some(&sword), None).unwrap();
     assert_eq!(name, "test:bare");
     assert_eq!(result.unwrap().item, Item::DiamondSword);
@@ -372,10 +376,10 @@ fn smithing_transforms_without_template_or_addition_match_empty_slots() {
 #[test]
 fn smithing_transforms_keep_the_base_components() {
     let set = stations();
-    let template = ItemStack::new(Item::NetheriteUpgradeSmithingTemplate, 1);
-    let mut sword = ItemStack::new(Item::IronSword, 1);
+    let template = ItemStack::mint(Item::NetheriteUpgradeSmithingTemplate, 1, MintReason::Test);
+    let mut sword = ItemStack::mint(Item::IronSword, 1, MintReason::Test);
     sword.set_damage(7);
-    let diamond = ItemStack::new(Item::Diamond, 1);
+    let diamond = ItemStack::mint(Item::Diamond, 1, MintReason::Test);
     let (name, result) = set
         .smithing(Some(&template), Some(&sword), Some(&diamond))
         .unwrap();

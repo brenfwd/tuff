@@ -2,7 +2,7 @@ use tuff_item::item::ItemStack;
 
 /// What a region or another player saw happen that a player's advancement
 /// triggers count, with the facts their conditions test.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum AdvancementEvent {
     /// Two animals the player fed bred.
     BredAnimals {
@@ -113,7 +113,7 @@ pub enum AdvancementEvent {
 
 /// A kill credited to a player: statistics count `kind`, advancements
 /// test the victim and the killing blow.
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct Kill {
     pub kind: tuff_vanilla_data::registry::EntityType,
     /// The victim's scoreboard name: a player's name, else its UUID.

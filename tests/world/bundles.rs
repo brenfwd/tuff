@@ -4,16 +4,18 @@
 use super::*;
 use crate::protocol::play::Serverbound;
 use crate::world::inventory::Inventory;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::SoundEvent;
 
 const HOTBAR_WINDOW_SLOT: i16 = 36;
 
 fn bundle_of(stacks: &[(Item, u8)]) -> ItemStack {
-    let mut bundle = ItemStack::new(Item::Bundle, 1);
+    let mut bundle = ItemStack::mint(Item::Bundle, 1, MintReason::Test);
     for (item, count) in stacks {
-        bundle.edit_bundle(|contents| contents.try_insert(&mut ItemStack::new(*item, *count)));
+        bundle.edit_bundle(|contents| {
+            contents.try_insert(&mut ItemStack::mint(*item, *count, MintReason::Test))
+        });
     }
     bundle
 }
@@ -23,7 +25,7 @@ fn contents(player: &session::PlayerSession) -> Vec<(Item, u8)> {
         .inventory()
         .hand(false)
         .and_then(|stack| stack.components.bundle_contents.as_ref())
-        .map(|c| c.items().iter().map(|s| (s.item, s.count)).collect())
+        .map(|c| c.items().iter().map(|s| (s.item, s.count())).collect())
         .unwrap_or_default()
 }
 
@@ -55,7 +57,7 @@ async fn clicking_fills_a_bundle_and_only_the_others_hear_it() {
         .set_slot(Inventory::hotbar_slot(0), Some(bundle_of(&[])));
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(1),
-        Some(ItemStack::new(Item::Dirt, 30)),
+        Some(ItemStack::mint(Item::Dirt, 30, MintReason::Test)),
     );
     while own.try_recv().is_ok() {}
 

@@ -37,7 +37,7 @@ pub use tuff_core::world::messages::{
 };
 pub use tuff_core::world::player::Difficulty;
 pub use tuff_core::world::*;
-pub use tuff_item::item::ItemStack;
+pub use tuff_item::item::{BurnReason, DupUnchecked, ItemStack, MintReason};
 pub use tuff_item::text::TextComponent;
 pub use tuff_nbt::{Compound, NamedTag, NbtLimits, Tag};
 pub use tuff_storage::backend::WorldBackend;

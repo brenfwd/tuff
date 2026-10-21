@@ -36,7 +36,7 @@ fn stackable_into(existing: Option<&ItemStack>, stack: &ItemStack) -> bool {
     existing.is_some_and(|existing| {
         existing.stacks_with(stack)
             && existing.max_stack_size() > 1
-            && existing.count < existing.max_stack_size()
+            && existing.count() < existing.max_stack_size()
     })
 }
 
@@ -61,7 +61,7 @@ fn grid_fits_in_inventory(grid: &[Option<ItemStack>], inventory: &Inventory) -> 
         if slot_with_remaining_space(inventory, stack).is_some() {
             continue;
         }
-        let amount = stack.count as u16;
+        let amount = stack.count() as u16;
         let shared = claimed
             .iter_mut()
             .find(|(item, held, cap)| *item == stack.item && *held < *cap && held + amount <= *cap);
@@ -117,19 +117,12 @@ fn move_to_grid(
 ) -> Option<u32> {
     let source = find_ingredient(inventory, item, target.as_ref())?;
     let stack = inventory.slot_mut(source);
-    let available = stack.as_ref().map_or(0, |s| s.count as u32);
+    let available = stack.as_ref().map_or(0, |s| s.count() as u32);
     let taken = count.min(available) as u8;
-    let moved = if (taken as u32) < available {
-        let current = stack.as_mut().expect("found above");
-        current.count -= taken;
-        current.clone().with_count(taken)
-    } else {
-        stack.take().expect("found above")
+    let Some(moved) = ItemStack::take_from(stack, taken) else {
+        return Some(count);
     };
-    match target {
-        Some(existing) => existing.count += moved.count,
-        None => *target = Some(moved),
-    }
+    ItemStack::put_back(target, moved);
     Some(count - taken as u32)
 }
 
@@ -246,7 +239,7 @@ fn try_place(
     let (biggest, _) = available.biggest_craftable(ingredients, u32::MAX);
     if placed_matches {
         for stack in grid.slots.iter().flatten() {
-            if biggest.min(stack.max_stack_size() as u32) < stack.count as u32 + 1 {
+            if biggest.min(stack.max_stack_size() as u32) < stack.count() as u32 + 1 {
                 return;
             }
         }
@@ -258,7 +251,7 @@ fn try_place(
             .slots
             .iter()
             .flatten()
-            .map(|stack| stack.count as u32)
+            .map(|stack| stack.count() as u32)
             .min();
         match smallest {
             Some(smallest) => smallest + 1,

@@ -113,7 +113,7 @@ pub fn can_fit(stack: &ItemStack) -> bool {
     stack.count > 0 && fits_inside_container_item(stack)
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct BundleContents {
     items: Vec<ItemStack>,
     selected: i32,
@@ -126,6 +126,14 @@ impl PartialEq for BundleContents {
 }
 
 impl BundleContents {
+    /// A copy of the contents. Temporary escape hatch.
+    pub fn dup_unchecked(&self) -> Self {
+        Self {
+            items: self.items.iter().map(ItemStack::dup_unchecked).collect(),
+            selected: self.selected,
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
@@ -217,12 +225,17 @@ impl BundleContents {
         } else {
             None
         };
-        let mut moved = stack.clone().with_count(amount);
+        let mut moved = stack.take(amount);
         if let Some(index) = existing {
             let held = self.items.remove(index);
-            moved.count = held.count.saturating_add(amount);
+            moved = match ItemStack::merge(held, moved) {
+                Ok(merged) => merged,
+                Err((held, moved)) => {
+                    self.items.insert(index, held);
+                    moved
+                }
+            };
         }
-        stack.count -= amount;
         self.items.insert(0, moved);
         amount
     }
@@ -272,7 +285,7 @@ impl BundleContents {
         }
         let mut items = Vec::with_capacity(entries.len());
         for entry in entries {
-            items.push(ItemStack::from_nbt(entry.as_compound()?)?);
+            items.push(ItemStack::decode_nbt(entry.as_compound()?)?);
         }
         Some(Self::from_items(items))
     }
@@ -318,10 +331,11 @@ impl ItemStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::item::MintReason;
     use tuff_vanilla_data::Item;
 
     fn stack(item: Item, count: u8) -> ItemStack {
-        ItemStack::new(item, count)
+        ItemStack::mint(item, count, MintReason::Test)
     }
 
     #[tuff_core::watchdog]

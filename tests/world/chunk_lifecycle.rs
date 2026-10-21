@@ -491,7 +491,7 @@ async fn entities_in_hold_only_chunks_wait_until_the_chunk_is_viewed() {
     world.ticks(40).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [
                 f64::from(chunks[0].x) * 16.0 + 8.5,
                 200.0,

@@ -18,6 +18,8 @@ use crate::world::trading::{MerchantOffer, MerchantView, TradeRequest};
 use crate::world::{distance_sq, framed, packets};
 use rand::Rng;
 use std::collections::VecDeque;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_item::item::ItemStack;
 use tuff_item::item::enchanting::TableOffers;
 use tuff_vanilla_data::registry::CustomStat;
@@ -109,7 +111,7 @@ impl PlayerSession {
             2,
         );
         if self.inventory.slots()[0] != result {
-            self.inventory.set_slot(0, result.clone());
+            self.inventory.set_slot(0, result.dup_unchecked());
             let state_id = self.inventory.next_state_id();
             self.send(&play::ContainerSetSlot {
                 window_id: 0,
@@ -130,7 +132,7 @@ impl PlayerSession {
         let Some(menu) = self.menus.menu.as_mut() else {
             return;
         };
-        let item = menu.container[slot].clone();
+        let item = menu.container[slot].dup_unchecked();
         let state_id = menu.next_state_id();
         let window_id = menu.window_id;
         let wire = menu.kind.wire_slot(slot);
@@ -243,7 +245,7 @@ impl PlayerSession {
                 );
                 let slot_changed = menu.container[anvil::RESULT] != fresh.result;
                 let cost_changed = outcome.cost != fresh.cost;
-                menu.container[anvil::RESULT] = fresh.result.clone();
+                menu.container[anvil::RESULT] = fresh.result.dup_unchecked();
                 let cost = fresh.cost;
                 *outcome = fresh;
                 if slot_changed {
@@ -286,8 +288,8 @@ impl PlayerSession {
             }
             Some(Station::Cartography { inputs, stale }) => {
                 let now = [
-                    menu.container[cartography::MAP].clone(),
-                    menu.container[cartography::ADDITIONAL].clone(),
+                    menu.container[cartography::MAP].dup_unchecked(),
+                    menu.container[cartography::ADDITIONAL].dup_unchecked(),
                 ];
                 if now != **inputs {
                     **inputs = now;
@@ -354,7 +356,7 @@ impl PlayerSession {
         let cost = offers.costs[slot];
         let lapis = menu.container[enchantment::LAPIS]
             .as_ref()
-            .map_or(0, |s| s.count as i32);
+            .map_or(0, |s| s.count() as i32);
         let Some(stack) = menu.container[enchantment::ITEM].as_ref() else {
             return;
         };
@@ -365,12 +367,12 @@ impl PlayerSession {
         if chosen.is_empty() {
             return;
         }
-        let enchanted = tuff_item::item::enchanting::enchant(stack.clone(), &chosen);
-        let item_for_trigger = enchanted.clone();
+        let enchanted = tuff_item::item::enchanting::enchant(stack.dup_unchecked(), &chosen);
+        let item_for_trigger = enchanted.dup_unchecked();
         menu.container[enchantment::ITEM] = Some(enchanted);
         if !free && let Some(lapis_stack) = menu.container[enchantment::LAPIS].as_mut() {
-            lapis_stack.count = lapis_stack.count.saturating_sub(price as u8);
-            if lapis_stack.count == 0 {
+            lapis_stack.shrink(price as u8, BurnReason::CraftingInput);
+            if lapis_stack.count() == 0 {
                 menu.container[enchantment::LAPIS] = None;
             }
         }
@@ -721,7 +723,10 @@ impl PlayerSession {
                 (contents, MenuBacking::Blocks(parts))
             }
             MenuSource::EnderChest { pos } => (
-                std::mem::replace(&mut self.menus.ender_items, vec![None; ENDER_CHEST_SLOTS]),
+                std::mem::replace(
+                    &mut self.menus.ender_items,
+                    (0..ENDER_CHEST_SLOTS).map(|_| None).collect(),
+                ),
                 MenuBacking::EnderChest(pos),
             ),
             MenuSource::Station {
@@ -729,7 +734,7 @@ impl PlayerSession {
             } => {
                 data = initial;
                 (
-                    vec![None; open.kind.container_size()],
+                    (0..open.kind.container_size()).map(|_| None).collect(),
                     MenuBacking::Station(pos),
                 )
             }
@@ -841,13 +846,13 @@ impl PlayerSession {
         };
         let state_id = menu.next_state_id();
         let window_id = menu.window_id;
-        let mut slots = menu.container.clone();
+        let mut slots = menu.container.dup_unchecked();
         for slot in 0..menu.kind.player_section() {
             let index = menu
                 .kind
                 .inventory_slot(menu.container.len() + slot)
                 .expect("player section slot");
-            slots.push(self.inventory.slots()[index].clone());
+            slots.push(self.inventory.slots()[index].dup_unchecked());
         }
         if menu.kind == MenuKind::Crafter {
             let preview = slots.remove(menu::crafter::PREVIEW);
@@ -949,7 +954,7 @@ impl PlayerSession {
             self.release_menu(&menu.region, menu.remote.as_ref(), positions, entity)
                 .await;
         }
-        returned.extend(self.inventory.carried().cloned());
+        returned.extend(self.inventory.carried().map(DupUnchecked::dup_unchecked));
         self.inventory.set_carried(None);
         for stack in returned {
             let leftover = if self.disconnected {
@@ -1067,7 +1072,7 @@ impl PlayerSession {
         };
         let resync = click.state_id != menu.state_id;
         let inventory_before = self.inventory.clone();
-        let container_before = menu.container.clone();
+        let container_before = menu.container.dup_unchecked();
         let action = Click {
             slot: click.slot,
             button: click.button,
@@ -1171,7 +1176,8 @@ impl PlayerSession {
         let grindstone_used = grindstone_hook
             .took
             .then(|| (menu.backing.positions()[0], grindstone_hook.experience));
-        let brewing_after = (menu.kind == MenuKind::BrewingStand).then(|| menu.container.clone());
+        let brewing_after =
+            (menu.kind == MenuKind::BrewingStand).then(|| menu.container.dup_unchecked());
         let took_result = furnace_hook.took;
         let traded = !trades.is_empty();
         let crafted = (grid_hook.took
@@ -1181,7 +1187,11 @@ impl PlayerSession {
             || traded)
             .then(|| menu.kind.result_slot())
             .flatten()
-            .and_then(|slot| container_before.get(slot).cloned().flatten())
+            .and_then(|slot| {
+                container_before
+                    .get(slot)
+                    .and_then(DupUnchecked::dup_unchecked)
+            })
             .map(|stack| stack.item);
         if let Some(item) = crafted {
             let before = Self::count_in(&inventory_before, item);
@@ -1260,7 +1270,7 @@ impl PlayerSession {
         }
         let inventory: Vec<(usize, Option<ItemStack>)> = (0..inventory_before.slots().len())
             .filter(|slot| inventory_before.slots()[*slot] != self.inventory.slots()[*slot])
-            .map(|slot| (slot, inventory_before.slots()[slot].clone()))
+            .map(|slot| (slot, inventory_before.slots()[slot].dup_unchecked()))
             .collect();
         let Some(menu) = self.menus.menu.as_mut() else {
             return;
@@ -1270,7 +1280,7 @@ impl PlayerSession {
         };
         menu.pending = Some(Pending {
             inventory,
-            carried: inventory_before.carried().cloned(),
+            carried: inventory_before.carried().map(DupUnchecked::dup_unchecked),
             drops,
             merchant: Some((container_before, offers_before)),
         });
@@ -1338,7 +1348,9 @@ impl PlayerSession {
             kind: MenuKind::Merchant,
             title: title.clone(),
             state_id: 0,
-            container: vec![None; MenuKind::Merchant.container_size()],
+            container: (0..MenuKind::Merchant.container_size())
+                .map(|_| None)
+                .collect(),
             drag: None,
             region,
             backing: MenuBacking::Merchant(merchant),

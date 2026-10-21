@@ -24,7 +24,7 @@ use crate::world::predicate::{
     self, Context as PredicateContext, EntityFacts, LocationFacts, PlayerFacts, PredicateWorld,
 };
 use crate::world::region_api::{RegionTask, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_world_model::BlockPos;
@@ -34,7 +34,7 @@ use super::Context;
 
 /// What a predicate is tested on: the `this` entity (if any) and the
 /// position and dimension it is tested at.
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct Subject {
     pub dimension: DimensionId,
     pub origin: [f64; 3],
@@ -44,7 +44,7 @@ pub struct Subject {
     pub at_block: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub enum This {
     /// Facts gathered already (players).
     Facts(Box<EntityFacts>),
@@ -822,7 +822,7 @@ fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, ItemStack)> {
     let mut equipment = Vec::new();
     if let Some(held) = saved
         .get_compound("SelectedItem")
-        .and_then(ItemStack::from_nbt)
+        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
     {
         equipment.push((EquipmentSlot::Mainhand, held));
     }
@@ -836,7 +836,10 @@ fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, ItemStack)> {
     ];
     if let Some(worn) = saved.get_compound("equipment") {
         for (name, slot) in slots {
-            if let Some(stack) = worn.get_compound(name).and_then(ItemStack::from_nbt) {
+            if let Some(stack) = worn
+                .get_compound(name)
+                .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
+            {
                 equipment.push((slot, stack));
             }
         }

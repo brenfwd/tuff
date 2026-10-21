@@ -12,6 +12,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::{Block, Item, tag};
@@ -263,7 +264,7 @@ impl Allay {
         match &self.inventory {
             None => Some(held.max_stack_size()),
             Some(stack) if stack.item == item => {
-                Some(stack.max_stack_size().saturating_sub(stack.count)).filter(|n| *n > 0)
+                Some(stack.max_stack_size().saturating_sub(stack.count())).filter(|n| *n > 0)
             }
             Some(_) => None,
         }
@@ -344,9 +345,8 @@ impl Allay {
         let Some(stack) = self.inventory.as_mut() else {
             return;
         };
-        let one = stack.clone().with_count(1);
-        stack.count -= 1;
-        if stack.count == 0 {
+        let one = stack.take(1);
+        if stack.count() == 0 {
             self.inventory = None;
         }
         let aim = [deposit.point[0], deposit.point[1] + 1.0, deposit.point[2]];
@@ -355,7 +355,7 @@ impl Allay {
                 player,
                 event: Box::new(
                     tuff_core::world::messages::AdvancementEvent::AllayDropItemOnBlock {
-                        item: one.clone(),
+                        item: one.dup_unchecked(),
                         location: tuff_core::world::predicate::LocationFacts {
                             position: [deposit.point[0], deposit.point[1] - 2.1, deposit.point[2]],
                             ..Default::default()
@@ -368,7 +368,7 @@ impl Allay {
                 player,
                 event: Box::new(
                     tuff_core::world::messages::AdvancementEvent::AllayDropItemOnBlock {
-                        item: one.clone(),
+                        item: one.dup_unchecked(),
                         location: tuff_core::world::predicate::LocationFacts {
                             position: [deposit.point[0], deposit.point[1] - 1.0, deposit.point[2]],
                             ..Default::default()
@@ -571,7 +571,7 @@ impl Species for Allay {
         if let Some(list) = take(nbt, "Inventory", |t| t.as_list().map(<[Tag]>::to_vec)) {
             self.inventory = list
                 .iter()
-                .find_map(|t| ItemStack::from_nbt(t.as_compound()?));
+                .find_map(|t| ItemStack::from_storage(t.as_compound()?));
         }
         let cooldown = take_number(nbt, "DuplicationCooldown").map_or(0, |v| v as i64);
         self.set_duplication_cooldown(core, cooldown);
@@ -717,10 +717,13 @@ impl Species for Allay {
         {
             return None;
         }
-        match (core.equipment.main_hand().cloned(), stack) {
+        match (
+            core.equipment.main_hand().map(DupUnchecked::dup_unchecked),
+            stack,
+        ) {
             (None, Some(stack)) => {
                 core.equipment
-                    .set(EquipmentSlot::Mainhand, Some(stack.clone().with_count(1)));
+                    .set(EquipmentSlot::Mainhand, Some(stack.dup_count_unchecked(1)));
                 core.sound(SoundEvent::EntityAllayItemGiven, 2.0, 1.0, cx);
                 self.liked_player = Some(interaction.player_uuid);
                 Some(HandEffect::Consume(1))
@@ -747,12 +750,11 @@ impl Species for Allay {
         match &mut self.inventory {
             None if fits => self.inventory = Some(stack),
             Some(kept) if fits && kept.stacks_with(&stack) => {
-                let room = kept.max_stack_size().saturating_sub(kept.count);
-                let added = room.min(stack.count);
-                kept.count += added;
-                if stack.count > added {
-                    let left = stack.count - added;
-                    self.rejected.push(stack.with_count(left));
+                let room = kept.max_stack_size().saturating_sub(kept.count());
+                let mut stack = stack;
+                kept.transfer(&mut stack, room);
+                if stack.count() > 0 {
+                    self.rejected.push(stack);
                 }
             }
             _ => self.rejected.push(stack),
@@ -769,7 +771,7 @@ impl Species for Allay {
         if let Some(stack) = self.inventory.take() {
             core.drop_item(stack, 0.0, cx);
         }
-        if let Some(held) = core.equipment.main_hand().cloned()
+        if let Some(held) = core.equipment.main_hand().map(DupUnchecked::dup_unchecked)
             && !super::equipment::prevents_drop(&held)
         {
             core.equipment.set(EquipmentSlot::Mainhand, None);
@@ -842,6 +844,7 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 mod tests {
     use super::*;
     use crate::tests::with_context;
+    use tuff_item::item::MintReason;
 
     fn interaction(player: u128, item: Option<Item>, off_hand: bool) -> EntityInteraction {
         EntityInteraction {
@@ -849,7 +852,7 @@ mod tests {
             player_uuid: player,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::new(item, 5)),
+            stack: item.map(|item| ItemStack::mint(item, 5, MintReason::Test)),
             off_hand,
             creative: false,
             sneaking: false,
@@ -880,7 +883,7 @@ mod tests {
             let effect = allay.interact(core, &interaction(9, Some(Item::Cobblestone), false), cx);
             assert!(matches!(effect, Some(HandEffect::Consume(1))));
             assert_eq!(
-                core.equipment.main_hand().map(|s| (s.item, s.count)),
+                core.equipment.main_hand().map(|s| (s.item, s.count())),
                 Some((Item::Cobblestone, 1))
             );
             assert_eq!(allay.liked_player(), Some(9));
@@ -896,7 +899,7 @@ mod tests {
                     .is_none(),
                 "only the main hand takes the item back"
             );
-            allay.inventory = Some(ItemStack::new(Item::Cobblestone, 3));
+            allay.inventory = Some(ItemStack::mint(Item::Cobblestone, 3, MintReason::Test));
             let effect = allay.interact(core, &interaction(9, None, false), cx);
             assert!(matches!(
                 effect,
@@ -908,7 +911,7 @@ mod tests {
             assert!(
                 cx.effects.iter().any(|e| matches!(
                     e,
-                    Effect::DropItem { stack, .. } if stack.item == Item::Cobblestone && stack.count == 3
+                    Effect::DropItem { stack, .. } if stack.item == Item::Cobblestone && stack.count() == 3
                 )),
                 "what it gathered falls out"
             );

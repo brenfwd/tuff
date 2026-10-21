@@ -256,9 +256,17 @@ async fn a_powered_shelf_chain_swaps_the_hotbar_row() {
         Some(Item::Stick),
         1,
     );
-    swap.hotbar = vec![None; 9];
-    swap.hotbar[3] = Some(tuff_item::item::ItemStack::new(Item::Apple, 1));
-    swap.hotbar[8] = Some(tuff_item::item::ItemStack::new(Item::Stick, 1));
+    swap.hotbar = (0..9).map(|_| None).collect();
+    swap.hotbar[3] = Some(tuff_item::item::ItemStack::mint(
+        Item::Apple,
+        1,
+        tuff_item::item::MintReason::Test,
+    ));
+    swap.hotbar[8] = Some(tuff_item::item::ItemStack::mint(
+        Item::Stick,
+        1,
+        tuff_item::item::MintReason::Test,
+    ));
     region.request(RegionRequest::Place(swap)).await;
     let ActionOutcome::HotbarSwapped {
         slots: swapped,

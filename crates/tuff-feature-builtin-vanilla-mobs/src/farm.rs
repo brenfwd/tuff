@@ -30,7 +30,7 @@ use tuff_core::world::entity::{
     take_number,
 };
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 const COW_VOLUME: f32 = 0.4;
@@ -354,7 +354,7 @@ impl Species for Mooshroom {
         if stack.item == Item::Bowl {
             let (sound, result) = match self.stew.take() {
                 Some(effects) => {
-                    let mut stew = ItemStack::new(Item::SuspiciousStew, 1);
+                    let mut stew = ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Spawn);
                     stew.components.suspicious_stew_effects = Some(effects);
                     (
                         SoundEvent::EntityMooshroomSuspiciousMilk,
@@ -669,8 +669,8 @@ fn mixed_color(recipes: &RecipeSet, a: DyeColor, b: DyeColor) -> Option<DyeColor
                 width: 2,
                 height: 1,
                 items: vec![
-                    Some(ItemStack::new(first, 1)),
-                    Some(ItemStack::new(second, 1)),
+                    Some(ItemStack::mint(first, 1, MintReason::Spawn)),
+                    Some(ItemStack::mint(second, 1, MintReason::Spawn)),
                 ],
             };
             if let Some((_, recipe)) = recipes.find(&input)
@@ -1329,10 +1329,9 @@ fn mooshroom_shear(
         .block_loot()
         .entity_drops("minecraft:shearing/mooshroom", &facts, cx.rng)
     {
-        for _ in 0..drop.count {
-            let mut single = drop.clone();
-            single.count = 1;
-            core.drop_item(single, 1.0, cx);
+        let mut drop = drop;
+        while drop.count() > 0 {
+            core.drop_item(drop.take(1), 1.0, cx);
         }
     }
     // Turning it into a plain cow (as the game does) needs a
@@ -1358,7 +1357,8 @@ fn sheep_shear(sheep: &mut Sheep, core: &mut MobCore, category: i32, cx: &mut Ti
         .block_loot()
         .entity_drops("minecraft:shearing/sheep", &facts, cx.rng)
     {
-        for _ in 0..drop.count {
+        let mut drop = drop;
+        while drop.count() > 0 {
             let [x, y, z] = core.base.position;
             let rng = &mut *cx.rng;
             let velocity = [
@@ -1368,8 +1368,7 @@ fn sheep_shear(sheep: &mut Sheep, core: &mut MobCore, category: i32, cx: &mut Ti
                 rng.r#gen::<f64>() * 0.2 - 0.1
                     + ((rng.r#gen::<f32>() - rng.r#gen::<f32>()) * 0.1) as f64,
             ];
-            let mut single = drop.clone();
-            single.count = 1;
+            let single = drop.take(1);
             cx.effects.push(Effect::DropItem {
                 stack: single,
                 position: [x, y + 1.0, z],

@@ -180,7 +180,7 @@ async fn location(
 
 /// The weapon's `post_piercing_attack` effects after a stab.
 pub async fn post_piercing_attack(session: &mut PlayerSession, weapon: &ItemStack) {
-    let equipment = [(EquipmentSlot::Mainhand, weapon.clone())];
+    let equipment = [(EquipmentSlot::Mainhand, weapon.dup_unchecked())];
     let facts = session.player_facts();
     for fired in fire(session, |e| &e.post_piercing_attack, &equipment, &facts) {
         Box::pin(apply(session, fired.slot, fired.actions)).await;

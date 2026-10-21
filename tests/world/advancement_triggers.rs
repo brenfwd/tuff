@@ -308,14 +308,14 @@ async fn reported_triggers_meet_their_advancements() {
 
     player
         .handle_event(report(AdvancementEvent::InteractedWithEntity {
-            item: Some(ItemStack::new(Item::Stick, 1)),
+            item: Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
             entity: facts(EntityType::Armadillo),
         }))
         .await;
     assert!(!player.advancement_done("minecraft:adventure/brush_armadillo"));
     player
         .handle_event(report(AdvancementEvent::InteractedWithEntity {
-            item: Some(ItemStack::new(Item::Brush, 1)),
+            item: Some(ItemStack::mint(Item::Brush, 1, MintReason::Test)),
             entity: facts(EntityType::Armadillo),
         }))
         .await;
@@ -411,7 +411,7 @@ async fn reported_block_and_pickup_triggers_meet_their_advancements() {
         .await;
     assert!(player.advancement_done("minecraft:adventure/crafters_crafting_crafters"));
 
-    let mut silk = ItemStack::new(Item::IronPickaxe, 1);
+    let mut silk = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     silk.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:silk_touch".to_owned(),
         1,
@@ -427,7 +427,7 @@ async fn reported_block_and_pickup_triggers_meet_their_advancements() {
 
     player
         .handle_event(report(AdvancementEvent::ThrownItemPickedUpByEntity {
-            item: ItemStack::new(Item::GoldIngot, 1),
+            item: ItemStack::mint(Item::GoldIngot, 1, MintReason::Test),
             entity: facts(EntityType::Piglin),
         }))
         .await;
@@ -694,7 +694,7 @@ async fn breaking_a_bee_nest_reports_the_bees_inside() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: nest,
-            tool: Some(ItemStack::new(Item::Shears, 1)),
+            tool: Some(ItemStack::mint(Item::Shears, 1, MintReason::Test)),
             mode: BreakMode::Finish,
             sequence: 1,
         })
@@ -729,7 +729,7 @@ async fn picking_up_a_thrown_item_reports_to_the_picker_and_the_thrower() {
     let mut item = crate::world::items::ItemEntity::new(
         world.shared.next_entity_id(),
         77,
-        ItemStack::new(Item::GoldIngot, 1),
+        ItemStack::mint(Item::GoldIngot, 1, MintReason::Test),
         at,
         [0.0; 3],
         0,

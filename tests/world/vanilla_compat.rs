@@ -130,7 +130,10 @@ fn compat_entities() -> [(Compound, [f64; 3]); 10] {
                 .with("id", "minecraft:skeleton")
                 .with(
                     "equipment",
-                    Compound::new().with("mainhand", ItemStack::new(Item::Bow, 1).to_nbt()),
+                    Compound::new().with(
+                        "mainhand",
+                        ItemStack::mint(Item::Bow, 1, MintReason::Test).to_nbt(),
+                    ),
                 )
                 .with("NoAI", true)
                 .with("NoGravity", true),

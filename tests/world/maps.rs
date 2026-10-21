@@ -10,7 +10,7 @@ use tuff_core::world::inventory::Inventory;
 use tuff_core::world::session::hooks::SessionTick;
 use tuff_feature_builtin_vanilla_maps::render::{Terrain, sample};
 use tuff_feature_builtin_vanilla_maps::{MapBanner, MapService};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::packet::play::Clientbound as Id;
 use tuff_vanilla_data::registry::MapDecorationType;
 use tuff_world_model::BlockPos;
@@ -26,7 +26,7 @@ fn service(world: &TestWorld) -> &MapService {
 }
 
 fn filled(id: u32) -> ItemStack {
-    let mut stack = ItemStack::new(Item::FilledMap, 1);
+    let mut stack = ItemStack::mint(Item::FilledMap, 1, MintReason::Test);
     stack.components.map_id = Some(id);
     stack
 }
@@ -120,11 +120,11 @@ async fn an_empty_map_makes_a_filled_map_centered_on_the_player() {
     let slot = Inventory::hotbar_slot(session.inventory().selected());
     session
         .inventory_mut()
-        .set_slot(slot, Some(ItemStack::new(Item::Map, 2)));
+        .set_slot(slot, Some(ItemStack::mint(Item::Map, 2, MintReason::Test)));
 
     session.handle_packet(use_item(1)).await;
     assert_eq!(session.inventory().hand(false).unwrap().item, Item::Map);
-    assert_eq!(session.inventory().hand(false).unwrap().count, 1);
+    assert_eq!(session.inventory().hand(false).unwrap().count(), 1);
     let made = session
         .inventory()
         .slots()
@@ -159,7 +159,7 @@ async fn creative_players_keep_their_empty_maps() {
     let slot = Inventory::hotbar_slot(session.inventory().selected());
     session
         .inventory_mut()
-        .set_slot(slot, Some(ItemStack::new(Item::Map, 1)));
+        .set_slot(slot, Some(ItemStack::mint(Item::Map, 1, MintReason::Test)));
     session.handle_packet(use_item(1)).await;
     assert_eq!(session.inventory().hand(false).unwrap().item, Item::Map);
     assert!(
@@ -499,6 +499,7 @@ mod tables {
     use tuff_core::world::messages::{MenuOpen, MenuSource};
     use tuff_core::world::session::PlayerSession;
     use tuff_feature_builtin_vanilla_maps::crafted::post_processing;
+    use tuff_item::item::DupUnchecked;
 
     async fn open_table(world: &TestWorld, session: &mut PlayerSession) -> i32 {
         let region = world.region(ChunkPos::new(0, 0).region()).await;
@@ -540,7 +541,7 @@ mod tables {
     }
 
     fn result(session: &PlayerSession) -> Option<ItemStack> {
-        session.menu_container().unwrap()[cartography::RESULT].clone()
+        session.menu_container().unwrap()[cartography::RESULT].dup_unchecked()
     }
 
     #[tuff_core::watchdog]
@@ -555,10 +556,15 @@ mod tables {
             .unwrap();
         let window = open_table(&world, &mut session).await;
         let mut two = filled(id);
-        two.count = 2;
-        put(&mut session, two, ItemStack::new(Item::Paper, 3)).await;
+        two.resize(2, MintReason::Test, BurnReason::Test);
+        put(
+            &mut session,
+            two,
+            ItemStack::mint(Item::Paper, 3, MintReason::Test),
+        )
+        .await;
         let shown = result(&session).expect("a result");
-        assert_eq!((shown.count, shown.components.map_id), (1, Some(id)));
+        assert_eq!((shown.count(), shown.components.map_id), (1, Some(id)));
         assert_eq!(
             post_processing(&shown),
             Some(tuff_feature_builtin_vanilla_maps::Derivation::ZoomOut)
@@ -566,14 +572,14 @@ mod tables {
 
         session.handle_packet(take(window)).await;
         let container = session.menu_container().unwrap();
-        assert_eq!(container[cartography::MAP].as_ref().unwrap().count, 1);
+        assert_eq!(container[cartography::MAP].as_ref().unwrap().count(), 1);
         assert_eq!(
-            container[cartography::ADDITIONAL].as_ref().unwrap().count,
+            container[cartography::ADDITIONAL].as_ref().unwrap().count(),
             2
         );
         assert!(session.inventory().carried().is_some());
         session.run_session_tick_hooks(SessionTick::Late).await;
-        let carried = session.inventory().carried().unwrap().clone();
+        let carried = session.inventory().carried().unwrap().dup_unchecked();
         assert_eq!(post_processing(&carried), None);
         let new = carried.components.map_id.unwrap();
         assert_ne!(new, id);
@@ -597,10 +603,15 @@ mod tables {
             .await
             .unwrap();
         let window = open_table(&world, &mut session).await;
-        put(&mut session, filled(id), ItemStack::new(Item::GlassPane, 1)).await;
+        put(
+            &mut session,
+            filled(id),
+            ItemStack::mint(Item::GlassPane, 1, MintReason::Test),
+        )
+        .await;
         session.handle_packet(take(window)).await;
         session.run_session_tick_hooks(SessionTick::Late).await;
-        let locked = session.inventory().carried().unwrap().clone();
+        let locked = session.inventory().carried().unwrap().dup_unchecked();
         let locked_id = locked.components.map_id.unwrap();
         assert_ne!(locked_id, id);
         assert!(service(&world).data(locked_id).await.unwrap().locked);
@@ -610,16 +621,26 @@ mod tables {
         session.inventory_mut().set_carried(None);
         put(
             &mut session,
-            locked.clone(),
-            ItemStack::new(Item::GlassPane, 1),
+            locked.dup_unchecked(),
+            ItemStack::mint(Item::GlassPane, 1, MintReason::Test),
         )
         .await;
         assert!(result(&session).is_none(), "a locked map stays as it is");
-        put(&mut session, locked, ItemStack::new(Item::Paper, 1)).await;
+        put(
+            &mut session,
+            locked,
+            ItemStack::mint(Item::Paper, 1, MintReason::Test),
+        )
+        .await;
         assert!(result(&session).is_none(), "nor can it grow");
-        put(&mut session, filled(id), ItemStack::new(Item::Map, 1)).await;
+        put(
+            &mut session,
+            filled(id),
+            ItemStack::mint(Item::Map, 1, MintReason::Test),
+        )
+        .await;
         let copies = result(&session).unwrap();
-        assert_eq!((copies.count, copies.components.map_id), (2, Some(id)));
+        assert_eq!((copies.count(), copies.components.map_id), (2, Some(id)));
         assert_eq!(post_processing(&copies), None);
         world.shutdown().await;
     }
@@ -640,7 +661,7 @@ mod tables {
         );
         session.inventory_mut().set_slot(12, Some(crafted));
         session.run_session_tick_hooks(SessionTick::Late).await;
-        let made = session.inventory().slots()[12].clone().unwrap();
+        let made = session.inventory().slots()[12].dup_unchecked().unwrap();
         assert_eq!(post_processing(&made), None);
         let data = service(&world)
             .data(made.components.map_id.unwrap())
@@ -835,7 +856,7 @@ mod explorer {
         let land = data.colors.iter().filter(|&&c| c >> 2 == 26).count();
         assert!(shore > 0 && land > 0, "{shore} {land}");
 
-        let mut stack = ItemStack::new(Item::WoodlandMansionMap, 1);
+        let mut stack = ItemStack::mint(Item::WoodlandMansionMap, 1, MintReason::Test);
         mark(&mut stack, &spec("#minecraft:on_woodland_mansion_maps"));
         assert!(pending(&stack).is_some());
         made.apply(&mut stack);
@@ -992,7 +1013,7 @@ mod explorer {
         let (viewer, mut events) = PlayerHandle::new(999);
         subscribe(&region, &viewer, &mut events, &[chunk]).await;
         place_blocks(&world, &region, pen(4, 11)).await;
-        let mut sell = ItemStack::new(Item::WoodlandMansionMap, 1);
+        let mut sell = ItemStack::mint(Item::WoodlandMansionMap, 1, MintReason::Test);
         mark(&mut sell, &spec("#minecraft:on_woodland_mansion_maps"));
         let offer = Compound::new()
             .with(
@@ -1037,7 +1058,10 @@ mod explorer {
                 .unwrap_or(&[])
                 .to_vec();
             if let Some(found) = recipes.iter().find_map(|r| {
-                let sell = ItemStack::from_nbt(r.as_compound()?.get_compound("sell")?)?;
+                let sell = ItemStack::mint_from_nbt(
+                    r.as_compound()?.get_compound("sell")?,
+                    MintReason::Test,
+                )?;
                 sell.components.map_id.is_some().then_some(sell)
             }) {
                 made = Some(found);

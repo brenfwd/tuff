@@ -351,8 +351,11 @@ impl State {
                     }
                     match tuff_nbt::Tag::from_snbt(&text) {
                         Ok(tuff_nbt::Tag::Compound(nbt)) => Some(
-                            tuff_item::item::ItemStack::from_nbt(&nbt)
-                                .ok_or(WorldError::InvalidState)?,
+                            tuff_item::item::ItemStack::mint_from_nbt(
+                                &nbt,
+                                tuff_item::item::MintReason::Plugin,
+                            )
+                            .ok_or(WorldError::InvalidState)?,
                         ),
                         _ => return Err(WorldError::InvalidState),
                     }

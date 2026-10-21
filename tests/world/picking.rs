@@ -36,12 +36,13 @@ async fn survival_pick_block_moves_the_item_into_the_hotbar_within_reach() {
     player.stand_at([4.5, 151.0, 6.5], true);
     player.run_tick().await;
     let hotbar = |slot| Inventory::hotbar_slot(slot);
+    player.inventory_mut().set_slot(
+        hotbar(0),
+        Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test)),
+    );
     player
         .inventory_mut()
-        .set_slot(hotbar(0), Some(ItemStack::new(Item::Dirt, 1)));
-    player
-        .inventory_mut()
-        .set_slot(20, Some(ItemStack::new(Item::Stone, 7)));
+        .set_slot(20, Some(ItemStack::mint(Item::Stone, 7, MintReason::Test)));
 
     player.handle_packet(pick_block(4, 150, 15, false)).await;
     assert_eq!(player.inventory().selected(), 0, "out of reach");
@@ -50,7 +51,7 @@ async fn survival_pick_block_moves_the_item_into_the_hotbar_within_reach() {
     assert_eq!(player.inventory().selected(), 1);
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::Stone, 7))
+        Some(&ItemStack::mint(Item::Stone, 7, MintReason::Test))
     );
     assert_eq!(player.inventory().slots()[20], None);
 
@@ -90,7 +91,7 @@ async fn creative_pick_block_creates_the_item_and_copies_block_entity_data() {
     assert_eq!(player.inventory().selected(), 0);
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::Spawner, 1))
+        Some(&ItemStack::mint(Item::Spawner, 1, MintReason::Test))
     );
 
     player.handle_packet(pick_block(5, 151, 5, true)).await;
@@ -99,7 +100,7 @@ async fn creative_pick_block_creates_the_item_and_copies_block_entity_data() {
         1,
         "data makes it a different stack"
     );
-    let picked = player.inventory().hand(false).unwrap().clone();
+    let picked = player.inventory().hand(false).unwrap().dup_unchecked();
     assert_eq!(picked.item, Item::Spawner);
     let stored = picked.components.to_nbt();
     let data = stored
@@ -112,7 +113,7 @@ async fn creative_pick_block_creates_the_item_and_copies_block_entity_data() {
     assert_eq!(player.inventory().selected(), 2);
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::Stone, 1))
+        Some(&ItemStack::mint(Item::Stone, 1, MintReason::Test))
     );
     world.shutdown().await;
 }
@@ -167,15 +168,16 @@ async fn pick_entity_selects_or_gives_its_spawn_egg() {
         "survival creates nothing"
     );
 
-    player
-        .inventory_mut()
-        .set_slot(20, Some(ItemStack::new(Item::CowSpawnEgg, 2)));
+    player.inventory_mut().set_slot(
+        20,
+        Some(ItemStack::mint(Item::CowSpawnEgg, 2, MintReason::Test)),
+    );
     player.inventory_mut().set_selected(3);
     player.handle_packet(pick.clone()).await;
     assert_eq!(player.inventory().selected(), 3);
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::CowSpawnEgg, 2))
+        Some(&ItemStack::mint(Item::CowSpawnEgg, 2, MintReason::Test))
     );
 
     player
@@ -185,7 +187,7 @@ async fn pick_entity_selects_or_gives_its_spawn_egg() {
     player.handle_packet(pick).await;
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::CowSpawnEgg, 1))
+        Some(&ItemStack::mint(Item::CowSpawnEgg, 1, MintReason::Test))
     );
     world.shutdown().await;
 }
@@ -225,7 +227,7 @@ async fn special_blocks_pick_their_seeds_level_and_honey() {
     };
 
     player.handle_packet(pick_block(5, 151, 5, false)).await;
-    let light = player.inventory().hand(false).unwrap().clone();
+    let light = player.inventory().hand(false).unwrap().dup_unchecked();
     assert_eq!(light.item, Item::Light);
     assert_eq!(block_state(&light).unwrap().get_str("level"), Some("7"));
 
@@ -236,12 +238,12 @@ async fn special_blocks_pick_their_seeds_level_and_honey() {
     );
 
     player.handle_packet(pick_block(7, 151, 5, false)).await;
-    let hive = player.inventory().hand(false).unwrap().clone();
+    let hive = player.inventory().hand(false).unwrap().dup_unchecked();
     assert_eq!(hive.item, Item::Beehive);
     assert_eq!(block_state(&hive), None);
 
     player.handle_packet(pick_block(7, 151, 5, true)).await;
-    let hive = player.inventory().hand(false).unwrap().clone();
+    let hive = player.inventory().hand(false).unwrap().dup_unchecked();
     assert_eq!(
         block_state(&hive).unwrap().get_str("honey_level"),
         Some("5")
@@ -272,7 +274,10 @@ async fn picking_an_item_frame_gives_the_framed_item() {
                 .with("TileX", 4)
                 .with("TileY", 150)
                 .with("TileZ", 8)
-                .with("Item", ItemStack::new(Item::Diamond, 1).to_nbt()),
+                .with(
+                    "Item",
+                    ItemStack::mint(Item::Diamond, 1, MintReason::Test).to_nbt(),
+                ),
             position: [4.5, 150.97, 8.5],
             fresh: false,
             reply,
@@ -302,7 +307,7 @@ async fn picking_an_item_frame_gives_the_framed_item() {
         .await;
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::Diamond, 1))
+        Some(&ItemStack::mint(Item::Diamond, 1, MintReason::Test))
     );
     world.shutdown().await;
 }

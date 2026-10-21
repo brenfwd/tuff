@@ -16,7 +16,7 @@ use tuff_vanilla_data::Frozen;
 use tuff_core::world::advancement::{
     Advancements, NoAdvancements, Overlay, OverlayFile, Related, View,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::Item;
 
 fn tree() -> Tree {
@@ -205,8 +205,8 @@ fn inventory_criteria_are_found_through_the_item_index() {
     let tree = tree();
     let progress = Progress::new();
     let player = EntityFacts::default();
-    let redstone = ItemStack::new(Item::Redstone, 1);
-    let inventory = vec![Some(redstone.clone())];
+    let redstone = ItemStack::mint(Item::Redstone, 1, MintReason::Test);
+    let inventory = vec![Some(redstone.dup_unchecked())];
     let event = Event::InventoryChanged {
         changed: Some(&redstone),
         inventory: &inventory,
@@ -252,8 +252,8 @@ fn rewarded<'a>(tree: &'a Tree, event: &Event<'_>) -> Vec<&'a str> {
 #[test]
 fn recipe_unlocks_come_from_the_recipe_advancements() {
     let tree = tree();
-    let redstone = ItemStack::new(Item::Redstone, 1);
-    let one = vec![Some(redstone.clone())];
+    let redstone = ItemStack::mint(Item::Redstone, 1, MintReason::Test);
+    let one = vec![Some(redstone.dup_unchecked())];
     let arrived = |stack: &ItemStack, inventory: &[Option<ItemStack>]| {
         rewarded(
             &tree,
@@ -264,24 +264,24 @@ fn recipe_unlocks_come_from_the_recipe_advancements() {
         )
     };
     assert!(arrived(&redstone, &one).contains(&"minecraft:piston"));
-    let wheat = ItemStack::new(Item::Wheat, 1);
-    assert!(arrived(&wheat, &[Some(wheat.clone())]).contains(&"minecraft:bread"));
-    let netherite = ItemStack::new(Item::NetheriteIngot, 1);
+    let wheat = ItemStack::mint(Item::Wheat, 1, MintReason::Test);
+    assert!(arrived(&wheat, &[Some(wheat.dup_unchecked())]).contains(&"minecraft:bread"));
+    let netherite = ItemStack::mint(Item::NetheriteIngot, 1, MintReason::Test);
     assert!(
-        arrived(&netherite, &[Some(netherite.clone())])
+        arrived(&netherite, &[Some(netherite.dup_unchecked())])
             .contains(&"minecraft:netherite_sword_smithing")
     );
     assert!(rewarded(&tree, &Event::Tick).contains(&"minecraft:crafting_table"));
     let water = tuff_vanilla_data::Block::Water.default_state();
     assert!(rewarded(&tree, &Event::EnterBlock(water)).contains(&"minecraft:oak_boat"));
 
-    let dirt = ItemStack::new(Item::Dirt, 1);
-    let mut inventory = vec![None; 43];
+    let dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
+    let mut inventory = (0..43).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     for slot in inventory.iter_mut().take(9) {
-        *slot = Some(dirt.clone());
+        *slot = Some(dirt.dup_unchecked());
     }
     assert!(!arrived(&dirt, &inventory).contains(&"minecraft:chest"));
-    inventory[40] = Some(dirt.clone());
+    inventory[40] = Some(dirt.dup_unchecked());
     assert!(
         arrived(&dirt, &inventory).contains(&"minecraft:chest"),
         "the off hand counts as an occupied slot"
@@ -351,10 +351,10 @@ fn crafted_recipes_meet_recipe_crafted_criteria() {
         "{found:?}"
     );
     let sherds = [
-        ItemStack::new(Item::ExplorerPotterySherd, 1),
-        ItemStack::new(Item::HeartPotterySherd, 1),
-        ItemStack::new(Item::AnglerPotterySherd, 1),
-        ItemStack::new(Item::ArcherPotterySherd, 1),
+        ItemStack::mint(Item::ExplorerPotterySherd, 1, MintReason::Test),
+        ItemStack::mint(Item::HeartPotterySherd, 1, MintReason::Test),
+        ItemStack::mint(Item::AnglerPotterySherd, 1, MintReason::Test),
+        ItemStack::mint(Item::ArcherPotterySherd, 1, MintReason::Test),
     ];
     let pot = |ingredients: &[ItemStack]| {
         met(&Event::RecipeCrafted {
@@ -366,10 +366,10 @@ fn crafted_recipes_meet_recipe_crafted_criteria() {
     };
     assert!(pot(&sherds));
     let bricks = [
-        ItemStack::new(Item::Brick, 1),
-        ItemStack::new(Item::Brick, 1),
-        ItemStack::new(Item::Brick, 1),
-        ItemStack::new(Item::Brick, 1),
+        ItemStack::mint(Item::Brick, 1, MintReason::Test),
+        ItemStack::mint(Item::Brick, 1, MintReason::Test),
+        ItemStack::mint(Item::Brick, 1, MintReason::Test),
+        ItemStack::mint(Item::Brick, 1, MintReason::Test),
     ];
     assert!(!pot(&bricks));
 }
@@ -378,7 +378,7 @@ fn entry(name: &str, parent: Option<&str>, displayed: bool) -> Entry {
     let display = displayed.then(|| Display {
         title: TextComponent::new(name),
         description: TextComponent::default(),
-        icon: ItemStack::new(Item::Stone, 1),
+        icon: ItemStack::mint(Item::Stone, 1, MintReason::Test),
         frame: Frame::Task,
         background: parent
             .is_none()
@@ -612,8 +612,8 @@ fn levitating_far_enough_meets_the_levitation_criterion() {
 #[test]
 fn item_criteria_are_indexed_by_the_tags_the_tree_was_built_with() {
     let base = tree();
-    let glass = ItemStack::new(Item::Glass, 1);
-    let inventory = vec![Some(glass.clone())];
+    let glass = ItemStack::mint(Item::Glass, 1, MintReason::Test);
+    let inventory = vec![Some(glass.dup_unchecked())];
     let event = Event::InventoryChanged {
         changed: Some(&glass),
         inventory: &inventory,
@@ -655,8 +655,8 @@ fn falling_from_the_build_limit_to_the_bottom_meets_its_criterion() {
 fn using_item_criteria_test_the_item() {
     let registry = trigger::builtin_registry();
     let conditions = serde_json::json!({"item": {"items": "minecraft:spyglass"}});
-    let spyglass = ItemStack::new(Item::Spyglass, 1);
-    let bow = ItemStack::new(Item::Bow, 1);
+    let spyglass = ItemStack::mint(Item::Spyglass, 1, MintReason::Test);
+    let bow = ItemStack::mint(Item::Bow, 1, MintReason::Test);
     let player = at([0.0, 64.0, 0.0]);
     let met = |stack| {
         registry.matches(
@@ -673,7 +673,7 @@ fn using_item_criteria_test_the_item() {
 #[tuff_core::watchdog]
 #[test]
 fn predicates_read_the_tags_in_effect() {
-    let glass = ItemStack::new(Item::Glass, 1);
+    let glass = ItemStack::mint(Item::Glass, 1, MintReason::Test);
     let items = serde_json::json!({"items": "#minecraft:logs"});
     let blocks = serde_json::json!({"blocks": "#logs"});
     let check = || {

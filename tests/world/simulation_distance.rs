@@ -30,7 +30,10 @@ async fn heights(simulation_distance: i32) -> (f64, f64) {
         summon(
             &region,
             EntityType::Item,
-            Compound::new().with("Item", ItemStack::new(Item::Stone, 1).to_nbt()),
+            Compound::new().with(
+                "Item",
+                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+            ),
             [x, y, 8.5],
         )
         .await;
@@ -96,7 +99,10 @@ async fn a_distance_beyond_the_player_index_reach_is_honoured() {
         summon(
             &region,
             EntityType::Item,
-            Compound::new().with("Item", ItemStack::new(Item::Stone, 1).to_nbt()),
+            Compound::new().with(
+                "Item",
+                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+            ),
             [x as f64 + 0.5, y, 8.5],
         )
         .await;
@@ -142,7 +148,10 @@ async fn a_spectator_alone_keeps_nearby_entities_ticking() {
         summon(
             &region,
             EntityType::Item,
-            Compound::new().with("Item", ItemStack::new(Item::Stone, 1).to_nbt()),
+            Compound::new().with(
+                "Item",
+                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+            ),
             [x, y, 8.5],
         )
         .await;
@@ -188,7 +197,10 @@ async fn a_spectator_in_a_neighbouring_region_keeps_chunks_simulating() {
         summon(
             &region,
             EntityType::Item,
-            Compound::new().with("Item", ItemStack::new(Item::Stone, 1).to_nbt()),
+            Compound::new().with(
+                "Item",
+                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+            ),
             [x, y, 8.5],
         )
         .await;

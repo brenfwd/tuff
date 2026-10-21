@@ -8,6 +8,7 @@
 //! per player.
 
 use std::collections::HashMap;
+use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::Block;
 use tuff_vanilla_data::registry::SoundEvent;
@@ -125,7 +126,7 @@ fn uuids(nbt: &Compound, key: &str) -> Vec<u128> {
 }
 
 fn stack_in(nbt: &Compound, key: &str) -> Option<ItemStack> {
-    ItemStack::from_nbt(nbt.get_compound(key)?)
+    ItemStack::from_storage(nbt.get_compound(key)?)
 }
 
 impl Vault {
@@ -164,7 +165,7 @@ impl Vault {
                 .get_list("items_to_eject")
                 .into_iter()
                 .flatten()
-                .filter_map(|tag| ItemStack::from_nbt(tag.as_compound()?))
+                .filter_map(|tag| ItemStack::from_storage(tag.as_compound()?))
                 .collect(),
             total_ejections: long(server, "total_ejections_needed") as i32,
             shared_dirty: false,
@@ -219,7 +220,7 @@ impl Vault {
     }
 
     fn next_to_eject(&self) -> Option<ItemStack> {
-        self.items_to_eject.last().cloned()
+        self.items_to_eject.last().map(DupUnchecked::dup_unchecked)
     }
 
     fn ejection_progress(&self) -> f32 {
@@ -469,8 +470,8 @@ pub fn use_block(
     if !vault.can_eject(State::Active) {
         return interacted;
     }
-    let key = vault.config.key_item.clone()?;
-    if key.item != held || key.components != place.components || place.held_count < key.count {
+    let key = vault.config.key_item.dup_unchecked()?;
+    if key.item != held || key.components != place.components || place.held_count < key.count() {
         play_fail(world, pos, SoundEvent::BlockVaultInsertItemFail);
         return interacted;
     }
@@ -513,6 +514,6 @@ pub fn use_block(
     Some(ActionOutcome::Used {
         off_hand: place.off_hand,
         item: held,
-        effect: HandEffect::Consume(key.count),
+        effect: HandEffect::Consume(key.count()),
     })
 }

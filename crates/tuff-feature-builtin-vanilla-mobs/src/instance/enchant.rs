@@ -2,6 +2,7 @@
 //! tick and `location_changed` when it changes block or gear.
 
 use std::collections::BTreeSet;
+use tuff_item::item::DupUnchecked;
 
 use tuff_core::world::entity::TickContext;
 use tuff_core::world::predicate::EntityFacts;
@@ -39,7 +40,7 @@ impl<S: Species> Mob<S> {
             .equipment
             .worn()
             .into_iter()
-            .map(|(slot, stack)| (slot, stack.clone()))
+            .map(|(slot, stack)| (slot, stack.dup_unchecked()))
             .collect();
         let worn: Vec<(EquipmentSlot, &ItemStack)> =
             gear.iter().map(|(slot, stack)| (*slot, stack)).collect();
@@ -54,7 +55,7 @@ impl<S: Species> Mob<S> {
                 baby: core.is_baby(),
                 ..Default::default()
             },
-            equipment: gear.clone(),
+            equipment: gear.dup_unchecked(),
             tick_count: Some(cx.tick as i64),
             movement: Some(core.base.velocity),
             fall_distance: Some(core.base.fall_distance),
@@ -156,7 +157,12 @@ impl<S: Species> Mob<S> {
                     self.hurt_by(&Damage::of(kind), amount, cx);
                 }
                 Action::ItemDamage(amount) => {
-                    if let Some(mut stack) = self.core.equipment.get(slot).cloned() {
+                    if let Some(mut stack) = self
+                        .core
+                        .equipment
+                        .get(slot)
+                        .map(DupUnchecked::dup_unchecked)
+                    {
                         let rng = &mut *cx.rng;
                         if stack.hurt(amount, rng) == tuff_item::item::Hurt::Broken {
                             self.core.equipment.set(slot, None);

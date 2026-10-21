@@ -4,6 +4,8 @@
 //! that loses its wall (or has something in its way) falls off at the next
 //! 100-tick check.
 
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::damage_type::{self, DamageType};
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -18,7 +20,7 @@ use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::SlotEdit;
 use tuff_core::world::{damage_type_in_tag, framed, packets, physics};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -190,7 +192,7 @@ impl ItemFrame {
     }
 
     pub fn set_item(&mut self, item: Option<ItemStack>) {
-        let item = item.map(|stack| stack.with_count(1));
+        let item = item.map(|stack| stack.keep(1, BurnReason::Template));
         let had_map = self.has_map();
         self.item = item;
         self.changed.push(DATA_ITEM);
@@ -273,7 +275,7 @@ impl ItemFrame {
     }
 
     fn frame_stack(&self) -> ItemStack {
-        let mut stack = ItemStack::new(frame_item(self.base.kind), 1);
+        let mut stack = ItemStack::mint(frame_item(self.base.kind), 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base
             .custom_name
@@ -334,7 +336,7 @@ impl ItemFrame {
         let item = self.item.take();
         if item.is_some() {
             self.changed.push(DATA_ITEM);
-            report_item(item.clone(), None, by, cx);
+            report_item(item.dup_unchecked(), None, by, cx);
         }
         self.release_map(item.as_ref(), cx);
         if !cx.shared.rule_bool("entity_drops") || creative {
@@ -421,8 +423,10 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         no_gravity: true,
         ..rest
     };
-    frame.item = take(nbt, "Item", |tag| ItemStack::from_nbt(tag.as_compound()?))
-        .filter(|stack| stack.count > 0);
+    frame.item = take(nbt, "Item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    })
+    .filter(|stack| stack.count() > 0);
     frame.rotation = take_number(nbt, "ItemRotation").map_or(0, |v| (v as i64).rem_euclid(8) as u8);
     frame.drop_chance = take_number(nbt, "ItemDropChance").map_or(1.0, |v| v as f32);
     frame.fixed = take_bool(nbt, "Fixed").unwrap_or(false);
@@ -445,7 +449,7 @@ impl RegionEntity for ItemFrame {
     }
 
     fn held_items(&self) -> Option<Vec<Option<ItemStack>>> {
-        Some(vec![self.item.clone()])
+        Some(vec![self.item.dup_unchecked()])
     }
 
     fn set_held_items(&mut self, slots: Vec<(usize, Option<ItemStack>)>) -> bool {
@@ -591,8 +595,13 @@ impl RegionEntity for ItemFrame {
         }
         if self.item.is_none() {
             let stack = interaction.stack.as_ref()?;
-            self.set_item(Some(stack.clone()));
-            report_item(None, self.item.clone(), Some(interaction.player), cx);
+            self.set_item(Some(stack.dup_unchecked()));
+            report_item(
+                None,
+                self.item.dup_unchecked(),
+                Some(interaction.player),
+                cx,
+            );
             self.sound(SoundEvent::EntityItemFrameAddItem, cx);
             return Some(HandEffect::Consume(1));
         }
@@ -669,7 +678,7 @@ mod tests {
     fn data_indices_match_the_dumped_layout() {
         for kind in [EntityType::ItemFrame, EntityType::GlowItemFrame] {
             let mut frame = ItemFrame::new(kind, 1, 1, BlockPos::new(0, 64, 0), Facing::North);
-            frame.set_item(Some(ItemStack::new(Item::Diamond, 1)));
+            frame.set_item(Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test)));
             frame.set_rotation(3);
             let layout = kind.data_layout();
             for (index, value) in frame.metadata() {
@@ -742,8 +751,8 @@ mod tests {
             Facing::South,
         );
         assert_eq!(frame.comparator_frame(), Some((Facing::South, 0)));
-        frame.set_item(Some(ItemStack::new(Item::Stick, 4)));
-        assert_eq!(frame.item().map(|s| s.count), Some(1));
+        frame.set_item(Some(ItemStack::mint(Item::Stick, 4, MintReason::Test)));
+        assert_eq!(frame.item().map(|s| s.count()), Some(1));
         assert_eq!(frame.comparator_frame(), Some((Facing::South, 1)));
         frame.set_rotation(7);
         assert_eq!(frame.comparator_frame(), Some((Facing::South, 8)));
@@ -763,7 +772,7 @@ mod tests {
             BlockPos::new(3, 70, -4),
             Facing::Up,
         );
-        frame.set_item(Some(ItemStack::new(Item::Compass, 1)));
+        frame.set_item(Some(ItemStack::mint(Item::Compass, 1, MintReason::Test)));
         frame.set_rotation(5);
         let nbt = tuff_core::world::entity::save(&frame).with("id", "minecraft:glow_item_frame");
         let loaded = registry.load(&nbt, 9).expect("loads");

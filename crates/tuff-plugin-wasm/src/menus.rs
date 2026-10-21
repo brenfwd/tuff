@@ -10,6 +10,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tuff_item::item::DupUnchecked;
 
 use tuff_core::custom::CustomContent;
 use tuff_core::custom::catalog::{self, Catalog, CatalogClick};
@@ -20,7 +21,7 @@ use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{
     HookFuture, PacketInterceptor, SessionHooks, SessionTick, Verdict,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 use crate::abi;
@@ -37,7 +38,7 @@ const MAX_ROWS: u8 = 6;
 const PLAYER_SLOTS: std::ops::Range<usize> = 9..45;
 
 /// What a plugin asked of a player's menu.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum MenuOp {
     Open {
         player: u128,
@@ -111,7 +112,8 @@ impl Menus {
                 title,
                 slots,
             } => {
-                let mut cells = vec![None; usize::from(rows) * 9];
+                let mut cells: Vec<Option<ItemStack>> =
+                    (0..usize::from(rows) * 9).map(|_| None).collect();
                 for (slot, stack) in slots {
                     cells[usize::from(slot)] = Some(stack);
                 }
@@ -154,7 +156,8 @@ impl Menus {
     /// Opens the custom item catalog on `page` for a player.
     pub fn open_catalog(&self, player: u128, page: usize, content: &CustomContent) {
         let catalog = Catalog { page };
-        let mut cells = vec![None; usize::from(catalog::ROWS) * 9];
+        let mut cells: Vec<Option<ItemStack>> =
+            (0..usize::from(catalog::ROWS) * 9).map(|_| None).collect();
         for (slot, stack) in catalog.slots(content) {
             cells[usize::from(slot)] = Some(stack);
         }
@@ -210,7 +213,7 @@ impl Menus {
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let open = entries.get_mut(&player)?.open.as_mut()?;
         open.state_id += 1;
-        Some((open.state_id, open.slots.clone()))
+        Some((open.state_id, open.slots.dup_unchecked()))
     }
 
     /// Takes a player's closed menu out of the table.
@@ -250,7 +253,7 @@ impl Menus {
                 rows: open.rows,
                 title: open.title.clone(),
                 state_id: open.state_id,
-                slots: open.slots.clone(),
+                slots: open.slots.dup_unchecked(),
             };
         }
         if open.dirty.is_empty() {
@@ -259,7 +262,7 @@ impl Menus {
         open.state_id += 1;
         let changed = std::mem::take(&mut open.dirty)
             .into_iter()
-            .map(|slot| (slot, open.slots[usize::from(slot)].clone()))
+            .map(|slot| (slot, open.slots[usize::from(slot)].dup_unchecked()))
             .collect();
         Due::Update {
             state_id: open.state_id,
@@ -331,7 +334,7 @@ pub fn build_stack(item: &MenuItem) -> Option<ItemStack> {
     nbt.insert("id", Tag::String(kind.name().to_owned()));
     nbt.insert("count", Tag::Int(i32::from(item.count)));
     nbt.insert("components", Tag::Compound(components));
-    ItemStack::from_nbt(&nbt)
+    ItemStack::mint_from_nbt(&nbt, MintReason::Plugin)
 }
 
 fn click_kind(mode: i32, button: i8) -> Option<MenuClickKind> {
@@ -355,7 +358,11 @@ fn window_contents(
     menu: Vec<Option<ItemStack>>,
 ) -> Vec<Option<ItemStack>> {
     let mut slots = menu;
-    slots.extend(session.inventory.slots()[PLAYER_SLOTS].iter().cloned());
+    slots.extend(
+        session.inventory.slots()[PLAYER_SLOTS]
+            .iter()
+            .map(DupUnchecked::dup_unchecked),
+    );
     slots
 }
 

@@ -85,7 +85,7 @@ impl HashedSlot {
     }
 
     fn matches_stack(&self, stack: ItemView<'_>) -> bool {
-        if self.item != stack.item.id() || self.count != stack.count as i32 {
+        if self.item != stack.item.id() || self.count != stack.count() as i32 {
             return false;
         }
         let mut removed: Vec<u32> = stack
@@ -116,7 +116,7 @@ impl HashedSlot {
 /// each added component's payload is prefixed with its byte length, so a
 /// component type this server cannot decode is skipped rather than making
 /// the rest of the packet unreadable.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
 pub enum CreativeSlot {
     Empty,
     Stack(ItemStack),

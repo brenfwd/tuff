@@ -4,6 +4,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::SoundEvent;
 
@@ -58,8 +59,14 @@ impl MobCore {
             if self.equipment.get(*slot).is_none()
                 && let Some(item) = tiers.get(tier)
             {
-                self.equipment
-                    .set(*slot, Some(tuff_item::item::ItemStack::new(*item, 1)));
+                self.equipment.set(
+                    *slot,
+                    Some(tuff_item::item::ItemStack::mint(
+                        *item,
+                        1,
+                        tuff_item::item::MintReason::Spawn,
+                    )),
+                );
             }
         }
     }
@@ -76,7 +83,7 @@ impl MobCore {
         ];
         let special = difficulty.special_multiplier();
         for (slot, chance) in SLOTS {
-            let Some(stack) = self.equipment.get(slot).cloned() else {
+            let Some(stack) = self.equipment.get(slot).map(DupUnchecked::dup_unchecked) else {
                 continue;
             };
             if rng.r#gen::<f32>() >= chance * special {
@@ -130,7 +137,11 @@ impl MobCore {
         if !self.is_alive() || !self.sun_burn_tick(cx) {
             return;
         }
-        if let Some(helmet) = self.equipment.get(EquipmentSlot::Head).cloned() {
+        if let Some(helmet) = self
+            .equipment
+            .get(EquipmentSlot::Head)
+            .map(DupUnchecked::dup_unchecked)
+        {
             if helmet.is_damageable() {
                 let wear = cx.rng.gen_range(0..2);
                 let mut helmet = helmet;
@@ -310,7 +321,11 @@ mod tests {
             assert!(burned, "full daylight sets it alight within a few seconds");
             assert_eq!(mob.base.fire, 160);
             mob.base.fire = 0;
-            let helmet = tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::LeatherHelmet, 1);
+            let helmet = tuff_item::item::ItemStack::mint(
+                tuff_vanilla_data::Item::LeatherHelmet,
+                1,
+                tuff_item::item::MintReason::Test,
+            );
             mob.equipment.set(EquipmentSlot::Head, Some(helmet));
             for _ in 0..2000 {
                 mob.burn_in_daylight(cx);

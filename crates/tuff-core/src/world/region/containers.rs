@@ -3,6 +3,8 @@
 //! Called from region.rs's dispatch and from the block edit pipeline.
 
 use std::collections::HashMap;
+use tuff_item::item::DupUnchecked;
+use tuff_item::item::MintReason;
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -251,7 +253,7 @@ impl RegionActor {
                 .orphans
                 .entry(key)
                 .or_default()
-                .push((pos, entity.items.clone()));
+                .push((pos, entity.items.dup_unchecked()));
         } else if spill.is_some() {
             let stacks = block_entity::spilled(&entity);
             let drops = block_entity::scatter(pos, stacks, &mut self.rng);
@@ -487,10 +489,9 @@ impl RegionActor {
                 TextComponent::translate(key, [])
             })
         };
-        let held = place.held.map(|item| ItemStack {
-            item,
-            count: 1,
-            components: place.components.clone(),
+        let held = place.held.map(|item| {
+            ItemStack::mint(item, 1, MintReason::CrossActor)
+                .with_components(place.components.clone())
         });
         if parts
             .iter()
@@ -528,7 +529,7 @@ impl RegionActor {
         let mut data = Vec::new();
         for part in &parts {
             let entity = self.block_entity(*part).expect("ensured above");
-            contents.extend(entity.items.iter().cloned());
+            contents.extend(entity.items.iter().map(DupUnchecked::dup_unchecked));
             sized.push((*part, entity.items.len()));
             data.extend(entity.data());
             if kind == ContainerKind::Crafter {
@@ -586,10 +587,9 @@ impl RegionActor {
         {
             return;
         }
-        let held = place.held.map(|item| ItemStack {
-            item,
-            count: 1,
-            components: place.components.clone(),
+        let held = place.held.map(|item| {
+            ItemStack::mint(item, 1, MintReason::CrossActor)
+                .with_components(place.components.clone())
         });
         let custom_name = self
             .block_entity(pos)
@@ -613,7 +613,7 @@ impl RegionActor {
         }
         let contents = self
             .block_entity(pos)
-            .map(|entity| entity.items.clone())
+            .map(|entity| entity.items.dup_unchecked())
             .unwrap_or_default();
         reply.internal(RegionInternal::HalfOpened {
             place,
@@ -654,7 +654,11 @@ impl RegionActor {
             self.add_viewer(pos, player.clone());
         }
         let entity = self.block_entity(pos).expect("ensured above");
-        let near = (pos, entity.items.clone(), entity.custom_name.clone());
+        let near = (
+            pos,
+            entity.items.dup_unchecked(),
+            entity.custom_name.clone(),
+        );
         let far = (half.pos, half.contents, half.custom_name);
         let ordered = if state.r#type() == Some(ChestType::Left) {
             [far, near]
@@ -746,7 +750,7 @@ impl RegionActor {
         entity.extra.remove(block_entity::raw::LOOT_TABLE);
         entity.extra.remove(block_entity::raw::LOOT_TABLE_SEED);
         if let Some(items) = items {
-            entity.items = items.clone();
+            entity.items = items.dup_unchecked();
             self.explore_loot(super::exploring::ExploreTarget::Block(pos), pos, &items);
         }
         player.send(PlayerEvent::Advancement(Box::new(
@@ -1019,7 +1023,7 @@ impl RegionActor {
             viewer.send(PlayerEvent::ContainerSlots {
                 dimension,
                 pos,
-                slots: slots.clone(),
+                slots: slots.dup_unchecked(),
             })
         });
         let current = viewers.len();
@@ -1074,7 +1078,7 @@ impl RegionActor {
             && !same
             && let Some(entity) = self.block_entity_mut(pos)
         {
-            let items = entity.items.clone();
+            let items = entity.items.dup_unchecked();
             let furnace = entity.furnace_mut().expect("a furnace");
             recipes.furnace_input_changed(kind, &items, furnace);
             let data = furnace.data();
@@ -1194,7 +1198,7 @@ impl RegionActor {
         positions.dedup();
         positions
             .into_iter()
-            .filter_map(|pos| Some((pos, self.block_entity(pos)?.items.clone())))
+            .filter_map(|pos| Some((pos, self.block_entity(pos)?.items.dup_unchecked())))
             .collect()
     }
 
@@ -1207,14 +1211,9 @@ impl RegionActor {
         for change in changes {
             if self.block_entity(change.pos).is_none() {
                 let gained = match (&change.expected, &change.new) {
-                    (Some(old), Some(new)) if old.stacks_with(new) => {
-                        (new.count > old.count).then(|| {
-                            let mut extra = new.clone();
-                            extra.count = new.count - old.count;
-                            extra
-                        })
-                    }
-                    (_, new) => new.clone(),
+                    (Some(old), Some(new)) if old.stacks_with(new) => (new.count() > old.count())
+                        .then(|| new.dup_count_unchecked(new.count() - old.count())),
+                    (_, new) => new.dup_unchecked(),
                 };
                 if let Some(stack) = gained {
                     self.spawn_item_at(
@@ -1226,7 +1225,7 @@ impl RegionActor {
                 }
                 continue;
             }
-            self.set_container_slot(change.pos, change.slot, change.new.clone());
+            self.set_container_slot(change.pos, change.slot, change.new.dup_unchecked());
             if !positions.contains(&change.pos) {
                 positions.push(change.pos);
             }
@@ -1343,7 +1342,12 @@ impl RegionActor {
         player.send(PlayerEvent::ContainerSlots {
             dimension: self.dimension,
             pos,
-            slots: entity.items.iter().cloned().enumerate().collect(),
+            slots: entity
+                .items
+                .iter()
+                .map(DupUnchecked::dup_unchecked)
+                .enumerate()
+                .collect(),
         });
     }
 }

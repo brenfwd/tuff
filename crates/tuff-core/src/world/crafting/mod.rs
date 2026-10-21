@@ -4,6 +4,8 @@
 //! make. Recipes are [`Recipe`] trait objects features register into
 //! [`Registry`]; the concrete kinds live in the vanilla-recipes feature.
 
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 pub mod brewing;
 pub mod place;
 pub mod smelting;
@@ -24,7 +26,7 @@ use tuff_vanilla_data::{Frozen, Item, tag};
 use crate::protocol::recipe::{DisplayEntry, RecipeDisplay, SlotDisplay};
 use crate::world::block_entity::{Campfire, ContainerKind, Furnace};
 use stacked::StackedContents;
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_item::load::{LoadError, LoadErrorKind};
 use tuff_nbt::Compound;
 
@@ -129,7 +131,7 @@ pub trait DataRecipes: Send + Sync {
 
 /// The occupied part of a crafting grid, trimmed to its bounding box the
 /// way the game presents grids to recipes.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct CraftingInput {
     pub width: usize,
     pub height: usize,
@@ -137,7 +139,7 @@ pub struct CraftingInput {
 }
 
 /// What a crafter made.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Crafted {
     pub recipe: Frozen<str>,
     pub result: ItemStack,
@@ -145,7 +147,7 @@ pub struct Crafted {
 }
 
 /// A trimmed input plus where it sat in the full grid.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Positioned {
     pub input: CraftingInput,
     pub left: usize,
@@ -190,12 +192,15 @@ impl CraftingInput {
         }
         let (new_width, new_height) = (right - left + 1, bottom - top + 1);
         let items = if (new_width, new_height) == (width, height) {
-            slots.to_vec()
+            slots
+                .iter()
+                .map(DupUnchecked::dup_unchecked)
+                .collect::<Vec<_>>()
         } else {
             let mut items = Vec::with_capacity(new_width * new_height);
             for y in 0..new_height {
                 for x in 0..new_width {
-                    items.push(slots[x + left + (y + top) * width].clone());
+                    items.push(slots[x + left + (y + top) * width].dup_unchecked());
                 }
             }
             items
@@ -243,7 +248,7 @@ impl CraftingInput {
             .map(|slot| {
                 slot.as_ref()
                     .and_then(|stack| stack.item.crafting_remainder())
-                    .map(|(item, count)| ItemStack::new(item, count))
+                    .map(|(item, count)| ItemStack::mint(item, count, MintReason::Crafting))
             })
             .collect()
     }
@@ -299,7 +304,7 @@ pub fn result_stack(result: &RecipeResult) -> ItemStack {
         .and_then(|value| tuff_item::registries::codecs::json_to_nbt(&value))
         .and_then(|tag| tag.as_compound().map(Components::from_nbt))
         .unwrap_or_default();
-    ItemStack::new(result.item, count).with_components(components)
+    ItemStack::mint(result.item, count, MintReason::Crafting).with_components(components)
 }
 
 /// A result stack built over an input's components: the input's component
@@ -334,7 +339,12 @@ pub fn with_input_components(
     }
     components.removed.sort();
     components.removed.dedup();
-    ItemStack::new(item, count.clamp(1, MAX_RESULT_COUNT) as u8).with_components(components)
+    ItemStack::mint(
+        item,
+        count.clamp(1, MAX_RESULT_COUNT) as u8,
+        MintReason::Crafting,
+    )
+    .with_components(components)
 }
 
 fn merge_typed(into: &mut Components, from: Components) {
@@ -741,15 +751,10 @@ impl RecipeSet {
         let positioned = CraftingInput::positioned(3, 3, grid);
         let input = &positioned.input;
         let (recipe_name, recipe) = self.find(input)?;
-        let result = recipe.assemble(input).filter(|result| result.count > 0)?;
+        let result = recipe.assemble(input).filter(|result| result.count() > 0)?;
         let remainders = recipe.remainders(input).into_iter().flatten().collect();
         for slot in grid.iter_mut() {
-            if let Some(stack) = slot.as_mut() {
-                stack.count -= 1;
-                if stack.count == 0 {
-                    *slot = None;
-                }
-            }
+            ItemStack::burn_from(slot, 1, BurnReason::CraftingInput);
         }
         Some(Crafted {
             recipe: recipe_name.clone(),
@@ -773,27 +778,22 @@ impl RecipeSet {
             Some((_, recipe)) => recipe.remainders(input),
             None => input.crafting_remainders(),
         };
-        remaining.resize(input.items.len(), None);
+        remaining.resize_with(input.items.len(), || None);
         let mut leftovers = Vec::new();
         for y in 0..input.height {
             for x in 0..input.width {
                 let slot = x + positioned.left + (y + positioned.top) * width;
-                if let Some(stack) = grid[slot].as_mut() {
-                    stack.count -= 1;
-                    if stack.count == 0 {
-                        grid[slot] = None;
-                    }
-                }
-                let Some(mut replacement) = remaining[x + y * input.width].take() else {
+                ItemStack::burn_from(&mut grid[slot], 1, BurnReason::CraftingInput);
+                let Some(replacement) = remaining[x + y * input.width].take() else {
                     continue;
                 };
-                match &grid[slot] {
+                match &mut grid[slot] {
                     None => grid[slot] = Some(replacement),
-                    Some(current) if current.stacks_with(&replacement) => {
-                        replacement.count += current.count;
-                        grid[slot] = Some(replacement);
+                    Some(current) => {
+                        if let Err(replacement) = current.join(replacement) {
+                            leftovers.push(replacement);
+                        }
                     }
-                    Some(_) => leftovers.push(replacement),
                 }
             }
         }

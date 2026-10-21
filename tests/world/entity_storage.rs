@@ -9,7 +9,7 @@ use tuff_core::world::messages::Igniter;
 use tuff_feature_builtin_vanilla_combat::world::explosion::PrimedTnt;
 use tuff_feature_builtin_vanilla_items::world::items::ItemEntity;
 use tuff_feature_builtin_vanilla_survival::world::experience_orb::ExperienceOrb;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_storage::entities::{decode, encode};
 use tuff_world_model::BlockPos;
@@ -19,7 +19,7 @@ fn item() -> ItemEntity {
     let mut item = ItemEntity::new(
         7,
         0x1234,
-        ItemStack::new(Item::Dirt, 3),
+        ItemStack::mint(Item::Dirt, 3, MintReason::Test),
         [1.5, 70.0, -2.5],
         [0.0, -0.1, 0.0],
         4,
@@ -67,7 +67,10 @@ fn items_orbs_and_tnt_round_trip_and_other_entities_are_preserved() {
     let loaded = live[0].downcast_ref::<ItemEntity>().unwrap();
     assert_eq!(loaded.base.id, 41);
     assert_eq!(loaded.base.uuid, 0x1234);
-    assert_eq!(loaded.stack, ItemStack::new(Item::Dirt, 3));
+    assert_eq!(
+        loaded.stack,
+        ItemStack::mint(Item::Dirt, 3, MintReason::Test)
+    );
     assert_eq!(loaded.base.position, [1.5, 70.0, -2.5]);
     assert!(loaded.base.on_ground);
     assert_eq!(
@@ -148,7 +151,7 @@ fn empty_chunks_encode_to_none_and_bad_positions_fail() {
 #[test]
 fn item_components_survive_the_entity_round_trip() {
     let mut entity = item();
-    entity.stack = ItemStack::new(Item::DiamondPickaxe, 1);
+    entity.stack = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     entity.stack.set_damage(12);
     entity
         .stack

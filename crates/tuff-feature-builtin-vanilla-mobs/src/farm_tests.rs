@@ -147,7 +147,7 @@ fn interaction(item: Item) -> EntityInteraction {
         player_uuid: 9,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: Some(ItemStack::new(item, 5)),
+        stack: Some(ItemStack::mint(item, 5, MintReason::Test)),
         off_hand: false,
         creative: false,
         sneaking: false,

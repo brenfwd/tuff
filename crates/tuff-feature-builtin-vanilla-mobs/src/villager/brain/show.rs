@@ -37,7 +37,7 @@ fn clear_held(core: &mut MobCore) {
 
 fn hold(core: &mut MobCore, stack: &ItemStack) {
     core.equipment
-        .set(EquipmentSlot::Mainhand, Some(stack.clone()));
+        .set(EquipmentSlot::Mainhand, Some(stack.dup_unchecked()));
     core.equipment.set_drop_chance(EquipmentSlot::Mainhand, 0.0);
 }
 
@@ -66,7 +66,7 @@ impl Villager {
             .flatten()
             .filter(|o| !o.is_out_of_stock())
             .filter(|o| o.buy.item == held || o.buy_b.as_ref().is_some_and(|b| b.item == held))
-            .map(|o| o.sell.clone())
+            .map(|o| o.sell.dup_unchecked())
             .collect()
     }
 

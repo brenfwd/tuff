@@ -2,7 +2,8 @@
 //! removals, and undoing them on a container's current contents.
 
 use tuff_core::world::region_api::{BlockCause, ContainerHolder, SlotEdit};
-use tuff_item::item::ItemStack;
+use tuff_item::item::BurnReason;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 
 use crate::record::{Kind, Record, Who};
@@ -11,7 +12,7 @@ use crate::record::{Kind, Record, Who};
 pub const MAX_PENDING: usize = 1024;
 
 /// One item's net change in a container: `stack` is one of it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
 pub struct Net {
     pub stack: ItemStack,
     pub delta: i64,
@@ -39,7 +40,7 @@ impl Pending {
     }
 
     fn add(&mut self, stack: &ItemStack, delta: i64, slot: usize) {
-        let one = stack.clone().with_count(1);
+        let one = stack.dup_count_unchecked(1);
         match self.items.iter_mut().find(|net| net.stack == one) {
             Some(net) => {
                 net.delta += delta;
@@ -57,10 +58,10 @@ impl Pending {
     pub fn apply(&mut self, slots: &[SlotEdit]) {
         for edit in slots {
             if let Some(old) = &edit.old {
-                self.add(old, -i64::from(old.count), edit.slot);
+                self.add(old, -i64::from(old.count()), edit.slot);
             }
             if let Some(new) = &edit.new {
-                self.add(new, i64::from(new.count), edit.slot);
+                self.add(new, i64::from(new.count()), edit.slot);
             }
         }
     }
@@ -134,7 +135,7 @@ pub fn parse_text(text: &str) -> Place {
 
 /// One container row to undo: put `amount` of `stack` back in, or take it
 /// out where it still is.
-#[derive(Clone, Debug)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct Undo {
     pub id: i64,
     pub entity: Option<u128>,
@@ -175,7 +176,9 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
                     break;
                 }
                 let room = match &items[slot] {
-                    Some(stack) if !empty_pass && same(stack, undo) => max - i64::from(stack.count),
+                    Some(stack) if !empty_pass && same(stack, undo) => {
+                        max - i64::from(stack.count())
+                    }
                     None if empty_pass => max,
                     _ => continue,
                 };
@@ -184,8 +187,8 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
                     continue;
                 }
                 left -= moved;
-                let stack = items[slot].get_or_insert_with(|| undo.stack.clone().with_count(0));
-                stack.count += moved as u8;
+                let stack = items[slot].get_or_insert_with(|| undo.stack.dup_count_unchecked(0));
+                stack.grow(moved as u8, MintReason::Command);
             }
         }
     } else {
@@ -200,10 +203,10 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
             let Some(stack) = items[slot].as_mut().filter(|stack| same(stack, undo)) else {
                 continue;
             };
-            let moved = i64::from(stack.count).min(left);
+            let moved = i64::from(stack.count()).min(left);
             left -= moved;
-            stack.count -= moved as u8;
-            if stack.count == 0 {
+            stack.shrink(moved as u8, BurnReason::Command);
+            if stack.count() == 0 {
                 items[slot] = None;
             }
         }
@@ -213,7 +216,8 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
 
 /// The stack a row's item data names.
 pub fn stack_of(data: Option<&Compound>) -> Option<ItemStack> {
-    ItemStack::from_nbt(data?).map(|stack| stack.with_count(1))
+    ItemStack::mint_from_nbt(data?, MintReason::Template)
+        .map(|stack| stack.keep(1, BurnReason::Template))
 }
 
 #[cfg(test)]
@@ -223,14 +227,14 @@ mod tests {
     use tuff_world_model::BlockPos;
 
     fn stack(item: Item, count: u8) -> Option<ItemStack> {
-        Some(ItemStack::new(item, count))
+        Some(ItemStack::mint(item, count, MintReason::Test))
     }
 
     fn undo(item: Item, amount: i64, add: bool, slot: Option<usize>) -> Undo {
         Undo {
             id: 1,
             entity: None,
-            stack: ItemStack::new(item, 1),
+            stack: ItemStack::mint(item, 1, MintReason::Test),
             any_components: false,
             amount,
             add,
@@ -282,7 +286,7 @@ mod tests {
         assert_eq!(records[1].amount, 5);
         assert_eq!(
             stack_of(records[1].data.as_ref()),
-            Some(ItemStack::new(Item::Dirt, 1))
+            Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test))
         );
     }
 

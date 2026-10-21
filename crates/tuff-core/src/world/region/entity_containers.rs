@@ -4,6 +4,7 @@
 
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 
 use super::*;
 use tuff_item::item::ItemStack;
@@ -49,7 +50,10 @@ impl RegionActor {
                 loot.container_loot(&table, slots, &mut StdRng::seed_from_u64(seed as u64))
             };
             if let (Some(items), Some(container)) = (items, tracked.entity.container_mut()) {
-                for (slot, stack) in container.iter_mut().zip(items.iter().cloned()) {
+                for (slot, stack) in container
+                    .iter_mut()
+                    .zip(items.iter().map(DupUnchecked::dup_unchecked))
+                {
                     *slot = stack;
                 }
                 let [x, y, z] = tracked.entity.base().position;
@@ -66,7 +70,13 @@ impl RegionActor {
                 let (namespace, path) = base.kind.name().split_once(':').unwrap_or(("", ""));
                 TextComponent::translate(format!("entity.{namespace}.{path}"), [])
             });
-        let contents = tracked.entity.container().unwrap_or(&[]).to_vec();
+        let contents = tracked
+            .entity
+            .container()
+            .unwrap_or(&[])
+            .iter()
+            .map(DupUnchecked::dup_unchecked)
+            .collect::<Vec<_>>();
         let kind = tracked.entity.container_menu();
         if let Some((origin, items)) = explore {
             self.explore_loot(
@@ -209,19 +219,22 @@ impl RegionActor {
             player.send(PlayerEvent::EntityTransaction {
                 window_id,
                 accepted: false,
-                contents: container.to_vec(),
+                contents: container
+                    .iter()
+                    .map(DupUnchecked::dup_unchecked)
+                    .collect::<Vec<_>>(),
             });
             return;
         }
         let mut slots = Vec::with_capacity(changes.len());
         let mut edits = Vec::new();
         for change in changes {
-            let old = std::mem::replace(&mut container[change.slot], change.new.clone());
+            let old = std::mem::replace(&mut container[change.slot], change.new.dup_unchecked());
             if holder.is_some() {
                 edits.push(SlotEdit {
                     slot: change.slot,
                     old,
-                    new: change.new.clone(),
+                    new: change.new.dup_unchecked(),
                 });
             }
             slots.push((change.slot, change.new));
@@ -257,7 +270,7 @@ impl RegionActor {
                     || viewer.send(PlayerEvent::EntitySlots {
                         dimension,
                         entity,
-                        slots: slots.clone(),
+                        slots: slots.dup_unchecked(),
                     })
             });
         }
@@ -312,20 +325,25 @@ impl RegionActor {
             return Some(stack);
         };
         let kind = entity_container_kind(items.len());
-        let before = holder.map(|_| items.to_vec());
+        let before = holder.map(|_| {
+            items
+                .iter()
+                .map(DupUnchecked::dup_unchecked)
+                .collect::<Vec<_>>()
+        });
         let mut changed = Vec::new();
         let rest = block_entity::insert(&recipes, kind, items, None, stack, &mut changed, 0);
         let slots = changed
             .into_iter()
-            .map(|slot| (slot, items[slot].clone()))
+            .map(|slot| (slot, items[slot].dup_unchecked()))
             .collect::<Vec<_>>();
         if let (Some(holder), Some(before)) = (holder, before) {
             let edits = slots
                 .iter()
                 .map(|(slot, new)| SlotEdit {
                     slot: *slot,
-                    old: before[*slot].clone(),
-                    new: new.clone(),
+                    old: before[*slot].dup_unchecked(),
+                    new: new.dup_unchecked(),
                 })
                 .collect();
             self.report_container_edit(holder, edits);
@@ -354,8 +372,8 @@ impl RegionActor {
                 .ents
                 .entities
                 .get(&entity)
-                .and_then(|tracked| tracked.entity.container()?[slot].clone())
-                .map(|stack| stack.with_count(1))
+                .and_then(|tracked| tracked.entity.container()?[slot].as_ref())
+                .map(|stack| stack.dup_count_unchecked(1))
             else {
                 continue;
             };
@@ -371,19 +389,19 @@ impl RegionActor {
             else {
                 return true;
             };
-            let old = holder.and(items[slot].clone());
+            let old = holder.and(items[slot].dup_unchecked());
             if let Some(stack) = items[slot].as_mut() {
-                stack.count -= 1;
-                if stack.count == 0 {
+                stack.set_count_unchecked(stack.count() - 1);
+                if stack.count() == 0 {
                     items[slot] = None;
                 }
             }
-            let value = items[slot].clone();
+            let value = items[slot].dup_unchecked();
             if let Some(holder) = holder {
                 let edit = SlotEdit {
                     slot,
                     old,
-                    new: value.clone(),
+                    new: value.dup_unchecked(),
                 };
                 self.report_container_edit(holder, vec![edit]);
             }
@@ -438,7 +456,7 @@ impl RegionActor {
                     .block_entity(part)
                     .and_then(|block| block.items[slot].as_ref())
                     .filter(|stack| kind.can_extract(slot, stack, face))
-                    .map(|stack| stack.clone().with_count(1))
+                    .map(|stack| stack.dup_count_unchecked(1))
                 else {
                     continue;
                 };
@@ -459,9 +477,10 @@ impl RegionActor {
         let [x, y, z] = tracked.entity.base().position;
         let bounds = tracked.entity.base().bounds();
         let full = tracked.entity.container().is_none_or(|items| {
-            items
-                .iter()
-                .all(|slot| slot.as_ref().is_some_and(|s| s.count >= s.max_stack_size()))
+            items.iter().all(|slot| {
+                slot.as_ref()
+                    .is_some_and(|s| s.count() >= s.max_stack_size())
+            })
         });
         if full {
             return false;
@@ -515,8 +534,8 @@ impl RegionActor {
             if !seen.insert(item) {
                 continue;
             }
-            match self.insert_into_entity(id, stack.clone()) {
-                Some(rest) if rest.count == stack.count => continue,
+            match self.insert_into_entity(id, stack.dup_unchecked()) {
+                Some(rest) if rest.count() == stack.count() => continue,
                 Some(rest) => {
                     self.set_item_stack(item, rest);
                     return true;

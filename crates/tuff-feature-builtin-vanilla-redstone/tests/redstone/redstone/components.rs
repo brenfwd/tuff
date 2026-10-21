@@ -281,7 +281,7 @@ async fn an_item_on_tripwire_powers_both_hooks() {
 
     b.region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [87.5, f64::from(FLOOR_Y) + 1.3, 86.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -329,7 +329,7 @@ async fn tripped_span(b: &Bench) -> (BlockPos, BlockPos) {
     set(&b.region, &wires).await;
     b.region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [87.5, f64::from(FLOOR_Y) + 1.3, 86.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -379,7 +379,7 @@ async fn shears_disarm_a_tripwire_without_tripping_the_hooks() {
     let dir = TestDir::new();
     let mut b = bench(dir.path(), &[ChunkPos::new(5, 5)], (80, 95), (84, 88)).await;
     let (west, east) = tripped_span(&b).await;
-    let shears = Some(ItemStack::new(Item::Shears, 1));
+    let shears = Some(ItemStack::mint(Item::Shears, 1, MintReason::Test));
     break_wire(&mut b, at(87, 1, 86), shears).await;
     assert_eq!(state(&b.region, west).await.powered(), Some(false));
     assert_eq!(state(&b.region, east).await.powered(), Some(false));

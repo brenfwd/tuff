@@ -415,7 +415,7 @@ pub struct TickContext<'a> {
     pub biome: &'a dyn Fn(BlockPos) -> Option<&'static str>,
     /// A container's item slots at a position (read-only; `None` where
     /// there is none). A double chest reads as both halves in menu order.
-    pub container: &'a dyn Fn(BlockPos) -> Option<std::borrow::Cow<'a, [Option<ItemStack>]>>,
+    pub container: &'a dyn Fn(BlockPos) -> Option<tuff_item::item::SlotsCow<'a>>,
     /// Whether the container at a position is locked and how many players
     /// and mobs have it open.
     pub container_info: &'a dyn Fn(BlockPos) -> ContainerInfo,
@@ -488,7 +488,7 @@ pub struct GroundPickup<'a> {
 }
 
 /// A player's melee hit on an entity, as the entity's region applies it.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EntityAttack {
     pub attacker: PlayerId,
     pub attacker_uuid: u128,
@@ -514,7 +514,7 @@ pub struct AttackOutcome {
 }
 
 /// A player's right click on an entity.
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct EntityInteraction {
     pub player: PlayerId,
     pub player_uuid: u128,

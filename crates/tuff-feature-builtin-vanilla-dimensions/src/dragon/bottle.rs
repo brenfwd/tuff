@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 use tuff_core::world::game_event::{Context, GameEvent, Source};
 use tuff_core::world::raycast::{self, FluidMode};
 use tuff_core::world::region_api::RegionTask;
-use tuff_item::item::{ItemStack, PotionContents};
+use tuff_item::item::{ItemStack, MintReason, PotionContents};
 use tuff_vanilla_data::registry::{Potion, SoundEvent};
 use tuff_vanilla_data::{Block, Item};
 
@@ -100,7 +100,7 @@ async fn fill_from_water(session: &mut PlayerSession, off_hand: bool, region: &R
 }
 
 fn water_bottle() -> ItemStack {
-    let mut stack = ItemStack::new(Item::Potion, 1);
+    let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Transform);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Water),
         ..PotionContents::default()

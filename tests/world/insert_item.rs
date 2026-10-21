@@ -162,9 +162,9 @@ async fn inserting_into_a_chest_stores_and_a_full_chest_refuses() {
     let (_dir, world, region, ..) = start().await;
     let chest = BlockPos::new(X, Y, Z);
     set(&region, chest, "minecraft:chest", None).await;
-    let stone = ItemStack::new(Item::Stone, 10);
+    let stone = ItemStack::mint(Item::Stone, 10, MintReason::Test);
     assert_eq!(
-        insert(&region, chest, None, stone.clone()).await,
+        insert(&region, chest, None, stone.dup_unchecked()).await,
         Insert::Stored
     );
     assert_eq!(slots(&region, chest).await, 1);
@@ -176,7 +176,7 @@ async fn inserting_into_a_chest_stores_and_a_full_chest_refuses() {
     )
     .await;
     assert_eq!(
-        insert(&region, chest, None, stone.clone()).await,
+        insert(&region, chest, None, stone.dup_unchecked()).await,
         Insert::Refused(stone)
     );
     world.shutdown().await;
@@ -203,7 +203,13 @@ async fn a_double_chest_spills_into_its_other_half() {
     )
     .await;
     assert_eq!(
-        insert(&region, left, None, ItemStack::new(Item::Stone, 5)).await,
+        insert(
+            &region,
+            left,
+            None,
+            ItemStack::mint(Item::Stone, 5, MintReason::Test)
+        )
+        .await,
         Insert::Stored
     );
     assert_eq!(slots(&region, right).await, 1);
@@ -216,9 +222,9 @@ async fn a_furnace_refuses_ingredients_from_below_but_takes_them_from_above() {
     let (_dir, world, region, ..) = start().await;
     let furnace = BlockPos::new(X, Y, Z);
     set(&region, furnace, "minecraft:furnace", None).await;
-    let ore = ItemStack::new(Item::IronOre, 1);
+    let ore = ItemStack::mint(Item::IronOre, 1, MintReason::Test);
     assert!(matches!(
-        insert(&region, furnace, Some(Facing::Down), ore.clone()).await,
+        insert(&region, furnace, Some(Facing::Down), ore.dup_unchecked()).await,
         Insert::Refused(_)
     ));
     assert_eq!(
@@ -239,20 +245,20 @@ async fn a_port_block_takes_one_item_and_no_target_returns_the_stack() {
             &region,
             shelf,
             Some(Facing::Up),
-            ItemStack::new(Item::Stick, 1)
+            ItemStack::mint(Item::Stick, 1, MintReason::Test)
         )
         .await,
         Insert::Stored
     );
-    let two = ItemStack::new(Item::Stick, 2);
+    let two = ItemStack::mint(Item::Stick, 2, MintReason::Test);
     assert_eq!(
         insert(&region, shelf, Some(Facing::Up), two).await,
-        Insert::Refused(ItemStack::new(Item::Stick, 1))
+        Insert::Refused(ItemStack::mint(Item::Stick, 1, MintReason::Test))
     );
     let air = BlockPos::new(X + 5, Y, Z);
-    let stick = ItemStack::new(Item::Stick, 1);
+    let stick = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     assert_eq!(
-        insert(&region, air, None, stick.clone()).await,
+        insert(&region, air, None, stick.dup_unchecked()).await,
         Insert::Nothing(stick)
     );
     world.shutdown().await;

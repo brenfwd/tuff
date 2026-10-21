@@ -5,6 +5,7 @@
 use crate::{Damage, MobCore, MobSounds, Species, data};
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::entity::Size;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -18,7 +19,7 @@ use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::{DispenseOutcome, SlotEdit};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -181,9 +182,9 @@ impl ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let old = core.equipment.get(slot).cloned();
+        let old = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
         let outcome = self.swap_slot(core, slot, interaction, cx);
-        let new = core.equipment.get(slot).cloned();
+        let new = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
         if old != new {
             cx.effects.push(Effect::HeldItems {
                 player: Some(interaction.player),
@@ -204,7 +205,7 @@ impl ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let current = core.equipment.get(slot).cloned();
+        let current = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
         if current.is_some() && self.bit(slot, REMOVE_ITEM_BIT) {
             return None;
         }
@@ -216,18 +217,18 @@ impl ArmorStand {
             && current.is_none()
             && let Some(held) = held
         {
-            let one = held.clone().with_count(1);
+            let one = held.dup_count_unchecked(1);
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
             return Some(HandEffect::None);
         }
         if let Some(held) = held
-            && held.count > 1
+            && held.count() > 1
         {
             if current.is_some() {
                 return None;
             }
-            let one = held.clone().with_count(1);
+            let one = held.dup_count_unchecked(1);
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
             return Some(HandEffect::Consume(1));
@@ -235,7 +236,8 @@ impl ArmorStand {
         if let Some(held) = held {
             self.equip_sound(core, held, cx);
         }
-        core.equipment.set(slot, held.cloned());
+        core.equipment
+            .set(slot, held.map(DupUnchecked::dup_unchecked));
         Some(HandEffect::Replace(current.map(Box::new)))
     }
 
@@ -284,7 +286,7 @@ impl ArmorStand {
             EquipmentSlot::Chest,
             EquipmentSlot::Head,
         ] {
-            if let Some(stack) = core.equipment.get(slot).cloned() {
+            if let Some(stack) = core.equipment.get(slot).map(DupUnchecked::dup_unchecked) {
                 core.equipment.set(slot, None);
                 if !prevents_drop(&stack) {
                     self.pop(core, above, stack, cx);
@@ -294,7 +296,7 @@ impl ArmorStand {
     }
 
     fn broken_by_player(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        let mut item = ItemStack::new(Item::ArmorStand, 1);
+        let mut item = ItemStack::mint(Item::ArmorStand, 1, MintReason::Spawn);
         if let Some(name) = core
             .base
             .custom_name
@@ -493,7 +495,7 @@ impl Species for ArmorStand {
             return None;
         }
         core.equipment
-            .set(equippable.slot, Some(stack.clone().with_count(1)));
+            .set(equippable.slot, Some(stack.dup_count_unchecked(1)));
         core.sound(equippable.equip_sound, 1.0, 1.0, cx);
         Some(DispenseOutcome::Dispensed)
     }
@@ -625,7 +627,9 @@ mod tests {
             (EquipmentSlot::Legs, Item::IronLeggings),
             (EquipmentSlot::Feet, Item::IronBoots),
         ] {
-            mob.core.equipment.set(slot, Some(ItemStack::new(item, 1)));
+            mob.core
+                .equipment
+                .set(slot, Some(ItemStack::mint(item, 1, MintReason::Test)));
         }
         let at = |y| mob.species.clicked_slot(y, &mob.core);
         assert_eq!(at(1.8), EquipmentSlot::Head);

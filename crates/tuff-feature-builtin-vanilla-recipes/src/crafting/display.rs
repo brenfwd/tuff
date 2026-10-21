@@ -1,6 +1,7 @@
 //! What the recipe book shows for each vanilla recipe: the game's recipe
 //! display and slot display trees (Recipe Book Add, Place Ghost Recipe).
 
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::data_registry::TRIM_PATTERN;
 use tuff_vanilla_data::recipe::{Ingredient, Recipe};
 use tuff_vanilla_data::registry::{DataComponentType, RecipeBookCategory};
@@ -9,7 +10,7 @@ use tuff_vanilla_data::{Frozen, Item};
 use super::result_stack;
 use super::{Shaped, Shapeless};
 use tuff_core::world::crafting::{Recipe as _, crafting_category};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 pub use tuff_core::protocol::recipe::{DisplayEntry, RecipeDisplay, SlotDisplay};
 
@@ -78,13 +79,27 @@ pub fn displays_of(recipe: &Recipe) -> Vec<RecipeDisplay> {
                 ingredients.push(ingredient(&transmute.material));
                 let count = super::transmute_count(transmute, materials);
                 let result = match &transmute.result {
-                    Some(result) => stack(result_stack(result).with_count(count.min(99) as u8)),
+                    Some(result) => {
+                        let mut shown = result_stack(result);
+                        shown.resize(
+                            count.min(99) as u8,
+                            MintReason::Template,
+                            BurnReason::Template,
+                        );
+                        stack(shown)
+                    }
                     None => {
                         let items: &[Item] = transmute.input.items();
                         SlotDisplay::Composite(
                             items
                                 .iter()
-                                .map(|item| stack(ItemStack::new(*item, count.min(99) as u8)))
+                                .map(|item| {
+                                    stack(ItemStack::mint(
+                                        *item,
+                                        count.min(99) as u8,
+                                        MintReason::Template,
+                                    ))
+                                })
                                 .collect(),
                         )
                     }

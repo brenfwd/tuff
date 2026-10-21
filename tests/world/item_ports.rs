@@ -31,12 +31,12 @@ impl ItemPort for TestPort {
     }
 
     fn peek(&self, _: &dyn RegionWorld, _: &PortAccess) -> Option<ItemStack> {
-        Some(ItemStack::new(Item::Stick, 1))
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))
     }
 
     fn take(&self, _: &mut dyn RegionWorld, _: &PortAccess) -> Option<ItemStack> {
         self.0.takes.fetch_add(1, Ordering::SeqCst);
-        Some(ItemStack::new(Item::Stick, 1))
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))
     }
 }
 

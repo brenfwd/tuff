@@ -4,6 +4,7 @@
 
 use super::*;
 use std::sync::Mutex;
+use tuff_item::item::DupUnchecked;
 
 use crate::world::inventory::Inventory;
 
@@ -209,7 +210,7 @@ async fn removed_base_components_stop_the_client_and_server_use() {
         off_hand: false,
         sequence: 1,
     };
-    let mut plain = ItemStack::new(Item::Apple, 1);
+    let mut plain = ItemStack::mint(Item::Apple, 1, MintReason::Test);
     plain.components.removed = charm.components.removed.clone();
     player
         .inventory_mut()
@@ -223,7 +224,7 @@ async fn removed_base_components_stop_the_client_and_server_use() {
 
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Apple, 1)),
+        Some(ItemStack::mint(Item::Apple, 1, MintReason::Test)),
     );
     player.handle_packet(eat).await;
     assert!(player.is_using(), "a plain apple is eaten");
@@ -359,9 +360,11 @@ async fn creative_clients_get_private_data_back() {
         .get_compound_mut("minecraft:custom_data")
         .unwrap()
         .insert("secret", 42);
-    player.inventory_mut().set_slot(36, Some(held.clone()));
+    player
+        .inventory_mut()
+        .set_slot(36, Some(held.dup_unchecked()));
     let client_view = |stack: &ItemStack| {
-        let mut view = stack.clone();
+        let mut view = stack.dup_unchecked();
         for component in stack.components.network_added() {
             if let tuff_item::item::NetworkComponent::ClientData(data) = component {
                 view.components
@@ -383,7 +386,7 @@ async fn creative_clients_get_private_data_back() {
     player
         .handle_packet(Serverbound::SetCreativeModeSlot {
             slot: 40,
-            stack: CreativeSlot::Stack(seen.clone()),
+            stack: CreativeSlot::Stack(seen.dup_unchecked()),
         })
         .await;
     assert_eq!(player.inventory().slots()[40].as_ref(), Some(&held));
@@ -396,7 +399,7 @@ async fn creative_clients_get_private_data_back() {
             stack: CreativeSlot::Stack(client_view(&stack(&world, CHARM, 1))),
         })
         .await;
-    let fresh = other.inventory().slots()[41].clone().unwrap();
+    let fresh = other.inventory().slots()[41].dup_unchecked().unwrap();
     assert_eq!(
         fresh,
         stack(&world, CHARM, 1),
@@ -445,7 +448,7 @@ async fn item_arguments_name_custom_items() {
         panic!("{CHARM} parses as a predicate");
     };
     assert!(only_charms.test(&stack(&world, CHARM, 1)));
-    assert!(!only_charms.test(&ItemStack::new(Item::Apple, 1)));
+    assert!(!only_charms.test(&ItemStack::mint(Item::Apple, 1, MintReason::Test)));
     assert!(!only_charms.test(&stack(&world, SWEET, 1)));
 
     let (mut player, _out) = session_with_outbound(&world, 1);
@@ -467,7 +470,7 @@ async fn item_arguments_name_custom_items() {
         .slots()
         .iter()
         .flatten()
-        .cloned()
+        .map(DupUnchecked::dup_unchecked)
         .collect();
     assert_eq!(given, [stack(&world, CHARM, 2)]);
     world.shutdown().await;
@@ -481,10 +484,11 @@ async fn the_inventory_grid_crafts_custom_results_only_from_exact_ingredients() 
     let (mut player, _out) = session_with_outbound(&world, 1);
     player
         .inventory_mut()
-        .set_slot(1, Some(ItemStack::new(Item::Apple, 1)));
-    player
-        .inventory_mut()
-        .set_slot(2, Some(ItemStack::new(Item::GoldNugget, 1)));
+        .set_slot(1, Some(ItemStack::mint(Item::Apple, 1, MintReason::Test)));
+    player.inventory_mut().set_slot(
+        2,
+        Some(ItemStack::mint(Item::GoldNugget, 1, MintReason::Test)),
+    );
     player.refresh_inventory_result();
     assert_eq!(
         player.inventory().slots()[0].as_ref(),

@@ -5,7 +5,9 @@ use tuff_core::world::block_entity::{
     BREW_TIME, BlockEntityTicker, BrewTick, Brewing, State, TickOutcome, TickView, brewing,
 };
 use tuff_core::world::crafting::{RecipeSet, result_stack};
-use tuff_item::item::ItemStack;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::BlockState;
 
 fn brewable(recipes: &RecipeSet, items: &[Option<ItemStack>]) -> bool {
@@ -24,11 +26,13 @@ fn shrink_with_remainder(items: &mut [Option<ItemStack>], slot: usize, drops: &m
         return;
     };
     let remainder = stack.item.crafting_remainder();
-    stack.count -= 1;
-    let empty = stack.count == 0;
+    stack.shrink(1, BurnReason::CraftingInput);
+    let empty = stack.count() == 0;
     match remainder {
-        Some((item, count)) if empty => items[slot] = Some(ItemStack::new(item, count)),
-        Some((item, count)) => drops.push(ItemStack::new(item, count)),
+        Some((item, count)) if empty => {
+            items[slot] = Some(ItemStack::mint(item, count, MintReason::Remainder))
+        }
+        Some((item, count)) => drops.push(ItemStack::mint(item, count, MintReason::Remainder)),
         None if empty => items[slot] = None,
         None => {}
     }
@@ -36,7 +40,7 @@ fn shrink_with_remainder(items: &mut [Option<ItemStack>], slot: usize, drops: &m
 
 fn brew(recipes: &RecipeSet, items: &mut [Option<ItemStack>], drops: &mut Vec<ItemStack>) {
     let reagent = items[brewing::INGREDIENT]
-        .clone()
+        .dup_unchecked()
         .expect("a reagent is brewing");
     for slot in &mut items[..brewing::BOTTLES] {
         if let Some(bottle) = slot

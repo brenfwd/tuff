@@ -824,7 +824,7 @@ mod tests {
     fn cactus_wears_down_and_destroys_resting_items() {
         use crate::world::entity::RegionEntity;
         use crate::world::items::ItemEntity;
-        use tuff_item::item::ItemStack;
+        use tuff_item::item::{ItemStack, MintReason};
         use tuff_vanilla_data::Item;
         let cactus = world(vec![(
             BlockPos::new(0, 64, 0),
@@ -837,13 +837,20 @@ mod tests {
             (Item::NetheriteIngot, [0.5, 65.0, 0.5]),
             (Item::Dirt, [1.125, 64.0, 0.5]),
         ] {
-            let mut entity = ItemEntity::new(1, 1, ItemStack::new(item, 1), at, [0.0; 3], 0);
+            let mut entity = ItemEntity::new(
+                1,
+                1,
+                ItemStack::mint(item, 1, MintReason::Test),
+                at,
+                [0.0; 3],
+                0,
+            );
             assert_eq!(destroyed_after(&mut entity), Some(5), "{item:?} at {at:?}");
         }
         let mut away = ItemEntity::new(
             1,
             1,
-            ItemStack::new(Item::Dirt, 1),
+            ItemStack::mint(Item::Dirt, 1, MintReason::Test),
             [1.3, 64.0, 0.5],
             [0.0; 3],
             0,
@@ -852,7 +859,7 @@ mod tests {
         let mut invulnerable = ItemEntity::new(
             1,
             1,
-            ItemStack::new(Item::Dirt, 1),
+            ItemStack::mint(Item::Dirt, 1, MintReason::Test),
             [0.5, 65.0, 0.5],
             [0.0; 3],
             0,

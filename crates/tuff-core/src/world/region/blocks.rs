@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
+use tuff_item::item::DupUnchecked;
 
 use rand::Rng;
 use rand::rngs::StdRng;
@@ -25,7 +26,7 @@ use crate::world::region_api::{BlockAction, BlockCause, BlockChange, RegionHooks
 use crate::world::{
     PLAYER_HALF_WIDTH, PLAYER_HEIGHT, REACH, block_contact, distance_sq, framed, packets, player,
 };
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::Compound;
 use tuff_world_model::BlockPos;
@@ -671,7 +672,7 @@ impl RegionActor {
             player.send(PlayerEvent::Advancement(Box::new(
                 crate::world::messages::AdvancementEvent::BeeNestDestroyed {
                     block: state,
-                    item: tool_stack.clone(),
+                    item: tool_stack.dup_unchecked(),
                     bees,
                 },
             )));
@@ -735,7 +736,7 @@ impl RegionActor {
         } else if let Some(components) = creative_drop
             && let Some(item) = state.block().item()
         {
-            let stack = ItemStack::new(item, 1).with_components(components);
+            let stack = ItemStack::mint(item, 1, MintReason::Creative).with_components(components);
             self.drop_items(pos, vec![stack]);
         }
         if !matches!(mode, BreakMode::Creative) && state.is_ice() {

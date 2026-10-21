@@ -1,7 +1,7 @@
 //! Dropped items merging with the items around them.
 
 use super::*;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::registry::EntityType;
 
 const SKY: i32 = 150;
@@ -25,7 +25,7 @@ async fn dropped(region: &RegionHandle) -> Vec<(i32, [f64; 3], ItemStack)> {
         let stack = data
             .get("Item")
             .and_then(|tag| tag.as_compound())
-            .and_then(ItemStack::from_nbt)
+            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
             .expect("a saved stack");
         found.push((entity.id, entity.position, stack));
     }
@@ -81,19 +81,19 @@ async fn resting_items_merge_into_the_bigger_stack() {
     let after = dropped(&region).await;
     let counts: Vec<(i32, u8)> = after
         .iter()
-        .map(|(id, _, stack)| (*id, stack.count))
+        .map(|(id, _, stack)| (*id, stack.count()))
         .collect();
     let dirt_near: Vec<u8> = after
         .iter()
         .filter(|(_, pos, stack)| pos[0] < 4.0 && stack.item == tuff_vanilla_data::Item::Dirt)
-        .map(|(_, _, stack)| stack.count)
+        .map(|(_, _, stack)| stack.count())
         .collect();
     let mut sorted = dirt_near.clone();
     sorted.sort_unstable();
     assert_eq!(sorted, [35, 60], "{counts:?}");
     let merged = after
         .iter()
-        .find(|(_, _, stack)| stack.count == 35)
+        .find(|(_, _, stack)| stack.count() == 35)
         .unwrap();
     assert_eq!(
         merged.0, before[1].0,
@@ -102,7 +102,7 @@ async fn resting_items_merge_into_the_bigger_stack() {
     assert!(
         after
             .iter()
-            .any(|(_, _, stack)| stack.item == tuff_vanilla_data::Item::Stone && stack.count == 3),
+            .any(|(_, _, stack)| stack.item == tuff_vanilla_data::Item::Stone && stack.count() == 3),
         "other items stay apart"
     );
     assert_eq!(
@@ -162,7 +162,7 @@ async fn items_merge_across_a_region_border_into_the_bigger_stack() {
     let all: Vec<(tuff_vanilla_data::Item, u8, f64)> = west_items
         .iter()
         .chain(&east_items)
-        .map(|(_, pos, stack)| (stack.item, stack.count, pos[0]))
+        .map(|(_, pos, stack)| (stack.item, stack.count(), pos[0]))
         .collect();
     let of = |item| -> Vec<(u8, f64)> {
         all.iter()

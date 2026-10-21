@@ -6,7 +6,8 @@ use tuff_core::world::block_entity::{read_items, write_items};
 use tuff_core::world::game_event::{Context, GameEvent, Source};
 use tuff_core::world::messages::{ActionOutcome, HandEffect, Place, PlayerEvent};
 use tuff_core::world::region_api::RegionWorld;
-use tuff_item::item::ItemStack;
+use tuff_item::item::DupUnchecked;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_common::placement;
 use tuff_vanilla_common::side_chain;
 use tuff_vanilla_data::block::Facing;
@@ -82,7 +83,8 @@ pub trait Shelves: RegionWorld {
             .held
             .filter(|item| item_tags::BOOKSHELF_BOOKS.contains(item));
         if let Some(item) = book.filter(|_| !occupied) {
-            let stack = ItemStack::new(item, 1).with_components(place.components.clone());
+            let stack = ItemStack::mint(item, 1, MintReason::CrossActor)
+                .with_components(place.components.clone());
             let sound = if is_enchanted(&stack) {
                 SoundEvent::BlockChiseledBookshelfInsertEnchanted
             } else {
@@ -175,10 +177,11 @@ pub trait Shelves: RegionWorld {
     ) -> Option<ActionOutcome> {
         let pos = place.target;
         let held = place.held.map(|item| {
-            ItemStack::new(item, place.held_count).with_components(place.components.clone())
+            ItemStack::mint(item, place.held_count, MintReason::CrossActor)
+                .with_components(place.components.clone())
         });
         let mut items = read_items(self.raw_block_entity(pos)?, SHELF_SLOTS);
-        let removed = std::mem::replace(&mut items[slot], held.clone());
+        let removed = std::mem::replace(&mut items[slot], held.dup_unchecked());
         let sound = match (&removed, &held) {
             (Some(_), None) => SoundEvent::BlockShelfTakeItem,
             (Some(_), Some(_)) => SoundEvent::BlockShelfSingleSwap,
@@ -204,8 +207,8 @@ pub trait Shelves: RegionWorld {
     fn swap_hotbar(&mut self, place: &Place, pos: BlockPos) -> Option<ActionOutcome> {
         let chain = side_chain::connected(&|at| self.block(at), pos);
         let count = chain.len() as i32;
-        let mut hotbar = place.hotbar.clone();
-        hotbar.resize(HOTBAR as usize, None);
+        let mut hotbar = place.hotbar.dup_unchecked();
+        hotbar.resize_with(HOTBAR as usize, || None);
         let mut changed = Vec::new();
         for (index, part) in chain.iter().enumerate() {
             let Some(nbt) = self.raw_block_entity(*part) else {

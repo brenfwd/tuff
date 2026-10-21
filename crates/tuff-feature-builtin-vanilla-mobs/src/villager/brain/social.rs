@@ -529,7 +529,7 @@ impl Villager {
             .iter()
             .flatten()
             .filter(|s| s.item == item)
-            .map(|s| s.count as u32)
+            .map(|s| s.count() as u32)
             .sum()
     }
 
@@ -551,17 +551,15 @@ impl Villager {
                 continue;
             }
             let max = stack.max_stack_size();
-            let count = if stack.count > max / 2 {
-                stack.count / 2
-            } else if stack.count > keep {
-                stack.count - keep
+            let count = if stack.count() > max / 2 {
+                stack.count() / 2
+            } else if stack.count() > keep {
+                stack.count() - keep
             } else {
                 continue;
             };
-            let mut thrown = stack.clone();
-            thrown.count = count;
-            stack.count -= count;
-            if stack.count == 0 {
+            let thrown = stack.take(count);
+            if stack.count() == 0 {
                 *slot = None;
             }
             let from = [

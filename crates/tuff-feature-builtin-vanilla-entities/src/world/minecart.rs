@@ -26,7 +26,7 @@ use tuff_core::world::menu::MenuKind;
 use tuff_core::world::messages::{HandEffect, Igniter};
 use tuff_core::world::physics::{self, BlockLookup};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -372,7 +372,7 @@ impl Minecart {
             last_activated: 0,
             broken: false,
             changed: Vec::new(),
-            items: vec![None; slots],
+            items: (0..slots).map(|_| None).collect(),
             loot_table: None,
             enabled: true,
             flipped: false,
@@ -454,7 +454,11 @@ impl Minecart {
     }
 
     fn drop_item(&self) -> Option<ItemStack> {
-        Some(ItemStack::new(minecart_item(self.base.kind)?, 1))
+        Some(ItemStack::mint(
+            minecart_item(self.base.kind)?,
+            1,
+            MintReason::EntityDrop,
+        ))
     }
 
     /// Its contents scatter in pieces of 10 to 30.
@@ -634,7 +638,7 @@ impl Minecart {
         }
         let mut fill = 0.0f32;
         for stack in self.items.iter().flatten() {
-            fill += f32::from(stack.count) / f32::from(stack.max_stack_size().min(64));
+            fill += f32::from(stack.count()) / f32::from(stack.max_stack_size().min(64));
         }
         fill /= self.items.len() as f32;
         let signal = (fill * 14.0).floor() as i32 + i32::from(fill > 0.0);

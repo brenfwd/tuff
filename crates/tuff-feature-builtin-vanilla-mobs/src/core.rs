@@ -757,7 +757,7 @@ impl MobCore {
             EquipmentSlot::Body,
         ]
         .into_iter()
-        .filter_map(|slot| Some((slot, self.equipment.get(slot)?.clone())))
+        .filter_map(|slot| Some((slot, self.equipment.get(slot)?.dup_unchecked())))
         .collect();
         EntityFacts {
             kind: Some(self.base.kind),

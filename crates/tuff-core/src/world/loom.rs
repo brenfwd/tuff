@@ -49,10 +49,11 @@ pub fn layer_count(banner: &ItemStack) -> usize {
 mod tests {
     use super::*;
     use crate::world::menu::MenuKind;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     fn stack(item: Item) -> ItemStack {
-        ItemStack::new(item, 1)
+        ItemStack::mint(item, 1, MintReason::Test)
     }
 
     #[tuff_core::watchdog]
@@ -86,7 +87,7 @@ mod tests {
         use crate::world::inventory::Inventory;
         use crate::world::menu::{LoomHook, ResultHook};
         let mut container = vec![
-            Some(ItemStack::new(Item::WhiteBanner, 2)),
+            Some(ItemStack::mint(Item::WhiteBanner, 2, MintReason::Test)),
             Some(stack(Item::RedDye)),
             None,
             None,
@@ -94,7 +95,7 @@ mod tests {
         let mut hook = LoomHook::default();
         hook.taken(&mut container, &mut Inventory::default(), &mut Vec::new());
         assert!(hook.took);
-        assert_eq!(container[0].as_ref().unwrap().count, 1);
+        assert_eq!(container[0].as_ref().unwrap().count(), 1);
         assert!(container[1].is_none());
     }
 }

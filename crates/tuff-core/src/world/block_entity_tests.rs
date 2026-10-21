@@ -1,9 +1,10 @@
 use super::*;
 use rand::SeedableRng;
+use tuff_item::item::MintReason;
 use tuff_vanilla_data::Item;
 
 fn stack(item: Item, count: u8) -> Option<ItemStack> {
-    Some(ItemStack::new(item, count))
+    Some(ItemStack::mint(item, count, MintReason::Test))
 }
 
 #[tuff_core::watchdog]
@@ -16,7 +17,11 @@ fn a_golem_tops_up_stacks_until_the_first_empty_slot() {
         stack(Item::Dirt, 1),
     ];
     let mut changed = Vec::new();
-    let (left, ended) = golem_place(&mut items, ItemStack::new(Item::Dirt, 10), &mut changed);
+    let (left, ended) = golem_place(
+        &mut items,
+        ItemStack::mint(Item::Dirt, 10, MintReason::Test),
+        &mut changed,
+    );
     assert_eq!((left, ended), (None, true));
     assert_eq!(items[0], stack(Item::Dirt, 64));
     assert_eq!(
@@ -27,15 +32,27 @@ fn a_golem_tops_up_stacks_until_the_first_empty_slot() {
     assert_eq!(items[3], stack(Item::Dirt, 1), "nothing reaches past it");
     assert_eq!(changed, vec![0, 2]);
     let mut full = vec![stack(Item::Dirt, 64), stack(Item::Dirt, 62)];
-    let (left, ended) = golem_place(&mut full, ItemStack::new(Item::Dirt, 5), &mut Vec::new());
-    assert_eq!((left, ended), (Some(ItemStack::new(Item::Dirt, 3)), false));
+    let (left, ended) = golem_place(
+        &mut full,
+        ItemStack::mint(Item::Dirt, 5, MintReason::Test),
+        &mut Vec::new(),
+    );
+    assert_eq!(
+        (left, ended),
+        (
+            Some(ItemStack::mint(Item::Dirt, 3, MintReason::Test)),
+            false
+        )
+    );
     assert_eq!(full[1], stack(Item::Dirt, 64));
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn crafters_spread_automated_items_and_skip_disabled_slots() {
-    let mut items = vec![None; CRAFTER_SLOTS];
+    let mut items = (0..CRAFTER_SLOTS)
+        .map(|_| None)
+        .collect::<Vec<Option<ItemStack>>>();
     let recipes = crate::world::crafting::RecipeSet::new(std::iter::empty());
     let mut changed = Vec::new();
     for _ in 0..3 {
@@ -44,15 +61,15 @@ fn crafters_spread_automated_items_and_skip_disabled_slots() {
             ContainerKind::Crafter,
             &mut items,
             None,
-            ItemStack::new(Item::Stone, 1),
+            ItemStack::mint(Item::Stone, 1, MintReason::Test),
             &mut changed,
             0b10,
         );
     }
-    assert_eq!(items[0].as_ref().map(|s| s.count), Some(1));
+    assert_eq!(items[0].as_ref().map(|s| s.count()), Some(1));
     assert!(items[1].is_none(), "a disabled slot takes nothing");
-    assert_eq!(items[2].as_ref().map(|s| s.count), Some(1));
-    assert_eq!(items[3].as_ref().map(|s| s.count), Some(1));
+    assert_eq!(items[2].as_ref().map(|s| s.count()), Some(1));
+    assert_eq!(items[3].as_ref().map(|s| s.count()), Some(1));
 }
 
 #[tuff_core::watchdog]
@@ -482,14 +499,18 @@ fn hoppers_feed_furnaces_by_face_and_take_only_results_and_buckets() {
 fn scatter_splits_stacks_inside_the_block() {
     let mut rng = rand::rngs::StdRng::seed_from_u64(7);
     let pos = BlockPos::new(10, 64, -5);
-    let drops = scatter(pos, [ItemStack::new(Item::Stone, 64)], &mut rng);
+    let drops = scatter(
+        pos,
+        [ItemStack::mint(Item::Stone, 64, MintReason::Test)],
+        &mut rng,
+    );
     assert!(drops.len() >= 3);
     assert_eq!(
-        drops.iter().map(|(s, _, _)| s.count as u32).sum::<u32>(),
+        drops.iter().map(|(s, _, _)| s.count() as u32).sum::<u32>(),
         64
     );
     for (stack, position, _) in &drops {
-        assert!((1..=30).contains(&stack.count));
+        assert!((1..=30).contains(&stack.count()));
         assert!(position[0] >= 10.0 && position[0] < 11.0);
         assert!(position[1] >= 64.0 && position[1] < 65.0);
         assert!(position[2] >= -5.0 && position[2] < -4.0);

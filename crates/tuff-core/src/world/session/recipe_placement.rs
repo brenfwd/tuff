@@ -4,6 +4,7 @@ use super::*;
 use crate::protocol::play::{self, GameMode};
 use crate::world::crafting::place;
 use crate::world::menu::{self, MenuKind, grid_of, set_grid};
+use tuff_item::item::DupUnchecked;
 
 impl PlayerSession {
     /// Place Recipe: the recipe book fills the open crafting grid.
@@ -45,7 +46,7 @@ impl PlayerSession {
             .menu
             .as_mut()
             .map(|menu| std::mem::take(&mut menu.container));
-        let container_before = container.clone().unwrap_or_default();
+        let container_before = container.dup_unchecked().unwrap_or_default();
         let mut grid = grid_of(kind, container.as_deref().unwrap_or(&[]), &self.inventory);
         let mut result = kind
             .is_furnace()

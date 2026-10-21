@@ -1,7 +1,7 @@
 use super::*;
 use crate::world::crafting::CraftingInput;
 use bytes::Bytes;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 fn base() -> Definitions {
     let mut defs = Definitions::default();
@@ -118,15 +118,19 @@ fn recipes_name_custom_items_and_advancements_join_the_tree() {
     let recipes = Arc::new(RecipeSet::default());
     let merged = merge(&defs, &recipes, &tree, None, vec![content]);
     let ruby = merged.custom.item("mine:ruby").unwrap().stack(1);
-    let mut slots = vec![None; 9];
+    let mut slots = (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     for slot in [0, 1, 3, 4] {
-        slots[slot] = Some(ruby.clone());
+        slots[slot] = Some(ruby.dup_unchecked());
     }
     let (name, recipe) = merged.recipes.find(&grid(slots)).unwrap();
     assert_eq!(&**name, "mine:ruby_block");
-    let made = recipe.assemble(&grid(vec![None; 9])).unwrap();
+    let made = recipe
+        .assemble(&grid(
+            (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>(),
+        ))
+        .unwrap();
     assert_eq!(
-        (made.count, crate::custom::item_id(&made)),
+        (made.count(), crate::custom::item_id(&made)),
         (2, Some("mine:ruby"))
     );
     assert_eq!(
@@ -135,15 +139,15 @@ fn recipes_name_custom_items_and_advancements_join_the_tree() {
     );
 
     let gem = merged.custom.item("core:gem").unwrap().stack(1);
-    let plain = ItemStack::new(Item::OakPlanks, 1);
-    let mut slots = vec![None; 9];
-    slots[4] = Some(plain.clone());
+    let plain = ItemStack::mint(Item::OakPlanks, 1, MintReason::Test);
+    let mut slots = (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>();
+    slots[4] = Some(plain.dup_unchecked());
     slots[8] = Some(gem);
     let (name, _) = merged.recipes.find(&grid(slots)).unwrap();
     assert_eq!(&**name, "mine:ruby");
-    let mut slots = vec![None; 9];
+    let mut slots = (0..9).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     slots[4] = Some(plain);
-    slots[8] = Some(ItemStack::new(Item::Diamond, 1));
+    slots[8] = Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test));
     assert!(merged.recipes.find(&grid(slots)).is_none());
 
     assert!(merged.recipes.get("mine:broken").is_none());

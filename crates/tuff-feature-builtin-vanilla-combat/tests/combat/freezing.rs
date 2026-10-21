@@ -76,9 +76,10 @@ async fn leather_armor_keeps_a_player_from_freezing() {
     let world = TestWorld::start(dir.path());
     let mut player = session(&world, 1000);
     let feet = Inventory::armor_slot(EquipmentSlot::Feet).unwrap();
-    player
-        .inventory_mut()
-        .set_slot(feet, Some(ItemStack::new(Item::LeatherBoots, 1)));
+    player.inventory_mut().set_slot(
+        feet,
+        Some(ItemStack::mint(Item::LeatherBoots, 1, MintReason::Test)),
+    );
     player.handle_event(in_powder_snow(&player, true)).await;
     run_ticks(&mut player, 200).await;
     assert_eq!(player.body.ticks_frozen, 0);
@@ -201,7 +202,7 @@ async fn powder_snow_freezes_and_hurts_a_mob_and_saves_its_frozen_ticks() {
         [4.5, SKY as f64, 4.5],
     )
     .await;
-    let boots = ItemStack::new(Item::LeatherBoots, 1).to_nbt();
+    let boots = ItemStack::mint(Item::LeatherBoots, 1, MintReason::Test).to_nbt();
     summon(
         &region,
         EntityType::Pig,

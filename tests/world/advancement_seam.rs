@@ -189,7 +189,7 @@ async fn a_session_asks_only_the_owner_it_holds() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn wearing_an_item_reports_durability_including_the_breaking_hit() {
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
@@ -197,7 +197,7 @@ async fn wearing_an_item_reports_durability_including_the_breaking_hit() {
     let owner = Arc::new(Recorder::default());
     player.progress.advancement_tree = owner.clone();
     player.mode.abilities.instabuild = false;
-    let mut helmet = ItemStack::new(Item::LeatherHelmet, 1);
+    let mut helmet = ItemStack::mint(Item::LeatherHelmet, 1, MintReason::Test);
     helmet.set_damage(helmet.max_damage().unwrap() - 1);
     player.inventory.set_hand(false, Some(helmet));
     owner.calls();

@@ -4,6 +4,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::{EquipmentSlot, ModifierOperation};
 use tuff_vanilla_data::registry::{Attribute, EntityType, MobEffect, Potion, SoundEvent};
@@ -17,7 +18,7 @@ use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::effects;
 use tuff_core::world::entity::{Culprit, TickContext};
 use tuff_core::world::projectile::{self, Launch, Owner, Shot, shot_velocity};
-use tuff_item::item::{ItemStack, PotionContents};
+use tuff_item::item::{ItemStack, MintReason, PotionContents};
 
 /// Witch data after the mob flags: celebrating (as a raider), drinking.
 const CELEBRATING: u8 = data::BABY;
@@ -112,7 +113,7 @@ impl Goal for ThrowPotion {
 
 /// A splash potion of `potion` as a fresh item stack.
 fn splash_stack(potion: Potion) -> ItemStack {
-    let mut stack = ItemStack::new(Item::SplashPotion, 1);
+    let mut stack = ItemStack::mint(Item::SplashPotion, 1, MintReason::Spawn);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(potion),
         ..Default::default()
@@ -297,7 +298,7 @@ impl Witch {
     }
 
     fn start_drinking(&mut self, core: &mut MobCore, potion: Potion, cx: &mut TickContext) {
-        let mut stack = ItemStack::new(Item::Potion, 1);
+        let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Spawn);
         stack.components.potion_contents = Some(Box::new(PotionContents {
             potion: Some(potion),
             ..Default::default()
@@ -325,7 +326,10 @@ impl Witch {
         self.drinking = false;
         core.signal = 0;
         core.changed(DRINKING);
-        let drunk = core.equipment.get(EquipmentSlot::Mainhand).cloned();
+        let drunk = core
+            .equipment
+            .get(EquipmentSlot::Mainhand)
+            .map(DupUnchecked::dup_unchecked);
         core.equipment.set(EquipmentSlot::Mainhand, None);
         if let Some(stack) = drunk
             && stack.item == Item::Potion

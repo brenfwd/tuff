@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::DupUnchecked;
 
 pub(super) fn condition(condition: &LootCondition, context: &Context, rng: &mut impl Rng) -> bool {
     let mut value = condition
@@ -186,7 +187,7 @@ pub(super) fn delegated_entity(
     let mut core = tuff_core::world::predicate::EntityFacts::default();
     if attacker {
         core.kind = facts.attacker_kind;
-        if let Some(weapon) = facts.attacker_weapon.clone() {
+        if let Some(weapon) = facts.attacker_weapon.dup_unchecked() {
             core.equipment
                 .push((tuff_vanilla_data::item::EquipmentSlot::Mainhand, weapon));
         }

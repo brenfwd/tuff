@@ -33,7 +33,7 @@ impl Goat {
         }
         let instruments = horn_instruments(self.screaming);
         let name = instruments[cx.rng.gen_range(0..instruments.len())];
-        let mut stack = ItemStack::new(Item::GoatHorn, 1);
+        let mut stack = ItemStack::mint(Item::GoatHorn, 1, MintReason::Spawn);
         stack.components.other.insert("minecraft:instrument", name);
         let [x, y, z] = core.base.position;
         let velocity = [

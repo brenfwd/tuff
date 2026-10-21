@@ -619,7 +619,11 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn tool_rules_read_block_tags_in_effect() {
-        let pickaxe = crate::item::ItemStack::new(tuff_vanilla_data::Item::WoodenPickaxe, 1);
+        let pickaxe = crate::item::ItemStack::mint(
+            tuff_vanilla_data::Item::WoodenPickaxe,
+            1,
+            crate::item::MintReason::Test,
+        );
         let tool = pickaxe.tool().unwrap();
         assert_eq!(tool.mining_speed(Block::Dirt), 1.0);
         assert!(tool.is_correct_for_drops(Block::Stone));

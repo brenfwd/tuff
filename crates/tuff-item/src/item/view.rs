@@ -106,35 +106,39 @@ impl ItemStack {
     }
 
     fn snapshot_copy(&self) -> ItemStack {
-        self.clone()
+        self.dup_unchecked()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::item::MintReason;
     use tuff_vanilla_data::Item;
 
     #[tuff_core::watchdog]
     #[test]
     fn a_snapshot_keeps_the_stack_as_it_was() {
-        let mut stack = ItemStack::new(Item::Stone, 5);
+        let mut stack = ItemStack::mint(Item::Stone, 5, MintReason::Test);
         let snapshot = ItemSnapshot::of(&stack);
         stack.count = 1;
         assert_eq!(snapshot.count, 5);
         assert_eq!(snapshot.view().item, Item::Stone);
-        assert_eq!(snapshot.clone(), ItemStack::new(Item::Stone, 5));
+        assert_eq!(
+            snapshot.clone(),
+            ItemStack::mint(Item::Stone, 5, MintReason::Test)
+        );
     }
 
     #[tuff_core::watchdog]
     #[test]
     fn a_view_reads_the_stack() {
-        let stack = ItemStack::new(Item::Dirt, 3);
+        let stack = ItemStack::mint(Item::Dirt, 3, MintReason::Test);
         let view = stack.view();
         assert_eq!(view.count, 3);
         assert_eq!(view, stack);
         assert_eq!(
-            ItemView::slots(&[None, Some(stack.clone())])
+            ItemView::slots(&[None, Some(stack.dup_unchecked())])
                 .flatten()
                 .count(),
             1

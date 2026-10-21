@@ -15,7 +15,7 @@ use tuff_item::item::ItemStack;
 use tuff_item::load::LoadError;
 
 /// One grid cell's requirement.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
 pub enum CustomIngredient {
     /// A plain (not custom) stack of one of these items.
     Item(Ingredient),
@@ -41,7 +41,7 @@ impl CustomIngredient {
     fn display(&self) -> SlotDisplay {
         match self {
             Self::Item(ingredient) => SlotDisplay::Ingredient(ingredient.clone()),
-            Self::Custom { display, .. } => SlotDisplay::Stack((**display).clone()),
+            Self::Custom { display, .. } => SlotDisplay::Stack((**display).dup_unchecked()),
         }
     }
 
@@ -98,7 +98,7 @@ fn register(
 
 /// A shaped crafting recipe over custom ingredients, matched as is or
 /// mirrored anywhere in the grid.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CustomShaped {
     pub name: &'static str,
     width: usize,
@@ -195,7 +195,7 @@ impl Recipe for CustomShaped {
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(self.result.clone())
+        Some(self.result.dup_unchecked())
     }
 
     fn accepts_custom_items(&self) -> bool {
@@ -211,7 +211,7 @@ impl Recipe for CustomShaped {
                 .iter()
                 .map(|cell| cell.as_ref().map_or(SlotDisplay::Empty, |i| i.display()))
                 .collect(),
-            result: SlotDisplay::Stack(self.result.clone()),
+            result: SlotDisplay::Stack(self.result.dup_unchecked()),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -238,7 +238,7 @@ impl Recipe for CustomShaped {
 }
 
 /// A shapeless crafting recipe over custom ingredients.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CustomShapeless {
     pub name: &'static str,
     pub ingredients: Vec<CustomIngredient>,
@@ -303,7 +303,7 @@ impl Recipe for CustomShapeless {
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(self.result.clone())
+        Some(self.result.dup_unchecked())
     }
 
     fn accepts_custom_items(&self) -> bool {
@@ -313,7 +313,7 @@ impl Recipe for CustomShapeless {
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: self.ingredients.iter().map(|i| i.display()).collect(),
-            result: SlotDisplay::Stack(self.result.clone()),
+            result: SlotDisplay::Stack(self.result.dup_unchecked()),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -338,6 +338,8 @@ mod tests {
     use crate::custom::Definitions;
     use crate::world::crafting::RecipeSet;
     use std::sync::Arc;
+    use tuff_item::item::DupUnchecked;
+    use tuff_item::item::MintReason;
 
     fn grid(cells: &[Option<ItemStack>], width: usize) -> CraftingInput {
         CraftingInput::positioned(width, cells.len() / width, cells).input
@@ -356,10 +358,10 @@ mod tests {
             "ex:crown",
             &["GRG", "G G"],
             &[('G', Item::GoldIngot.into()), ('R', (&ruby).into())],
-            crown.clone(),
+            crown.dup_unchecked(),
         )
         .unwrap();
-        let gold = || Some(ItemStack::new(Item::GoldIngot, 1));
+        let gold = || Some(ItemStack::mint(Item::GoldIngot, 1, MintReason::Test));
         let cells = [
             gold(),
             Some(ruby.stack(1)),
@@ -373,10 +375,10 @@ mod tests {
         ];
         assert!(recipe.matches(&grid(&cells, 3)));
         assert_eq!(recipe.assemble(&grid(&cells, 3)), Some(crown));
-        let mut plain = cells.clone();
-        plain[1] = Some(ItemStack::new(Item::Emerald, 1));
+        let mut plain = cells.dup_unchecked();
+        plain[1] = Some(ItemStack::mint(Item::Emerald, 1, MintReason::Test));
         assert!(!recipe.matches(&grid(&plain, 3)));
-        let mut custom_gold = cells.clone();
+        let mut custom_gold = cells.dup_unchecked();
         custom_gold[0] = Some(CustomItemDef::new("ex:fool", Item::GoldIngot).stack(1));
         assert!(!recipe.matches(&grid(&custom_gold, 3)));
         assert!(recipe.placement().is_none());
@@ -384,10 +386,23 @@ mod tests {
             &recipe.displays()[0],
             RecipeDisplay::Shaped { ingredients, .. } if matches!(ingredients[1], SlotDisplay::Stack(_))
         ));
-        assert!(CustomShaped::new("ex:bad", &["X"], &[], ItemStack::new(Item::Stone, 1)).is_none());
         assert!(
-            CustomShaped::new("ex:bad", &["AB", "A"], &[], ItemStack::new(Item::Stone, 1))
-                .is_none()
+            CustomShaped::new(
+                "ex:bad",
+                &["X"],
+                &[],
+                ItemStack::mint(Item::Stone, 1, MintReason::Test)
+            )
+            .is_none()
+        );
+        assert!(
+            CustomShaped::new(
+                "ex:bad",
+                &["AB", "A"],
+                &[],
+                ItemStack::mint(Item::Stone, 1, MintReason::Test)
+            )
+            .is_none()
         );
     }
 
@@ -398,12 +413,12 @@ mod tests {
             "ex:hook",
             &["  ", "AB"],
             &[('A', Item::Stick.into()), ('B', Item::String.into())],
-            ItemStack::new(Item::TripwireHook, 1),
+            ItemStack::mint(Item::TripwireHook, 1, MintReason::Test),
         )
         .unwrap();
         let mirrored = [
-            Some(ItemStack::new(Item::String, 1)),
-            Some(ItemStack::new(Item::Stick, 1)),
+            Some(ItemStack::mint(Item::String, 1, MintReason::Test)),
+            Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
         ];
         assert!(recipe.matches(&grid(&mirrored, 2)));
         assert!(recipe.placement().is_some());
@@ -419,9 +434,12 @@ mod tests {
                 (&ruby).into(),
                 Ingredient::any_of(&[Item::Emerald, Item::Diamond]).into(),
             ],
-            ItemStack::new(Item::Diamond, 2),
+            ItemStack::mint(Item::Diamond, 2, MintReason::Test),
         );
-        let both = [Some(ItemStack::new(Item::Emerald, 1)), Some(ruby.stack(1))];
+        let both = [
+            Some(ItemStack::mint(Item::Emerald, 1, MintReason::Test)),
+            Some(ruby.stack(1)),
+        ];
         assert!(recipe.matches(&grid(&both, 2)));
         let two_rubies = [Some(ruby.stack(1)), Some(ruby.stack(1))];
         assert!(!recipe.matches(&grid(&two_rubies, 2)));
@@ -449,7 +467,10 @@ mod tests {
         let set = RecipeSet::new([("ex:emerald_dust".into(), Arc::new(block) as Arc<dyn Recipe>)])
             .with_custom(content.clone());
         let input = |stack: ItemStack| grid(&[Some(stack)], 1);
-        assert!(set.find(&input(ItemStack::new(Item::Emerald, 1))).is_some());
+        assert!(
+            set.find(&input(ItemStack::mint(Item::Emerald, 1, MintReason::Test)))
+                .is_some()
+        );
         assert!(
             set.find(&input(content.stack("ex:ruby", 1).unwrap()))
                 .is_none()
@@ -468,7 +489,7 @@ mod tests {
         let recipe = CustomShapeless::new(
             "ex:crown",
             vec![Item::GoldIngot.into(), (&ruby).into()],
-            result.clone(),
+            result.dup_unchecked(),
         );
         let displays = recipe.displays();
         let [

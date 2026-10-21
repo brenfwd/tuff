@@ -5,7 +5,12 @@ fn saddled(kind_nbt: Compound) -> Compound {
         "equipment",
         Compound::new().with(
             "saddle",
-            tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::Saddle, 1).to_nbt(),
+            tuff_item::item::ItemStack::mint(
+                tuff_vanilla_data::Item::Saddle,
+                1,
+                tuff_item::item::MintReason::Test,
+            )
+            .to_nbt(),
         ),
     )
 }

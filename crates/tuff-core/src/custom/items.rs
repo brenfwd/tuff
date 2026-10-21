@@ -11,6 +11,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::registry::DataComponentType;
 use tuff_vanilla_data::{BlockState, Item};
@@ -356,7 +357,12 @@ impl PlayerSession {
             return stack;
         }
         if let Some(previous) = slot
-            .and_then(|slot| self.inventory.slots().get(slot).cloned().flatten())
+            .and_then(|slot| {
+                self.inventory
+                    .slots()
+                    .get(slot)
+                    .and_then(DupUnchecked::dup_unchecked)
+            })
             .filter(is_private)
         {
             let stash = &mut self.ext.entry::<PrivateStash>().0;
@@ -380,7 +386,7 @@ impl PlayerSession {
                     stashed.item == stack.item && client_view(stashed) == stack.components
                 })
             })
-            .cloned()
+            .map(DupUnchecked::dup_unchecked)
             .unwrap_or_else(|| def.stack(1));
         if let Some(data) = source.components.other.get(CUSTOM_DATA) {
             stack.components.other.insert(CUSTOM_DATA, data.clone());
@@ -394,6 +400,7 @@ mod tests {
     use super::*;
     use crate::custom::Definitions;
     use crate::protocol::codec::HashedSlot;
+    use tuff_item::item::MintReason;
 
     fn content(defs: impl IntoIterator<Item = CustomItemDef>) -> Arc<CustomContent> {
         let mut definitions = Definitions::default();
@@ -568,7 +575,7 @@ mod tests {
         ]);
         assert!(content.suppresses_base(&content.stack("ex:ruby", 1).unwrap()));
         assert!(!content.suppresses_base(&content.stack("ex:gem", 1).unwrap()));
-        assert!(!content.suppresses_base(&ItemStack::new(Item::Emerald, 1)));
+        assert!(!content.suppresses_base(&ItemStack::mint(Item::Emerald, 1, MintReason::Test)));
         assert!(content.stack("ex:missing", 1).is_none());
         assert_eq!(content.items().count(), 2);
     }

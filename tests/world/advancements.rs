@@ -108,7 +108,7 @@ fn updates(outbound: &mut mpsc::UnboundedReceiver<bytes::Bytes>) -> Vec<UpdatePa
 fn give(player: &mut PlayerSession, slot: usize, item: Item) {
     player
         .inventory_mut()
-        .set_slot(slot, Some(ItemStack::new(item, 1)));
+        .set_slot(slot, Some(ItemStack::mint(item, 1, MintReason::Test)));
 }
 
 fn source() -> DirectiveSource {

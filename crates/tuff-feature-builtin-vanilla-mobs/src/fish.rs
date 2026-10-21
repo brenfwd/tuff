@@ -26,7 +26,7 @@ use tuff_core::world::entity::{
 };
 use tuff_core::world::messages::{HandEffect, PlayerEvent};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_data::entity::PathType;
 
@@ -137,7 +137,7 @@ pub(crate) fn bucket_interact(
     }
     let bucket_item = Item::of_bucket(kind)?;
     let nbt = capture(core, extra);
-    let mut result = ItemStack::new(bucket_item, 1);
+    let mut result = ItemStack::mint(bucket_item, 1, MintReason::Spawn);
     result
         .components
         .other

@@ -6,6 +6,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::tag::block as tags;
@@ -22,7 +23,7 @@ use tuff_core::world::entity::{
 };
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::projectile::{self, Launch, Owner, Shot, shot_velocity};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_common::placement;
 use tuff_world_model::BlockPos;
@@ -756,7 +757,7 @@ fn throw_snowball(core: &MobCore, target: &TargetView, cx: &mut TickContext) {
     let velocity = shot_velocity([dx, dy, dz], 1.6, 12.0, cx.rng);
     let id = cx.shared.next_entity_id();
     let owner = Owner::of(Culprit::entity(&core.base), None);
-    let item = ItemStack::new(Item::Snowball, 1);
+    let item = ItemStack::mint(Item::Snowball, 1, MintReason::Spawn);
     let shot = Shot::Thrown {
         kind: EntityType::Snowball,
         item,
@@ -1098,7 +1099,11 @@ impl CopperGolem {
         if !in_air || cx.rng.r#gen::<f32>() > STATUE_CHANCE {
             return;
         }
-        if let Some(stack) = core.equipment.get(EquipmentSlot::Mainhand).cloned() {
+        if let Some(stack) = core
+            .equipment
+            .get(EquipmentSlot::Mainhand)
+            .map(DupUnchecked::dup_unchecked)
+        {
             core.equipment.set(EquipmentSlot::Mainhand, None);
             core.drop_item(stack, 0.5, cx);
         }
@@ -1155,7 +1160,10 @@ impl Species for CopperGolem {
         use tuff_core::protocol::play::level_event;
         let stack = interaction.stack.as_ref()?;
         if stack.item == Item::Shears
-            && let Some(antenna) = core.equipment.get(EquipmentSlot::Saddle).cloned()
+            && let Some(antenna) = core
+                .equipment
+                .get(EquipmentSlot::Saddle)
+                .map(DupUnchecked::dup_unchecked)
             && tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::SHEARABLE_FROM_COPPER_GOLEM,
                 antenna.item,
@@ -1218,8 +1226,10 @@ impl Species for CopperGolem {
                 self.set_oxidation(core, previous);
             }
             Notice::Gifted(item) if core.equipment.get(EquipmentSlot::Saddle).is_none() => {
-                core.equipment
-                    .set(EquipmentSlot::Saddle, Some(ItemStack::new(item, 1)));
+                core.equipment.set(
+                    EquipmentSlot::Saddle,
+                    Some(ItemStack::mint(item, 1, MintReason::Spawn)),
+                );
                 core.equipment.set_drop_chance(EquipmentSlot::Saddle, 2.0);
             }
             _ => {}
@@ -1230,8 +1240,8 @@ impl Species for CopperGolem {
         match core.equipment.get(EquipmentSlot::Mainhand) {
             None => core.equipment.set(EquipmentSlot::Mainhand, Some(stack)),
             Some(held) if held.stacks_with(&stack) => {
-                let mut held = held.clone();
-                held.count += stack.count;
+                let mut held = held.dup_unchecked();
+                held.join_or_drop(stack, &mut Vec::new());
                 core.equipment.set(EquipmentSlot::Mainhand, Some(held));
             }
             Some(_) => self.overflow.push(stack),

@@ -153,8 +153,8 @@ async fn player_clicks_log_net_item_rows_that_roll_back_and_restore() {
         .await;
     expect(&mut events, container_menu).await;
 
-    let diamonds = |count| Some(ItemStack::new(Item::Diamond, count));
-    let stone = |count| Some(ItemStack::new(Item::Stone, count));
+    let diamonds = |count| Some(ItemStack::mint(Item::Diamond, count, MintReason::Test));
+    let stone = |count| Some(ItemStack::mint(Item::Stone, count, MintReason::Test));
     click(
         &region,
         &alex,
@@ -445,7 +445,7 @@ async fn a_rollback_while_the_chest_is_open_rejects_the_viewers_stale_clicks() {
         .request(RegionRequest::Place(place(&alex, chest, Item::Torch, 1)))
         .await;
     expect(&mut events, container_menu).await;
-    let diamonds = |count| Some(ItemStack::new(Item::Diamond, count));
+    let diamonds = |count| Some(ItemStack::mint(Item::Diamond, count, MintReason::Test));
     click(
         &region,
         &alex,

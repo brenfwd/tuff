@@ -641,6 +641,7 @@ mod tests {
     use super::*;
     use crate::tests::with_context;
     use tuff_core::protocol::play::MetadataValue;
+    use tuff_item::item::MintReason;
 
     fn interaction(owner: u128, item: Option<tuff_vanilla_data::Item>) -> EntityInteraction {
         EntityInteraction {
@@ -648,7 +649,7 @@ mod tests {
             player_uuid: owner,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::new(item, 1)),
+            stack: item.map(|item| ItemStack::mint(item, 1, MintReason::Test)),
             off_hand: false,
             creative: false,
             sneaking: false,

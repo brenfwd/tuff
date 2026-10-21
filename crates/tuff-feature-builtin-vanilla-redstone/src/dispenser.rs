@@ -1,6 +1,8 @@
 //! Dispensers and droppers: firing one item from a random filled slot.
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::redstone::Dispense;
 use tuff_vanilla_data::{Block, BlockState};
@@ -39,7 +41,7 @@ fn facing_of(state: BlockState) -> Facing {
 }
 
 fn slot_stack(world: &dyn RegionWorld, pos: BlockPos, slot: usize) -> Option<ItemStack> {
-    world.container_items(pos)?.get(slot)?.clone()
+    world.container_items(pos)?.get(slot)?.dup_unchecked()
 }
 
 fn set_slot(world: &mut dyn RegionWorld, pos: BlockPos, slot: usize, value: Option<ItemStack>) {
@@ -134,7 +136,7 @@ fn drop_into_target(
     state: BlockState,
     stack: &ItemStack,
 ) -> bool {
-    let one = stack.clone().with_count(1);
+    let one = stack.dup_count_unchecked(1);
     let block = state.block();
     let inserted = world.caused(BlockCause::Block(block), |world| {
         world.insert_item(target, Some(facing.opposite()), one, Porter::Dropper(pos))
@@ -188,7 +190,7 @@ fn complete(
     }
     let sound = match outcome {
         DispenseOutcome::Dropped | DispenseOutcome::DroppedFailing => {
-            drop_out(world, pos, facing, stack.clone().with_count(1));
+            drop_out(world, pos, facing, stack.dup_count_unchecked(1));
             take(world, pos, slot);
             if outcome == DispenseOutcome::Dropped {
                 LEVEL_EVENT_DISPENSE
@@ -211,7 +213,7 @@ fn complete(
             LEVEL_EVENT_DISPENSE
         }
         DispenseOutcome::Exchanged(remainder) => {
-            if stack.count == 1 {
+            if stack.count() == 1 {
                 set_slot(world, pos, slot, Some(remainder));
             } else {
                 take(world, pos, slot);
@@ -229,7 +231,7 @@ fn wear(world: &mut dyn RegionWorld, pos: BlockPos, slot: usize, amount: u32) {
         return;
     };
     stack.hurt(amount, world.rng());
-    let value = (stack.count > 0).then_some(stack);
+    let value = (stack.count() > 0).then_some(stack);
     set_slot(world, pos, slot, value);
 }
 
@@ -237,8 +239,8 @@ fn take(world: &mut dyn RegionWorld, pos: BlockPos, slot: usize) {
     let Some(mut stack) = slot_stack(world, pos, slot) else {
         return;
     };
-    stack.count -= 1;
-    let value = (stack.count > 0).then_some(stack);
+    stack.shrink(1, BurnReason::Consumed);
+    let value = (stack.count() > 0).then_some(stack);
     set_slot(world, pos, slot, value);
 }
 

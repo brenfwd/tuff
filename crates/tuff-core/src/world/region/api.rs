@@ -2,6 +2,7 @@
 //! core calls it through.
 
 use std::sync::Arc;
+use tuff_item::item::DupUnchecked;
 
 use super::{ChunkPos, RegionActor, RegionPos};
 use crate::feature::feature_span;
@@ -781,8 +782,8 @@ impl RegionWorld for RegionActor {
             .iter()
             .map(|(slot, old, new)| crate::world::region_api::SlotEdit {
                 slot: *slot,
-                old: old.cloned(),
-                new: new.cloned(),
+                old: old.map(DupUnchecked::dup_unchecked),
+                new: new.map(DupUnchecked::dup_unchecked),
             })
             .collect();
         RegionActor::report_container_edit(self, holder, slots);

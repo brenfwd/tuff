@@ -16,7 +16,7 @@ use bytes::Bytes;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::EntityType;
 
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_item::load::{LoadError, LoadErrorKind};
 use tuff_item::registry::Registry;
 use tuff_nbt::{Compound, Tag};
@@ -98,7 +98,7 @@ impl CustomItemDef {
                 }
             }
         }
-        ItemStack::new(self.base, count).with_components(components)
+        ItemStack::mint(self.base, count, MintReason::Command).with_components(components)
     }
 }
 
@@ -489,14 +489,18 @@ mod tests {
         let content = defs.resolve().unwrap();
         let stack = content.item("ex:ruby").unwrap().stack(3);
         assert_eq!(stack.item, Item::Emerald);
-        assert_eq!(stack.count, 3);
+        assert_eq!(stack.count(), 3);
         assert_eq!(item_id(&stack), Some("ex:ruby"));
         assert_eq!(content.item_of(&stack).unwrap().id, "ex:ruby");
         assert_eq!(
             stack.components.other.get(ITEM_MODEL).and_then(Tag::as_str),
             Some("ex:ruby")
         );
-        assert!(content.item_of(&ItemStack::new(Item::Emerald, 1)).is_none());
+        assert!(
+            content
+                .item_of(&ItemStack::mint(Item::Emerald, 1, MintReason::Test))
+                .is_none()
+        );
         assert!(stack.stacks_with(&content.item("ex:ruby").unwrap().stack(1)));
     }
 

@@ -7,7 +7,7 @@ use super::CommandError;
 use super::args::{read_identifier, read_nbt_compound};
 use super::reader::Reader;
 use crate::protocol::codec::WriteExt;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_wire::PacketWriter;
 
@@ -184,7 +184,8 @@ fn encode(kind: ParticleType, data: &Compound, w: &mut PacketWriter) -> Result<(
             let Some(Tag::Compound(item)) = data.get("item") else {
                 return Err(invalid("Missing field item"));
             };
-            let stack = ItemStack::from_nbt(item).ok_or_else(|| invalid("Invalid item"))?;
+            let stack = ItemStack::mint_from_nbt(item, MintReason::Template)
+                .ok_or_else(|| invalid("Invalid item"))?;
             w.write_slot(Some(stack.view()));
         }
         P::Geyser | P::GeyserPlume => w.write_int(positive(data, "water_blocks")?),

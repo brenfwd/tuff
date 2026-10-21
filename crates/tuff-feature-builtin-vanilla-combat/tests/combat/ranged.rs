@@ -19,7 +19,7 @@ fn owner(player: &PlayerHandle) -> tuff_core::world::projectile::Owner {
 }
 
 fn tipped(potion: Potion) -> ItemStack {
-    let mut stack = ItemStack::new(Item::TippedArrow, 1);
+    let mut stack = ItemStack::mint(Item::TippedArrow, 1, MintReason::Test);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(potion),
         ..Default::default()
@@ -79,7 +79,7 @@ async fn tipped_arrows_carry_an_eighth_of_their_potion_and_stick() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn spectral_arrows_make_their_victim_glow() {
-    let hit = shot_at_player(&ItemStack::new(Item::SpectralArrow, 1)).await;
+    let hit = shot_at_player(&ItemStack::mint(Item::SpectralArrow, 1, MintReason::Test)).await;
     assert_eq!(hit.projectile, Some(EntityType::SpectralArrow));
     let glow = hit
         .effects
@@ -146,7 +146,7 @@ async fn raised_shields_send_arrows_back_without_sticking() {
     player.stand_at([0.5, 151.0, 0.5], true);
     player.inventory_mut().set_slot(
         Inventory::OFFHAND_SLOT,
-        Some(ItemStack::new(Item::Shield, 1)),
+        Some(ItemStack::mint(Item::Shield, 1, MintReason::Test)),
     );
     player.hold_up(true, 10);
     player
@@ -203,7 +203,7 @@ async fn arrows_stick_in_the_mobs_they_hurt_and_bounce_off_invulnerable_ones() {
 }
 
 fn enchanted(item: Item, enchantments: &[(&str, i32)]) -> ItemStack {
-    let mut stack = ItemStack::new(item, 1);
+    let mut stack = ItemStack::mint(item, 1, MintReason::Test);
     stack.components.enchantments = Some(tuff_item::item::Enchantments::new(
         enchantments
             .iter()
@@ -245,14 +245,14 @@ fn loaded(player: &PlayerSession) -> Vec<ItemStack> {
     player
         .inventory()
         .hand(false)
-        .and_then(|s| s.components.charged_projectiles.clone())
+        .and_then(|s| s.components.charged_projectiles.dup_unchecked())
         .unwrap_or_default()
 }
 
 fn ammo_left(player: &PlayerSession) -> u8 {
     player.inventory().slots()[Inventory::hotbar_slot(1)]
         .as_ref()
-        .map_or(0, |s| s.count)
+        .map_or(0, |s| s.count())
 }
 
 async fn count_of(world: &TestWorld, region: &RegionHandle, kind: EntityType, n: usize) {
@@ -270,8 +270,8 @@ async fn crossbows_load_over_their_charge_time_and_fire_on_the_next_use() {
     let region = world.region(ChunkPos::new(0, 0).region()).await;
     let mut player = crossbowman(
         &world,
-        ItemStack::new(Item::Crossbow, 1),
-        ItemStack::new(Item::Arrow, 2),
+        ItemStack::mint(Item::Crossbow, 1, MintReason::Test),
+        ItemStack::mint(Item::Arrow, 2, MintReason::Test),
     );
     player.handle_packet(use_item()).await;
     assert!(player.is_using(), "an empty crossbow starts loading");
@@ -298,7 +298,11 @@ async fn multishot_loads_one_arrow_and_fires_three_and_quick_charge_loads_sooner
     let world = TestWorld::start(dir.path());
     let region = world.region(ChunkPos::new(0, 0).region()).await;
     let crossbow = enchanted(Item::Crossbow, &[("multishot", 1), ("quick_charge", 3)]);
-    let mut player = crossbowman(&world, crossbow, ItemStack::new(Item::Arrow, 5));
+    let mut player = crossbowman(
+        &world,
+        crossbow,
+        ItemStack::mint(Item::Arrow, 5, MintReason::Test),
+    );
     player.handle_packet(use_item()).await;
     for _ in 0..11 {
         player.run_tick().await;
@@ -320,12 +324,12 @@ async fn crossbows_load_rockets_from_the_off_hand_and_fire_them() {
     let region = world.region(ChunkPos::new(0, 0).region()).await;
     let mut player = crossbowman(
         &world,
-        ItemStack::new(Item::Crossbow, 1),
-        ItemStack::new(Item::Arrow, 5),
+        ItemStack::mint(Item::Crossbow, 1, MintReason::Test),
+        ItemStack::mint(Item::Arrow, 5, MintReason::Test),
     );
     player.inventory_mut().set_slot(
         Inventory::OFFHAND_SLOT,
-        Some(ItemStack::new(Item::FireworkRocket, 2)),
+        Some(ItemStack::mint(Item::FireworkRocket, 2, MintReason::Test)),
     );
     player.handle_packet(use_item()).await;
     for _ in 0..26 {
@@ -345,7 +349,7 @@ async fn crossbows_load_rockets_from_the_off_hand_and_fire_them() {
 }
 
 fn starry_rocket(stars: usize) -> ItemStack {
-    let mut rocket = ItemStack::new(Item::FireworkRocket, 1);
+    let mut rocket = ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test);
     rocket.components.fireworks = Some(Box::new(tuff_item::item::decor::Fireworks {
         flight_duration: 1,
         explosions: vec![
@@ -452,7 +456,7 @@ async fn drowned_with_tridents_throw_them() {
     let (player, mut events) = PlayerHandle::new(1000);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
-    let trident = ItemStack::new(Item::Trident, 1).to_nbt();
+    let trident = ItemStack::mint(Item::Trident, 1, MintReason::Test).to_nbt();
     summon(
         &region,
         EntityType::Drowned,
@@ -484,7 +488,7 @@ async fn players_throw_tridents_held_back_long_enough() {
     player.stand_at([4.5, 151.0, 6.5], true);
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Trident, 1)),
+        Some(ItemStack::mint(Item::Trident, 1, MintReason::Test)),
     );
     player.handle_packet(use_item()).await;
     for _ in 0..5 {
@@ -748,7 +752,7 @@ async fn flying_pearls_hold_their_chunks_until_a_while_after_they_land() {
         world.shared.next_entity_id(),
         [7.5, f64::from(SKY) + 30.0, 7.5],
         [0.0, 0.0, 0.0],
-        ItemStack::new(Item::EnderPearl, 1),
+        ItemStack::mint(Item::EnderPearl, 1, MintReason::Test),
         owner(&player),
     );
     region

@@ -88,7 +88,7 @@ async fn a_snowball_powers_a_target_briefly() {
         b.world.shared.next_entity_id(),
         [83.5, f64::from(FLOOR_Y) + 1.5, 86.5],
         [1.5, 0.0, 0.0],
-        ItemStack::new(Item::Snowball, 1),
+        ItemStack::mint(Item::Snowball, 1, MintReason::Test),
         Default::default(),
     );
     b.region
@@ -119,7 +119,7 @@ async fn a_fast_trident_snaps_pointed_dripstone() {
     )
     .await;
     let mut trident = Arrow::trident(
-        &ItemStack::new(Item::Trident, 1),
+        &ItemStack::mint(Item::Trident, 1, MintReason::Test),
         b.world.shared.next_entity_id(),
         [83.5, f64::from(FLOOR_Y) + 1.3, 86.5],
         [2.5, 0.0, 0.0],
@@ -154,7 +154,7 @@ async fn a_players_snowball_on_a_target_reports_the_signal_it_gave() {
         b.world.shared.next_entity_id(),
         [83.5, f64::from(FLOOR_Y) + 1.5, 86.5],
         [1.5, 0.0, 0.0],
-        ItemStack::new(Item::Snowball, 1),
+        ItemStack::mint(Item::Snowball, 1, MintReason::Test),
         owner,
     );
     snowball.base.no_gravity = true;

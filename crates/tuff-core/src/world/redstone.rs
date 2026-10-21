@@ -209,7 +209,7 @@ pub trait BlockEntityCarrier: Send + Sync {
 }
 
 /// What stands in for a block a piston moves with its block entity.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum CarriedLook {
     /// The moving piston draws the block's own model.
     Model,

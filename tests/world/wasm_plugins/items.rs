@@ -7,7 +7,7 @@ use crate::world::inventory::Inventory;
 use crate::world::menu::MenuKind;
 use crate::world::messages::{MenuOpen, MenuSource};
 use crate::world::session::hooks::SessionHooks;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_plugin_wasm::items::{Actions, Pickups};
 use tuff_plugin_wasm::wit::bindings::types::{FilterScope, ItemActionKind, ItemFilter};
 use tuff_vanilla_data::Item;
@@ -74,13 +74,15 @@ async fn drops_swaps_pickups_and_crafts_are_reported_and_cancelled_by_filter() {
     let mut client = Client::new(&world);
     let slot = Inventory::hotbar_slot(client.session.inventory.selected());
 
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Egg, 4));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Egg, 4, MintReason::Test));
     let drop = action(PlayerActionStatus::DropItem);
     assert_eq!(
         Actions.intercept(&mut client.session, &drop).await,
         Verdict::Cancel
     );
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Snowball, 4));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Snowball, 4, MintReason::Test));
     assert_eq!(
         Actions.intercept(&mut client.session, &drop).await,
         Verdict::Allow
@@ -92,11 +94,14 @@ async fn drops_swaps_pickups_and_crafts_are_reported_and_cancelled_by_filter() {
         Verdict::Cancel
     );
 
-    let egg = ItemStack::new(Item::Egg, 2);
+    let egg = ItemStack::mint(Item::Egg, 2, MintReason::Test);
     assert!(!Pickups.allows_item_pickup(&client.session, egg.view()));
-    assert!(Pickups.allows_item_pickup(&client.session, ItemStack::new(Item::Stick, 2).view()));
+    assert!(Pickups.allows_item_pickup(
+        &client.session,
+        ItemStack::mint(Item::Stick, 2, MintReason::Test).view()
+    ));
 
-    *client.session.inventory.slot_mut(0) = Some(ItemStack::new(Item::Stick, 4));
+    *client.session.inventory.slot_mut(0) = Some(ItemStack::mint(Item::Stick, 4, MintReason::Test));
     let take = Serverbound::ContainerClick {
         window_id: 0,
         state_id: 0,
@@ -161,7 +166,7 @@ async fn station_result_slots_report_and_cancel_crafts() {
         let window_id = client.session.window_id().expect("the menu opened");
         let result = kind.result_slot().expect("a result slot");
         client.session.menus.menu.as_mut().unwrap().container[result] =
-            Some(ItemStack::new(Item::Stick, 2));
+            Some(ItemStack::mint(Item::Stick, 2, MintReason::Test));
         let click = |slot: usize| Serverbound::ContainerClick {
             window_id,
             state_id: 0,
@@ -192,7 +197,8 @@ async fn station_result_slots_report_and_cancel_crafts() {
 
 fn drop_egg(client: &mut Client) -> Serverbound {
     let slot = Inventory::hotbar_slot(client.session.inventory.selected());
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Egg, 4));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Egg, 4, MintReason::Test));
     action(PlayerActionStatus::DropItem)
 }
 
@@ -318,7 +324,8 @@ async fn a_take_reports_how_many_items_it_removed() {
     install(dir.path(), "taken.wasm", &take_watcher());
     let world = start(dir.path()).await;
     let mut client = Client::new(&world);
-    *client.session.inventory.slot_mut(36) = Some(ItemStack::new(Item::Stone, 10));
+    *client.session.inventory.slot_mut(36) =
+        Some(ItemStack::mint(Item::Stone, 10, MintReason::Test));
     let take = |count, all_or_nothing| {
         PlayerEvent::PluginInventory(vec![InventoryOp::Take {
             item: Item::Stone,

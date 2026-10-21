@@ -670,7 +670,8 @@ impl Villager {
         }
         let reach = crate::physics::inflate(core.bounds(), [1.0, 0.0, 1.0]);
         let wanted = |item: tuff_vanilla_data::Item, count: u8| {
-            let stack = tuff_item::item::ItemStack::new(item, count);
+            let stack =
+                tuff_item::item::ItemStack::mint(item, count, tuff_item::item::MintReason::Spawn);
             self.wants(&stack)
                 .then(|| self.room_for(&stack).min(count as u32) as u8)
         };
@@ -686,7 +687,11 @@ impl Villager {
                 continue;
             };
             if crate::physics::intersects(entity.bounds, reach) {
-                let stack = tuff_item::item::ItemStack::new(item, room);
+                let stack = tuff_item::item::ItemStack::mint(
+                    item,
+                    room,
+                    tuff_item::item::MintReason::Spawn,
+                );
                 if self.add_item(stack).is_none() {
                     cx.effects.push(Effect::TakeItem {
                         item: entity.id,

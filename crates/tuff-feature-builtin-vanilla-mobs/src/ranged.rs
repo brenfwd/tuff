@@ -2,6 +2,8 @@
 //! goal that keeps a skeleton at range, strafing while it draws.
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -15,7 +17,7 @@ use tuff_core::world::entity::{Culprit, TickContext};
 use tuff_core::world::projectile::{
     self, ArrowShot, Flight, Launch, Owner, Pickup, Shot, shot_velocity, triangle,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_common::combat;
 use tuff_vanilla_common::ranged;
 
@@ -83,8 +85,8 @@ impl MobCore {
     pub fn projectile_for(&self, weapon: Item) -> ItemStack {
         self.ammo_slot(weapon)
             .and_then(|slot| self.equipment.get(slot))
-            .cloned()
-            .unwrap_or_else(|| ItemStack::new(Item::Arrow, 1))
+            .map(DupUnchecked::dup_unchecked)
+            .unwrap_or_else(|| ItemStack::mint(Item::Arrow, 1, MintReason::Spawn))
     }
 
     /// An arrow of `projectile` leaving `start`, fired from `weapon`.
@@ -94,16 +96,16 @@ impl MobCore {
         weapon: Option<&ItemStack>,
         velocity: [f64; 3],
     ) -> ArrowShot {
-        let mut item = projectile.clone();
+        let mut item = projectile.dup_unchecked();
         let free = item.components.remove_other(ranged::INTANGIBLE).is_some();
-        let mut arrow = ArrowShot::new(item.with_count(1), velocity);
+        let mut arrow = ArrowShot::new(item.keep(1, BurnReason::Template), velocity);
         if free {
             arrow.pickup = Some(Pickup::CreativeOnly);
         }
         if let Some(weapon) = weapon {
             arrow.pierce = ranged::piercing(weapon);
         }
-        arrow.weapon = weapon.cloned();
+        arrow.weapon = weapon.map(DupUnchecked::dup_unchecked);
         arrow
     }
 
@@ -111,7 +113,7 @@ impl MobCore {
     fn launch(&self, start: [f64; 3], mut shot: Shot, cx: &mut TickContext) {
         use tuff_vanilla_common::enchant_effects as fx;
         if let Shot::Arrow(arrow) = &mut shot
-            && let Some(weapon) = arrow.weapon.clone()
+            && let Some(weapon) = arrow.weapon.dup_unchecked()
         {
             let look = (self.base.yaw, self.base.pitch);
             let world = fx::arrow_spawned(arrow, &weapon, start, look, &mut *cx.rng);
@@ -152,12 +154,12 @@ impl MobCore {
         if self.crossbow_charged() {
             return false;
         }
-        let Some(mut crossbow) = self.equipment.get(slot).cloned() else {
+        let Some(mut crossbow) = self.equipment.get(slot).map(DupUnchecked::dup_unchecked) else {
             return false;
         };
         let held = self.ammo_slot(Item::Crossbow);
         let ammo = self.projectile_for(Item::Crossbow);
-        let mut left = ammo.count;
+        let mut left = ammo.count();
         let mut drawn = Vec::new();
         for i in 0..ranged::projectile_count(&crossbow) {
             let uses = if i > 0 {
@@ -169,20 +171,20 @@ impl MobCore {
                 continue;
             }
             if uses == 0 {
-                drawn.push(ranged::intangible(ammo.clone()));
+                drawn.push(ranged::intangible(ammo.dup_unchecked()));
             } else {
                 left -= uses;
-                drawn.push(ammo.clone().with_count(uses));
+                drawn.push(ammo.dup_count_unchecked(uses));
             }
         }
         if drawn.is_empty() {
             return false;
         }
         if let Some(held) = held
-            && left != ammo.count
+            && left != ammo.count()
         {
             self.equipment
-                .set(held, (left > 0).then(|| ammo.clone().with_count(left)));
+                .set(held, (left > 0).then(|| ammo.dup_count_unchecked(left)));
         }
         crossbow.components.charged_projectiles = Some(drawn);
         self.equipment.set(slot, Some(crossbow));
@@ -192,7 +194,7 @@ impl MobCore {
     /// Empties a half-loaded crossbow (a charge cut short).
     fn unload_crossbow(&mut self) {
         if let Some(slot) = self.weapon_slot(Item::Crossbow)
-            && let Some(mut crossbow) = self.equipment.get(slot).cloned()
+            && let Some(mut crossbow) = self.equipment.get(slot).map(DupUnchecked::dup_unchecked)
             && crossbow.components.charged_projectiles.take().is_some()
         {
             self.equipment.set(slot, Some(crossbow));
@@ -206,7 +208,7 @@ impl MobCore {
         let Some(slot) = self.weapon_slot(Item::Crossbow) else {
             return;
         };
-        let Some(mut crossbow) = self.equipment.get(slot).cloned() else {
+        let Some(mut crossbow) = self.equipment.get(slot).map(DupUnchecked::dup_unchecked) else {
             return;
         };
         let projectiles = crossbow
@@ -214,7 +216,7 @@ impl MobCore {
             .charged_projectiles
             .take()
             .unwrap_or_default();
-        self.equipment.set(slot, Some(crossbow.clone()));
+        self.equipment.set(slot, Some(crossbow.dup_unchecked()));
         if projectiles.is_empty() {
             return;
         }
@@ -237,7 +239,7 @@ impl MobCore {
             let velocity = shot_velocity(direction, CROSSBOW_POWER, uncertainty, cx.rng);
             let shot = if rocket {
                 Shot::Firework {
-                    item: projectile.clone(),
+                    item: projectile.dup_unchecked(),
                     flight: Flight::Shot(velocity),
                 }
             } else {
@@ -258,7 +260,7 @@ impl MobCore {
                 self.equipment.set(slot, None);
                 break;
             }
-            self.equipment.set(slot, Some(crossbow.clone()));
+            self.equipment.set(slot, Some(crossbow.dup_unchecked()));
         }
     }
 
@@ -289,7 +291,7 @@ impl MobCore {
         let weapon = self
             .weapon_slot(Item::Bow)
             .and_then(|slot| self.equipment.get(slot))
-            .cloned();
+            .map(DupUnchecked::dup_unchecked);
         let projectile = self.projectile_for(Item::Bow);
         let mut arrow = self.arrow_from(&projectile, weapon.as_ref(), velocity);
         arrow.damage = Some(f64::from(power * 2.0) + triangle(cx.rng, difficulty * 0.11, 0.574_25));
@@ -669,9 +671,13 @@ impl TridentAttack {
             .equipment
             .main_hand()
             .filter(|s| s.item == tuff_vanilla_data::Item::Trident)
-            .cloned()
+            .map(DupUnchecked::dup_unchecked)
             .unwrap_or_else(|| {
-                tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::Trident, 1)
+                tuff_item::item::ItemStack::mint(
+                    tuff_vanilla_data::Item::Trident,
+                    1,
+                    tuff_item::item::MintReason::Spawn,
+                )
             });
         let eye = mob.eye_position();
         let start = [
@@ -689,7 +695,7 @@ impl TridentAttack {
         let velocity = shot_velocity([dx, dy + horizontal * 0.2, dz], 1.6, uncertainty, cx.rng);
         mob.launch(
             start,
-            Shot::Arrow(ArrowShot::new(stack.clone().with_count(1), velocity)),
+            Shot::Arrow(ArrowShot::new(stack.dup_count_unchecked(1), velocity)),
             cx,
         );
         let pitch = 1.0 / (cx.rng.r#gen::<f32>() * 0.4 + 0.8);

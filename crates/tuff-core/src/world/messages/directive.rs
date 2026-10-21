@@ -34,7 +34,7 @@ pub enum SlotFill {
 }
 
 /// What a command does to one player.
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub enum Directive {
     GameMode(GameMode),
     /// `/recipe give|take`: `None` means every recipe.
@@ -393,7 +393,7 @@ pub fn enchant_stack(
     if level > 0 {
         entries.push((enchantment.to_owned(), level));
     }
-    let mut updated = stack.clone();
+    let mut updated = stack.dup_unchecked();
     updated.components.enchantments =
         (!entries.is_empty()).then(|| tuff_item::item::Enchantments::new(entries));
     Ok(updated)

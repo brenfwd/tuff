@@ -6,6 +6,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{Attribute, EntityType, SoundEvent};
 use tuff_vanilla_data::{Block, Item, tag};
@@ -23,7 +24,7 @@ use tuff_core::world::entity::{
 };
 use tuff_core::world::menu::{MenuKind, MountArmor, mount};
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -178,7 +179,7 @@ pub fn saddle_up(
         return None;
     }
     core.equipment
-        .set(EquipmentSlot::Saddle, Some(stack.clone().with_count(1)));
+        .set(EquipmentSlot::Saddle, Some(stack.dup_count_unchecked(1)));
     core.sound(sound.unwrap_or(eq.equip_sound), 1.0, 1.0, cx);
     Some(HandEffect::Consume(1))
 }
@@ -202,7 +203,7 @@ pub fn try_equip(
         return None;
     }
     core.equipment
-        .set(eq.slot, Some(stack.clone().with_count(1)));
+        .set(eq.slot, Some(stack.dup_count_unchecked(1)));
     core.sound(eq.equip_sound, 1.0, 1.0, cx);
     Some(HandEffect::Consume(1))
 }
@@ -285,7 +286,7 @@ impl Profile {
 /// A mount's saddle, body armor and chest slots as its screen shows them.
 /// Slots 0 and 1 mirror the mob's saddle and body equipment: whichever
 /// side changed since the last sync wins.
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct MountInventory {
     slots: Vec<Option<ItemStack>>,
     mirror: [Option<ItemStack>; 2],
@@ -294,7 +295,7 @@ pub struct MountInventory {
 impl Default for MountInventory {
     fn default() -> Self {
         Self {
-            slots: vec![None; mount::CHEST],
+            slots: (0..mount::CHEST).map(|_| None).collect(),
             mirror: [None, None],
         }
     }
@@ -321,7 +322,8 @@ impl MountInventory {
 
     /// Resizes the chest to `columns`, keeping what still fits.
     pub fn resize(&mut self, columns: u8) {
-        self.slots.resize(mount::CHEST + columns as usize * 3, None);
+        self.slots
+            .resize_with(mount::CHEST + columns as usize * 3, || None);
     }
 
     /// Empties the chest, returning what it held.
@@ -351,7 +353,7 @@ impl MountInventory {
     pub fn sync(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         for (index, slot) in MIRRORED.into_iter().enumerate() {
             if self.slots[index] != self.mirror[index] {
-                let stack = self.slots[index].clone();
+                let stack = self.slots[index].dup_unchecked();
                 if let Some(stack) = &stack {
                     core.equipment
                         .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
@@ -362,17 +364,17 @@ impl MountInventory {
                 }
                 core.equipment.set(slot, stack);
             } else if core.equipment.get(slot) != self.slots[index].as_ref() {
-                self.slots[index] = core.equipment.get(slot).cloned();
+                self.slots[index] = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
             }
-            self.mirror[index] = self.slots[index].clone();
+            self.mirror[index] = self.slots[index].dup_unchecked();
         }
     }
 
     /// Takes the equipment as it is, without reacting to it.
     pub fn adopt(&mut self, core: &MobCore) {
         for (index, slot) in MIRRORED.into_iter().enumerate() {
-            self.slots[index] = core.equipment.get(slot).cloned();
-            self.mirror[index] = self.slots[index].clone();
+            self.slots[index] = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
+            self.mirror[index] = self.slots[index].dup_unchecked();
         }
     }
 }
@@ -585,7 +587,7 @@ impl Equine {
     }
 
     fn equip(&mut self, core: &mut MobCore, slot: EquipmentSlot, stack: &ItemStack) {
-        core.equipment.set(slot, Some(stack.clone().with_count(1)));
+        core.equipment.set(slot, Some(stack.dup_count_unchecked(1)));
         core.equipment
             .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
         core.persistence_required = true;
@@ -844,7 +846,7 @@ impl Equine {
             core.drop_item(stack, 0.0, cx);
         }
         if std::mem::take(&mut self.has_chest) {
-            core.drop_item(ItemStack::new(Item::Chest, 1), 0.0, cx);
+            core.drop_item(ItemStack::mint(Item::Chest, 1, MintReason::Spawn), 0.0, cx);
             core.changed(FLAGS + 1);
         }
     }

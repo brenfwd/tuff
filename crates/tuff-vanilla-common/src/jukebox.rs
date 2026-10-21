@@ -16,7 +16,7 @@ pub fn is_playing(nbt: &Compound) -> bool {
 }
 
 pub fn record(nbt: &Compound) -> Option<ItemStack> {
-    nbt.get_compound(RECORD).and_then(ItemStack::from_nbt)
+    nbt.get_compound(RECORD).and_then(ItemStack::from_storage)
 }
 
 /// Whether `stack` plays a song (a hopper or dropper may load it).

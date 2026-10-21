@@ -1,11 +1,12 @@
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Frozen;
 
 use super::*;
 
 fn fished(luck: f32, open_water: bool, runs: u64) -> Vec<Item> {
-    let rod = ItemStack::new(Item::FishingRod, 1);
+    let rod = ItemStack::mint(Item::FishingRod, 1, MintReason::Test);
     let mut rng = StdRng::seed_from_u64(7);
     (0..runs)
         .flat_map(|_| fishing_drops(LootTables::builtin(), luck, open_water, &rod, &mut rng))
@@ -131,7 +132,7 @@ fn set_damage_leaves_the_rolled_share_of_durability() {
     let params = serde_json::json!({"damage": 0.25});
     let mut rng = StdRng::seed_from_u64(1);
     let stack = modify_stack(
-        ItemStack::new(Item::Crossbow, 1),
+        ItemStack::mint(Item::Crossbow, 1, MintReason::Test),
         "minecraft:set_damage",
         &params,
         &bare_context(),
@@ -140,7 +141,7 @@ fn set_damage_leaves_the_rolled_share_of_durability() {
     let max = stack.max_damage().unwrap();
     assert_eq!(stack.damage(), (0.75 * max as f32).floor() as u32);
     let book = modify_stack(
-        ItemStack::new(Item::Book, 1),
+        ItemStack::mint(Item::Book, 1, MintReason::Test),
         "minecraft:set_enchantments",
         &serde_json::json!({"enchantments": {"minecraft:wind_burst": 1}}),
         &bare_context(),
@@ -168,7 +169,7 @@ fn set_stew_effect_appends_one_effect_in_ticks_unless_instant() {
     let mut rng = StdRng::seed_from_u64(3);
     for _ in 0..40 {
         let stack = modify_stack(
-            ItemStack::new(Item::SuspiciousStew, 1),
+            ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Test),
             "minecraft:set_stew_effect",
             &params,
             &bare_context(),
@@ -180,7 +181,7 @@ fn set_stew_effect_appends_one_effect_in_ticks_unless_instant() {
     }
     assert_eq!(seen, [(false, 100), (true, 5)].into_iter().collect());
     let other = modify_stack(
-        ItemStack::new(Item::Bread, 1),
+        ItemStack::mint(Item::Bread, 1, MintReason::Test),
         "minecraft:set_stew_effect",
         &params,
         &bare_context(),
@@ -194,22 +195,22 @@ fn set_stew_effect_appends_one_effect_in_ticks_unless_instant() {
 fn set_random_dyes_dyes_one_item_and_ignores_non_positive_rolls() {
     let mut rng = StdRng::seed_from_u64(5);
     let dyed = modify_stack(
-        ItemStack::new(Item::LeatherChestplate, 3),
+        ItemStack::mint(Item::LeatherChestplate, 3, MintReason::Test),
         "minecraft:set_random_dyes",
         &serde_json::json!({"number_of_dyes": 2}),
         &bare_context(),
         &mut rng,
     );
-    assert_eq!(dyed.count, 1);
+    assert_eq!(dyed.count(), 1);
     assert!(dyed.components.dyed_color.is_some());
     let plain = modify_stack(
-        ItemStack::new(Item::LeatherChestplate, 3),
+        ItemStack::mint(Item::LeatherChestplate, 3, MintReason::Test),
         "minecraft:set_random_dyes",
         &serde_json::json!({"number_of_dyes": 0}),
         &bare_context(),
         &mut rng,
     );
-    assert_eq!(plain.count, 3);
+    assert_eq!(plain.count(), 3);
     assert!(plain.components.dyed_color.is_none());
 }
 
@@ -231,7 +232,7 @@ fn tool_and_block_conditions_read_the_tags_in_effect() {
             });
     }
     let tags = std::sync::Arc::new(TagSet::resolve_all(&builders).0);
-    let glass = ItemStack::new(Item::Glass, 1);
+    let glass = ItemStack::mint(Item::Glass, 1, MintReason::Test);
     let check = || {
         (
             match_tool(
@@ -250,12 +251,12 @@ fn tool_and_block_conditions_read_the_tags_in_effect() {
 }
 
 fn block_drops(block: Block, tool: Option<Item>, rng: &mut impl Rng) -> Vec<ItemStack> {
-    let tool = tool.map(|item| ItemStack::new(item, 1));
+    let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Test));
     super::block_drops(block.default_state(), tool.as_ref(), None, rng)
 }
 
 fn enchanted(item: Item, id: &str, level: i32) -> ItemStack {
-    let mut stack = ItemStack::new(item, 1);
+    let mut stack = ItemStack::mint(item, 1, MintReason::Test);
     stack.components.enchantments = Some(Enchantments::new([(format!("minecraft:{id}"), level)]));
     stack
 }
@@ -318,9 +319,9 @@ fn silk_touch_keeps_the_ore_block_itself() {
             None,
             &mut rng
         ),
-        vec![ItemStack::new(Item::DiamondOre, 1)]
+        vec![ItemStack::mint(Item::DiamondOre, 1, MintReason::Test)]
     );
-    let plain = ItemStack::new(Item::DiamondPickaxe, 1);
+    let plain = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     assert_eq!(
         super::block_drops(
             Block::DiamondOre.default_state(),
@@ -328,7 +329,7 @@ fn silk_touch_keeps_the_ore_block_itself() {
             None,
             &mut rng
         ),
-        vec![ItemStack::new(Item::Diamond, 1)]
+        vec![ItemStack::mint(Item::Diamond, 1, MintReason::Test)]
     );
 }
 
@@ -347,14 +348,14 @@ fn fortune_multiplies_ore_drops_up_to_level_plus_one() {
         );
         assert_eq!(drops.len(), 1);
         assert_eq!(drops[0].item, Item::Diamond);
-        counts.insert(drops[0].count);
-        assert!((1..=4).contains(&drops[0].count));
+        counts.insert(drops[0].count());
+        assert!((1..=4).contains(&drops[0].count()));
     }
     assert!(
         counts.len() > 1,
         "fortune should vary the count: {counts:?}"
     );
-    let plain = ItemStack::new(Item::DiamondPickaxe, 1);
+    let plain = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     for _ in 0..20 {
         let drops = super::block_drops(
             Block::DiamondOre.default_state(),
@@ -362,7 +363,10 @@ fn fortune_multiplies_ore_drops_up_to_level_plus_one() {
             None,
             &mut rng,
         );
-        assert_eq!(drops, vec![ItemStack::new(Item::Diamond, 1)]);
+        assert_eq!(
+            drops,
+            vec![ItemStack::mint(Item::Diamond, 1, MintReason::Test)]
+        );
     }
 }
 
@@ -381,7 +385,7 @@ fn fortune_on_glowstone_stays_within_its_limit() {
         );
         assert_eq!(drops.len(), 1);
         assert_eq!(drops[0].item, Item::GlowstoneDust);
-        counts.insert(drops[0].count);
+        counts.insert(drops[0].count());
     }
     assert_eq!(counts, [2, 3, 4].into());
 }
@@ -396,7 +400,7 @@ fn looting_raises_rotten_flesh_by_up_to_its_level() {
                 super::entity_drops("minecraft:entities/zombie", facts, rng)
                     .iter()
                     .filter(|s| s.item == Item::RottenFlesh)
-                    .map(|s| s.count)
+                    .map(|s| s.count())
                     .sum::<u8>()
             })
             .collect::<std::collections::BTreeSet<_>>()
@@ -440,7 +444,7 @@ fn table_bonus_picks_the_chance_for_the_tool_level() {
     let mut rng = StdRng::seed_from_u64(4);
     let condition: Value =
         serde_json::from_str(r#"{"chances":[0.0,1.0],"enchantment":"minecraft:fortune"}"#).unwrap();
-    let plain = ItemStack::new(Item::WoodenAxe, 1);
+    let plain = ItemStack::mint(Item::WoodenAxe, 1, MintReason::Test);
     for _ in 0..20 {
         assert!(!super::table_bonus(&condition, Some(&plain), &mut rng));
     }
@@ -515,21 +519,21 @@ fn world_blocks_drop_like_vanilla_by_hand() {
     let mut rng = StdRng::seed_from_u64(6);
     assert_eq!(
         block_drops(Block::Dirt, None, &mut rng),
-        vec![ItemStack::new(Item::Dirt, 1)]
+        vec![ItemStack::mint(Item::Dirt, 1, MintReason::Test)]
     );
     assert_eq!(
         block_drops(Block::GrassBlock, None, &mut rng),
-        vec![ItemStack::new(Item::Dirt, 1)]
+        vec![ItemStack::mint(Item::Dirt, 1, MintReason::Test)]
     );
     assert!(block_drops(Block::Stone, None, &mut rng).is_empty());
     assert_eq!(
         block_drops(Block::Stone, Some(Item::WoodenPickaxe), &mut rng),
-        vec![ItemStack::new(Item::Cobblestone, 1)]
+        vec![ItemStack::mint(Item::Cobblestone, 1, MintReason::Test)]
     );
     assert!(block_drops(Block::Bedrock, None, &mut rng).is_empty());
     assert_eq!(
         block_drops(Block::WallTorch, None, &mut rng),
-        vec![ItemStack::new(Item::Torch, 1)]
+        vec![ItemStack::mint(Item::Torch, 1, MintReason::Test)]
     );
     assert_eq!(
         super::block_drops(
@@ -538,7 +542,7 @@ fn world_blocks_drop_like_vanilla_by_hand() {
             None,
             &mut rng
         ),
-        vec![ItemStack::new(Item::OakSign, 1)]
+        vec![ItemStack::mint(Item::OakSign, 1, MintReason::Test)]
     );
 }
 
@@ -549,16 +553,16 @@ fn harvesting_needs_a_correct_tool_only_when_the_block_requires_one() {
     assert!(block_drops(Block::IronOre, Some(Item::WoodenPickaxe), &mut rng).is_empty());
     assert_eq!(
         block_drops(Block::IronOre, Some(Item::StonePickaxe), &mut rng),
-        vec![ItemStack::new(Item::RawIron, 1)]
+        vec![ItemStack::mint(Item::RawIron, 1, MintReason::Test)]
     );
     assert!(block_drops(Block::Obsidian, Some(Item::IronPickaxe), &mut rng).is_empty());
     assert_eq!(
         block_drops(Block::Obsidian, Some(Item::DiamondPickaxe), &mut rng),
-        vec![ItemStack::new(Item::Obsidian, 1)]
+        vec![ItemStack::mint(Item::Obsidian, 1, MintReason::Test)]
     );
     assert_eq!(
         block_drops(Block::Piston, None, &mut rng),
-        vec![ItemStack::new(Item::Piston, 1)]
+        vec![ItemStack::mint(Item::Piston, 1, MintReason::Test)]
     );
 }
 
@@ -567,7 +571,7 @@ fn harvesting_needs_a_correct_tool_only_when_the_block_requires_one() {
 fn harvesting_honors_a_stacks_own_tool() {
     use tuff_item::item::gear::{BlockSet, Tool, ToolRule};
     let mut rng = StdRng::seed_from_u64(8);
-    let mut stick = ItemStack::new(Item::Stick, 1);
+    let mut stick = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     stick.components.tool = Some(Box::new(Tool {
         rules: vec![ToolRule {
             blocks: BlockSet::tag("minecraft:mineable/pickaxe").unwrap(),
@@ -582,12 +586,12 @@ fn harvesting_honors_a_stacks_own_tool() {
     assert!(can_harvest(obsidian, Some(&stick)));
     assert_eq!(
         super::block_drops(obsidian, Some(&stick), None, &mut rng),
-        vec![ItemStack::new(Item::Obsidian, 1)]
+        vec![ItemStack::mint(Item::Obsidian, 1, MintReason::Test)]
     );
-    let mut blunt = ItemStack::new(Item::DiamondPickaxe, 1);
+    let mut blunt = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     blunt.components.removed = vec!["minecraft:tool".into()];
     assert!(!can_harvest(obsidian, Some(&blunt)));
-    let mut sword = ItemStack::new(Item::DiamondSword, 1);
+    let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     assert!(!sword.can_destroy_blocks_in_creative());
     sword.components.removed = vec!["minecraft:tool".into()];
     assert!(sword.can_destroy_blocks_in_creative());
@@ -608,30 +612,30 @@ fn harvesting_honors_a_stacks_own_tool() {
 fn drops_follow_block_state_and_tool_conditions() {
     let mut rng = StdRng::seed_from_u64(9);
     let drops = |state: &str, tool: Option<Item>, rng: &mut _| {
-        let tool = tool.map(|item| ItemStack::new(item, 1));
+        let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Test));
         super::block_drops(state.parse().unwrap(), tool.as_ref(), None, rng)
     };
     assert_eq!(
         drops("minecraft:oak_door[half=lower]", None, &mut rng),
-        vec![ItemStack::new(Item::OakDoor, 1)]
+        vec![ItemStack::mint(Item::OakDoor, 1, MintReason::Test)]
     );
     assert!(drops("minecraft:oak_door[half=upper]", None, &mut rng).is_empty());
     assert!(drops("minecraft:red_bed[part=foot]", None, &mut rng).is_empty());
     assert_eq!(
         drops("minecraft:red_bed[part=head]", None, &mut rng),
-        vec![ItemStack::new(Item::RedBed, 1)]
+        vec![ItemStack::mint(Item::RedBed, 1, MintReason::Test)]
     );
     assert_eq!(
         drops("minecraft:oak_slab[type=double]", None, &mut rng),
-        vec![ItemStack::new(Item::OakSlab, 2)]
+        vec![ItemStack::mint(Item::OakSlab, 2, MintReason::Test)]
     );
     assert_eq!(
         drops("minecraft:leaf_litter[segment_amount=3]", None, &mut rng),
-        vec![ItemStack::new(Item::LeafLitter, 3)]
+        vec![ItemStack::mint(Item::LeafLitter, 3, MintReason::Test)]
     );
     assert_eq!(
         drops("minecraft:short_grass", Some(Item::Shears), &mut rng),
-        vec![ItemStack::new(Item::ShortGrass, 1)]
+        vec![ItemStack::mint(Item::ShortGrass, 1, MintReason::Test)]
     );
     assert!(
         drops("minecraft:short_grass", None, &mut rng)
@@ -722,14 +726,14 @@ fn bonus_rolls_scale_with_luck() {
 fn fill_container_slots_splits_large_stacks_to_use_available_room() {
     let mut rng = rand::thread_rng();
     for _ in 0..100 {
-        let drops = vec![ItemStack::new(Item::Bone, 20)];
+        let drops = vec![ItemStack::mint(Item::Bone, 20, MintReason::Test)];
         let result = fill_container_slots(drops, 6, &mut rng);
         let filled: Vec<&ItemStack> = result.iter().flatten().collect();
         assert!(
             filled.len() > 1,
             "a count-20 stack into 6 slots should split, got {filled:?}"
         );
-        let total: u32 = filled.iter().map(|s| s.count as u32).sum();
+        let total: u32 = filled.iter().map(|s| s.count() as u32).sum();
         assert_eq!(total, 20, "splitting must conserve the total item count");
         assert!(filled.iter().all(|s| s.item == Item::Bone));
     }
@@ -743,10 +747,10 @@ fn fill_container_slots_splits_large_stacks_to_use_available_room() {
 fn fill_container_slots_never_splits_stacks_already_at_one() {
     let mut rng = rand::thread_rng();
     let drops = vec![
-        ItemStack::new(Item::Bread, 1),
-        ItemStack::new(Item::IronIngot, 1),
+        ItemStack::mint(Item::Bread, 1, MintReason::Test),
+        ItemStack::mint(Item::IronIngot, 1, MintReason::Test),
     ];
-    let result = fill_container_slots(drops.clone(), 27, &mut rng);
+    let result = fill_container_slots(drops.dup_unchecked(), 27, &mut rng);
     let mut filled: Vec<ItemStack> = result.into_iter().flatten().collect();
     filled.sort_by_key(|s| s.item.name());
     let mut expected = drops;
@@ -925,13 +929,13 @@ fn a_pack_table_that_reaches_itself_stops_and_overrides_apply() {
     let mut rng = StdRng::seed_from_u64(3);
     assert_eq!(
         roll_in(&tables, "a:loop", &mut rng),
-        [ItemStack::new(Item::Diamond, 1)]
+        [ItemStack::mint(Item::Diamond, 1, MintReason::Test)]
     );
     assert_eq!(
         block_drops_in(&tables, Block::Stone.default_state(), None, None, &mut rng),
         []
     );
-    let pickaxe = ItemStack::new(Item::WoodenPickaxe, 1);
+    let pickaxe = ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test);
     assert_eq!(
         block_drops_in(
             &tables,
@@ -941,14 +945,14 @@ fn a_pack_table_that_reaches_itself_stops_and_overrides_apply() {
             &mut rng
         ),
         [
-            ItemStack::new(Item::Emerald, 1),
-            ItemStack::new(Item::Emerald, 1)
+            ItemStack::mint(Item::Emerald, 1, MintReason::Test),
+            ItemStack::mint(Item::Emerald, 1, MintReason::Test)
         ]
     );
     assert!(block_drops_in(&tables, Block::Dirt.default_state(), None, None, &mut rng).is_empty());
     assert_eq!(
         super::block_drops(Block::Dirt.default_state(), None, None, &mut rng),
-        [ItemStack::new(Item::Dirt, 1)]
+        [ItemStack::mint(Item::Dirt, 1, MintReason::Test)]
     );
 }
 
@@ -995,7 +999,7 @@ fn location_and_value_checks_gate_entries() {
         block_drops_located(
             tables,
             Block::Stone.default_state(),
-            Some(&ItemStack::new(Item::WoodenPickaxe, 1)),
+            Some(&ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test)),
             None,
             at,
             None,
@@ -1055,7 +1059,7 @@ fn lore_and_custom_data_functions_edit_components() {
             {"type":"minecraft:set_lore","lore":["c"],"mode":"append"},
             {"type":"minecraft:set_custom_data","tag":{"x":1}},
             {"type":"minecraft:set_custom_data","tag":{"y":2}}]"##,
-        ItemStack::new(Item::Stick, 1),
+        ItemStack::mint(Item::Stick, 1, MintReason::Test),
     );
     let lore = component(&stack, "minecraft:lore")
         .and_then(Tag::as_list)
@@ -1073,7 +1077,7 @@ fn set_lore_is_capped_at_256_lines() {
     let lines = vec!["\"x\""; 300].join(",");
     let stack = modified(
         &format!(r##"[{{"type":"minecraft:set_lore","lore":[{lines}],"mode":"replace_all"}}]"##),
-        ItemStack::new(Item::Stick, 1),
+        ItemStack::mint(Item::Stick, 1, MintReason::Test),
     );
     let lore = component(&stack, "minecraft:lore")
         .and_then(Tag::as_list)
@@ -1087,10 +1091,10 @@ fn filtered_applies_the_branch_the_item_takes_and_discard_empties() {
     let modifier = r##"{"type":"minecraft:filtered","item_filter":{"items":"minecraft:stick"},
         "on_pass":{"type":"minecraft:set_custom_data","tag":{"p":1}},
         "on_fail":{"type":"minecraft:discard"}}"##;
-    let pass = modified(modifier, ItemStack::new(Item::Stick, 1));
+    let pass = modified(modifier, ItemStack::mint(Item::Stick, 1, MintReason::Test));
     assert!(component(&pass, "minecraft:custom_data").is_some());
-    let fail = modified(modifier, ItemStack::new(Item::Stone, 1));
-    assert_eq!(fail.count, 0);
+    let fail = modified(modifier, ItemStack::mint(Item::Stone, 1, MintReason::Test));
+    assert_eq!(fail.count(), 0);
 }
 
 #[tuff_core::watchdog]
@@ -1101,7 +1105,7 @@ fn contents_attributes_and_model_data_are_set() {
               "entries":[{"type":"minecraft:item","name":"minecraft:apple"}]},
             {"type":"minecraft:set_custom_model_data","floats":[1.5],"strings":{"values":["s"],"mode":"append"}},
             {"type":"minecraft:set_loot_table","name":"minecraft:chests/x"}]"##,
-        ItemStack::new(Item::Bundle, 1),
+        ItemStack::mint(Item::Bundle, 1, MintReason::Test),
     );
     assert!(stack.components.bundle_contents.is_some());
     let cmd = component(&stack, "minecraft:custom_model_data")
@@ -1137,7 +1141,7 @@ fn copy_custom_data_copies_block_entity_paths() {
     )
     .unwrap();
     let stack = modify_stack(
-        ItemStack::new(Item::Stick, 1),
+        ItemStack::mint(Item::Stick, 1, MintReason::Test),
         "minecraft:copy_custom_data",
         &params,
         &context,
@@ -1157,7 +1161,7 @@ fn copy_state_copies_listed_properties_of_the_matching_block() {
     context.state = state;
     let run = |params: &str, context: &Context| {
         modify_stack(
-            ItemStack::new(Item::BeeNest, 1),
+            ItemStack::mint(Item::BeeNest, 1, MintReason::Test),
             "minecraft:copy_state",
             &serde_json::from_str(params).unwrap(),
             context,
@@ -1192,7 +1196,7 @@ fn copy_custom_data_reads_storage_and_shorthand_context_sources() {
         ))
         .unwrap();
         modify_stack(
-            ItemStack::new(Item::Stick, 1),
+            ItemStack::mint(Item::Stick, 1, MintReason::Test),
             "minecraft:copy_custom_data",
             &params,
             context,
@@ -1223,7 +1227,7 @@ fn slot_entries_provide_container_slots_filtered_limited_and_stored() {
             stacks
                 .iter()
                 .map(|(slot, item, count)| {
-                    let mut nbt = ItemStack::new(*item, *count).to_nbt();
+                    let mut nbt = ItemStack::mint(*item, *count, MintReason::Test).to_nbt();
                     nbt.insert("Slot", Tag::Byte(*slot));
                     Tag::Compound(nbt)
                 })
@@ -1261,23 +1265,23 @@ fn slot_entries_provide_container_slots_filtered_limited_and_stored() {
     assert_eq!(
         provide(r#""all""#),
         vec![
-            ItemStack::new(Item::Apple, 4),
-            ItemStack::new(Item::Stick, 1),
-            ItemStack::new(Item::Stick, 2)
+            ItemStack::mint(Item::Apple, 4, MintReason::Test),
+            ItemStack::mint(Item::Stick, 1, MintReason::Test),
+            ItemStack::mint(Item::Stick, 2, MintReason::Test)
         ]
     );
     assert_eq!(
         provide(r#"{"type":"minecraft:limit_slots","limit":2,"slot_source":"all"}"#),
         vec![
-            ItemStack::new(Item::Apple, 4),
-            ItemStack::new(Item::Stick, 1)
+            ItemStack::mint(Item::Apple, 4, MintReason::Test),
+            ItemStack::mint(Item::Stick, 1, MintReason::Test)
         ]
     );
     assert_eq!(
         provide(
             r#"{"type":"minecraft:filtered","item_filter":{"items":"minecraft:stick"},"slot_source":{"type":"minecraft:slot_range","source":"block_entity","slots":"container.3"}}"#
         ),
-        vec![ItemStack::new(Item::Stick, 2)]
+        vec![ItemStack::mint(Item::Stick, 2, MintReason::Test)]
     );
     assert!(
         provide(r#"{"type":"minecraft:slot_range","source":"this","slots":"container.*"}"#)
@@ -1306,7 +1310,7 @@ fn a_sequence_runs_its_functions_and_fill_player_head_names_the_profile() {
     let mut rng = StdRng::seed_from_u64(1);
     let stack = modified(
         r#"{"type":"minecraft:sequence","functions":[{"type":"minecraft:set_custom_data","tag":{"a":1}}]}"#,
-        ItemStack::new(Item::Stick, 1),
+        ItemStack::mint(Item::Stick, 1, MintReason::Test),
     );
     assert!(component(&stack, "minecraft:custom_data").is_some());
 
@@ -1317,7 +1321,7 @@ fn a_sequence_runs_its_functions_and_fill_player_head_names_the_profile() {
     let mut context = bare_context();
     context.entity = Some(&facts);
     let stack = modify_stack(
-        ItemStack::new(Item::PlayerHead, 1),
+        ItemStack::mint(Item::PlayerHead, 1, MintReason::Test),
         "minecraft:fill_player_head",
         &Value::Null,
         &context,
@@ -1340,24 +1344,24 @@ fn pool_level_functions_set_item_count_and_name() {
     let swapped = stack(
         "minecraft:set_item",
         serde_json::json!({"item": "minecraft:diamond"}),
-        ItemStack::new(Item::Stick, 3),
+        ItemStack::mint(Item::Stick, 3, MintReason::Test),
         &mut rng,
     );
-    assert_eq!((swapped.item, swapped.count), (Item::Diamond, 3));
+    assert_eq!((swapped.item, swapped.count()), (Item::Diamond, 3));
     let counted = stack(
         "minecraft:set_count",
         serde_json::json!({"count": 5, "add": true}),
         swapped,
         &mut rng,
     );
-    assert_eq!(counted.count, 8);
+    assert_eq!(counted.count(), 8);
     let limited = stack(
         "minecraft:limit_count",
         serde_json::json!({"limit": {"max": 4}}),
         counted,
         &mut rng,
     );
-    assert_eq!(limited.count, 4);
+    assert_eq!(limited.count(), 4);
     let named = stack(
         "minecraft:set_name",
         serde_json::json!({"name": "Hi"}),
@@ -1376,7 +1380,7 @@ fn pool_level_functions_set_item_count_and_name() {
 #[tuff_core::watchdog]
 #[test]
 fn set_damage_add_uses_integer_division_for_the_base() {
-    let mut stack = ItemStack::new(Item::Crossbow, 1);
+    let mut stack = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
     let max = stack.max_damage().unwrap();
     stack.set_damage(max / 2);
     let mut rng = StdRng::seed_from_u64(1);
@@ -1396,7 +1400,7 @@ fn set_random_potion_picks_from_the_options_or_the_whole_registry() {
     let mut rng = StdRng::seed_from_u64(3);
     for _ in 0..20 {
         let out = modify_stack(
-            ItemStack::new(Item::Potion, 1),
+            ItemStack::mint(Item::Potion, 1, MintReason::Test),
             "minecraft:set_random_potion",
             &serde_json::json!({"options": ["minecraft:swiftness", "minecraft:healing"]}),
             &bare_context(),
@@ -1415,7 +1419,7 @@ fn set_random_potion_picks_from_the_options_or_the_whole_registry() {
         ));
     }
     let any = modify_stack(
-        ItemStack::new(Item::Potion, 1),
+        ItemStack::mint(Item::Potion, 1, MintReason::Test),
         "minecraft:set_random_potion",
         &serde_json::json!({}),
         &bare_context(),
@@ -1542,7 +1546,7 @@ fn stone_drops_of(entry: &str, block_entity: Option<&Compound>) -> Vec<ItemStack
     block_drops_in(
         &tables,
         Block::Stone.default_state(),
-        Some(&ItemStack::new(Item::WoodenPickaxe, 1)),
+        Some(&ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test)),
         block_entity,
         &mut StdRng::seed_from_u64(1),
     )
@@ -1563,7 +1567,7 @@ fn a_count_above_the_max_stack_splits_into_several_stacks() {
     let entry = r#"{"type":"item","name":"ender_pearl","modifier":[{"type":"minecraft:set_count","count":40}]}"#;
     let counts: Vec<u8> = stone_drops_of(entry, None)
         .iter()
-        .map(|s| s.count)
+        .map(|s| s.count())
         .collect();
     assert_eq!(counts, [16, 16, 8]);
 }
@@ -1574,7 +1578,7 @@ fn entry_functions_apply_to_non_item_entries() {
     let entry = r#"{"type":"minecraft:tag","name":"minecraft:logs","expand":true,"modifier":[{"type":"minecraft:set_count","count":3}]}"#;
     let drops = stone_drops_of(entry, None);
     assert_eq!(drops.len(), 1);
-    assert_eq!(drops[0].count, 3);
+    assert_eq!(drops[0].count(), 3);
 }
 
 #[tuff_core::watchdog]
@@ -1591,20 +1595,23 @@ fn contents_dynamic_drops_the_block_entity_items() {
         Some(&entity),
     );
     assert_eq!(drops.len(), 1);
-    assert_eq!((drops[0].item, drops[0].count), (Item::Diamond, 5));
+    assert_eq!((drops[0].item, drops[0].count()), (Item::Diamond, 5));
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn furnace_smelt_scales_by_result_count_and_use_input_count() {
-    let beef = ItemStack::new(Item::Beef, 3);
-    let kept = modified(r#"[{"type":"minecraft:furnace_smelt"}]"#, beef.clone());
-    assert_eq!((kept.item, kept.count), (Item::CookedBeef, 3));
+    let beef = ItemStack::mint(Item::Beef, 3, MintReason::Test);
+    let kept = modified(
+        r#"[{"type":"minecraft:furnace_smelt"}]"#,
+        beef.dup_unchecked(),
+    );
+    assert_eq!((kept.item, kept.count()), (Item::CookedBeef, 3));
     let single = modified(
         r#"[{"type":"minecraft:furnace_smelt","use_input_count":false}]"#,
         beef,
     );
-    assert_eq!((single.item, single.count), (Item::CookedBeef, 1));
+    assert_eq!((single.item, single.count()), (Item::CookedBeef, 1));
 }
 
 #[tuff_core::watchdog]
@@ -1613,7 +1620,7 @@ fn book_page_functions_apply_list_operations() {
     let book = modified(
         r#"[{"type":"minecraft:set_writable_book_pages","pages":["a","b"]},
             {"type":"minecraft:set_writable_book_pages","pages":["c"],"mode":"append"}]"#,
-        ItemStack::new(Item::WritableBook, 1),
+        ItemStack::mint(Item::WritableBook, 1, MintReason::Test),
     );
     let nbt = book.components.to_nbt();
     let content = nbt.get_compound("minecraft:writable_book_content").unwrap();
@@ -1623,7 +1630,7 @@ fn book_page_functions_apply_list_operations() {
     );
     let written = modified(
         r#"[{"type":"minecraft:set_written_book_pages","pages":["x"]}]"#,
-        ItemStack::new(Item::WrittenBook, 1),
+        ItemStack::mint(Item::WrittenBook, 1, MintReason::Test),
     );
     assert!(
         written
@@ -1640,7 +1647,7 @@ fn toggle_tooltips_hides_and_shows_components() {
     let stack = modified(
         r#"[{"type":"minecraft:toggle_tooltips","toggles":{"minecraft:enchantments":false,"minecraft:lore":false}},
             {"type":"minecraft:toggle_tooltips","toggles":{"minecraft:lore":true}}]"#,
-        ItemStack::new(Item::Stick, 1),
+        ItemStack::mint(Item::Stick, 1, MintReason::Test),
     );
     let display = component(&stack, "minecraft:tooltip_display").unwrap();
     let hidden: Vec<&str> = display
@@ -1688,7 +1695,7 @@ fn match_tool_uses_the_full_item_predicate() {
     )
     .unwrap();
     let with = |count| {
-        let tool = ItemStack::new(Item::Stick, count);
+        let tool = ItemStack::mint(Item::Stick, count, MintReason::Test);
         let context = Context {
             tool: Some(&tool),
             ..bare_context()

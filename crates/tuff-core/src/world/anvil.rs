@@ -6,7 +6,7 @@ use tuff_item::item::ItemStack;
 
 pub const MAX_NAME_LENGTH: usize = 50;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct AnvilOutcome {
     pub result: Option<ItemStack>,
     pub cost: i32,

@@ -1,3 +1,5 @@
+use tuff_item::item::BurnReason;
+use tuff_item::item::MintReason;
 use tuff_vanilla_data::item::EquipmentSlot;
 
 use tuff_core::world::region_api::RegionWorld;
@@ -48,7 +50,7 @@ pub fn equip(world: &mut dyn RegionWorld, table: &Compound, saved: &mut Compound
             continue;
         };
         if !matches!(slot, EquipmentSlot::Mainhand | EquipmentSlot::Offhand) {
-            stack.count = 1;
+            stack.resize(1, MintReason::Loot, BurnReason::Loot);
         }
         equipment.insert(*key, stack.to_nbt());
         let chance = match chances {

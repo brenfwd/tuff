@@ -30,7 +30,7 @@ pub use tuff_core::world::crafting::{
     CraftingInput, Positioned, result_stack, with_input_components,
 };
 use tuff_item::item::decor::{self, ArmorTrim, FireworkExplosion, Fireworks};
-use tuff_item::item::{Enchantments, ItemStack};
+use tuff_item::item::{Enchantments, ItemStack, MintReason};
 
 pub const MAX_GRID: usize = 3;
 const MAX_FIREWORK_FUEL: usize = 3;
@@ -464,8 +464,9 @@ fn repair_pair(input: &CraftingInput) -> Option<(&ItemStack, &ItemStack)> {
     let mut stacks = input.stacks();
     let first = stacks.next()?;
     let second = stacks.next()?;
-    let repairable =
-        |stack: &ItemStack| stack.count == 1 && stack.max_damage().is_some() && stack.has_damage();
+    let repairable = |stack: &ItemStack| {
+        stack.count() == 1 && stack.max_damage().is_some() && stack.has_damage()
+    };
     (first.item == second.item && repairable(first) && repairable(second))
         .then_some((first, second))
 }
@@ -529,7 +530,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             let remaining = (first.max_damage()? - first.damage())
                 + (second.max_damage()? - second.damage())
                 + durability * REPAIR_BONUS_PERCENT / 100;
-            let mut result = ItemStack::new(first.item, 1);
+            let mut result = ItemStack::mint(first.item, 1, MintReason::Crafting);
             if first.item.max_damage() != Some(durability) {
                 result.components.max_damage = Some(durability);
             }
@@ -672,7 +673,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             Some(result)
         }
         Recipe::CraftingDecoratedPot(pot) => {
-            let side = |x, y| input.get(x, y).map(|stack| stack.clone().with_count(1));
+            let side = |x, y| input.get(x, y).map(|stack| stack.dup_count_unchecked(1));
             let mut result = result_stack(&pot.result);
             result.components.other.insert(
                 "minecraft:pot_decorations",
@@ -686,7 +687,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             Some(result)
         }
         Recipe::CraftingSpecialMapExtending(_) => {
-            let mut result = input.get(1, 1)?.clone().with_count(1);
+            let mut result = input.get(1, 1)?.dup_count_unchecked(1);
             result
                 .components
                 .other
@@ -709,7 +710,9 @@ pub fn remaining_items(recipe: &Recipe, input: &CraftingInput) -> Vec<Option<Ite
                         && stack.components.written_book.is_some()
                 })
             }) {
-                remaining[index] = input.items[index].clone().map(|s| s.with_count(1));
+                remaining[index] = input.items[index]
+                    .as_ref()
+                    .map(|s| ItemStack::mint_like(s, 1, MintReason::Crafting));
             }
         }
         Recipe::CraftingSpecialBannerDuplicate(_) => {
@@ -718,7 +721,7 @@ pub fn remaining_items(recipe: &Recipe, input: &CraftingInput) -> Vec<Option<Ite
                     && stack.item.crafting_remainder().is_none()
                     && banner_layers(stack) > 0
                 {
-                    remaining[index] = Some(stack.clone().with_count(1));
+                    remaining[index] = Some(stack.dup_count_unchecked(1));
                 }
             }
         }
@@ -742,7 +745,7 @@ pub fn apply_trim(
     if base.components.trim.as_deref() == Some(&trim) {
         return None;
     }
-    let mut result = base.clone().with_count(1);
+    let mut result = base.dup_count_unchecked(1);
     result.components.trim = Some(Box::new(trim));
     Some(result)
 }

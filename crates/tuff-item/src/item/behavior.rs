@@ -257,11 +257,12 @@ impl ItemStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::item::MintReason;
     use tuff_vanilla_data::Item;
     use tuff_vanilla_data::registry::DataComponentType;
 
     fn with(item: Item, id: &str, nbt: Compound) -> ItemStack {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         stack.components.other.insert(id, Tag::Compound(nbt));
         stack
     }
@@ -269,9 +270,15 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn consumable_falls_back_to_the_item_default() {
-        let apple = ItemStack::new(Item::Apple, 1).consumable().unwrap();
+        let apple = ItemStack::mint(Item::Apple, 1, MintReason::Test)
+            .consumable()
+            .unwrap();
         assert_eq!(apple.consume_ticks(), 32);
-        assert!(ItemStack::new(Item::Stone, 1).consumable().is_none());
+        assert!(
+            ItemStack::mint(Item::Stone, 1, MintReason::Test)
+                .consumable()
+                .is_none()
+        );
     }
 
     #[tuff_core::watchdog]
@@ -312,12 +319,12 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn removed_behavior_components_are_absent() {
-        let mut apple = ItemStack::new(Item::Apple, 1);
+        let mut apple = ItemStack::mint(Item::Apple, 1, MintReason::Test);
         apple
             .components
             .remove_network(DataComponentType::Consumable);
         assert!(apple.consumable().is_none());
-        let mut spear = ItemStack::new(Item::IronSpear, 1);
+        let mut spear = ItemStack::mint(Item::IronSpear, 1, MintReason::Test);
         spear
             .components
             .remove_network(DataComponentType::KineticWeapon);
@@ -353,7 +360,7 @@ mod tests {
         let piercing = stack.piercing_weapon().unwrap();
         assert!(!piercing.deals_knockback && !piercing.dismounts);
         assert_eq!(
-            ItemStack::new(Item::IronSpear, 1).kinetic_weapon(),
+            ItemStack::mint(Item::IronSpear, 1, MintReason::Test).kinetic_weapon(),
             Item::IronSpear.kinetic_weapon_data().copied()
         );
     }

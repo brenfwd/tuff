@@ -13,7 +13,10 @@ pub mod equippable;
 pub mod gear;
 pub mod hash;
 pub mod identity;
+mod ledger;
 mod view;
+pub use ledger::{BurnReason, DupUnchecked, MintReason, SlotsCow, dup_probe, dup_slice_unchecked};
+pub use tuff_macros::DupClone;
 pub use view::{ItemSnapshot, ItemView};
 
 use std::ops::{Deref, DerefMut};
@@ -75,10 +78,10 @@ const TYPED_NBT_ON_WIRE: [DataComponentType; 2] = [
     DataComponentType::BlockEntityData,
 ];
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ItemStack {
     pub item: Item,
-    pub count: u8,
+    count: u8,
     pub components: Components,
 }
 
@@ -98,7 +101,7 @@ pub struct StackCooldown {
 
 /// The values a stack sets on top of its item's defaults and the defaults
 /// removed from it.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ComponentPatch {
     pub damage: Option<u32>,
     pub max_damage: Option<u32>,
@@ -143,6 +146,78 @@ pub struct ComponentPatch {
 static EMPTY_PATCH: LazyLock<ComponentPatch> = LazyLock::new(ComponentPatch::default);
 
 impl ComponentPatch {
+    /// A copy, nested stacks included. Temporary escape hatch.
+    #[allow(clippy::clone_on_copy)] // every field is copied the same way
+    pub fn dup_unchecked(&self) -> Self {
+        let Self {
+            damage,
+            max_damage,
+            unbreakable,
+            custom_name,
+            enchantments,
+            stored_enchantments,
+            potion_contents,
+            repair_cost,
+            ominous_bottle_amplifier,
+            map_id,
+            container,
+            charged_projectiles,
+            bundle_contents,
+            dyed_color,
+            base_color,
+            banner_patterns,
+            trim,
+            fireworks,
+            firework_explosion,
+            writable_book,
+            written_book,
+            attribute_modifiers,
+            tool,
+            weapon,
+            suspicious_stew_effects,
+            other,
+            removed,
+        } = self;
+        Self {
+            damage: damage.clone(),
+            max_damage: max_damage.clone(),
+            unbreakable: unbreakable.clone(),
+            custom_name: custom_name.clone(),
+            enchantments: enchantments.clone(),
+            stored_enchantments: stored_enchantments.clone(),
+            potion_contents: potion_contents.clone(),
+            repair_cost: repair_cost.clone(),
+            ominous_bottle_amplifier: ominous_bottle_amplifier.clone(),
+            map_id: map_id.clone(),
+            container: container.as_ref().map(|slots| {
+                slots
+                    .iter()
+                    .map(|slot| slot.as_ref().map(ItemStack::dup_unchecked))
+                    .collect()
+            }),
+            charged_projectiles: charged_projectiles
+                .as_ref()
+                .map(|stacks| stacks.iter().map(ItemStack::dup_unchecked).collect()),
+            bundle_contents: bundle_contents
+                .as_ref()
+                .map(|contents| Box::new(contents.dup_unchecked())),
+            dyed_color: dyed_color.clone(),
+            base_color: base_color.clone(),
+            banner_patterns: banner_patterns.clone(),
+            trim: trim.clone(),
+            fireworks: fireworks.clone(),
+            firework_explosion: firework_explosion.clone(),
+            writable_book: writable_book.clone(),
+            written_book: written_book.clone(),
+            attribute_modifiers: attribute_modifiers.clone(),
+            tool: tool.clone(),
+            weapon: weapon.clone(),
+            suspicious_stew_effects: suspicious_stew_effects.clone(),
+            other: other.clone(),
+            removed: removed.clone(),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         *self == *EMPTY_PATCH
     }
@@ -200,12 +275,21 @@ impl From<ComponentPatch> for Components {
     }
 }
 
-impl Clone for Components {
-    fn clone(&self) -> Self {
+impl Components {
+    /// A copy, nested stacks included. Temporary escape hatch.
+    pub fn dup_unchecked(&self) -> Self {
         match self.0.as_deref() {
-            Some(patch) if !patch.is_empty() => Self(Some(Box::new(patch.clone()))),
+            Some(patch) if !patch.is_empty() => Self(Some(Box::new(patch.dup_unchecked()))),
             _ => Self(None),
         }
+    }
+}
+
+/// Copies nested stacks (container, bundle and projectile contents) along
+/// with the rest of the patch. Temporary escape hatch.
+impl Clone for Components {
+    fn clone(&self) -> Self {
+        self.dup_unchecked()
     }
 }
 
@@ -372,7 +456,7 @@ pub enum Hurt {
 }
 
 /// A component as it is sent in a Slot, borrowed from a stack.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum NetworkComponent<'a> {
     Damage(u32),
     MaxDamage(u32),
@@ -440,8 +524,8 @@ pub fn pot_decorations_from_nbt(tag: &Tag) -> Option<PotSides> {
     let template = |tag: &Tag| match tag {
         Tag::String(id) => Item::from_name(id)
             .filter(|item| *item != Item::Air)
-            .map(|item| ItemStack::new(item, 1)),
-        Tag::Compound(nbt) => ItemStack::from_nbt(nbt),
+            .map(|item| ItemStack::mint(item, 1, MintReason::Template)),
+        Tag::Compound(nbt) => ItemStack::decode_nbt(nbt),
         _ => None,
     };
     let mut sides: PotSides = Default::default();
@@ -457,7 +541,7 @@ pub fn pot_decorations_from_nbt(tag: &Tag) -> Option<PotSides> {
             for (index, side) in sides.iter_mut().enumerate() {
                 *side = Some(match ids.get(index) {
                     Some(tag) => template(tag)?,
-                    None => ItemStack::new(Item::Brick, 1),
+                    None => ItemStack::mint(Item::Brick, 1, MintReason::Template),
                 });
             }
         }
@@ -502,14 +586,6 @@ pub fn typed_entity_name(kind: DataComponentType, id: u32) -> Option<&'static st
 }
 
 impl ItemStack {
-    pub fn new(item: Item, count: u8) -> Self {
-        Self {
-            item,
-            count,
-            components: Components::default(),
-        }
-    }
-
     pub fn with_components(mut self, components: impl Into<Components>) -> Self {
         self.components = components.into();
         self.components.compact();
@@ -523,10 +599,6 @@ impl ItemStack {
             .map_or(self.item.max_stack_size(), |size| {
                 size.clamp(1, MAX_COUNT) as u8
             })
-    }
-
-    pub fn with_count(self, count: u8) -> Self {
-        Self { count, ..self }
     }
 
     /// Whether the stack carries any (non-stored) enchantment.
@@ -681,14 +753,14 @@ impl ItemStack {
     pub fn use_remainder(&self) -> Option<ItemStack> {
         const ID: &str = "minecraft:use_remainder";
         if let Some(Tag::Compound(nbt)) = self.components.other.get(ID) {
-            return ItemStack::from_nbt(nbt);
+            return ItemStack::decode_nbt(nbt);
         }
         if self.components.is_removed(ID) {
             return None;
         }
         self.item
             .use_remainder()
-            .map(|item| ItemStack::new(item, 1))
+            .map(|item| ItemStack::mint(item, 1, MintReason::Remainder))
     }
 
     pub fn weapon(&self) -> Option<Weapon> {
@@ -951,7 +1023,7 @@ impl ItemStack {
     }
 
     /// `None` for unknown items and air.
-    pub fn from_nbt(nbt: &Compound) -> Option<Self> {
+    pub(crate) fn decode_nbt(nbt: &Compound) -> Option<Self> {
         let item = Item::from_name(nbt.get_str("id")?)?;
         if item == Item::Air {
             return None;
@@ -982,10 +1054,10 @@ fn container_from_nbt(tag: &Tag) -> Option<Vec<Option<ItemStack>>> {
         if !(0..MAX_CONTAINER_SLOTS as i32).contains(&slot) {
             return None;
         }
-        let stack = ItemStack::from_nbt(entry.get_compound("item")?)?;
+        let stack = ItemStack::decode_nbt(entry.get_compound("item")?)?;
         let slot = slot as usize;
         if contents.len() <= slot {
-            contents.resize(slot + 1, None);
+            contents.resize_with(slot + 1, || None);
         }
         contents[slot] = Some(stack);
     }
@@ -1017,7 +1089,7 @@ fn charged_from_nbt(tag: &Tag) -> Option<Vec<ItemStack>> {
     }
     entries
         .iter()
-        .map(|entry| ItemStack::from_nbt(entry.as_compound()?))
+        .map(|entry| ItemStack::decode_nbt(entry.as_compound()?))
         .collect()
 }
 
@@ -1025,7 +1097,7 @@ fn charged_from_nbt(tag: &Tag) -> Option<Vec<ItemStack>> {
 /// empty (the item's default).
 pub fn container_component(contents: &[Option<ItemStack>]) -> Option<Vec<Option<ItemStack>>> {
     let last = contents.iter().rposition(Option::is_some)?;
-    Some(contents[..=last].to_vec())
+    Some(dup_slice_unchecked(&contents[..=last]))
 }
 
 fn as_i64(tag: &Tag) -> Option<i64> {

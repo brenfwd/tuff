@@ -503,15 +503,17 @@ fn pack_tags_recipes_and_loot_tables_load() {
     .unwrap();
 
     let recipes = contents.recipes.as_ref().unwrap();
-    let grid = [Some(tuff_item::item::ItemStack::new(
+    let grid = [Some(tuff_item::item::ItemStack::mint(
         tuff_vanilla_data::Item::Diamond,
         1,
+        tuff_item::item::MintReason::Test,
     ))];
     assert_eq!(
         recipes.grid_result(&grid, 1, 1),
-        Some(tuff_item::item::ItemStack::new(
+        Some(tuff_item::item::ItemStack::mint(
             tuff_vanilla_data::Item::Dirt,
-            1
+            1,
+            tuff_item::item::MintReason::Test
         ))
     );
     let logs = contents
@@ -676,19 +678,30 @@ fn pack_tags_reach_built_in_tag_ingredients() {
     let selected = configure(&packs, &DataPackConfig::default());
     let contents = load(&*backend, &roots(), &base, &packs, &selected, 1, None).unwrap();
     let recipes = contents.recipes.as_ref().unwrap();
-    let crafted =
-        |item| recipes.grid_result(&[Some(tuff_item::item::ItemStack::new(item, 1))], 1, 1);
-    let four_planks = Some(tuff_item::item::ItemStack::new(
+    let crafted = |item| {
+        recipes.grid_result(
+            &[Some(tuff_item::item::ItemStack::mint(
+                item,
+                1,
+                tuff_item::item::MintReason::Test,
+            ))],
+            1,
+            1,
+        )
+    };
+    let four_planks = Some(tuff_item::item::ItemStack::mint(
         tuff_vanilla_data::Item::OakPlanks,
         4,
+        tuff_item::item::MintReason::Test,
     ));
     assert_eq!(crafted(tuff_vanilla_data::Item::Stone), four_planks);
     assert_eq!(crafted(tuff_vanilla_data::Item::OakLog), four_planks);
     assert_eq!(
         base.recipes.grid_result(
-            &[Some(tuff_item::item::ItemStack::new(
+            &[Some(tuff_item::item::ItemStack::mint(
                 tuff_vanilla_data::Item::Stone,
-                1
+                1,
+                tuff_item::item::MintReason::Test
             ))],
             1,
             1

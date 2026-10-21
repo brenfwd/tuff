@@ -132,7 +132,9 @@ impl State {
         nbt.insert("id", tuff_nbt::Tag::String(item.name().to_owned()));
         nbt.insert("count", tuff_nbt::Tag::Int(1));
         nbt.insert("components", tuff_nbt::Tag::Compound(components));
-        let stack = tuff_item::item::ItemStack::from_nbt(&nbt).ok_or(WorldError::InvalidState)?;
+        let stack =
+            tuff_item::item::ItemStack::mint_from_nbt(&nbt, tuff_item::item::MintReason::Plugin)
+                .ok_or(WorldError::InvalidState)?;
         self.queue_inventory(
             player,
             InventoryOp::Give {

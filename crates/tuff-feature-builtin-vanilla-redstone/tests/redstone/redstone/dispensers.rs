@@ -41,8 +41,11 @@ async fn saved_block_entity(region: &RegionHandle, pos: BlockPos) -> Option<Comp
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_shoots_a_firework_rocket_straight_out_of_its_face() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::FireworkRocket, 2)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::FireworkRocket, 2, MintReason::Test)],
+    )
+    .await;
     click(&mut b, button, 2).await;
     let seen = watch(&b, 6).await;
     let rockets: Vec<[f64; 3]> = seen
@@ -61,7 +64,7 @@ async fn a_dispenser_shoots_a_firework_rocket_straight_out_of_its_face() {
     );
     let left = dispenser_slot(&mut b, dispenser).await;
     assert_eq!(
-        left.map(|s| (s.item, s.count)),
+        left.map(|s| (s.item, s.count())),
         Some((Item::FireworkRocket, 1))
     );
     b.world.shutdown().await;
@@ -71,8 +74,11 @@ async fn a_dispenser_shoots_a_firework_rocket_straight_out_of_its_face() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_fires_a_spectral_arrow_as_a_spectral_arrow() {
     let dir = TestDir::new();
-    let (b, _, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::SpectralArrow, 1)]).await;
+    let (b, _, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::SpectralArrow, 1, MintReason::Test)],
+    )
+    .await;
     let mut b = b;
     click(&mut b, button, 2).await;
     let seen = watch(&b, 4).await;
@@ -92,8 +98,11 @@ async fn a_dispenser_fires_a_spectral_arrow_as_a_spectral_arrow() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispensed_wind_charge_bursts_on_a_wall_and_pushes_without_hurting() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::WindCharge, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::WindCharge, 1, MintReason::Test)],
+    )
+    .await;
     set(
         &b.region,
         &[
@@ -191,8 +200,11 @@ fn bees_in(saved: Option<Compound>) -> usize {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn shears_from_a_dispenser_let_a_full_hives_bees_out_in_front() {
     let dir = TestDir::new();
-    let (mut b, _, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::Shears, 1)]).await;
+    let (mut b, _, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::Shears, 1, MintReason::Test)],
+    )
+    .await;
     let hive = at(86, 1, 86);
     place_hive(&b, hive, hive_with_a_bee()).await;
     assert_eq!(bees_in(saved_block_entity(&b.region, hive).await), 1);
@@ -218,8 +230,11 @@ async fn shears_from_a_dispenser_let_a_full_hives_bees_out_in_front() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_bottled_hive_keeps_its_bees_behind_a_blocked_front() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::GlassBottle, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::GlassBottle, 1, MintReason::Test)],
+    )
+    .await;
     let hive = at(86, 1, 86);
     place_hive(&b, hive, hive_with_a_bee()).await;
     set(&b.region, &[(at(86, 1, 87), "minecraft:stone")]).await;
@@ -237,7 +252,7 @@ async fn a_bottled_hive_keeps_its_bees_behind_a_blocked_front() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispensed_minecart_keeps_the_name_of_its_item() {
     let dir = TestDir::new();
-    let mut stack = ItemStack::new(Item::Minecart, 1);
+    let mut stack = ItemStack::mint(Item::Minecart, 1, MintReason::Test);
     stack.components.custom_name = Some(Box::new(tuff_item::text::TextComponent::new("Rusty")));
     let (mut b, _, button) = dispenser_bench(dir.path(), vec![stack]).await;
     set(

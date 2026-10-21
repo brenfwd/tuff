@@ -11,7 +11,7 @@ use crate::protocol::codec::WriteExt;
 use tuff_item::item::ItemStack;
 use tuff_wire::PacketWriter;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
 pub enum SlotDisplay {
     Empty,
     AnyFuel,
@@ -38,7 +38,7 @@ pub enum SlotDisplay {
     Composite(Vec<SlotDisplay>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum RecipeDisplay {
     Shapeless {
         ingredients: Vec<SlotDisplay>,
@@ -76,7 +76,7 @@ pub enum RecipeDisplay {
 
 /// One entry of the recipe book: a display with the id the client refers
 /// to it by.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DisplayEntry {
     pub id: u32,
     /// The name of the recipe it shows.

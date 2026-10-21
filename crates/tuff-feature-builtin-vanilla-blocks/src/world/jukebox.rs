@@ -143,7 +143,7 @@ pub fn take<W: RegionWorld + ?Sized>(world: &mut W, pos: BlockPos) -> Option<Ite
     let state = jukebox_at(world, pos)?;
     let nbt = world.raw_block_entity_mut(pos)?;
     let record = nbt.remove(RECORD)?;
-    let record = record.as_compound().and_then(ItemStack::from_nbt);
+    let record = record.as_compound().and_then(ItemStack::from_storage);
     let was_playing = nbt.remove(TICKS).is_some();
     set_has_record(world, pos, state, false);
     if was_playing {
@@ -250,7 +250,7 @@ impl tuff_core::world::item_port::ItemPort for JukeboxPort {
         at: &tuff_core::world::item_port::PortAccess,
         stack: &ItemStack,
     ) -> bool {
-        accepts(world, at.pos, stack) && insert(world, at.pos, stack.clone())
+        accepts(world, at.pos, stack) && insert(world, at.pos, stack.dup_unchecked())
     }
 
     fn replace(

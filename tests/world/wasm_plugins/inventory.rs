@@ -4,7 +4,7 @@
 use super::*;
 use crate::world::menu::MenuKind;
 use crate::world::session::hooks::SessionHooks;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_plugin_wasm::inventory::{Clicks, Windows};
 use tuff_plugin_wasm::wit::bindings::types::{InventoryClickKind, InventoryFilter};
 use tuff_vanilla_data::Item;
@@ -89,7 +89,8 @@ async fn clicks_are_reported_and_cancelled_by_slot_and_kind() {
     install(dir.path(), "windowguard.wasm", &guard());
     let world = start(dir.path()).await;
     let mut client = Client::new(&world);
-    *client.session.inventory.slot_mut(36) = Some(ItemStack::new(Item::Stick, 4));
+    *client.session.inventory.slot_mut(36) =
+        Some(ItemStack::mint(Item::Stick, 4, MintReason::Test));
 
     let armor = click(5, 0, 0);
     assert_eq!(

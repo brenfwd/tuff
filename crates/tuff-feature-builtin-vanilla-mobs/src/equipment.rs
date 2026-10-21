@@ -3,6 +3,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 
 use tuff_core::protocol::play::equipment_slot;
@@ -35,7 +36,7 @@ pub const DEFAULT_DROP_CHANCE: f32 = 0.085;
 /// the mob picked up).
 pub const PRESERVED_DROP_CHANCE: f32 = 2.0;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Equipment {
     items: [Option<ItemStack>; 8],
     drop_chances: [f32; 8],
@@ -76,9 +77,9 @@ impl Equipment {
             .map(|(s, ..)| *s as usize)
             .max()
             .map_or(0, |m| m + 1);
-        let mut out = vec![None; len];
+        let mut out: Vec<Option<ItemStack>> = (0..len).map(|_| None).collect();
         for (slot, ..) in &SLOTS {
-            out[*slot as usize] = self.get(*slot).cloned();
+            out[*slot as usize] = self.get(*slot).map(DupUnchecked::dup_unchecked);
         }
         out
     }
@@ -129,7 +130,7 @@ impl Equipment {
         SLOTS
             .iter()
             .zip(&self.items)
-            .map(|((_, _, id), stack)| (*id, stack.clone()))
+            .map(|((_, _, id), stack)| (*id, stack.dup_unchecked()))
             .collect()
     }
 
@@ -187,7 +188,7 @@ impl Equipment {
             let mut kept = Compound::new();
             for (key, value) in saved.iter() {
                 let slot = SLOTS.iter().position(|(_, name, _)| *name == key);
-                let stack = value.as_compound().and_then(ItemStack::from_nbt);
+                let stack = value.as_compound().and_then(ItemStack::from_storage);
                 match (slot, stack) {
                     (Some(i), Some(stack)) => self.items[i] = Some(stack),
                     _ => {
@@ -257,7 +258,7 @@ pub fn dispense_equip(
         return None;
     }
     core.equipment
-        .set(equippable.slot, Some(stack.clone().with_count(1)));
+        .set(equippable.slot, Some(stack.dup_count_unchecked(1)));
     core.equipment
         .set_drop_chance(equippable.slot, PRESERVED_DROP_CHANCE);
     core.persistence_required = true;
@@ -268,6 +269,7 @@ pub fn dispense_equip(
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     use super::*;
@@ -277,7 +279,7 @@ mod tests {
     fn slots_are_read_and_set_by_number() {
         let mut equipment = Equipment::default();
         let head = EquipmentSlot::Head as usize;
-        assert!(equipment.set_number(head, Some(ItemStack::new(Item::Bow, 1))));
+        assert!(equipment.set_number(head, Some(ItemStack::mint(Item::Bow, 1, MintReason::Test))));
         assert!(!equipment.set_number(99, None));
         assert_eq!(
             equipment.by_number()[head].as_ref().map(|s| s.item),
@@ -293,9 +295,18 @@ mod tests {
             .with(
                 "equipment",
                 Compound::new()
-                    .with("mainhand", ItemStack::new(Item::Bow, 1).to_nbt())
-                    .with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt())
-                    .with("reins", ItemStack::new(Item::Stick, 1).to_nbt()),
+                    .with(
+                        "mainhand",
+                        ItemStack::mint(Item::Bow, 1, MintReason::Test).to_nbt(),
+                    )
+                    .with(
+                        "saddle",
+                        ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                    )
+                    .with(
+                        "reins",
+                        ItemStack::mint(Item::Stick, 1, MintReason::Test).to_nbt(),
+                    ),
             )
             .with(
                 "drop_chances",
@@ -327,7 +338,7 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.set(
             EquipmentSlot::Head,
-            Some(ItemStack::new(Item::GoldIngot, 1)),
+            Some(ItemStack::mint(Item::GoldIngot, 1, MintReason::Test)),
         );
         equipment.set_drop_chance(EquipmentSlot::Head, 0.0);
         assert!(equipment.death_drops(true, &mut rng, |c, _| c).is_empty());
@@ -344,11 +355,11 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.set(
             EquipmentSlot::Head,
-            Some(ItemStack::new(Item::IronHelmet, 1)),
+            Some(ItemStack::mint(Item::IronHelmet, 1, MintReason::Test)),
         );
         equipment.set(
             EquipmentSlot::Mainhand,
-            Some(ItemStack::new(Item::GoldIngot, 1)),
+            Some(ItemStack::mint(Item::GoldIngot, 1, MintReason::Test)),
         );
         equipment.set_drop_chance(EquipmentSlot::Mainhand, PRESERVED_DROP_CHANCE);
         let drops = equipment.death_drops(false, &mut rng, |chance, _| chance);

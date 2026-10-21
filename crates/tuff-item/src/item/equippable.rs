@@ -90,7 +90,7 @@ mod tests {
     use super::*;
 
     fn stack_with(equippable: Compound) -> ItemStack {
-        let mut stack = ItemStack::new(Item::Stick, 1);
+        let mut stack = ItemStack::mint(Item::Stick, 1, MintReason::Test);
         stack.components.other.insert(KEY, equippable);
         stack
     }
@@ -98,12 +98,16 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_stack_without_the_component_uses_its_items() {
-        let helmet = ItemStack::new(Item::IronHelmet, 1);
+        let helmet = ItemStack::mint(Item::IronHelmet, 1, MintReason::Test);
         assert_eq!(
             helmet.equippable().map(|e| e.slot),
             Some(EquipmentSlot::Head)
         );
-        assert!(ItemStack::new(Item::Stick, 1).equippable().is_none());
+        assert!(
+            ItemStack::mint(Item::Stick, 1, MintReason::Test)
+                .equippable()
+                .is_none()
+        );
         assert!(helmet.allows_wearer(EntityType::Zombie));
     }
 
@@ -146,7 +150,7 @@ mod tests {
                 .equippable()
                 .is_none()
         );
-        let mut helmet = ItemStack::new(Item::IronHelmet, 1);
+        let mut helmet = ItemStack::mint(Item::IronHelmet, 1, MintReason::Test);
         helmet.components.removed.push(KEY.to_owned());
         assert!(helmet.equippable().is_none());
     }

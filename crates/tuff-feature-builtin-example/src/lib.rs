@@ -43,7 +43,7 @@ use tuff_core::world::services::{ServiceFactory, WorldService};
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{HookFuture, SessionHooks, SessionTick};
 use tuff_http::Response;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::load::{LoadError, Phase};
 use tuff_item::text::TextComponent;
 use tuff_nbt::Compound;
@@ -523,13 +523,13 @@ impl Recipe for DirtToDiamond {
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(ItemStack::new(Item::Diamond, 1))
+        Some(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting))
     }
 
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: vec![SlotDisplay::Ingredient(Self::DIRT)],
-            result: SlotDisplay::Stack(ItemStack::new(Item::Diamond, 1)),
+            result: SlotDisplay::Stack(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting)),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -562,7 +562,7 @@ impl Recipe for DiamondRepair {
     }
 
     fn assemble(&self, input: &CraftingInput) -> Option<ItemStack> {
-        let mut repaired = Self::damaged_tool(input)?.clone().with_count(1);
+        let mut repaired = Self::damaged_tool(input)?.dup_count_unchecked(1);
         repaired.set_damage(0);
         Some(repaired)
     }

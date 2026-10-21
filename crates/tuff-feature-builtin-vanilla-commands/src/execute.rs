@@ -337,7 +337,7 @@ async fn condition_inner(
                     .iter()
                     .flatten()
                     .filter(|stack| predicate.test(stack))
-                    .map(|stack| i32::from(stack.count))
+                    .map(|stack| i32::from(stack.count()))
                     .sum()
             };
             if count > 0 {

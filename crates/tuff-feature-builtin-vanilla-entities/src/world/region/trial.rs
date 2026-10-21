@@ -12,6 +12,7 @@
 //! here waits on another actor.
 
 use std::collections::HashMap;
+use tuff_item::item::BurnReason;
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -991,7 +992,7 @@ impl Tick<'_> {
         let id = self.world.shared().next_entity_id();
         let delay = self.world.rng().gen_range(60..=120);
         let uuid = self.world.rng().r#gen();
-        let mut entity = OminousItemSpawner::new(id, uuid, at, stack.clone(), delay);
+        let mut entity = OminousItemSpawner::new(id, uuid, at, stack.dup_unchecked(), delay);
         entity.base.position = at;
         self.world.add_entity(Box::new(entity));
         let rng = self.world.rng();
@@ -1190,8 +1191,8 @@ fn dispensing_items(
         .roll(config.ominous_items_table(), &mut rng)
         .into_iter()
         .map(|stack| {
-            let weight = u64::from(stack.count);
-            (stack.with_count(1), weight)
+            let weight = u64::from(stack.count());
+            (stack.keep(1, BurnReason::Loot), weight)
         })
         .collect()
 }

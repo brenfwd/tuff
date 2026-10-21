@@ -91,7 +91,7 @@ fn summary(entity: &dyn RegionEntity) -> EntitySummary {
         pickable: entity.pickable(),
         item: entity.downcast_ref::<ItemEntity>().map(|item| {
             let takeable = item.pickup_delay == 0 && item.reserved.is_none();
-            (item.stack.item, item.stack.count, takeable)
+            (item.stack.item, item.stack.count(), takeable)
         }),
         vehicle: base.vehicle.as_ref().map(|mount| mount.id),
         carries: !base.riders.is_empty() || !base.entity_riders.is_empty(),
@@ -1039,7 +1039,7 @@ impl RegionActor {
                     } else {
                         other.absorb(item);
                     }
-                    (item.stack.clone(), other.stack.clone())
+                    (item.stack.dup_unchecked(), other.stack.dup_unchecked())
                 });
             self.ents.entities.insert(id, own);
             let Some((own_stack, other_stack)) = result else {
@@ -1047,7 +1047,7 @@ impl RegionActor {
             };
             touched.extend([id, other_id]);
             for (entity, stack) in [(other_id, other_stack), (id, own_stack)] {
-                if stack.count == 0 {
+                if stack.count() == 0 {
                     self.remove_entity(entity, &[]);
                 } else {
                     self.set_item_stack(entity, stack);

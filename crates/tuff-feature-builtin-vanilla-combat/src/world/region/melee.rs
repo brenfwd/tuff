@@ -113,7 +113,7 @@ impl RegionHooks for CombatRegionHooks {
                     id,
                     origin,
                     velocity,
-                    stack.clone(),
+                    stack.dup_unchecked(),
                     projectile::Owner::default(),
                 );
                 world.add_entity(Box::new(thrown));

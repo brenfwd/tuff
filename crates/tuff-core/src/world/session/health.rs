@@ -15,7 +15,8 @@ use crate::world::region_api::{PlayerEffectEvent, PlayerEffectTrigger, RegionTas
 use crate::world::stats::Stat;
 use crate::world::{EYE_HEIGHT, block_contact, framed, message_plain, packets};
 use rand::Rng;
-use tuff_item::item::{Hurt, ItemStack};
+use tuff_item::item::DupUnchecked;
+use tuff_item::item::{Hurt, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -120,7 +121,7 @@ impl PlayerSession {
                     attacker: hit.attacker.clone(),
                     projectile: hit.projectile,
                     position: hit.position,
-                    weapon: hit.weapon.clone(),
+                    weapon: hit.weapon.dup_unchecked(),
                     direct: hit.projectile.is_none(),
                 },
                 hit.amount,
@@ -244,14 +245,18 @@ impl PlayerSession {
     }
 
     pub fn equipment_snapshot(&self) -> [Option<ItemStack>; 6] {
-        EQUIPMENT_SLOTS.map(|slot| self.inventory.equipped(slot).cloned())
+        EQUIPMENT_SLOTS.map(|slot| {
+            self.inventory
+                .equipped(slot)
+                .map(DupUnchecked::dup_unchecked)
+        })
     }
 
     /// The equipment worn and held, by slot.
     pub fn equipment(&self) -> Vec<(EquipmentSlot, ItemStack)> {
         EQUIPMENT_SLOTS
             .into_iter()
-            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?.clone())))
+            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?.dup_unchecked())))
             .collect()
     }
 
@@ -278,7 +283,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        ItemStack::new(item, 1).view(),
+                        ItemStack::mint(item, 1, MintReason::Template).view(),
                     );
                     self.progress
                         .stats
@@ -560,7 +565,11 @@ impl PlayerSession {
     /// Wears the stack in a window slot and reports the durability change
     /// to advancement criteria, including the hit that breaks it.
     pub fn hurt_slot_reporting(&mut self, window: usize, amount: u32) -> Hurt {
-        let before = self.inventory.slots().get(window).cloned().flatten();
+        let before = self
+            .inventory
+            .slots()
+            .get(window)
+            .and_then(DupUnchecked::dup_unchecked);
         let outcome = self.inventory.hurt_slot(window, amount, &mut self.rng);
         let Some(mut stack) = before else {
             return outcome;
@@ -569,7 +578,12 @@ impl PlayerSession {
         match outcome {
             Hurt::Unchanged => {}
             Hurt::Damaged => {
-                if let Some(now) = self.inventory.slots().get(window).cloned().flatten() {
+                if let Some(now) = self
+                    .inventory
+                    .slots()
+                    .get(window)
+                    .and_then(DupUnchecked::dup_unchecked)
+                {
                     let delta = damage_before as i32 - now.damage() as i32;
                     self.fire(
                         crate::world::advancement::trigger::Event::ItemDurabilityChanged {
@@ -610,7 +624,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        ItemStack::new(item, 1).view(),
+                        ItemStack::mint(item, 1, MintReason::Template).view(),
                     );
                     self.progress
                         .stats

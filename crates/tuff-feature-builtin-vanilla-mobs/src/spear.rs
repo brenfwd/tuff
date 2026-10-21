@@ -2,6 +2,7 @@
 //! stab whatever it touches while they run, then back away and go again.
 //! A mounted mob charges at its vehicle's charge speed.
 
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{Attribute, EntityType};
 use tuff_vanilla_data::{Block, damage_type};
 
@@ -198,7 +199,7 @@ impl SpearUse {
     }
 
     fn sweep(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
-        let Some(stack) = mob.equipment.main_hand().cloned() else {
+        let Some(stack) = mob.equipment.main_hand().map(DupUnchecked::dup_unchecked) else {
             return;
         };
         let (Some(kinetic), Some(mut range)) =
@@ -286,7 +287,7 @@ impl SpearUse {
             c.as_ref()
                 .is_some_and(|c| c.test(used, speed, relative, MOB_ACTION_FACTOR))
         };
-        let mut weapon = stack.clone();
+        let mut weapon = stack.dup_unchecked();
         let wear = stack
             .weapon()
             .map_or(0, |w| w.item_damage_per_attack as u32);
@@ -324,7 +325,7 @@ impl SpearUse {
             attacker.owner_name = None;
             hit.attacker = Some(attacker);
             hit.position = Some(mob.base.position);
-            hit.weapon = Some(stack.clone());
+            hit.weapon = Some(stack.dup_unchecked());
             if knocks {
                 hit.knockback =
                     Some((STAB_KNOCKBACK + knockback_base / 2.0, yaw.sin(), -yaw.cos()));

@@ -14,7 +14,7 @@ use tuff_core::world::item_port::{ItemPort, PortAccess, Porter};
 use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::redstone::UPDATE_ALL;
 use tuff_core::world::region_api::RegionWorld;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_common::composter::{COMPOSTER_FILL, FULL, READY, compostable, level, with_level};
 use tuff_world_model::BlockPos;
@@ -92,7 +92,7 @@ fn eject(world: &mut dyn RegionWorld, pos: BlockPos) {
         f64::from(pos.z) + 0.5 + dz,
     ];
     world.spawn_item_at(
-        ItemStack::new(Item::BoneMeal, 1),
+        ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop),
         position,
         [vx, 0.2, vz],
         BLOCK_DROP_PICKUP_DELAY,
@@ -109,7 +109,8 @@ impl ItemPort for ComposterPort {
 
     fn peek(&self, world: &dyn RegionWorld, at: &PortAccess) -> Option<ItemStack> {
         let ripe = world.owns(at.pos) && world.block(at.pos).and_then(level) == Some(READY);
-        (ripe && through(at, Facing::Down)).then(|| ItemStack::new(Item::BoneMeal, 1))
+        (ripe && through(at, Facing::Down))
+            .then(|| ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop))
     }
 
     fn take(&self, world: &mut dyn RegionWorld, at: &PortAccess) -> Option<ItemStack> {
@@ -138,14 +139,14 @@ impl ItemPort for PotPort {
         let Some(nbt) = world.raw_block_entity_mut(at.pos) else {
             return false;
         };
-        let merged = match nbt.get_compound(POT_ITEM).and_then(ItemStack::from_nbt) {
-            None => stack.clone().with_count(1),
-            Some(held) => {
-                if !held.stacks_with(stack) || held.count >= held.max_stack_size() {
+        let merged = match nbt.get_compound(POT_ITEM).and_then(ItemStack::from_storage) {
+            None => stack.dup_count_unchecked(1),
+            Some(mut held) => {
+                if !held.stacks_with(stack) || held.count() >= held.max_stack_size() {
                     return false;
                 }
-                let count = held.count + 1;
-                held.with_count(count)
+                held.grow(1, MintReason::CrossActor);
+                held
             }
         };
         let compound: Compound = merged.to_nbt();

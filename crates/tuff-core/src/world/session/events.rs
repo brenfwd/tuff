@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::MintReason;
 
 impl PlayerSession {
     pub async fn handle_event(&mut self, event: PlayerEvent) {
@@ -242,13 +243,13 @@ impl PlayerSession {
             }
             PlayerEvent::ItemGranted { stack, picked_up } => {
                 let item = stack.item;
-                let offered = stack.count;
+                let offered = stack.count();
                 let leftover = if self.is_dead() {
                     Some(stack)
                 } else {
                     self.inventory.add(stack)
                 };
-                let taken = offered - leftover.as_ref().map_or(0, |l| l.count);
+                let taken = offered - leftover.as_ref().map_or(0, |l| l.count());
                 if taken > 0 {
                     self.send_inventory();
                     if picked_up {
@@ -755,7 +756,7 @@ impl PlayerSession {
                 if item == Item::Bucket
                     && let HandEffect::Exchange(filled) = effect
                 {
-                    let filled = ItemStack::new(filled, 1);
+                    let filled = ItemStack::mint(filled, 1, MintReason::Transform);
                     self.fire(crate::world::advancement::trigger::Event::FilledBucket(
                         &filled,
                     ));

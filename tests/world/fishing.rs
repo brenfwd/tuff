@@ -44,7 +44,7 @@ fn bobber(world: &TestWorld, player: &PlayerHandle) -> Bobber {
         [7.5, f64::from(SKY) + 1.2, 7.5],
         (0.0, 90.0),
         owner(player),
-        ItemStack::new(Item::FishingRod, 1),
+        ItemStack::mint(Item::FishingRod, 1, MintReason::Test),
         0.0,
         &mut rand::thread_rng(),
     )
@@ -154,7 +154,7 @@ async fn using_a_rod_casts_then_reels_in() {
     player.stand_at([4.5, f64::from(SKY) + 1.0, 4.5], true);
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::FishingRod, 1)),
+        Some(ItemStack::mint(Item::FishingRod, 1, MintReason::Test)),
     );
     player.publish(true).await;
     let use_item = || crate::protocol::play::Serverbound::UseItem {

@@ -64,7 +64,7 @@ pub enum ActionOutcome {
 
 /// What using an item does to the stack in hand. Creative players keep
 /// their stacks except where noted.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum HandEffect {
     None,
     Consume(u8),
@@ -91,7 +91,7 @@ pub enum HandEffect {
     Split(Box<ItemStack>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Attack {
     pub attacker: PlayerHandle,
     pub attacker_name: String,
@@ -193,7 +193,7 @@ pub enum BreakMode {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct Place {
     pub player: PlayerHandle,
     pub eye: [f64; 3],

@@ -12,7 +12,7 @@ use crate::world::custom_dimension::{DimensionProvider, ProviderContext};
 use crate::world::messages::{PlayerHandle, RegionRequest};
 use crate::world::session::PlayerSession;
 use crate::world::session::hooks::{PacketInterceptor, Verdict};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_plugin_wasm::worldgen::WorldgenProvider;
 use tuff_plugin_wasm::{Limits, WasmHost, WasmPluginsFeature, bridge};
@@ -317,7 +317,8 @@ async fn frame(world: &TestWorld, dimension: &str, at: [i32; 3], w: i32, h: i32)
 
 async fn light(world: &TestWorld, client: &mut PlayerSession, at: [i32; 3]) -> Verdict {
     let slot = crate::world::inventory::Inventory::hotbar_slot(client.inventory.selected());
-    *client.inventory.slot_mut(slot) = Some(ItemStack::new(Item::WaterBucket, 1));
+    *client.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::WaterBucket, 1, MintReason::Test));
     let verdict = bridge::Clicks
         .intercept(
             client,
@@ -373,7 +374,7 @@ async fn drop_item(world: &TestWorld, dimension: &str, at: [f64; 3]) {
     let region = world.region_in(dimension, chunk.region()).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: at,
             velocity: [0.0; 3],
             pickup_delay: 10_000,

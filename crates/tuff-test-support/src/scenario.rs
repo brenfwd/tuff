@@ -103,7 +103,7 @@ pub fn interaction(player: &PlayerHandle, item: Option<Item>) -> EntityInteracti
         player_uuid: 77,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: item.map(|item| ItemStack::new(item, 16)),
+        stack: item.map(|item| ItemStack::mint(item, 16, MintReason::Test)),
         off_hand: false,
         creative: false,
         sneaking: false,
