@@ -661,7 +661,8 @@ async fn a_beacon_coming_on_reports_its_levels_to_players_nearby() {
             Compound::new().with("id", "minecraft:beacon"),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     region.request(RegionRequest::Place(beacon)).await;
     let level = ticking_expect(&world, &mut events, 200, |event| match event {
         PlayerEvent::Advancement(event) => match *event {

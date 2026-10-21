@@ -306,10 +306,6 @@ mod screen {
         player
             .handle_packet(click(window, merchant::RESULT as i16, 0))
             .await;
-        assert_eq!(
-            player.inventory().carried(),
-            Some(&ItemStack::mint(Item::Emerald, 1, MintReason::Test))
-        );
         assert!(
             player
                 .handle_events_until(|e| matches!(
@@ -317,6 +313,11 @@ mod screen {
                     PlayerEvent::TradeAnswered { accepted: true, .. }
                 ))
                 .await
+        );
+        assert_eq!(
+            player.inventory().carried(),
+            Some(&ItemStack::mint(Item::Emerald, 1, MintReason::Test)),
+            "the trade settles once the merchant agrees"
         );
         let slots = player
             .menu_container()

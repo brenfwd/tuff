@@ -1,7 +1,7 @@
 use tuff_vanilla_data::{BlockState, Item};
 
 use crate::world::placement;
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::ItemStack;
 use tuff_world_model::{BlockPos, Face};
 
 use super::*;
@@ -209,7 +209,7 @@ pub struct Place {
     /// The held item, whatever it is.
     pub held: Option<Item>,
     /// The held stack's components, for blocks placed with contents.
-    pub components: Components,
+    pub components: tuff_item::item::ComponentsSnapshot,
     /// How many of the held item the hand holds.
     pub held_count: u8,
     pub off_hand: bool,

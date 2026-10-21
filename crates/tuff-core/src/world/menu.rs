@@ -6,7 +6,6 @@
 //! container snapshot plus the inventory the session owns, so the same code
 //! serves the survival inventory window, block containers and ender chests.
 
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::Menu as MenuType;
@@ -202,6 +201,12 @@ pub trait ResultHook {
         inventory: &mut Inventory,
         drops: &mut Vec<ItemStack>,
     );
+
+    /// Why the items taken from a result slot that only previews what it
+    /// makes come into existence.
+    fn made_as(&self) -> MintReason {
+        MintReason::Crafting
+    }
 }
 
 /// For menus without a result slot.
@@ -257,6 +262,13 @@ impl MenuKind {
     }
 
     /// The slot that holds a recipe's output, which can only be taken.
+    /// Whether the result slot only previews what taking from it makes
+    /// (crafting, stations, trades), rather than holding real items (a
+    /// furnace's output).
+    pub fn result_is_preview(self) -> bool {
+        self.result_slot().is_some() && !self.is_furnace()
+    }
+
     pub fn result_slot(self) -> Option<usize> {
         match self {
             Self::Player | Self::Crafting => Some(0),
@@ -657,6 +669,7 @@ impl MenuKind {
 
 mod hooks;
 pub use hooks::*;
+pub mod settle;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Drag {
@@ -716,7 +729,21 @@ impl View<'_> {
         }
     }
 
+    /// Takes up to `count` items out of `slot`; from a result slot that
+    /// previews what it makes, the items taken are made then.
     fn take(&mut self, slot: usize, count: u8) -> Option<ItemStack> {
+        if self.is_result(slot) && self.kind.result_is_preview() {
+            let reason = self.hook.made_as();
+            let entry = self.get_mut(slot);
+            let preview = entry.as_ref()?;
+            let made = count.min(preview.count());
+            if made == 0 {
+                return None;
+            }
+            let stack = ItemStack::mint_like(preview, made, reason);
+            ItemStack::burn_from(entry, made, BurnReason::Template);
+            return Some(stack);
+        }
         let entry = self.get_mut(slot);
         let stack = entry.as_mut()?;
         let taken = count.min(stack.count());
@@ -854,12 +881,14 @@ impl View<'_> {
         changed
     }
 
-    /// Shift-click: returns a copy of what the slot held before, or `None`
-    /// if nothing could move.
-    fn quick_move(&mut self, slot: usize) -> Option<ItemStack> {
-        let mut stack = self.get(slot)?.dup_unchecked();
-        let clicked = stack.dup_unchecked();
-        let targets = self.kind.quick_move_targets(slot, &stack, self);
+    /// Shift-click: returns the item the slot held, or `None` if nothing
+    /// could move.
+    fn quick_move(&mut self, slot: usize) -> Option<Item> {
+        let held = self.get(slot)?;
+        let targets = self.kind.quick_move_targets(slot, held, self);
+        let count = held.count();
+        let mut stack = self.take(slot, count)?;
+        let item = stack.item;
         let mut moved = false;
         for (start, end, backwards) in targets {
             moved |= self.move_into(&mut stack, start, end, backwards);
@@ -868,18 +897,24 @@ impl View<'_> {
             }
         }
         if !moved {
+            if self.is_result(slot) && self.kind.result_is_preview() {
+                let preview = ItemStack::mint_like(&stack, stack.count(), MintReason::Template);
+                stack.burn(BurnReason::Template);
+                ItemStack::put_back(self.get_mut(slot), preview);
+            } else {
+                ItemStack::put_back(self.get_mut(slot), stack);
+            }
             return None;
         }
         if self.is_result(slot) {
-            *self.get_mut(slot) = None;
             self.taken(slot);
             if stack.count() > 0 {
                 self.drops.push(stack);
             }
-        } else {
-            *self.get_mut(slot) = (stack.count() > 0).then_some(stack);
+        } else if stack.count() > 0 {
+            ItemStack::put_back(self.get_mut(slot), stack);
         }
-        Some(clicked)
+        Some(item)
     }
 }
 
@@ -965,18 +1000,14 @@ pub fn click(
     }
     let left = button == 0;
     let Some(index) = index else {
-        if slot == OUTSIDE
-            && let Some(mut carried) = view.inventory.carried().map(DupUnchecked::dup_unchecked)
-        {
-            if left {
-                view.inventory.set_carried(None);
-                view.drops.push(carried);
+        if slot == OUTSIDE {
+            let carried = view.inventory.carried_mut();
+            let thrown = if left {
+                carried.take()
             } else {
-                let one = carried.take(1);
-                view.inventory
-                    .set_carried((carried.count() > 0).then_some(carried));
-                view.drops.push(one);
-            }
+                ItemStack::take_from(carried, 1)
+            };
+            view.drops.extend(thrown);
         }
         return view.drops;
     };
@@ -985,7 +1016,7 @@ pub fn click(
             return view.drops;
         }
         while let Some(moved) = view.quick_move(index) {
-            let same = view.get(index).is_some_and(|s| s.item == moved.item);
+            let same = view.get(index).is_some_and(|s| s.item == moved);
             if !same {
                 break;
             }
@@ -1008,37 +1039,47 @@ pub enum BundleSound {
 /// A bundle on the cursor clicking a slot: the slot's stack goes in (left)
 /// or one stack comes out into an empty slot (right).
 fn bundle_on_slot(view: &mut View<'_>, index: usize, left: bool) -> bool {
-    let Some(mut bundle) = view
-        .inventory
-        .carried()
-        .filter(|c| c.is_bundle())
-        .map(DupUnchecked::dup_unchecked)
-    else {
+    if !view.inventory.carried().is_some_and(|c| c.is_bundle()) {
+        return false;
+    }
+    let other = view.get(index).map(|other| {
+        (
+            bundle::item_weight(other),
+            bundle::can_fit(other),
+            other.count(),
+        )
+    });
+    if left != other.is_some() {
+        return false;
+    }
+    let Some(mut bundle) = view.inventory.carried_mut().take() else {
         return false;
     };
-    let other = view.get(index).map(DupUnchecked::dup_unchecked);
-    let handled = match (left, other) {
-        (true, Some(other)) => {
+    match other {
+        Some((weight, fits, count)) => {
             let inserted = bundle.edit_bundle(|contents| {
-                let room = bundle::item_weight(&other).map_or(0, |w| contents.room_for(w));
-                if !bundle::can_fit(&other) {
+                if !fits {
                     return 0;
                 }
+                let room = weight.map_or(0, |w| contents.room_for(w));
                 let room = room.min(u8::MAX as u64) as u8;
-                let Some(mut taken) = view.try_remove(index, other.count(), room) else {
+                let Some(mut taken) = view.try_remove(index, count, room) else {
                     return 0;
                 };
                 view.taken(index);
-                contents.try_insert(&mut taken)
+                let inserted = contents.try_insert(&mut taken);
+                if taken.count() > 0 {
+                    ItemStack::put_back(view.get_mut(index), taken);
+                }
+                inserted
             });
             view.inventory.note_bundle_sound(if inserted > 0 {
                 BundleSound::Insert
             } else {
                 BundleSound::InsertFail
             });
-            true
         }
-        (false, None) => {
+        None => {
             bundle.edit_bundle(|contents| {
                 let Some(removed) = contents.remove_one() else {
                     return;
@@ -1051,41 +1092,38 @@ fn bundle_on_slot(view: &mut View<'_>, index: usize, left: bool) -> bool {
                     None => view.inventory.note_bundle_sound(BundleSound::RemoveOne),
                 }
             });
-            true
         }
-        _ => false,
-    };
-    if handled {
-        view.inventory.set_carried(Some(bundle));
     }
-    handled
+    view.inventory.set_carried(Some(bundle));
+    true
 }
 
 /// A stack on the cursor clicking a bundle in a slot: the cursor goes in
 /// (left) or one stack comes out onto the cursor (right). Other clicks
 /// only clear the bundle's selection and carry on as usual.
 fn stack_on_bundle(view: &mut View<'_>, index: usize, left: bool) -> bool {
-    let Some(mut bundle) = view
-        .get(index)
-        .filter(|s| s.is_bundle())
-        .map(DupUnchecked::dup_unchecked)
-    else {
+    if !view.get(index).is_some_and(|s| s.is_bundle()) {
+        return false;
+    }
+    let modifiable = view.allow_modification(index);
+    let carrying = view.inventory.carried().is_some();
+    let Some(mut bundle) = view.get_mut(index).take() else {
         return false;
     };
-    let carried = view.inventory.carried().map(DupUnchecked::dup_unchecked);
-    match (left, carried) {
-        (false, None) => {
-            if view.allow_modification(index) {
+    let handled = match (left, carrying) {
+        (false, false) => {
+            if modifiable {
                 let removed = bundle.edit_bundle(|contents| contents.remove_one());
                 if let Some(removed) = removed {
                     view.inventory.note_bundle_sound(BundleSound::RemoveOne);
                     view.inventory.set_carried(Some(removed));
                 }
             }
+            true
         }
-        (true, Some(mut carried)) => {
-            let inserted = view.allow_modification(index)
-                && bundle.edit_bundle(|c| c.try_insert(&mut carried)) > 0;
+        (true, true) => {
+            let mut carried = view.inventory.carried_mut().take().expect("checked above");
+            let inserted = modifiable && bundle.edit_bundle(|c| c.try_insert(&mut carried)) > 0;
             view.inventory.note_bundle_sound(if inserted {
                 BundleSound::Insert
             } else {
@@ -1093,25 +1131,25 @@ fn stack_on_bundle(view: &mut View<'_>, index: usize, left: bool) -> bool {
             });
             view.inventory
                 .set_carried((carried.count() > 0).then_some(carried));
+            true
         }
         _ => {
             if let Some(contents) = &mut bundle.components.bundle_contents {
                 contents.toggle_selected(-1);
             }
-            *view.get_mut(index) = Some(bundle);
-            return false;
+            false
         }
-    }
+    };
     *view.get_mut(index) = Some(bundle);
-    true
+    handled
 }
 
 fn pickup(view: &mut View<'_>, index: usize, left: bool) {
     if bundle_on_slot(view, index, left) || stack_on_bundle(view, index, left) {
         return;
     }
-    let clicked = view.get(index).map(DupUnchecked::dup_unchecked);
-    let carried = view.inventory.carried().map(DupUnchecked::dup_unchecked);
+    let clicked = view.get(index).map(ItemStack::count);
+    let carried = view.inventory.carried_mut().take();
     match (clicked, carried) {
         (None, Some(carried)) => {
             let amount = if left { carried.count() } else { 1 };
@@ -1119,35 +1157,41 @@ fn pickup(view: &mut View<'_>, index: usize, left: bool) {
             view.inventory.set_carried(rest);
         }
         (None, None) => {}
-        (Some(_), _) if !view.may_pickup(index) => {}
-        (Some(clicked), None) => {
-            let amount = if left {
-                clicked.count()
-            } else {
-                clicked.count().div_ceil(2)
-            };
+        (Some(_), carried) if !view.may_pickup(index) => view.inventory.set_carried(carried),
+        (Some(count), None) => {
+            let amount = if left { count } else { count.div_ceil(2) };
             if let Some(taken) = view.try_remove(index, amount, u8::MAX) {
                 view.inventory.set_carried(Some(taken));
                 view.taken(index);
             }
         }
-        (Some(clicked), Some(mut carried)) => {
+        (Some(count), Some(mut carried)) => {
+            let stacks = view
+                .get(index)
+                .is_some_and(|clicked| clicked.stacks_with(&carried));
             if view.may_place(index, &carried) {
-                if clicked.stacks_with(&carried) {
+                if stacks {
                     let amount = if left { carried.count() } else { 1 };
                     let rest = view.safe_insert(index, carried, amount);
                     view.inventory.set_carried(rest);
                 } else if carried.count() <= view.max_stack(index, &carried) {
-                    *view.get_mut(index) = Some(carried);
-                    view.inventory.set_carried(Some(clicked));
-                }
-            } else if clicked.stacks_with(&carried) {
-                let room = carried.max_stack_size().saturating_sub(carried.count());
-                if let Some(taken) = view.try_remove(index, clicked.count(), room) {
-                    carried.join_or_drop(taken, &mut view.drops);
+                    let clicked = view.get_mut(index).replace(carried);
+                    view.inventory.set_carried(clicked);
+                } else {
                     view.inventory.set_carried(Some(carried));
-                    view.taken(index);
                 }
+            } else if stacks {
+                let room = carried.max_stack_size().saturating_sub(carried.count());
+                match view.try_remove(index, count, room) {
+                    Some(taken) => {
+                        carried.join_or_drop(taken, &mut view.drops);
+                        view.inventory.set_carried(Some(carried));
+                        view.taken(index);
+                    }
+                    None => view.inventory.set_carried(Some(carried)),
+                }
+            } else {
+                view.inventory.set_carried(Some(carried));
             }
         }
     }
@@ -1162,44 +1206,49 @@ fn swap_with_hotbar(view: &mut View<'_>, index: usize, button: i8) {
     if view.kind.inventory_slot(index) == Some(source_slot) {
         return;
     }
-    let source = view.inventory.slots()[source_slot].dup_unchecked();
-    let target = view.get(index).map(DupUnchecked::dup_unchecked);
+    let target = view.get(index).map(ItemStack::count);
+    let source = view.inventory.slot_mut(source_slot).take();
     match (source, target) {
         (None, None) => {}
-        (None, Some(target)) => {
+        (None, Some(count)) => {
             if view.may_pickup(index) {
-                *view.inventory.slot_mut(source_slot) = Some(target);
-                *view.get_mut(index) = None;
+                *view.inventory.slot_mut(source_slot) = view.take(index, count);
                 view.taken(index);
             }
         }
         (Some(source), None) => {
-            if view.may_place(index, &source) {
-                let limit = view.max_stack(index, &source);
-                if source.count() > limit {
-                    let (placed, rest) = source.split(limit);
-                    *view.inventory.slot_mut(source_slot) = rest;
-                    *view.get_mut(index) = Some(placed);
-                } else {
-                    *view.inventory.slot_mut(source_slot) = None;
-                    *view.get_mut(index) = Some(source);
-                }
+            if !view.may_place(index, &source) {
+                *view.inventory.slot_mut(source_slot) = Some(source);
+                return;
+            }
+            let limit = view.max_stack(index, &source);
+            if source.count() > limit {
+                let (placed, rest) = source.split(limit);
+                *view.inventory.slot_mut(source_slot) = rest;
+                *view.get_mut(index) = Some(placed);
+            } else {
+                *view.get_mut(index) = Some(source);
             }
         }
-        (Some(source), Some(target)) => {
-            if view.may_pickup(index) && view.may_place(index, &source) {
-                let limit = view.max_stack(index, &source);
-                if source.count() > limit {
-                    let (placed, rest) = source.split(limit);
-                    *view.inventory.slot_mut(source_slot) = rest;
-                    *view.get_mut(index) = Some(placed);
-                    if let Some(left) = view.inventory.add(target) {
-                        view.drops.push(left);
-                    }
-                } else {
-                    *view.inventory.slot_mut(source_slot) = Some(target);
-                    *view.get_mut(index) = Some(source);
+        (Some(source), Some(count)) => {
+            if !(view.may_pickup(index) && view.may_place(index, &source)) {
+                *view.inventory.slot_mut(source_slot) = Some(source);
+                return;
+            }
+            let limit = view.max_stack(index, &source);
+            let target = view.take(index, count);
+            if source.count() > limit {
+                let (placed, rest) = source.split(limit);
+                *view.inventory.slot_mut(source_slot) = rest;
+                *view.get_mut(index) = Some(placed);
+                if let Some(target) = target
+                    && let Some(left) = view.inventory.add(target)
+                {
+                    view.drops.push(left);
                 }
+            } else {
+                *view.inventory.slot_mut(source_slot) = target;
+                *view.get_mut(index) = Some(source);
             }
         }
     }
@@ -1209,12 +1258,12 @@ fn pickup_all(view: &mut View<'_>, index: usize, button: i8) {
     if view.kind == MenuKind::Merchant {
         return;
     }
-    let Some(mut carried) = view.inventory.carried().map(DupUnchecked::dup_unchecked) else {
-        return;
-    };
-    if view.get(index).is_some() && view.may_pickup(index) {
+    if view.inventory.carried().is_none() || view.get(index).is_some() && view.may_pickup(index) {
         return;
     }
+    let Some(mut carried) = view.inventory.carried_mut().take() else {
+        return;
+    };
     let limit = carried.max_stack_size();
     let order: Vec<usize> = if button == 0 {
         (0..view.len()).collect()
@@ -1256,10 +1305,10 @@ fn drag_step(
 ) {
     let header = button & 3;
     let kind = ((button >> 2) & 3) as u8;
-    let Some(carried) = view.inventory.carried().map(DupUnchecked::dup_unchecked) else {
+    if view.inventory.carried().is_none() {
         *drag = None;
         return;
-    };
+    }
     match (header, drag.as_mut()) {
         (0, None) => {
             if kind < 2 || (kind == 2 && creative) {
@@ -1270,11 +1319,11 @@ fn drag_step(
             }
         }
         (1, Some(current)) => {
-            let Some(slot) = index else {
+            let (Some(slot), Some(carried)) = (index, view.inventory.carried()) else {
                 return;
             };
-            if view.quick_replaceable(slot, &carried)
-                && view.may_place(slot, &carried)
+            if view.quick_replaceable(slot, carried)
+                && view.may_place(slot, carried)
                 && (current.kind == 2 || carried.count() as usize > current.slots.len())
                 && !current.slots.contains(&slot)
             {
@@ -1283,13 +1332,13 @@ fn drag_step(
         }
         (2, Some(_)) => {
             let current = drag.take().unwrap();
-            finish_drag(view, current, carried);
+            finish_drag(view, current);
         }
         _ => *drag = None,
     }
 }
 
-fn finish_drag(view: &mut View<'_>, drag: Drag, carried: ItemStack) {
+fn finish_drag(view: &mut View<'_>, drag: Drag) {
     if drag.slots.len() == 1 {
         pickup(view, drag.slots[0], drag.kind != 1);
         return;
@@ -1297,7 +1346,9 @@ fn finish_drag(view: &mut View<'_>, drag: Drag, carried: ItemStack) {
     if drag.slots.is_empty() {
         return;
     }
-    let mut carried = carried;
+    let Some(mut carried) = view.inventory.carried_mut().take() else {
+        return;
+    };
     let total = carried.count();
     let slots = drag.slots.len() as u8;
     for slot in drag.slots {

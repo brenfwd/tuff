@@ -43,7 +43,7 @@ pub struct CustomItemDef {
     pub base: Item,
     /// The `item_model` the pack provides; `None` keeps the base model.
     pub model: Option<String>,
-    pub components: Components,
+    pub components: tuff_item::item::ComponentsSnapshot,
     /// Whether the base item's own behaviour still runs on use.
     pub inherit_behavior: bool,
     /// What using the item does, before (or instead of) the base item.
@@ -58,7 +58,7 @@ impl CustomItemDef {
             id: id.into(),
             base,
             model: None,
-            components: Components::default(),
+            components: Default::default(),
             inherit_behavior: false,
             behavior: None,
             private_data: false,
@@ -71,22 +71,27 @@ impl CustomItemDef {
     }
 
     pub fn with_components(mut self, components: Components) -> Self {
-        self.components = components;
+        self.components = tuff_item::item::ComponentsSnapshot::describing(components);
         self
     }
 
     /// A stack of this item.
     pub fn stack(&self, count: u8) -> ItemStack {
-        ItemStack::mint(self.base, count, MintReason::Command).with_components(self.components())
+        ItemStack::mint_with(self.base, count, &self.components(), MintReason::Command)
     }
 
     /// A picture of one of this item, never a real item.
     pub fn template(&self) -> tuff_item::item::ItemSnapshot {
-        tuff_item::item::ItemSnapshot::describe(self.base, 1, self.components())
+        tuff_item::item::ItemSnapshot::describe_with(self.base, 1, &self.components())
     }
 
-    fn components(&self) -> Components {
-        let mut components = self.components.clone();
+    fn components(&self) -> tuff_item::item::ComponentsSnapshot {
+        let mut snapshot = self.components.clone();
+        snapshot.edit(|components| self.finish_components(components));
+        snapshot
+    }
+
+    fn finish_components(&self, components: &mut Components) {
         if let Some(model) = &self.model {
             components.other.insert(ITEM_MODEL, model.as_str());
         }
@@ -107,7 +112,6 @@ impl CustomItemDef {
                 }
             }
         }
-        components
     }
 }
 

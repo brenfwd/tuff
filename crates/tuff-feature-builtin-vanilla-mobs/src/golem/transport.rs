@@ -331,7 +331,7 @@ impl TransportItems {
             }
             Outcome::Deposit { stack } => {
                 let view = (cx.container)(target).unwrap_or_default();
-                let placed = tuff_core::world::block_entity::golem_room(&view, &stack);
+                let placed = tuff_core::world::block_entity::golem_room(view.iter(), &stack);
                 if placed > 0
                     && let Some(given) = mob.equipment.take_some(EquipmentSlot::Mainhand, placed)
                 {

@@ -303,7 +303,8 @@ async fn export_world_for_vanilla() {
                 })
             }
             _ => Default::default(),
-        };
+        }
+        .into();
         region.request(RegionRequest::Place(placing)).await;
         expect(&mut events, |event| match event {
             PlayerEvent::ActionResult {

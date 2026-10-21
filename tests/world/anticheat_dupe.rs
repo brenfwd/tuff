@@ -274,7 +274,11 @@ async fn tampered_creative_stacks_never_reach_the_inventory() {
     bomb.components
         .other
         .insert("minecraft:custom_data", deep(200));
-    session.handle_packet(set(CreativeSlot::Stack(bomb))).await;
+    session
+        .handle_packet(set(CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(
+            &bomb,
+        ))))
+        .await;
     assert_eq!(session.inventory().slots()[hotbar], None);
 
     session.handle_packet(set(CreativeSlot::Invalid)).await;
@@ -287,7 +291,9 @@ async fn tampered_creative_stacks_never_reach_the_inventory() {
         MintReason::Test,
     ))]);
     session
-        .handle_packet(set(CreativeSlot::Stack(shulker)))
+        .handle_packet(set(CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(
+            &shulker,
+        ))))
         .await;
     assert_eq!(session.inventory().slots()[hotbar], None);
 
@@ -297,7 +303,9 @@ async fn tampered_creative_stacks_never_reach_the_inventory() {
         .other
         .insert("minecraft:custom_data", deep(8));
     session
-        .handle_packet(set(CreativeSlot::Stack(named.test_copy())))
+        .handle_packet(set(CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(
+            &named.test_copy(),
+        ))))
         .await;
     assert_eq!(session.inventory().slots()[hotbar], Some(named));
     assert!(!session.disconnected);

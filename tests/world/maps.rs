@@ -968,6 +968,7 @@ mod explorer {
         let MenuSource::Blocks { contents, .. } = open.source else {
             panic!("a chest is a block container");
         };
+        let contents = stacks(&contents);
         let slot = contents
             .iter()
             .position(|stack| stack.as_ref().is_some_and(|s| pending(s).is_some()))

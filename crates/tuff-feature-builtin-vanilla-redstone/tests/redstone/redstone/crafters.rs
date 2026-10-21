@@ -11,8 +11,14 @@ async fn put(b: &mut Bench, pos: BlockPos, slot: usize, stack: ItemStack) -> boo
                 pos,
                 slot,
                 expected: None,
-                new: Some(stack),
+                new: snap(Some(&stack)),
             }],
+            pool: pool_for(&[ContainerChange {
+                pos,
+                slot,
+                expected: None,
+                new: snap(Some(&stack)),
+            }]),
             took_result: false,
         })
         .await;

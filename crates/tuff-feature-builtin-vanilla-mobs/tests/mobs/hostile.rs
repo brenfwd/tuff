@@ -1436,7 +1436,8 @@ async fn spawners_spawn_their_mob_while_players_are_near() {
                 .with("SpawnData", spawn_data),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     world.ticks(60).await;
@@ -1494,7 +1495,8 @@ async fn spawners_do_nothing_when_the_spawner_blocks_work_rule_is_off() {
                 .with("SpawnData", spawn_data),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     world.ticks(60).await;
@@ -1545,7 +1547,8 @@ async fn spawners_dress_their_mob_from_an_equipment_table() {
                 .with("SpawnData", Tag::Compound(spawn_data)),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     region
@@ -1630,7 +1633,8 @@ async fn spawners_follow_custom_spawn_rules_and_show_the_next_mob() {
                 ),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     world.ticks(2).await;

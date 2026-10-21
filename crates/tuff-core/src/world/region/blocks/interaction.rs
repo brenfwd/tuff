@@ -154,8 +154,7 @@ impl RegionActor {
                 .recipes()
                 .can_cook(ContainerKind::Campfire, item)
             {
-                let stack = ItemStack::mint(item, 1, MintReason::Transform)
-                    .with_components(place.components.clone());
+                let stack = ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
                 if !self.place_campfire_food(pos, stack) {
                     return None;
                 }

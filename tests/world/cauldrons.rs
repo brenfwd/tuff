@@ -199,7 +199,8 @@ async fn water_washes_banners_shulker_boxes_and_dyed_armor() {
                     .with("color", "blue"),
             ),
         ]),
-    ));
+    ))
+    .into();
     let outcome = click(&region, &mut events, banner).await;
     let ActionOutcome::Used {
         effect: HandEffect::ExchangeStack(stack),

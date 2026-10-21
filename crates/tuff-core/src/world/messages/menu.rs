@@ -1,6 +1,6 @@
 use crate::world::dimension::DimensionId;
 use crate::world::menu::MenuKind;
-use tuff_item::item::ItemStack;
+use tuff_item::item::ItemSnapshot;
 use tuff_item::text::TextComponent;
 use tuff_world_model::BlockPos;
 
@@ -25,7 +25,7 @@ pub enum MenuSource {
     /// container data slots (a furnace's progress).
     Blocks {
         parts: Vec<(BlockPos, usize)>,
-        contents: Vec<Option<ItemStack>>,
+        contents: Vec<Option<ItemSnapshot>>,
         data: Vec<i32>,
         /// The part owned by another region (the far half of a double
         /// chest across a region border) and that region.
@@ -45,7 +45,7 @@ pub enum MenuSource {
     /// The container of the region entity with this id (a chest boat).
     Entity {
         entity: i32,
-        contents: Vec<Option<ItemStack>>,
+        contents: Vec<Option<ItemSnapshot>>,
     },
 }
 
@@ -54,25 +54,35 @@ pub enum MenuSource {
 pub struct OpenedHalf {
     pub pos: BlockPos,
     pub region: RegionHandle,
-    pub contents: Vec<Option<ItemStack>>,
+    pub contents: Vec<Option<ItemSnapshot>>,
     pub custom_name: Option<TextComponent>,
 }
 
 /// One slot of an entity container a transaction changes, as
 /// [`ContainerChange`] is for blocks.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EntitySlotChange {
     pub slot: usize,
-    pub expected: Option<ItemStack>,
-    pub new: Option<ItemStack>,
+    pub expected: Option<ItemSnapshot>,
+    pub new: Option<ItemSnapshot>,
 }
 
-/// One slot of a block container a transaction changes: what the session
-/// expects it to hold and what it should hold afterwards.
-#[derive(Debug, PartialEq)]
+/// One slot of a block container a transaction changes: pictures of what
+/// the session expects it to hold and of what it should hold afterwards.
+/// The items themselves move in the transaction's pool.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContainerChange {
     pub pos: BlockPos,
     pub slot: usize,
-    pub expected: Option<ItemStack>,
-    pub new: Option<ItemStack>,
+    pub expected: Option<ItemSnapshot>,
+    pub new: Option<ItemSnapshot>,
+}
+
+/// Whether a slot holds what a picture shows.
+pub fn holds(slot: Option<&tuff_item::item::ItemStack>, picture: Option<&ItemSnapshot>) -> bool {
+    match (slot, picture) {
+        (None, None) => true,
+        (Some(stack), Some(picture)) => **picture == *stack,
+        _ => false,
+    }
 }

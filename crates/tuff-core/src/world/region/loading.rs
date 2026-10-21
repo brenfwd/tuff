@@ -17,7 +17,7 @@ use super::{
 };
 use crate::protocol::play;
 use crate::storage::normalise::SaveView;
-use crate::world::block_entity::{self};
+use crate::world::block_entity::{self, SavePicture as _};
 use crate::world::dimension::DimensionId;
 use crate::world::lighting::{LightChange, LightOp, Lighting};
 use crate::world::messages::{PlayerEvent, PlayerId, RegionInternal};
@@ -941,7 +941,7 @@ impl RegionActor {
             if !(column.lit && light_idle) {
                 chunk.set_light(None);
             }
-            let mut meta = column.meta.clone();
+            let mut meta = column.meta.save_picture();
             ticks::store(
                 &mut meta.extra,
                 "block_ticks",

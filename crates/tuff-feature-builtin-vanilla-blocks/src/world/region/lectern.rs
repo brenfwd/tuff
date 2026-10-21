@@ -48,7 +48,7 @@ fn open(world: &mut dyn RegionWorld, place: &Place) -> bool {
         title: TextComponent::translate("container.lectern", []),
         source: MenuSource::Blocks {
             parts: vec![(pos, 1)],
-            contents: vec![Some(book)],
+            contents: vec![Some(book.into_template())],
             data: vec![page],
             remote: None,
         },
@@ -142,8 +142,7 @@ impl RegionHooks for Lecterns {
             let item = place
                 .held
                 .filter(|item| item_tags::LECTERN_BOOKS.contains(item))?;
-            let book = ItemStack::mint(item, 1, MintReason::Transform)
-                .with_components(place.components.clone());
+            let book = ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
             place_book(world, place.target, state, book);
             world.play_sound(SoundEvent::ItemBookPut, place.target, 1.0, 1.0, None);
             return Some(ActionOutcome::Used {

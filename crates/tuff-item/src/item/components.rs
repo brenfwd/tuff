@@ -417,8 +417,23 @@ impl Components {
             .collect()
     }
 
+    /// Stores the nested stacks of a component received in a Slot, moving
+    /// them in.
+    pub fn set_network_container(&mut self, contents: Vec<Option<ItemStack>>) {
+        self.container = Some(contents);
+    }
+
+    pub fn set_network_projectiles(&mut self, projectiles: Vec<ItemStack>) {
+        self.charged_projectiles = Some(projectiles);
+    }
+
+    pub fn set_network_bundle(&mut self, contents: BundleContents) {
+        self.bundle_contents = Some(Box::new(contents));
+    }
+
     /// Stores a component received in a Slot. Returns false for a type this
-    /// server cannot hold.
+    /// server cannot hold (nested stacks go through the `set_network_*`
+    /// moves).
     pub fn set_network(&mut self, component: NetworkComponent<'_>) -> bool {
         match component {
             NetworkComponent::Damage(damage) => self.damage = Some(damage),
@@ -439,15 +454,9 @@ impl Components {
                 self.ominous_bottle_amplifier = Some(amplifier)
             }
             NetworkComponent::MapId(id) => self.map_id = Some(id),
-            NetworkComponent::Container(contents) => {
-                self.container = Some(dup_slice_unchecked(contents))
-            }
-            NetworkComponent::ChargedProjectiles(projectiles) => {
-                self.charged_projectiles = Some(dup_slice_unchecked(projectiles))
-            }
-            NetworkComponent::BundleContents(contents) => {
-                self.bundle_contents = Some(Box::new(contents.dup_unchecked()))
-            }
+            NetworkComponent::Container(_)
+            | NetworkComponent::ChargedProjectiles(_)
+            | NetworkComponent::BundleContents(_) => return false,
             NetworkComponent::DyedColor(rgb) => self.dyed_color = Some(rgb),
             NetworkComponent::BaseColor(color) => self.base_color = Some(color),
             NetworkComponent::BannerPatterns(layers) => {

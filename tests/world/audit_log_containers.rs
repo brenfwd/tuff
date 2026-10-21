@@ -128,6 +128,7 @@ async fn click(
         .request(RegionRequest::ContainerTransaction {
             player: player.clone(),
             window_id: 1,
+            pool: pool_for(&changes),
             changes,
             took_result: false,
         })
@@ -467,6 +468,7 @@ async fn a_rollback_while_the_chest_is_open_rejects_the_viewers_stale_clicks() {
             player: alex.clone(),
             window_id: 1,
             changes: set_slot(chest, 0, diamonds(2), None),
+            pool: pool_for(&set_slot(chest, 0, diamonds(2), None)),
             took_result: false,
         })
         .await;

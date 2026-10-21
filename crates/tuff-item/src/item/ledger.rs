@@ -29,10 +29,6 @@ pub enum MintReason {
     Remainder,
     /// An item turning into another (filling a bucket, enchanting, dyeing).
     Transform,
-    /// A region rebuilding a stack another actor owns from its description
-    /// (a held item sent with a use or place request). To be replaced by
-    /// moving the stack in the message.
-    CrossActor,
     /// The creative inventory or pick block.
     Creative,
     /// `/give`, `/item` and other commands.
@@ -105,8 +101,13 @@ impl ItemStack {
     /// New items with the item and components of `template`.
     pub fn mint_like<'a>(template: impl Into<ItemView<'a>>, count: u8, reason: MintReason) -> Self {
         let template = template.into().get();
-        Self::mint(template.item, count, reason)
-            .with_components(template.components.dup_unchecked())
+        Self::mint(template.item, count, reason).with_components(template.components.picture_copy())
+    }
+
+    /// New items of `item` carrying a copy of `components` (nested stacks
+    /// included, minted with them).
+    pub fn mint_with(item: Item, count: u8, components: &Components, reason: MintReason) -> Self {
+        Self::mint(item, count, reason).with_components(components.picture_copy())
     }
 
     /// Tests and fixtures only: new items like this stack, minted for
@@ -130,29 +131,14 @@ impl ItemStack {
     /// The door for items leaving existence.
     pub fn burn(self, _reason: BurnReason) {}
 
-    /// A copy of this stack that bypasses conservation. Temporary: every
-    /// call site is listed for removal in the move-only stacks work.
-    pub fn dup_unchecked(&self) -> Self {
+    /// A copy for a picture or a template. Only the snapshot and mint
+    /// doors call it.
+    pub(crate) fn picture_copy(&self) -> Self {
         Self {
             item: self.item,
             count: self.count,
-            components: self.components.dup_unchecked(),
+            components: self.components.picture_copy(),
         }
-    }
-
-    /// [`dup_unchecked`](Self::dup_unchecked) with another count.
-    pub fn dup_count_unchecked(&self, count: u8) -> Self {
-        Self {
-            item: self.item,
-            count,
-            components: self.components.dup_unchecked(),
-        }
-    }
-
-    /// Sets the count of a copy that mirrors a stack another actor owns.
-    /// Temporary escape hatch: mirrors become snapshots.
-    pub fn set_count_unchecked(&mut self, count: u8) {
-        self.count = count;
     }
 
     pub fn count(&self) -> u8 {
@@ -170,7 +156,7 @@ impl ItemStack {
         let taken = Self {
             item: rest.item,
             count: n,
-            components: rest.components.dup_unchecked(),
+            components: rest.components.picture_copy(),
         };
         rest.count -= n;
         (taken, Some(rest))
@@ -200,7 +186,7 @@ impl ItemStack {
         Self {
             item: self.item,
             count: n,
-            components: self.components.dup_unchecked(),
+            components: self.components.picture_copy(),
         }
     }
 
@@ -361,167 +347,38 @@ impl ItemStack {
     }
 }
 
-/// Copies of stacks and of values holding them that bypass conservation.
-/// Temporary: every call site is listed for removal in the move-only
-/// stacks work.
-pub trait DupUnchecked: Sized {
-    fn dup_unchecked(&self) -> Self;
-}
-
-impl DupUnchecked for ItemStack {
-    fn dup_unchecked(&self) -> Self {
-        ItemStack::dup_unchecked(self)
-    }
-}
-
-impl<T: DupUnchecked> DupUnchecked for Option<T> {
-    fn dup_unchecked(&self) -> Self {
-        self.as_ref().map(T::dup_unchecked)
-    }
-}
-
-impl<T: DupUnchecked> DupUnchecked for Box<T> {
-    fn dup_unchecked(&self) -> Self {
-        Box::new(T::dup_unchecked(self))
-    }
-}
-
-impl<T: DupUnchecked> DupUnchecked for Box<[T]> {
-    fn dup_unchecked(&self) -> Self {
-        dup_slice_unchecked(self).into_boxed_slice()
-    }
-}
-
-impl<T: DupUnchecked> DupUnchecked for Vec<T> {
-    fn dup_unchecked(&self) -> Self {
-        dup_slice_unchecked(self)
-    }
-}
-
-impl<T: DupUnchecked, const N: usize> DupUnchecked for [T; N] {
-    fn dup_unchecked(&self) -> Self {
-        std::array::from_fn(|index| self[index].dup_unchecked())
-    }
-}
-
-impl<A: DupUnchecked, B: DupUnchecked> DupUnchecked for (A, B) {
-    fn dup_unchecked(&self) -> Self {
-        (self.0.dup_unchecked(), self.1.dup_unchecked())
-    }
-}
-
-/// [`DupUnchecked`] for a slice, into a vector.
-pub fn dup_slice_unchecked<T: DupUnchecked>(items: &[T]) -> Vec<T> {
-    items.iter().map(T::dup_unchecked).collect()
-}
-
-macro_rules! dup_by_copy {
-    ($($ty:ty),*) => {
-        $(impl DupUnchecked for $ty {
-            fn dup_unchecked(&self) -> Self {
-                *self
-            }
-        })*
-    };
-}
-dup_by_copy!(
-    bool,
-    u8,
-    u16,
-    u32,
-    u64,
-    usize,
-    i8,
-    i16,
-    i32,
-    i64,
-    f32,
-    f64,
-    Item,
-    tuff_vanilla_data::item::EquipmentSlot
-);
-
-impl<K: Clone + Eq + std::hash::Hash, V: DupUnchecked> DupUnchecked
-    for std::collections::HashMap<K, V>
-{
-    fn dup_unchecked(&self) -> Self {
-        self.iter()
-            .map(|(key, value)| (key.clone(), value.dup_unchecked()))
-            .collect()
-    }
-}
-
-impl<A: DupUnchecked, B: DupUnchecked, C: DupUnchecked> DupUnchecked for (A, B, C) {
-    fn dup_unchecked(&self) -> Self {
-        (
-            self.0.dup_unchecked(),
-            self.1.dup_unchecked(),
-            self.2.dup_unchecked(),
-        )
-    }
-}
-
-/// Field-by-field copying for `#[derive(DupClone)]`: `Clone` fields are
-/// cloned, the rest go through [`DupUnchecked`].
-#[doc(hidden)]
-pub mod dup_probe {
-    use super::DupUnchecked;
-
-    pub struct Probe<'a, T>(pub &'a T);
-
-    pub trait ViaClone<T> {
-        fn dup_field(&self) -> T;
-    }
-
-    impl<T: Clone> ViaClone<T> for Probe<'_, T> {
-        fn dup_field(&self) -> T {
-            self.0.clone()
-        }
-    }
-
-    pub trait ViaDup<T> {
-        fn dup_field(&self) -> T;
-    }
-
-    impl<T: DupUnchecked> ViaDup<T> for &Probe<'_, T> {
-        fn dup_field(&self) -> T {
-            self.0.dup_unchecked()
-        }
-    }
-}
-
-/// Container slots that are borrowed, or owned when they had to be
-/// assembled (a double chest's two halves).
-#[derive(Debug)]
+/// The slots of a container as a read-only view: one block entity's, or
+/// both halves of a double chest joined in menu order.
+#[derive(Debug, Clone, Copy)]
 pub enum SlotsCow<'a> {
     Borrowed(&'a [Option<ItemStack>]),
-    Owned(Vec<Option<ItemStack>>),
+    Joined(&'a [Option<ItemStack>], &'a [Option<ItemStack>]),
 }
 
 impl Default for SlotsCow<'_> {
     fn default() -> Self {
-        Self::Owned(Vec::new())
+        Self::Borrowed(&[])
     }
 }
 
-impl std::ops::Deref for SlotsCow<'_> {
-    type Target = [Option<ItemStack>];
+impl<'a> SlotsCow<'a> {
+    pub fn iter(&self) -> impl Iterator<Item = &'a Option<ItemStack>> + 'a {
+        let (first, second): (&'a [Option<ItemStack>], &'a [Option<ItemStack>]) = match *self {
+            Self::Borrowed(slots) => (slots, &[]),
+            Self::Joined(first, second) => (first, second),
+        };
+        first.iter().chain(second)
+    }
 
-    fn deref(&self) -> &[Option<ItemStack>] {
+    pub fn len(&self) -> usize {
         match self {
-            Self::Borrowed(slots) => slots,
-            Self::Owned(slots) => slots,
+            Self::Borrowed(slots) => slots.len(),
+            Self::Joined(first, second) => first.len() + second.len(),
         }
     }
-}
 
-impl SlotsCow<'_> {
-    /// The slots as an owned copy. Temporary escape hatch.
-    pub fn into_owned_unchecked(self) -> Vec<Option<ItemStack>> {
-        match self {
-            Self::Borrowed(slots) => dup_slice_unchecked(slots),
-            Self::Owned(slots) => slots,
-        }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

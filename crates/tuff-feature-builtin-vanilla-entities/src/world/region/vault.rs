@@ -480,7 +480,7 @@ pub fn use_block(
         .key_item
         .as_ref()
         .map(tuff_item::item::ItemSnapshot::of)?;
-    if key.item != held || key.components != place.components || place.held_count < key.count() {
+    if key.item != held || key.components != *place.components || place.held_count < key.count() {
         play_fail(world, pos, SoundEvent::BlockVaultInsertItemFail);
         return interacted;
     }

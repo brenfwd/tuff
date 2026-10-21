@@ -422,7 +422,7 @@ impl State {
     }
 }
 
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct BlockEntity {
     pub kind: ContainerKind,
     pub items: Vec<Option<ItemStack>>,
@@ -672,6 +672,32 @@ impl BlockEntity {
     }
 }
 
+/// What a save writes for a chunk's block entities, taken on the owning
+/// thread: the modeled ones are encoded in place (their stacks are read,
+/// never copied) and stored with the unmodeled ones.
+pub trait SavePicture {
+    fn save_picture(&self) -> Self;
+}
+
+impl SavePicture for tuff_world_model::chunk_meta::ChunkMeta<BlockEntity> {
+    fn save_picture(&self) -> Self {
+        let mut raw_block_entities = self.raw_block_entities.clone();
+        raw_block_entities.extend(
+            self.block_entities
+                .iter()
+                .map(|(pos, entity)| (*pos, entity.encode(*pos))),
+        );
+        Self {
+            status: self.status.clone(),
+            extra: self.extra.clone(),
+            relight: self.relight,
+            block_entities: Default::default(),
+            raw_block_entities,
+            below_zero_retrogen: self.below_zero_retrogen,
+        }
+    }
+}
+
 /// `size` slots filled from saved `Items` entries; entries with a slot out
 /// of range or an unreadable stack are dropped.
 pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemStack>> {
@@ -730,7 +756,10 @@ pub fn write_items(nbt: &mut Compound, items: &[Option<ItemStack>]) {
 /// all went in)
 /// and whether the walk reached an empty slot.
 /// How many of `stack` [`golem_place`] would put into `items`.
-pub fn golem_room(items: &[Option<ItemStack>], stack: &ItemStack) -> u8 {
+pub fn golem_room<'a>(
+    items: impl IntoIterator<Item = &'a Option<ItemStack>>,
+    stack: &ItemStack,
+) -> u8 {
     let mut room = 0u8;
     for item in items {
         match item {
@@ -820,6 +849,39 @@ pub fn insert(
         }
     }
     (stack.count() > 0).then_some(stack)
+}
+
+/// How many of `count` of `stack` [`insert`] would put into `items`,
+/// reading them only. Exact for containers whose slots accept items
+/// regardless of the others (chests).
+pub fn insert_room(
+    recipes: &RecipeSet,
+    kind: ContainerKind,
+    items: &[Option<ItemStack>],
+    face: Option<Facing>,
+    stack: &ItemStack,
+    count: u8,
+    disabled: u16,
+) -> u8 {
+    let mut left = count;
+    for slot in kind.slots_for_face(face) {
+        if left == 0 {
+            break;
+        }
+        if !kind.can_insert(recipes, items, slot, stack, face, disabled) {
+            continue;
+        }
+        match &items[slot] {
+            None => left = 0,
+            Some(current)
+                if current.stacks_with(stack) && current.count() <= current.max_stack_size() =>
+            {
+                left -= left.min(stack.max_stack_size().saturating_sub(current.count()));
+            }
+            Some(_) => {}
+        }
+    }
+    count - left
 }
 
 /// Whether every slot of `items` reachable through `face` is full.

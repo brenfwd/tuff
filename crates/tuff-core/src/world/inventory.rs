@@ -22,7 +22,7 @@ const MAIN: RangeInclusive<usize> = 9..=35;
 const HOTBAR: RangeInclusive<usize> = 36..=44;
 const OFFHAND: usize = 45;
 
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Debug)]
 pub struct Inventory {
     slots: Box<[Option<ItemStack>]>,
     carried: Option<ItemStack>,
@@ -459,6 +459,29 @@ impl Inventory {
         );
         self.drag = drag;
         drops
+    }
+
+    /// Template copies of the slots and the cursor, for working a click
+    /// out on pictures; never items.
+    pub fn template_copy(&self) -> Self {
+        let template = |slot: &Option<ItemStack>| {
+            slot.as_ref().map(|stack| {
+                ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Template)
+            })
+        };
+        Self {
+            slots: self.slots.iter().map(template).collect(),
+            carried: template(&self.carried),
+            selected: self.selected,
+            state_id: self.state_id,
+            drag: self.drag.clone(),
+            bundle_sounds: Vec::new(),
+        }
+    }
+
+    /// Every stack in the slots and on the cursor, emptying them.
+    pub fn into_stacks(self) -> impl Iterator<Item = ItemStack> {
+        self.slots.into_iter().flatten().chain(self.carried)
     }
 
     pub fn note_bundle_sound(&mut self, sound: BundleSound) {

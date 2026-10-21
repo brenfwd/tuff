@@ -102,6 +102,15 @@ impl ItemSnapshot {
         }))
     }
 
+    /// A picture of `count` of `item` with a copy of `components`.
+    pub fn describe_with(
+        item: tuff_vanilla_data::Item,
+        count: u8,
+        components: &super::Components,
+    ) -> Self {
+        Self::describe(item, count, components.picture_copy())
+    }
+
     /// The same picture showing `count` items.
     pub fn with_count(self, count: u8) -> Self {
         let mut stack = Arc::try_unwrap(self.0).unwrap_or_else(|shared| shared.snapshot_copy());
@@ -130,6 +139,65 @@ impl PartialEq<ItemStack> for ItemSnapshot {
     }
 }
 
+/// A shareable, read-only copy of a component patch for templates (a
+/// command's item argument, a custom item, a placed block's contents).
+/// Stamping it onto real items goes through [`ItemStack::mint_with`].
+#[derive(Clone, Default, PartialEq)]
+pub struct ComponentsSnapshot(Arc<super::Components>);
+
+impl ComponentsSnapshot {
+    pub fn of(components: &super::Components) -> Self {
+        Self(Arc::new(components.picture_copy()))
+    }
+
+    /// Takes components that only describe items (parsed from a command,
+    /// built for a template).
+    pub fn describing(components: super::Components) -> Self {
+        Self(Arc::new(components))
+    }
+
+    /// A private copy of the pictured components, still only a picture.
+    pub fn edit(&mut self, edit: impl FnOnce(&mut super::Components)) {
+        if Arc::get_mut(&mut self.0).is_none() {
+            self.0 = Arc::new(self.0.picture_copy());
+        }
+        if let Some(components) = Arc::get_mut(&mut self.0) {
+            edit(components);
+        }
+    }
+}
+
+impl Deref for ComponentsSnapshot {
+    type Target = super::Components;
+
+    fn deref(&self) -> &super::Components {
+        &self.0
+    }
+}
+
+/// Edits the picture, copying it first when it is shared; it stays a
+/// picture.
+impl std::ops::DerefMut for ComponentsSnapshot {
+    fn deref_mut(&mut self) -> &mut super::Components {
+        if Arc::get_mut(&mut self.0).is_none() {
+            self.0 = Arc::new(self.0.picture_copy());
+        }
+        Arc::get_mut(&mut self.0).expect("unshared after the copy")
+    }
+}
+
+impl From<super::Components> for ComponentsSnapshot {
+    fn from(components: super::Components) -> Self {
+        Self::describing(components)
+    }
+}
+
+impl fmt::Debug for ComponentsSnapshot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Pictures of every slot.
 pub fn snapshot_slots(slots: &[Option<ItemStack>]) -> Vec<Option<ItemSnapshot>> {
     slots
@@ -152,7 +220,7 @@ impl ItemStack {
     }
 
     fn snapshot_copy(&self) -> ItemStack {
-        self.dup_unchecked()
+        self.picture_copy()
     }
 }
 

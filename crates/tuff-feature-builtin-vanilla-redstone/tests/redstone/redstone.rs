@@ -461,13 +461,14 @@ async fn fill(b: &mut Bench, pos: BlockPos, stacks: Vec<ItemStack>, sequence: i3
             pos,
             slot,
             expected: None,
-            new: Some(stack),
+            new: snap(Some(stack)),
         })
-        .collect();
+        .collect::<Vec<_>>();
     b.region
         .request(RegionRequest::ContainerTransaction {
             player: b.player.clone(),
             window_id: 1,
+            pool: pool_for(&changes),
             changes,
             took_result: false,
         })

@@ -126,10 +126,10 @@ impl PartialEq for BundleContents {
 }
 
 impl BundleContents {
-    /// A copy of the contents. Temporary escape hatch.
-    pub fn dup_unchecked(&self) -> Self {
+    /// A copy for a picture or a template.
+    pub(crate) fn picture_copy(&self) -> Self {
         Self {
-            items: self.items.iter().map(ItemStack::dup_unchecked).collect(),
+            items: self.items.iter().map(ItemStack::picture_copy).collect(),
             selected: self.selected,
         }
     }

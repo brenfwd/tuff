@@ -96,6 +96,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(chest, 27)]);
     assert_eq!(
         contents,
@@ -115,6 +116,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(chest, 0, None, Some(stone.test_copy())),
+            pool: pool_for(&set_slot(chest, 0, None, Some(stone.test_copy()))),
             took_result: false,
         })
         .await;
@@ -134,6 +136,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
             player: bob.clone(),
             window_id: 1,
             changes: set_slot(chest, 0, None, Some(dirt.test_copy())),
+            pool: pool_for(&set_slot(chest, 0, None, Some(dirt.test_copy()))),
             took_result: false,
         })
         .await;
@@ -141,7 +144,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     assert!(!accepted, "a stale expectation is rejected");
     assert_eq!(contents.len(), 1);
     assert_eq!(contents[0].0, chest);
-    assert_eq!(contents[0].1[0], Some(stone.test_copy()));
+    assert_eq!(stacks(&contents[0].1)[0], Some(stone.test_copy()));
 
     let (carol, mut carol_events) = PlayerHandle::new(102);
     region
@@ -149,6 +152,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
             player: carol.clone(),
             window_id: 1,
             changes: set_slot(chest, 1, None, Some(dirt.test_copy())),
+            pool: pool_for(&set_slot(chest, 1, None, Some(dirt.test_copy()))),
             took_result: false,
         })
         .await;
@@ -246,6 +250,7 @@ async fn a_locked_chest_refuses_the_wrong_key_and_opens_with_the_right_one() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(
         contents,
         (0..27).map(|_| None).collect::<Vec<Option<ItemStack>>>(),
@@ -292,6 +297,7 @@ async fn a_loot_chest_rolls_its_table_once_on_first_open() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     let expected = tuff_feature_builtin_vanilla_loot::container_loot(
         "minecraft:chests/simple_dungeon",
         27,
@@ -357,6 +363,7 @@ async fn a_loot_chest_explorer_map_is_finished_or_dropped() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     let waiting = |stack: &ItemStack| {
         tuff_feature_builtin_vanilla_loot::exploration::pending(stack).is_some()
     };
@@ -446,6 +453,7 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
     assert_eq!(contents.len(), 54);
 
@@ -455,6 +463,7 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(right, 0, None, Some(apple.test_copy())),
+            pool: pool_for(&set_slot(right, 0, None, Some(apple.test_copy()))),
             took_result: false,
         })
         .await;
@@ -474,6 +483,7 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
     assert_eq!(contents[0], Some(apple.test_copy()));
     world.shutdown().await;
@@ -491,6 +501,7 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
     assert_eq!(contents[0], Some(apple));
     assert_eq!(
@@ -539,6 +550,7 @@ async fn hoppers_move_one_item_per_cooldown_and_pull_dropped_items() {
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(top, 0, None, stone(3)),
+            pool: pool_for(&set_slot(top, 0, None, stone(3))),
             took_result: false,
         })
         .await;
@@ -576,6 +588,7 @@ async fn hoppers_move_one_item_per_cooldown_and_pull_dropped_items() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(contents[0], stone(3));
     region
         .request(RegionRequest::CloseContainer {
@@ -606,6 +619,7 @@ async fn hoppers_move_one_item_per_cooldown_and_pull_dropped_items() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a hopper is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(
         contents,
         vec![
@@ -699,6 +713,7 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
     else {
         panic!("a shulker box is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(shulker, 27)]);
     assert_eq!(contents[0], Some(apple.test_copy()));
     expect_chunk_packet(
@@ -850,6 +865,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
     else {
         panic!("a furnace is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(block, 3)]);
     assert_eq!(
         contents,
@@ -868,15 +884,29 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
                     pos: block,
                     slot: furnace::FUEL,
                     expected: None,
-                    new: coal.as_ref().map(tuff_item::item::ItemStack::test_copy),
+                    new: snap(coal.as_ref().map(tuff_item::item::ItemStack::test_copy)),
                 },
                 ContainerChange {
                     pos: block,
                     slot: furnace::INPUT,
                     expected: None,
-                    new: ore(2),
+                    new: snap(ore(2)),
                 },
             ],
+            pool: pool_for(&[
+                ContainerChange {
+                    pos: block,
+                    slot: furnace::FUEL,
+                    expected: None,
+                    new: snap(coal.as_ref().map(tuff_item::item::ItemStack::test_copy)),
+                },
+                ContainerChange {
+                    pos: block,
+                    slot: furnace::INPUT,
+                    expected: None,
+                    new: snap(ore(2)),
+                },
+            ]),
             took_result: false,
         })
         .await;
@@ -947,6 +977,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(block, furnace::RESULT, diamond(2), None),
+            pool: pool_for(&set_slot(block, furnace::RESULT, diamond(2), None)),
             took_result: true,
         })
         .await;
@@ -985,6 +1016,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
             player: alice.clone(),
             window_id: 1,
             changes: Vec::new(),
+            pool: pool_for(&Vec::new()),
             took_result: true,
         })
         .await;
@@ -1246,6 +1278,11 @@ async fn a_hopper_facing_a_full_chest_keeps_its_items() {
             changes: (0..27)
                 .flat_map(|slot| set_slot(bottom, slot, None, dirt()))
                 .collect(),
+            pool: pool_for(
+                &(0..27)
+                    .flat_map(|slot| set_slot(bottom, slot, None, dirt()))
+                    .collect::<Vec<_>>(),
+            ),
             took_result: false,
         })
         .await;
@@ -1266,6 +1303,7 @@ async fn a_hopper_facing_a_full_chest_keeps_its_items() {
             player: alice.clone(),
             window_id: 2,
             changes: set_slot(hopper, 0, None, stone(5)),
+            pool: pool_for(&set_slot(hopper, 0, None, stone(5))),
             took_result: false,
         })
         .await;
@@ -1285,6 +1323,7 @@ async fn a_hopper_facing_a_full_chest_keeps_its_items() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a hopper is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(contents[0], stone(5), "the refused item went back");
     region
         .request(RegionRequest::CloseContainer {
@@ -1299,6 +1338,7 @@ async fn a_hopper_facing_a_full_chest_keeps_its_items() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert!(contents.iter().all(|slot| *slot == dirt()));
     world.shutdown().await;
 }

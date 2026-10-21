@@ -15,9 +15,8 @@ pub mod hash;
 pub mod identity;
 mod ledger;
 mod view;
-pub use ledger::{BurnReason, DupUnchecked, MintReason, SlotsCow, dup_probe, dup_slice_unchecked};
-pub use tuff_macros::DupClone;
-pub use view::{ItemSnapshot, ItemView, snapshot_slots};
+pub use ledger::{BurnReason, MintReason, SlotsCow};
+pub use view::{ComponentsSnapshot, ItemSnapshot, ItemView, snapshot_slots};
 
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
@@ -146,9 +145,10 @@ pub struct ComponentPatch {
 static EMPTY_PATCH: LazyLock<ComponentPatch> = LazyLock::new(ComponentPatch::default);
 
 impl ComponentPatch {
-    /// A copy, nested stacks included. Temporary escape hatch.
+    /// A copy for a picture or a template, nested stacks included. Only
+    /// the snapshot and mint doors call it.
     #[allow(clippy::clone_on_copy)] // every field is copied the same way
-    pub fn dup_unchecked(&self) -> Self {
+    pub(crate) fn picture_copy(&self) -> Self {
         let Self {
             damage,
             max_damage,
@@ -192,15 +192,15 @@ impl ComponentPatch {
             container: container.as_ref().map(|slots| {
                 slots
                     .iter()
-                    .map(|slot| slot.as_ref().map(ItemStack::dup_unchecked))
+                    .map(|slot| slot.as_ref().map(ItemStack::picture_copy))
                     .collect()
             }),
             charged_projectiles: charged_projectiles
                 .as_ref()
-                .map(|stacks| stacks.iter().map(ItemStack::dup_unchecked).collect()),
+                .map(|stacks| stacks.iter().map(ItemStack::picture_copy).collect()),
             bundle_contents: bundle_contents
                 .as_ref()
-                .map(|contents| Box::new(contents.dup_unchecked())),
+                .map(|contents| Box::new(contents.picture_copy())),
             dyed_color: dyed_color.clone(),
             base_color: base_color.clone(),
             banner_patterns: banner_patterns.clone(),
@@ -276,20 +276,12 @@ impl From<ComponentPatch> for Components {
 }
 
 impl Components {
-    /// A copy, nested stacks included. Temporary escape hatch.
-    pub fn dup_unchecked(&self) -> Self {
+    /// A copy for a picture or a template, nested stacks included.
+    pub(crate) fn picture_copy(&self) -> Self {
         match self.0.as_deref() {
-            Some(patch) if !patch.is_empty() => Self(Some(Box::new(patch.dup_unchecked()))),
+            Some(patch) if !patch.is_empty() => Self(Some(Box::new(patch.picture_copy()))),
             _ => Self(None),
         }
-    }
-}
-
-/// Copies nested stacks (container, bundle and projectile contents) along
-/// with the rest of the patch. Temporary escape hatch.
-impl Clone for Components {
-    fn clone(&self) -> Self {
-        self.dup_unchecked()
     }
 }
 
@@ -1091,13 +1083,6 @@ fn charged_from_nbt(tag: &Tag) -> Option<Vec<ItemStack>> {
         .iter()
         .map(|entry| ItemStack::decode_nbt(entry.as_compound()?))
         .collect()
-}
-
-/// The `container` component of `contents`, or `None` when every slot is
-/// empty (the item's default).
-pub fn container_component(contents: &[Option<ItemStack>]) -> Option<Vec<Option<ItemStack>>> {
-    let last = contents.iter().rposition(Option::is_some)?;
-    Some(dup_slice_unchecked(&contents[..=last]))
 }
 
 fn as_i64(tag: &Tag) -> Option<i64> {

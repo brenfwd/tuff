@@ -59,7 +59,7 @@ async fn open_cart(
     match open.source {
         MenuSource::Entity { entity, contents } => {
             assert_eq!(entity, cart);
-            (open.kind, contents)
+            (open.kind, stacks(&contents))
         }
         other => panic!("not an entity menu: {other:?}"),
     }
@@ -196,6 +196,12 @@ async fn items_flow_from_a_chest_through_a_hopper_minecart_into_a_hopper_below()
                 None,
                 Some(ItemStack::mint(Item::Stone, 3, MintReason::Test)),
             ),
+            pool: pool_for(&set_slot(
+                top,
+                0,
+                None,
+                Some(ItemStack::mint(Item::Stone, 3, MintReason::Test)),
+            )),
             took_result: false,
         })
         .await;
@@ -231,6 +237,7 @@ async fn items_flow_from_a_chest_through_a_hopper_minecart_into_a_hopper_below()
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     let moved: Vec<ItemStack> = contents.into_iter().flatten().collect();
     assert!(
         moved.contains(&ItemStack::mint(Item::Stone, 3, MintReason::Test)),

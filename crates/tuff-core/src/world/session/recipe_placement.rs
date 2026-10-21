@@ -3,8 +3,8 @@
 use super::*;
 use crate::protocol::play::{self, GameMode};
 use crate::world::crafting::place;
-use crate::world::menu::{self, MenuKind, grid_of, set_grid};
-use tuff_item::item::DupUnchecked;
+use crate::world::menu::{self, MenuKind, set_grid, take_grid};
+use crate::world::session::menus::Sim;
 
 impl PlayerSession {
     /// Place Recipe: the recipe book fills the open crafting grid.
@@ -40,47 +40,49 @@ impl PlayerSession {
         }
         let creative = self.mode.abilities.instabuild;
         let mut drops = Vec::new();
-        let inventory_before = self.inventory.clone();
-        let mut container = self
-            .menus
-            .menu
-            .as_mut()
-            .map(|menu| std::mem::take(&mut menu.container));
-        let container_before = container.dup_unchecked().unwrap_or_default();
-        let mut grid = grid_of(kind, container.as_deref().unwrap_or(&[]), &self.inventory);
-        let mut result = kind
-            .is_furnace()
-            .then(|| {
-                container
-                    .as_mut()
-                    .and_then(|c| c[menu::furnace::RESULT].take())
-            })
-            .flatten();
-        let outcome = place::place_recipe(
-            recipe,
-            &mut place::Grid {
-                width,
-                height,
-                slots: &mut grid,
-            },
-            std::slice::from_mut(&mut result),
-            &mut self.inventory,
-            use_max_items,
-            creative,
-            &mut drops,
-        );
-        set_grid(
-            kind,
-            container.as_deref_mut().unwrap_or(&mut []),
-            &mut self.inventory,
-            grid,
-        );
-        if kind.is_furnace()
-            && let Some(container) = container.as_mut()
-        {
-            container[menu::furnace::RESULT] = result;
-        }
-        if let (Some(menu), Some(container)) = (self.menus.menu.as_mut(), container) {
+        let mut sim = match (self.menu_mirrored(), self.menus.menu.as_ref()) {
+            (true, Some(menu)) => Some(Sim::of(&self.inventory, &menu.container)),
+            _ => None,
+        };
+        let mut own = match sim {
+            Some(_) => None,
+            None => self
+                .menus
+                .menu
+                .as_mut()
+                .map(|menu| std::mem::take(&mut menu.container)),
+        };
+        let outcome = {
+            let mut none = Vec::new();
+            let (container, inventory) = match sim.as_mut() {
+                Some(sim) => (&mut sim.container, &mut sim.inventory),
+                None => (own.as_mut().unwrap_or(&mut none), &mut self.inventory),
+            };
+            let mut grid = take_grid(kind, container, inventory);
+            let mut result = kind
+                .is_furnace()
+                .then(|| container[menu::furnace::RESULT].take())
+                .flatten();
+            let outcome = place::place_recipe(
+                recipe,
+                &mut place::Grid {
+                    width,
+                    height,
+                    slots: &mut grid,
+                },
+                std::slice::from_mut(&mut result),
+                inventory,
+                use_max_items,
+                creative,
+                &mut drops,
+            );
+            set_grid(kind, container, inventory, grid);
+            if kind.is_furnace() {
+                container[menu::furnace::RESULT] = result;
+            }
+            outcome
+        };
+        if let (Some(menu), Some(container)) = (self.menus.menu.as_mut(), own) {
             menu.container = container;
         }
         if outcome == place::PostPlace::Ghost {
@@ -96,10 +98,21 @@ impl PlayerSession {
             }
             _ => {
                 self.refresh_station();
-                self.send_menu_content();
+                if sim.is_none() {
+                    self.send_menu_content();
+                }
             }
         }
-        self.submit_container_changes(container_before, inventory_before, drops, false)
-            .await;
+        match sim {
+            Some(mut sim) => {
+                sim.drops = drops;
+                self.settle_click(sim, false, true).await;
+            }
+            None => {
+                for stack in drops {
+                    self.throw_item(stack).await;
+                }
+            }
+        }
     }
 }

@@ -236,7 +236,8 @@ fn custom_item(item: &bindings::types::ItemDecl) -> Result<CustomItemDef, String
         let compound = components
             .as_compound()
             .ok_or("its components are not a compound")?;
-        def.components = Components::from_nbt(compound);
+        def.components =
+            tuff_item::item::ComponentsSnapshot::describing(Components::from_nbt(compound));
     }
     Ok(def)
 }

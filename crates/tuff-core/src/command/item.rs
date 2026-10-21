@@ -4,7 +4,7 @@
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::DataComponentType;
 
-use tuff_item::item::{Components, ItemStack, MintReason};
+use tuff_item::item::{Components, ComponentsSnapshot, ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 use super::args::{Resources, read_identifier, read_nbt_value};
@@ -16,18 +16,25 @@ use super::reader::Reader;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemInput {
     pub item: Item,
-    pub components: Components,
+    pub components: ComponentsSnapshot,
 }
 
 impl ItemInput {
+    /// The item a template pictures.
+    pub fn from_template(template: &ItemSnapshot) -> Self {
+        Self {
+            item: template.item,
+            components: ComponentsSnapshot::of(&template.components),
+        }
+    }
+
     pub fn stack(&self, count: u8) -> ItemStack {
-        ItemStack::mint(self.item, count, MintReason::Command)
-            .with_components(self.components.clone())
+        ItemStack::mint_with(self.item, count, &self.components, MintReason::Command)
     }
 
     /// What `/give` and `/item` hand to each target, which mints its own.
-    pub fn template(&self, count: u8) -> tuff_item::item::ItemSnapshot {
-        tuff_item::item::ItemSnapshot::describe(self.item, count, self.components.clone())
+    pub fn template(&self, count: u8) -> ItemSnapshot {
+        ItemSnapshot::describe_with(self.item, count, &self.components)
     }
 }
 
@@ -206,7 +213,7 @@ pub fn parse_item_stack_with(
     }
     Ok(ItemInput {
         item,
-        components: Components::from_nbt(&nbt),
+        components: ComponentsSnapshot::describing(Components::from_nbt(&nbt)),
     })
 }
 

@@ -1,6 +1,6 @@
 use super::*;
 use tuff_item::item::BurnReason;
-use tuff_item::item::MintReason;
+use tuff_item::item::{ItemSnapshot, MintReason};
 use tuff_nbt::Compound;
 use tuff_wire::Buffer;
 use tuff_world_model::BlockPos;
@@ -99,7 +99,7 @@ fn creative_slot_accepts_plain_stacks_only() {
     assert_eq!(
         slot(64, stone, 0, 0),
         (
-            CreativeSlot::Stack(ItemStack::mint(Item::Stone, 64, MintReason::Test)),
+            CreativeSlot::Stack(ItemSnapshot::describe(Item::Stone, 64, Default::default())),
             0
         )
     );
@@ -385,7 +385,7 @@ fn creative_slot_decoding_matches_the_game() {
         let mut r = bytes_reader(&unhex(case.creative));
         assert_eq!(
             r.read_creative_slot().unwrap(),
-            CreativeSlot::Stack(case.stack.test_copy()),
+            CreativeSlot::Stack(ItemSnapshot::of(&case.stack)),
             "{}",
             case.creative
         );
@@ -428,7 +428,7 @@ fn slot_components_round_trip_through_the_creative_decoder() {
     let mut r = reader(write_creative_slot(&stack));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(stack.test_copy())
+        CreativeSlot::Stack(ItemSnapshot::of(&stack))
     );
     assert_eq!(r.remaining(), 0);
 
@@ -455,7 +455,10 @@ fn slot_components_round_trip_through_the_creative_decoder() {
     potion.components.stored_enchantments =
         Some(Enchantments::new([("minecraft:mending".to_owned(), 1)]));
     let mut r = reader(write_creative_slot(&potion));
-    assert_eq!(r.read_creative_slot().unwrap(), CreativeSlot::Stack(potion));
+    assert_eq!(
+        r.read_creative_slot().unwrap(),
+        CreativeSlot::Stack(ItemSnapshot::of(&potion))
+    );
     assert_eq!(r.remaining(), 0);
 }
 
@@ -474,7 +477,10 @@ fn suspicious_stew_effects_round_trip_on_the_wire() {
         },
     ]);
     let mut r = reader(write_creative_slot(&stew));
-    assert_eq!(r.read_creative_slot().unwrap(), CreativeSlot::Stack(stew));
+    assert_eq!(
+        r.read_creative_slot().unwrap(),
+        CreativeSlot::Stack(ItemSnapshot::of(&stew))
+    );
     assert_eq!(r.remaining(), 0);
 }
 
@@ -489,7 +495,7 @@ fn bundle_contents_round_trip_on_the_wire_nested() {
     let mut r = reader(write_creative_slot(&outer));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(outer.test_copy())
+        CreativeSlot::Stack(ItemSnapshot::of(&outer))
     );
     assert_eq!(
         ItemStack::mint_from_nbt(&outer.to_nbt(), MintReason::Test).unwrap(),
@@ -508,7 +514,7 @@ fn ominous_bottle_amplifiers_round_trip_on_the_wire() {
     let mut r = reader(write_creative_slot(&bottle));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(bottle.test_copy())
+        CreativeSlot::Stack(ItemSnapshot::of(&bottle))
     );
     assert_eq!(r.remaining(), 0);
     let saved = bottle.components.to_nbt();
@@ -527,7 +533,10 @@ fn block_state_components_round_trip_on_the_wire() {
     let bytes = write_creative_slot(&light).finish();
     assert!(bytes.windows(8).any(|w| w == b"\x05level\x017"));
     let mut r = reader(write_creative_slot(&light));
-    assert_eq!(r.read_creative_slot().unwrap(), CreativeSlot::Stack(light));
+    assert_eq!(
+        r.read_creative_slot().unwrap(),
+        CreativeSlot::Stack(ItemSnapshot::of(&light))
+    );
     assert_eq!(r.remaining(), 0);
 }
 
@@ -541,7 +550,10 @@ fn a_sulfur_cube_bucket_sends_and_takes_back_what_it_holds() {
         .other
         .insert("minecraft:sulfur_cube_content", held);
     let mut r = reader(write_creative_slot(&bucket));
-    assert_eq!(r.read_creative_slot().unwrap(), CreativeSlot::Stack(bucket));
+    assert_eq!(
+        r.read_creative_slot().unwrap(),
+        CreativeSlot::Stack(ItemSnapshot::of(&bucket))
+    );
     assert_eq!(r.remaining(), 0);
 }
 
@@ -574,7 +586,7 @@ fn display_components_round_trip_on_the_wire() {
     let mut r = reader(write_creative_slot(&stack));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(stack.test_copy())
+        CreativeSlot::Stack(ItemSnapshot::of(&stack))
     );
     assert_eq!(r.remaining(), 0);
 
@@ -651,7 +663,7 @@ fn charged_crossbows_round_trip_their_projectiles_as_templates() {
     let mut r = reader(write_creative_slot(&crossbow));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(crossbow.test_copy())
+        CreativeSlot::Stack(ItemSnapshot::of(&crossbow))
     );
     assert_eq!(r.remaining(), 0);
 
@@ -697,7 +709,7 @@ fn pot_decorations_are_sent_as_optional_templates_per_side() {
     let mut r = reader(write_creative_slot(&pot));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(pot.test_copy())
+        CreativeSlot::Stack(ItemSnapshot::of(&pot))
     );
     assert_eq!(r.remaining(), 0);
 
@@ -788,7 +800,10 @@ fn inline_banner_and_trim_definitions_decode_from_creative_slots() {
     armor.components.trim = Some(Box::new(trim));
     for stack in [banner, armor] {
         let mut r = reader(write_creative_slot(&stack));
-        assert_eq!(r.read_creative_slot().unwrap(), CreativeSlot::Stack(stack));
+        assert_eq!(
+            r.read_creative_slot().unwrap(),
+            CreativeSlot::Stack(ItemSnapshot::of(&stack))
+        );
         assert_eq!(r.remaining(), 0);
     }
 }
@@ -805,7 +820,7 @@ fn container_components_round_trip_and_bound_their_nesting() {
     let mut r = reader(write_creative_slot(&shulker));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(shulker.test_copy())
+        CreativeSlot::Stack(ItemSnapshot::of(&shulker))
     );
     assert_eq!(r.remaining(), 0);
 
@@ -847,7 +862,7 @@ fn container_components_round_trip_and_bound_their_nesting() {
         reader(write_creative_slot(&deepest))
             .read_creative_slot()
             .unwrap(),
-        CreativeSlot::Stack(deepest)
+        CreativeSlot::Stack(ItemSnapshot::of(&deepest))
     );
     assert!(
         reader(write_creative_slot(&boxed(MAX_CONTAINER_DEPTH + 2)))
@@ -956,7 +971,7 @@ fn unknown_component_types_are_skipped_but_unsupported() {
     expected.components.removed = vec!["minecraft:tool".into()];
     assert_eq!(
         reader(w).read_creative_slot().unwrap(),
-        CreativeSlot::Stack(expected)
+        CreativeSlot::Stack(ItemSnapshot::of(&expected))
     );
 
     let mut w = PacketWriter::new();

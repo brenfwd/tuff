@@ -727,25 +727,6 @@ impl PlayerSession {
     }
 
     /// Potions taken out of a brewing stand's bottle slots.
-    pub fn took_potions(&mut self, before: &[Option<ItemStack>], after: &[Option<ItemStack>]) {
-        for (slot, taken) in before
-            .iter()
-            .enumerate()
-            .take(crate::world::menu::brewing::INGREDIENT)
-        {
-            let Some(taken) = taken else {
-                continue;
-            };
-            let left = after.get(slot).and_then(Option::as_ref);
-            if left.as_ref().is_some_and(|stack| stack.item == taken.item) {
-                continue;
-            }
-            if let Some(contents) = &taken.components.potion_contents {
-                self.fire(Event::BrewedPotion(contents.potion.map(|p| p.name())));
-            }
-        }
-    }
-
     /// The progress as selectors read it.
     pub fn advancement_view(&mut self) -> View {
         let tree = self.progress.advancement_tree.clone();
@@ -868,6 +849,28 @@ fn group_arrow_kills(
         volleys.push((volley.into_iter().map(|(v, _, _)| v).collect(), weapon));
     }
     volleys
+}
+
+/// The potions taken out of a brewing stand's bottle slots between
+/// `before` and `after`, by name, for the brewed potion trigger.
+pub(crate) fn potions_taken(
+    before: &[Option<ItemStack>],
+    after: &[Option<ItemStack>],
+) -> Vec<Option<&'static str>> {
+    before
+        .iter()
+        .enumerate()
+        .take(crate::world::menu::brewing::INGREDIENT)
+        .filter_map(|(slot, taken)| {
+            let taken = taken.as_ref()?;
+            let left = after.get(slot).and_then(Option::as_ref);
+            if left.is_some_and(|stack| stack.item == taken.item) {
+                return None;
+            }
+            let contents = taken.components.potion_contents.as_ref()?;
+            Some(contents.potion.map(|p| p.name()))
+        })
+        .collect()
 }
 
 #[cfg(test)]

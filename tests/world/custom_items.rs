@@ -254,7 +254,7 @@ async fn block_clicks_go_to_the_behaviour_and_hide_the_base_item() {
     .await;
     let click = |target, id: &str, sequence| {
         let mut click = place(&player, target, Item::FlintAndSteel, sequence);
-        click.components = stack(&world, id, 1).components;
+        click.components = stack(&world, id, 1).components.into();
         click
     };
 
@@ -383,7 +383,7 @@ async fn creative_clients_get_private_data_back() {
     player
         .handle_packet(Serverbound::SetCreativeModeSlot {
             slot: 40,
-            stack: CreativeSlot::Stack(seen.test_copy()),
+            stack: CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(&seen.test_copy())),
         })
         .await;
     assert_eq!(player.inventory().slots()[40].as_ref(), Some(&held));
@@ -393,7 +393,9 @@ async fn creative_clients_get_private_data_back() {
     other
         .handle_packet(Serverbound::SetCreativeModeSlot {
             slot: 41,
-            stack: CreativeSlot::Stack(client_view(&stack(&world, CHARM, 1))),
+            stack: CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(&client_view(&stack(
+                &world, CHARM, 1,
+            )))),
         })
         .await;
     let fresh = other.inventory().slots()[41]

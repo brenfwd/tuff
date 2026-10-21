@@ -32,7 +32,7 @@ pub(super) async fn sneak_open(
     match open.source {
         MenuSource::Entity { entity, contents } => {
             assert_eq!(entity, boat);
-            contents
+            stacks(&contents)
         }
         other => panic!("not an entity menu: {other:?}"),
     }
@@ -70,13 +70,13 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     let take = vec![
         EntitySlotChange {
             slot: 4,
-            expected: Some(diamond.test_copy()),
+            expected: snap(Some(diamond.test_copy())),
             new: None,
         },
         EntitySlotChange {
             slot: 0,
             expected: None,
-            new: Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
+            new: snap(Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))),
         },
     ];
     region
@@ -85,6 +85,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
             window_id: 1,
             entity: boat,
             changes: take.clone(),
+            pool: entity_pool_for(&take.clone()),
         })
         .await;
     let accepted = expect(&mut events, |event| match event {
@@ -116,6 +117,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
             player: player.clone(),
             window_id: 1,
             entity: boat,
+            pool: entity_pool_for(&take),
             changes: take,
         })
         .await;
@@ -127,6 +129,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     })
     .await;
     assert!(!accepted, "a stale click is refused");
+    let contents = stacks(&contents);
     assert_eq!(
         contents[0],
         Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))
@@ -233,6 +236,7 @@ async fn a_chest_boat_rolls_its_loot_table_on_first_open_and_riders_open_it() {
     let MenuSource::Entity { contents, .. } = open.source else {
         panic!("not an entity menu");
     };
+    let contents = stacks(&contents);
     assert!(contents.iter().any(Option::is_some), "the loot rolled");
 
     let data = chest_boat_data(&region, raft).await;

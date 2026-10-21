@@ -34,8 +34,10 @@ fn stacks_without_components_stay_small_and_unallocated() {
 #[test]
 fn an_emptied_patch_equals_no_patch() {
     let plain = Components::default();
-    let mut emptied = plain.clone();
-    emptied.damage = Some(3);
+    let mut emptied = Components::from(ComponentPatch {
+        damage: Some(3),
+        ..Default::default()
+    });
     assert!(emptied.is_allocated());
     assert_ne!(emptied, plain);
     assert_eq!(emptied.damage, Some(3));
@@ -44,7 +46,7 @@ fn an_emptied_patch_equals_no_patch() {
     assert!(emptied.is_empty());
     assert_eq!(emptied, plain);
     assert_eq!(plain, emptied);
-    assert!(!emptied.clone().is_allocated());
+    assert!(!emptied.picture_copy().is_allocated());
     emptied.compact();
     assert!(!emptied.is_allocated());
     assert_eq!(
