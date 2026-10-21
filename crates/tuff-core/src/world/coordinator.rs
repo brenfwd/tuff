@@ -908,8 +908,19 @@ impl Coordinator {
                 }
             }
             CoordinatorMessage::PluginInventory { uuid, ops } => {
-                if let Some(online) = self.online_by_uuid(uuid) {
-                    online.handle.send(PlayerEvent::PluginInventory(ops));
+                let unsent = match self.online_by_uuid(uuid) {
+                    Some(online) => match online.handle.try_send(PlayerEvent::PluginInventory(ops))
+                    {
+                        Ok(()) => Vec::new(),
+                        Err(event) => match *event {
+                            PlayerEvent::PluginInventory(ops) => ops,
+                            _ => Vec::new(),
+                        },
+                    },
+                    None => ops,
+                };
+                for op in unsent {
+                    op.discard();
                 }
             }
             CoordinatorMessage::EditInventory { uuid, edit, reply } => {

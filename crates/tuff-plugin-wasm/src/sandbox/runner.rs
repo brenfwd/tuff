@@ -301,6 +301,11 @@ impl Sandbox {
         })
     }
 
+    /// Puts items taken from a player into one of the plugin's stashes.
+    pub fn fill_stash(&mut self, stash: u64, stacks: Vec<tuff_item::item::ItemStack>) {
+        self.state().stashes.fill(stash, stacks);
+    }
+
     /// Replaces the plugin's working copy of its persistent store.
     pub fn set_storage(&mut self, storage: Storage) {
         self.state().storage = storage;

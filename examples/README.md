@@ -10,6 +10,7 @@ into the server's `plugins/` directory and run `/tuff plugin load <file>`.
 |---|---|
 | say hello, keep per-player state, use a setting | `rust-hello/`, or `cpp-hello/` for C++ |
 | write a command with typed arguments and permissions | `rust-worldedit/` |
+| hold real items for players and hand them back, never copying one | `rust-vault/` |
 | provide or call a typed interface between plugins | `rust-messaging-client/` (optional consumer; its provider is the test guest `crates/tuff-plugin-wasm/tests/guests/rust-messaging-provider/`) |
 | call or serve a typed interface from C++ | `cpp-messaging/` (calls the same greeter provider) |
 | serve a typed API other plugins drive (bots: fake players, owners, events) | `rust-bots/` (API crate `rust-bots/api/`, test consumer `crates/tuff-plugin-wasm/tests/guests/rust-bots-consumer/`) |

@@ -29,6 +29,80 @@ pub enum InventoryOp {
         stack: tuff_item::item::ItemSnapshot,
         count: i32,
     },
+    /// Moves these stacks in, dropping what does not fit.
+    GiveStacks(Vec<ItemStack>),
+    /// [`InventoryOp::Take`], handing what is taken to `sink`.
+    TakeInto {
+        item: tuff_vanilla_data::Item,
+        count: u32,
+        all_or_nothing: bool,
+        sink: TakenSink,
+    },
+}
+
+type Deliver = Box<dyn FnOnce(Vec<ItemStack>) -> Result<(), Vec<ItemStack>> + Send + Sync>;
+
+/// Where items a feature takes from a player go instead of being used
+/// up: a plugin's stash, filled by a message to its host.
+pub struct TakenSink {
+    pub stash: u64,
+    deliver: Option<Deliver>,
+}
+
+impl TakenSink {
+    /// A sink for `stash` that nothing receives yet.
+    pub fn new(stash: u64) -> Self {
+        Self {
+            stash,
+            deliver: None,
+        }
+    }
+
+    /// Sends what is taken with `deliver`, which hands the stacks back
+    /// when no one can take them.
+    pub fn attach(
+        &mut self,
+        deliver: impl FnOnce(Vec<ItemStack>) -> Result<(), Vec<ItemStack>> + Send + Sync + 'static,
+    ) {
+        self.deliver = Some(Box::new(deliver));
+    }
+
+    /// Hands `stacks` over; they come back when no one takes them.
+    pub fn deliver(self, stacks: Vec<ItemStack>) -> Result<(), Vec<ItemStack>> {
+        match self.deliver {
+            Some(deliver) => deliver(stacks),
+            None => Err(stacks),
+        }
+    }
+}
+
+impl std::fmt::Debug for TakenSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TakenSink")
+            .field("stash", &self.stash)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for TakenSink {
+    fn eq(&self, other: &Self) -> bool {
+        self.stash == other.stash
+    }
+}
+
+impl InventoryOp {
+    /// Lets go of an edit no player will apply: stacks it carries are used
+    /// up.
+    pub fn discard(self) {
+        if let Self::GiveStacks(stacks) = self {
+            if !stacks.is_empty() {
+                log::warn!("a feature's items for an offline player were used up");
+            }
+            for stack in stacks {
+                stack.burn(BurnReason::Plugin);
+            }
+        }
+    }
 }
 
 impl PlayerSession {
@@ -42,45 +116,102 @@ impl PlayerSession {
     /// take skips the rest, so a take followed by a give is an exchange.
     pub async fn apply_inventory_ops(&mut self, ops: Vec<InventoryOp>) {
         for op in ops {
-            if let InventoryOp::Give { stack, count } = op {
-                self.give_items(stack.view(), count, tuff_item::item::MintReason::Plugin)
-                    .await;
-            } else if !self.apply_inventory_op(op) {
-                break;
+            match op {
+                InventoryOp::Give { stack, count } => {
+                    self.give_items(stack.view(), count, tuff_item::item::MintReason::Plugin)
+                        .await;
+                }
+                InventoryOp::GiveStacks(stacks) => self.receive_stacks(stacks).await,
+                InventoryOp::TakeInto {
+                    item,
+                    count,
+                    all_or_nothing,
+                    sink,
+                } => {
+                    let Some(taken) = self.take_items(item, count, all_or_nothing) else {
+                        break;
+                    };
+                    if let Err(back) = sink.deliver(taken) {
+                        self.receive_stacks(back).await;
+                    }
+                }
+                op => {
+                    if !self.apply_inventory_op(op) {
+                        break;
+                    }
+                }
             }
         }
     }
 
+    /// Puts stacks into the inventory, throwing what does not fit.
+    async fn receive_stacks(&mut self, stacks: Vec<ItemStack>) {
+        let left: Vec<ItemStack> = stacks
+            .into_iter()
+            .filter_map(|stack| self.inventory.add(stack))
+            .collect();
+        for stack in left {
+            self.throw_item(stack).await;
+        }
+        self.send_inventory();
+    }
+
+    /// Takes up to `count` of `item` out of the main slots, hotbar, off
+    /// hand and cursor; `None` when an all-or-nothing take finds too few.
+    fn take_items(
+        &mut self,
+        item: tuff_vanilla_data::Item,
+        count: u32,
+        all_or_nothing: bool,
+    ) -> Option<Vec<ItemStack>> {
+        let held = u32::try_from(Self::count_in(&self.inventory, item)).unwrap_or(0);
+        if all_or_nothing && held < count {
+            self.items_taken_hooks(item, count, 0);
+            return None;
+        }
+        let mut remaining = count.min(held);
+        let carried_hit = remaining > 0
+            && self
+                .inventory
+                .carried()
+                .is_some_and(|stack| stack.item == item);
+        let mut taken = Vec::new();
+        for slot in (36..crate::world::inventory::SLOTS).chain(9..36) {
+            if remaining == 0 {
+                break;
+            }
+            taken.extend(take_some(
+                self.inventory.slot_mut(slot),
+                item,
+                &mut remaining,
+            ));
+        }
+        if remaining > 0 && carried_hit {
+            taken.extend(take_some(
+                self.inventory.carried_mut(),
+                item,
+                &mut remaining,
+            ));
+        }
+        self.send_inventory();
+        self.items_taken_hooks(item, count, count.min(held) - remaining);
+        Some(taken)
+    }
+
     /// Applies one edit; false when an all-or-nothing take found too few.
-    pub fn apply_inventory_op(&mut self, op: InventoryOp) -> bool {
+    fn apply_inventory_op(&mut self, op: InventoryOp) -> bool {
         match op {
             InventoryOp::Take {
                 item,
                 count,
                 all_or_nothing,
             } => {
-                let held = u32::try_from(Self::count_in(&self.inventory, item)).unwrap_or(0);
-                if all_or_nothing && held < count {
-                    self.items_taken_hooks(item, count, 0);
+                let Some(taken) = self.take_items(item, count, all_or_nothing) else {
                     return false;
+                };
+                for stack in taken {
+                    stack.burn(BurnReason::Plugin);
                 }
-                let mut remaining = count.min(held);
-                let carried_hit = remaining > 0
-                    && self
-                        .inventory
-                        .carried()
-                        .is_some_and(|stack| stack.item == item);
-                for slot in (36..crate::world::inventory::SLOTS).chain(9..36) {
-                    if remaining == 0 {
-                        break;
-                    }
-                    burn_some(self.inventory.slot_mut(slot), item, &mut remaining);
-                }
-                if remaining > 0 && carried_hit {
-                    burn_some(self.inventory.carried_mut(), item, &mut remaining);
-                }
-                self.send_inventory();
-                self.items_taken_hooks(item, count, count.min(held) - remaining);
             }
             InventoryOp::Clear => {
                 for stack in self.inventory.clear() {
@@ -106,19 +237,22 @@ impl PlayerSession {
                 }
             },
             InventoryOp::Give { .. } => {}
+            op @ (InventoryOp::GiveStacks(_) | InventoryOp::TakeInto { .. }) => op.discard(),
         }
         true
     }
 }
 
-fn burn_some(held: &mut Option<ItemStack>, item: tuff_vanilla_data::Item, remaining: &mut u32) {
-    let Some(stack) = held.as_mut().filter(|stack| stack.item == item) else {
-        return;
-    };
-    let take = (*remaining).min(u32::from(stack.count()));
-    *remaining -= take;
-    stack.take(take as u8).burn(BurnReason::Plugin);
-    if stack.count() == 0 {
-        *held = None;
+fn take_some(
+    held: &mut Option<ItemStack>,
+    item: tuff_vanilla_data::Item,
+    remaining: &mut u32,
+) -> Option<ItemStack> {
+    if held.as_ref().is_none_or(|stack| stack.item != item) {
+        return None;
     }
+    let count = u32::from(held.as_ref().map_or(0, ItemStack::count));
+    let take = (*remaining).min(count);
+    *remaining -= take;
+    ItemStack::take_from(held, take as u8)
 }
