@@ -996,8 +996,10 @@ impl PlayerSession {
         let back = match self.region(region).await {
             Some(handle) => match handle.try_request(RegionRequest::SpawnEntity(item)).await {
                 Ok(()) => Vec::new(),
-                Err(RegionRequest::SpawnEntity(mut item)) => item.take_items(),
-                Err(_) => Vec::new(),
+                Err(request) => match *request {
+                    RegionRequest::SpawnEntity(mut item) => item.take_items(),
+                    _ => Vec::new(),
+                },
             },
             None => item.take_items(),
         };
@@ -1057,8 +1059,10 @@ impl PlayerSession {
                 };
                 match handle.try_request(request).await {
                     Ok(()) => None,
-                    Err(RegionRequest::SpawnItem { stack, .. }) => Some(stack),
-                    Err(_) => None,
+                    Err(request) => match *request {
+                        RegionRequest::SpawnItem { stack, .. } => Some(stack),
+                        _ => None,
+                    },
                 }
             }
             None => Some(stack),

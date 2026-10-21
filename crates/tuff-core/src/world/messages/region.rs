@@ -86,8 +86,11 @@ impl RegionHandle {
 
     /// Like [`Self::request`], but hands the request back if the region
     /// has closed, so nothing it carries is lost.
-    pub async fn try_request(&self, request: RegionRequest) -> Result<(), RegionRequest> {
-        self.requests.send(request).await.map_err(|error| error.0)
+    pub async fn try_request(&self, request: RegionRequest) -> Result<(), Box<RegionRequest>> {
+        self.requests
+            .send(request)
+            .await
+            .map_err(|error| Box::new(error.0))
     }
 
     /// Runs `run` on the region and answers what it returned; `None` if

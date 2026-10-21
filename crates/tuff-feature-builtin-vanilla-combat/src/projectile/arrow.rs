@@ -294,7 +294,7 @@ impl Arrow {
             ticks: self.ticks,
             pierced: self.pierced.clone(),
             changed: self.changed.clone(),
-            reserved: self.reserved.clone(),
+            reserved: self.reserved,
             refused_by: self.refused_by.clone(),
             effects: self.effects.clone(),
             glow_ticks: self.glow_ticks,
