@@ -107,36 +107,7 @@ impl State {
         if !(1..=abi::MAX_GIVE_COUNT).contains(&count) {
             return Err(WorldError::InvalidState);
         }
-        let too_long =
-            |text: &Option<String>| text.as_ref().is_some_and(|t| t.len() > abi::MAX_GIVE_TEXT);
-        if too_long(&custom_data) || too_long(&custom_name) {
-            return Err(WorldError::OverBudget);
-        }
-        let item =
-            <tuff_vanilla_data::Item as tuff_vanilla_data::registry::Registry>::from_name(item)
-                .filter(|item| *item != tuff_vanilla_data::Item::Air)
-                .ok_or(WorldError::InvalidState)?;
-        let mut components = tuff_nbt::Compound::new();
-        if let Some(data) = custom_data {
-            match tuff_nbt::Tag::from_snbt(&data) {
-                Ok(tag @ tuff_nbt::Tag::Compound(_)) => {
-                    components.insert("minecraft:custom_data", tag);
-                }
-                _ => return Err(WorldError::InvalidState),
-            }
-        }
-        if let Some(name) = custom_name {
-            components.insert("minecraft:custom_name", tuff_nbt::Tag::String(name));
-        }
-        let mut nbt = tuff_nbt::Compound::new();
-        nbt.insert("id", tuff_nbt::Tag::String(item.name().to_owned()));
-        nbt.insert("count", tuff_nbt::Tag::Int(1));
-        nbt.insert("components", tuff_nbt::Tag::Compound(components));
-        let stack =
-            tuff_item::item::ItemStack::mint_from_nbt(&nbt, tuff_item::item::MintReason::Template)
-                .ok_or(WorldError::InvalidState)?;
-        let template = tuff_item::item::ItemSnapshot::of(&stack);
-        stack.burn(tuff_item::item::BurnReason::Template);
+        let template = item_template(item, custom_data, custom_name)?;
         self.queue_inventory(
             player,
             InventoryOp::Give {
@@ -419,4 +390,41 @@ impl State {
         }
         Ok(())
     }
+}
+
+/// A picture of one of `item` with the optional custom data (SNBT of a
+/// compound) and plain-text name a plugin gives it.
+pub(super) fn item_template(
+    item: &str,
+    custom_data: Option<String>,
+    custom_name: Option<String>,
+) -> Result<tuff_item::item::ItemSnapshot, WorldError> {
+    let too_long =
+        |text: &Option<String>| text.as_ref().is_some_and(|t| t.len() > abi::MAX_GIVE_TEXT);
+    if too_long(&custom_data) || too_long(&custom_name) {
+        return Err(WorldError::OverBudget);
+    }
+    let item = <tuff_vanilla_data::Item as tuff_vanilla_data::registry::Registry>::from_name(item)
+        .filter(|item| *item != tuff_vanilla_data::Item::Air)
+        .ok_or(WorldError::InvalidState)?;
+    let mut components = tuff_nbt::Compound::new();
+    if let Some(data) = custom_data {
+        match tuff_nbt::Tag::from_snbt(&data) {
+            Ok(tag @ tuff_nbt::Tag::Compound(_)) => {
+                components.insert("minecraft:custom_data", tag);
+            }
+            _ => return Err(WorldError::InvalidState),
+        }
+    }
+    if let Some(name) = custom_name {
+        components.insert("minecraft:custom_name", tuff_nbt::Tag::String(name));
+    }
+    let mut nbt = tuff_nbt::Compound::new();
+    nbt.insert("id", tuff_nbt::Tag::String(item.name().to_owned()));
+    nbt.insert("count", tuff_nbt::Tag::Int(1));
+    nbt.insert("components", tuff_nbt::Tag::Compound(components));
+    let stack =
+        tuff_item::item::ItemStack::mint_from_nbt(&nbt, tuff_item::item::MintReason::Template)
+            .ok_or(WorldError::InvalidState)?;
+    Ok(stack.into_template())
 }

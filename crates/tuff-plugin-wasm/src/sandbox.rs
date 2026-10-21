@@ -478,6 +478,7 @@ pub(crate) struct State {
     outstanding: std::collections::HashSet<Handle>,
     owed: std::collections::HashSet<u64>,
     fakes: crate::fake::Fakes,
+    stashes: crate::stash::Stashes,
 }
 
 impl State {
@@ -515,6 +516,7 @@ impl State {
             outstanding: Default::default(),
             owed: Default::default(),
             fakes: Default::default(),
+            stashes: Default::default(),
         }
     }
 
@@ -790,6 +792,68 @@ impl Imports for State {
         all_or_nothing: bool,
     ) -> value::Result<Result<(), WorldError>> {
         State::host_take_items(self, player, item, count, all_or_nothing)
+    }
+
+    fn host_stash_new(&mut self) -> value::Result<Result<u64, WorldError>> {
+        State::host_stash_new(self)
+    }
+
+    fn host_stash_mint(
+        &mut self,
+        stash: u64,
+        item: &str,
+        count: u32,
+        custom_data: Option<String>,
+        custom_name: Option<String>,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_stash_mint(self, stash, item, count, custom_data, custom_name)
+    }
+
+    fn host_stash_contents(
+        &mut self,
+        stash: u64,
+    ) -> value::Result<Option<Vec<crate::wit::bindings::types::ItemStack>>> {
+        State::host_stash_contents(self, stash)
+    }
+
+    fn host_stash_split(
+        &mut self,
+        stash: u64,
+        item: Option<String>,
+        count: u32,
+    ) -> value::Result<Result<u64, WorldError>> {
+        State::host_stash_split(self, stash, item, count)
+    }
+
+    fn host_stash_merge(
+        &mut self,
+        target: u64,
+        source: u64,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_stash_merge(self, target, source)
+    }
+
+    fn host_stash_burn(&mut self, stash: u64) -> value::Result<Result<(), WorldError>> {
+        State::host_stash_burn(self, stash)
+    }
+
+    fn host_give_stash(
+        &mut self,
+        player: Uuid,
+        stash: u64,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_give_stash(self, player, stash)
+    }
+
+    fn host_take_into_stash(
+        &mut self,
+        player: Uuid,
+        item: &str,
+        count: u32,
+        all_or_nothing: bool,
+        stash: u64,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_take_into_stash(self, player, item, count, all_or_nothing, stash)
     }
 
     fn host_clear_inventory(&mut self, player: Uuid) -> value::Result<Result<(), WorldError>> {

@@ -343,3 +343,74 @@ async fn a_take_reports_how_many_items_it_removed() {
     );
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stacks_move_between_a_player_and_a_stash_without_copies() {
+    use crate::world::messages::PlayerEvent;
+    use crate::world::session::plugin_inventory::{InventoryOp, TakenSink};
+    let dir = TestDir::new();
+    let world = start(dir.path()).await;
+    let mut client = Client::new(&world);
+    *client.session.inventory.slot_mut(36) =
+        Some(ItemStack::mint(Item::Stone, 10, MintReason::Test));
+    let (delivered, mut arrived) = tokio::sync::mpsc::unbounded_channel();
+    let mut sink = TakenSink::new(7);
+    sink.attach(move |stacks| delivered.send(stacks).map_err(|refused| refused.0));
+    client
+        .session
+        .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::TakeInto {
+            item: Item::Stone,
+            count: 4,
+            all_or_nothing: true,
+            sink,
+        }]))
+        .await;
+    let taken = arrived.try_recv().expect("the stash got what was taken");
+    assert_eq!(taken.iter().map(ItemStack::count).sum::<u8>(), 4);
+    assert_eq!(
+        client.session.inventory.slots()[36]
+            .as_ref()
+            .map(ItemStack::count),
+        Some(6)
+    );
+
+    let unreachable = TakenSink::new(8);
+    client
+        .session
+        .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::TakeInto {
+            item: Item::Stone,
+            count: 2,
+            all_or_nothing: true,
+            sink: unreachable,
+        }]))
+        .await;
+    let held: u32 = client
+        .session
+        .inventory
+        .slots()
+        .iter()
+        .flatten()
+        .filter(|s| s.item == Item::Stone)
+        .map(|s| u32::from(s.count()))
+        .sum();
+    assert_eq!(held, 6, "a stash no one receives for hands the items back");
+
+    client
+        .session
+        .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::GiveStacks(
+            taken,
+        )]))
+        .await;
+    let held: u32 = client
+        .session
+        .inventory
+        .slots()
+        .iter()
+        .flatten()
+        .filter(|s| s.item == Item::Stone)
+        .map(|s| u32::from(s.count()))
+        .sum();
+    assert_eq!(held, 10, "the same items came back");
+    world.shutdown().await;
+}

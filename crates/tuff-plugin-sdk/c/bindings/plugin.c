@@ -217,6 +217,30 @@ extern void __wasm_import_tuff_plugin_host_give_item_to(int64_t, int64_t, uint8_
 __attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("take-items")))
 extern void __wasm_import_tuff_plugin_host_take_items(int64_t, int64_t, uint8_t *, size_t, int32_t, int32_t, uint8_t *);
 
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("stash-new")))
+extern void __wasm_import_tuff_plugin_host_stash_new(uint8_t *);
+
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("stash-mint")))
+extern void __wasm_import_tuff_plugin_host_stash_mint(int64_t, uint8_t *, size_t, int32_t, int32_t, uint8_t *, size_t, int32_t, uint8_t *, size_t, uint8_t *);
+
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("stash-contents")))
+extern void __wasm_import_tuff_plugin_host_stash_contents(int64_t, uint8_t *);
+
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("stash-split")))
+extern void __wasm_import_tuff_plugin_host_stash_split(int64_t, int32_t, uint8_t *, size_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("stash-merge")))
+extern void __wasm_import_tuff_plugin_host_stash_merge(int64_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("stash-burn")))
+extern void __wasm_import_tuff_plugin_host_stash_burn(int64_t, uint8_t *);
+
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("give-stash")))
+extern void __wasm_import_tuff_plugin_host_give_stash(int64_t, int64_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("take-into-stash")))
+extern void __wasm_import_tuff_plugin_host_take_into_stash(int64_t, int64_t, uint8_t *, size_t, int32_t, int32_t, int64_t, uint8_t *);
+
 __attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("clear-inventory")))
 extern void __wasm_import_tuff_plugin_host_clear_inventory(int64_t, int64_t, uint8_t *);
 
@@ -2324,6 +2348,10 @@ void tuff_plugin_host_inventory_free(tuff_plugin_host_inventory_t *ptr) {
   tuff_plugin_types_inventory_free(ptr);
 }
 
+void tuff_plugin_host_item_stack_free(tuff_plugin_host_item_stack_t *ptr) {
+  tuff_plugin_types_item_stack_free(ptr);
+}
+
 void tuff_plugin_host_world_error_free(tuff_plugin_host_world_error_t *ptr) {
   tuff_plugin_types_world_error_free(ptr);
 }
@@ -2659,6 +2687,30 @@ void tuff_plugin_host_result_list_option_entity_state_world_error_free(tuff_plug
     tuff_plugin_host_list_option_entity_state_free(&ptr->val.ok);
   } else {
     tuff_plugin_host_world_error_free(&ptr->val.err);
+  }
+}
+
+void tuff_plugin_host_result_stash_world_error_free(tuff_plugin_host_result_stash_world_error_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    tuff_plugin_host_world_error_free(&ptr->val.err);
+  }
+}
+
+void tuff_plugin_host_list_item_stack_free(tuff_plugin_host_list_item_stack_t *ptr) {
+  size_t list_len = ptr->len;
+  if (list_len > 0) {
+    tuff_plugin_host_item_stack_t *list_ptr = ptr->ptr;
+    for (size_t i = 0; i < list_len; i++) {
+      tuff_plugin_host_item_stack_free(&list_ptr[i]);
+    }
+    free(list_ptr);
+  }
+}
+
+void tuff_plugin_host_option_list_item_stack_free(tuff_plugin_host_option_list_item_stack_t *ptr) {
+  if (ptr->is_some) {
+    tuff_plugin_host_list_item_stack_free(&ptr->val);
   }
 }
 
@@ -6892,6 +6944,418 @@ bool tuff_plugin_host_take_items(tuff_plugin_host_uuid_t *player, plugin_string_
   uint8_t ret_area[2];
   uint8_t *ptr = (uint8_t *) &ret_area;
   __wasm_import_tuff_plugin_host_take_items((int64_t) ((*player).high), (int64_t) ((*player).low), (uint8_t *) (*item).ptr, (*item).len, (int32_t) (count), all_or_nothing, ptr);
+  tuff_plugin_host_result_void_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 1));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_stash_new(tuff_plugin_host_stash_t *ret, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[16];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_stash_new(ptr);
+  tuff_plugin_host_result_stash_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_stash_mint(tuff_plugin_host_stash_t stash, plugin_string_t *item, uint32_t count, plugin_string_t *maybe_custom_data, plugin_string_t *maybe_custom_name, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(1)))
+  uint8_t ret_area[2];
+  plugin_option_string_t custom_data;
+  custom_data.is_some = maybe_custom_data != NULL;if (maybe_custom_data) {
+    custom_data.val = *maybe_custom_data;
+  }
+  plugin_option_string_t custom_name;
+  custom_name.is_some = maybe_custom_name != NULL;if (maybe_custom_name) {
+    custom_name.val = *maybe_custom_name;
+  }
+  int32_t option;
+  uint8_t * option1;
+  size_t option2;
+  if ((custom_data).is_some) {
+    const plugin_string_t *payload0 = &(custom_data).val;
+    option = 1;
+    option1 = (uint8_t *) (*payload0).ptr;
+    option2 = (*payload0).len;
+  } else {
+    option = 0;
+    option1 = 0;
+    option2 = 0;
+  }
+  int32_t option5;
+  uint8_t * option6;
+  size_t option7;
+  if ((custom_name).is_some) {
+    const plugin_string_t *payload4 = &(custom_name).val;
+    option5 = 1;
+    option6 = (uint8_t *) (*payload4).ptr;
+    option7 = (*payload4).len;
+  } else {
+    option5 = 0;
+    option6 = 0;
+    option7 = 0;
+  }
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_stash_mint((int64_t) (stash), (uint8_t *) (*item).ptr, (*item).len, (int32_t) (count), option, option1, option2, option5, option6, option7, ptr);
+  tuff_plugin_host_result_void_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 1));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_stash_contents(tuff_plugin_host_stash_t stash, tuff_plugin_host_list_item_stack_t *ret) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(3*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_stash_contents((int64_t) (stash), ptr);
+  tuff_plugin_host_option_list_item_stack_t option;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      option.is_some = false;
+      break;
+    }
+    case 1: {
+      option.is_some = true;
+      option.val = (tuff_plugin_host_list_item_stack_t) { (tuff_plugin_host_item_stack_t*)(*((uint8_t **) (ptr + sizeof(void*)))), (*((size_t*) (ptr + (2*sizeof(void*))))) };
+      break;
+    }
+  }
+  *ret = option.val;
+  return option.is_some;
+}
+
+bool tuff_plugin_host_stash_split(tuff_plugin_host_stash_t stash, plugin_string_t *maybe_item, uint32_t count, tuff_plugin_host_stash_t *ret, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[16];
+  plugin_option_string_t item;
+  item.is_some = maybe_item != NULL;if (maybe_item) {
+    item.val = *maybe_item;
+  }
+  int32_t option;
+  uint8_t * option1;
+  size_t option2;
+  if ((item).is_some) {
+    const plugin_string_t *payload0 = &(item).val;
+    option = 1;
+    option1 = (uint8_t *) (*payload0).ptr;
+    option2 = (*payload0).len;
+  } else {
+    option = 0;
+    option1 = 0;
+    option2 = 0;
+  }
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_stash_split((int64_t) (stash), option, option1, option2, (int32_t) (count), ptr);
+  tuff_plugin_host_result_stash_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_stash_merge(tuff_plugin_host_stash_t target, tuff_plugin_host_stash_t source, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(1)))
+  uint8_t ret_area[2];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_stash_merge((int64_t) (target), (int64_t) (source), ptr);
+  tuff_plugin_host_result_void_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 1));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_stash_burn(tuff_plugin_host_stash_t stash, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(1)))
+  uint8_t ret_area[2];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_stash_burn((int64_t) (stash), ptr);
+  tuff_plugin_host_result_void_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 1));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_give_stash(tuff_plugin_host_uuid_t *player, tuff_plugin_host_stash_t stash, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(1)))
+  uint8_t ret_area[2];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_give_stash((int64_t) ((*player).high), (int64_t) ((*player).low), (int64_t) (stash), ptr);
+  tuff_plugin_host_result_void_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 1));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_take_into_stash(tuff_plugin_host_uuid_t *player, plugin_string_t *item, uint32_t count, bool all_or_nothing, tuff_plugin_host_stash_t stash, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(1)))
+  uint8_t ret_area[2];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_take_into_stash((int64_t) ((*player).high), (int64_t) ((*player).low), (uint8_t *) (*item).ptr, (*item).len, (int32_t) (count), all_or_nothing, (int64_t) (stash), ptr);
   tuff_plugin_host_result_void_world_error_t result;
   switch ((int32_t) *((uint8_t*) (ptr + 0))) {
     case 0: {
