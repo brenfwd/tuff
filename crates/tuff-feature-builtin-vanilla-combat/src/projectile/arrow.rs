@@ -713,10 +713,11 @@ impl Arrow {
 impl RegionEntity for Arrow {
     fn ground_pickup(&mut self) -> Option<tuff_core::world::entity::GroundPickup<'_>> {
         let creative_only = self.creative_pickup();
-        let stack = self.pickup_stack().map(DupUnchecked::dup_unchecked);
-        if !creative_only && stack.is_none() {
+        let allowed = self.pickup_stack().is_some();
+        if !creative_only && !allowed {
             return None;
         }
+        let stack = allowed.then_some(&mut self.item);
         Some(tuff_core::world::entity::GroundPickup {
             bounds: self.base.bounds(),
             reserved: &mut self.reserved,

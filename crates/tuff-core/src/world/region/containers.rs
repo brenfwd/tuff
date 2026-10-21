@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use tuff_item::item::DupUnchecked;
+use tuff_item::item::ItemSnapshot;
 use tuff_item::item::MintReason;
 
 use rand::rngs::StdRng;
@@ -1002,17 +1003,25 @@ impl RegionActor {
 
     /// Tells everyone viewing the container at `pos` about its changed
     /// slots, forgetting viewers who have left.
-    pub(super) fn broadcast_slots(
-        &mut self,
-        pos: BlockPos,
-        slots: Vec<(usize, Option<ItemStack>)>,
-    ) {
-        if slots.is_empty() {
+    pub(super) fn broadcast_slots(&mut self, pos: BlockPos, changed: &[usize]) {
+        if changed.is_empty() || !self.menus.viewers.contains_key(&pos) {
             return;
         }
-        let mut slots = slots;
+        let Some(items) = self.block_entity(pos).map(|entity| &entity.items) else {
+            return;
+        };
+        let mut slots: Vec<(usize, Option<ItemSnapshot>)> = changed
+            .iter()
+            .filter_map(|&slot| Some((slot, items.get(slot)?.as_ref().map(ItemSnapshot::of))))
+            .collect();
         if let Some(preview) = self.crafter_preview(pos) {
-            slots.push((crate::world::menu::crafter::PREVIEW, preview));
+            slots.push((
+                crate::world::menu::crafter::PREVIEW,
+                preview.as_ref().map(ItemSnapshot::of),
+            ));
+            if let Some(preview) = preview {
+                preview.burn(tuff_item::item::BurnReason::Template);
+            }
         }
         let Some(viewers) = self.menus.viewers.get_mut(&pos) else {
             return;
@@ -1023,7 +1032,7 @@ impl RegionActor {
             viewer.send(PlayerEvent::ContainerSlots {
                 dimension,
                 pos,
-                slots: slots.dup_unchecked(),
+                slots: slots.clone(),
             })
         });
         let current = viewers.len();
@@ -1062,26 +1071,35 @@ impl RegionActor {
         pos: BlockPos,
         slot: usize,
         stack: Option<ItemStack>,
-    ) {
-        let recipes = self.shared.recipes();
+    ) -> Option<ItemStack> {
         let Some(entity) = self.block_entity(pos) else {
-            return;
+            return stack;
         };
         let kind = entity.kind;
         let same = match (&entity.items[slot], &stack) {
             (Some(old), Some(new)) => old.stacks_with(new),
             _ => false,
         };
-        self.write_container_slot(pos, slot, stack);
-        if kind.is_furnace()
-            && slot == furnace::INPUT
-            && !same
-            && let Some(entity) = self.block_entity_mut(pos)
+        let displaced = self
+            .write_container_slot(pos, slot, stack)
+            .unwrap_or_else(|stack| stack);
+        if kind.is_furnace() && slot == furnace::INPUT && !same {
+            self.furnace_input_changed(pos);
+        }
+        displaced
+    }
+
+    /// Restarts the furnace at `pos` after a new kind of input arrived.
+    pub(super) fn furnace_input_changed(&mut self, pos: BlockPos) {
+        let recipes = self.shared.recipes();
+        if let Some(entity) = self.block_entity_mut(pos)
+            && let Some(kind) = Some(entity.kind).filter(|kind| kind.is_furnace())
         {
-            let items = entity.items.dup_unchecked();
+            let items = std::mem::take(&mut entity.items);
             let furnace = entity.furnace_mut().expect("a furnace");
             recipes.furnace_input_changed(kind, &items, furnace);
             let data = furnace.data();
+            entity.items = items;
             self.broadcast_data(
                 pos,
                 vec![
@@ -1206,7 +1224,7 @@ impl RegionActor {
     /// touched in order. A change to a container that is gone drops what
     /// it would have added.
     fn apply_container_changes(&mut self, changes: Vec<ContainerChange>) -> Vec<BlockPos> {
-        let mut by_pos: HashMap<BlockPos, Vec<(usize, Option<ItemStack>)>> = HashMap::new();
+        let mut by_pos: HashMap<BlockPos, Vec<usize>> = HashMap::new();
         let mut positions = Vec::new();
         for change in changes {
             if self.block_entity(change.pos).is_none() {
@@ -1229,13 +1247,10 @@ impl RegionActor {
             if !positions.contains(&change.pos) {
                 positions.push(change.pos);
             }
-            by_pos
-                .entry(change.pos)
-                .or_default()
-                .push((change.slot, change.new));
+            by_pos.entry(change.pos).or_default().push(change.slot);
         }
         for (pos, slots) in by_pos {
-            self.broadcast_slots(pos, slots);
+            self.broadcast_slots(pos, &slots);
         }
         positions
     }
@@ -1345,7 +1360,7 @@ impl RegionActor {
             slots: entity
                 .items
                 .iter()
-                .map(DupUnchecked::dup_unchecked)
+                .map(|stack| stack.as_ref().map(ItemSnapshot::of))
                 .enumerate()
                 .collect(),
         });

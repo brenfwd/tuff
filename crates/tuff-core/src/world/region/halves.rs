@@ -13,7 +13,7 @@ use super::{Column, RegionActor, block_at};
 use crate::world::block_entity::{self, ContainerKind};
 use crate::world::messages::{RegionHandle, RegionInternal};
 use crate::world::placement;
-use tuff_item::item::{ItemStack, SlotsCow};
+use tuff_item::item::{ItemSnapshot, ItemStack, SlotsCow};
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::Chunk;
 use tuff_world_model::pos::{ChunkMap, ChunkPos};
@@ -280,24 +280,30 @@ impl RegionActor {
 
     /// Puts back what a drain removed when its taker cannot be reached.
     pub(super) fn undrain(&mut self, pos: BlockPos, slot: usize, stack: ItemStack) {
-        let current = self
-            .block_entity(pos)
-            .and_then(|entity| entity.items.get(slot).map(DupUnchecked::dup_unchecked))
-            .flatten();
-        match current {
+        let observed = self.observes_containers();
+        let Some(held) = self
+            .block_entity_mut(pos)
+            .and_then(|entity| entity.items.get_mut(slot))
+        else {
+            self.spill_stack(pos, stack);
+            return;
+        };
+        let old = observed.then(|| held.as_ref().map(ItemSnapshot::of));
+        let rest = match held {
             None => {
-                self.write_container_slot(pos, slot, Some(stack.dup_unchecked()));
-                self.broadcast_slots(pos, vec![(slot, Some(stack))]);
+                *held = Some(stack);
+                None
             }
-            Some(mut held) if held.stacks_with(&stack) => match held.join(stack) {
-                Ok(()) => {
-                    self.write_container_slot(pos, slot, Some(held.dup_unchecked()));
-                    self.broadcast_slots(pos, vec![(slot, Some(held))]);
-                }
-                Err(stack) => self.spill_stack(pos, stack),
-            },
-            Some(_) => self.spill_stack(pos, stack),
+            Some(held) => held.join(stack).err(),
+        };
+        if let Some(rest) = rest {
+            self.spill_stack(pos, rest);
+            return;
         }
+        if let Some(old) = old {
+            self.report_slot(pos, slot, old);
+        }
+        self.broadcast_slots(pos, &[slot]);
     }
 
     pub(super) fn half_pulled_from(
@@ -351,6 +357,7 @@ impl RegionActor {
         part: BlockPos,
         face: Option<Facing>,
         stack: &ItemStack,
+        count: u8,
     ) -> bool {
         let Some(items) = self.part_items(part) else {
             return false;
@@ -369,7 +376,7 @@ impl RegionActor {
             kind,
             &mut items,
             face,
-            stack.dup_unchecked(),
+            stack.dup_count_unchecked(count),
             &mut changed,
             disabled,
         )

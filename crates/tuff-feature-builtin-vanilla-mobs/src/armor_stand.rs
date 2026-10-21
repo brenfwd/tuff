@@ -19,7 +19,7 @@ use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::{DispenseOutcome, SlotEdit};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -182,16 +182,21 @@ impl ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let old = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
+        let old = core.equipment.get(slot).map(ItemSnapshot::of);
         let outcome = self.swap_slot(core, slot, interaction, cx);
-        let new = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
-        if old != new {
+        let new = core.equipment.get(slot);
+        let same = match (&old, new) {
+            (None, None) => true,
+            (Some(old), Some(new)) => old == new,
+            _ => false,
+        };
+        if !same {
             cx.effects.push(Effect::HeldItems {
                 player: Some(interaction.player),
                 slots: vec![SlotEdit {
                     slot: slot as usize,
                     old,
-                    new,
+                    new: new.map(ItemSnapshot::of),
                 }],
             });
         }

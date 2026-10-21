@@ -245,8 +245,18 @@ impl ContainerHolder {
 #[derive(Debug, PartialEq)]
 pub struct SlotEdit {
     pub slot: usize,
-    pub old: Option<ItemStack>,
-    pub new: Option<ItemStack>,
+    pub old: Option<tuff_item::item::ItemSnapshot>,
+    pub new: Option<tuff_item::item::ItemSnapshot>,
+}
+
+impl SlotEdit {
+    pub fn of(slot: usize, old: Option<&ItemStack>, new: Option<&ItemStack>) -> Self {
+        Self {
+            slot,
+            old: old.map(tuff_item::item::ItemSnapshot::of),
+            new: new.map(tuff_item::item::ItemSnapshot::of),
+        }
+    }
 }
 
 /// Container slots that just changed together (one click, one hopper
@@ -274,7 +284,7 @@ pub enum ItemTaker {
 #[derive(Debug)]
 pub struct ItemPickup {
     pub taker: ItemTaker,
-    pub stack: ItemStack,
+    pub stack: tuff_item::item::ItemSnapshot,
     pub position: [f64; 3],
     pub thrower: Option<u128>,
 }

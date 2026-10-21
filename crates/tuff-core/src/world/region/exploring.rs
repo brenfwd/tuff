@@ -1,5 +1,4 @@
 use tokio::sync::oneshot;
-use tuff_item::item::DupUnchecked;
 
 use super::RegionActor;
 use crate::world::drops::EXPLORATION_PENDING;
@@ -74,9 +73,12 @@ impl RegionActor {
                         .and_then(|entity| entity.items.get(slot))
                         .is_some_and(|stack| waiting(stack.as_ref()));
                     if still_waiting {
-                        self.set_container_slot(pos, slot, found.dup_unchecked());
+                        let replaced = self.set_container_slot(pos, slot, found);
+                        if let Some(replaced) = replaced {
+                            replaced.burn(tuff_item::item::BurnReason::Transform);
+                        }
                         self.block_entity_changed(pos);
-                        self.broadcast_slots(pos, vec![(slot, found)]);
+                        self.broadcast_slots(pos, &[slot]);
                     }
                 }
                 ExploreTarget::Entity(id) => {
@@ -89,8 +91,10 @@ impl RegionActor {
                         continue;
                     };
                     if container.get(slot).is_some_and(|s| waiting(s.as_ref())) {
-                        container[slot] = found.dup_unchecked();
-                        self.entity_slots_changed(id, vec![(slot, found)], None);
+                        if let Some(replaced) = std::mem::replace(&mut container[slot], found) {
+                            replaced.burn(tuff_item::item::BurnReason::Transform);
+                        }
+                        self.entity_slots_changed(id, &[slot], None);
                     }
                 }
             }

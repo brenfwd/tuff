@@ -94,7 +94,12 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     .await;
     assert!(accepted);
     let slots = expect(&mut other_events, |event| match event {
-        PlayerEvent::EntitySlots { entity, slots, .. } if entity == boat => Some(slots),
+        PlayerEvent::EntitySlots { entity, slots, .. } if entity == boat => Some(
+            slots
+                .into_iter()
+                .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                .collect::<Vec<_>>(),
+        ),
         _ => None,
     })
     .await;

@@ -254,23 +254,33 @@ mod tests {
         pending.apply(&[
             SlotEdit {
                 slot: 0,
-                old: stack(Item::Diamond, 10),
+                old: stack(Item::Diamond, 10)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
                 new: None,
             },
             SlotEdit {
                 slot: 4,
                 old: None,
-                new: stack(Item::Diamond, 10),
+                new: stack(Item::Diamond, 10)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
             },
             SlotEdit {
                 slot: 1,
-                old: stack(Item::Stone, 3),
-                new: stack(Item::Stone, 1),
+                old: stack(Item::Stone, 3)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
+                new: stack(Item::Stone, 1)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
             },
             SlotEdit {
                 slot: 2,
                 old: None,
-                new: stack(Item::Dirt, 5),
+                new: stack(Item::Dirt, 5)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
             },
         ]);
         let records: Vec<Record> = pending

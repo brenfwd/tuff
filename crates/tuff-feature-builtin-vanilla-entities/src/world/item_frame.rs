@@ -336,7 +336,7 @@ impl ItemFrame {
         let item = self.item.take();
         if item.is_some() {
             self.changed.push(DATA_ITEM);
-            report_item(item.dup_unchecked(), None, by, cx);
+            report_item(item.as_ref(), None, by, cx);
         }
         self.release_map(item.as_ref(), cx);
         if !cx.shared.rule_bool("entity_drops") || creative {
@@ -596,12 +596,7 @@ impl RegionEntity for ItemFrame {
         if self.item.is_none() {
             let stack = interaction.stack.as_ref()?;
             self.set_item(Some(stack.dup_unchecked()));
-            report_item(
-                None,
-                self.item.dup_unchecked(),
-                Some(interaction.player),
-                cx,
-            );
+            report_item(None, self.item.as_ref(), Some(interaction.player), cx);
             self.sound(SoundEvent::EntityItemFrameAddItem, cx);
             return Some(HandEffect::Consume(1));
         }
@@ -647,14 +642,14 @@ impl RegionEntity for ItemFrame {
 
 /// Tells container observers the frame's item went from `old` to `new`.
 fn report_item(
-    old: Option<ItemStack>,
-    new: Option<ItemStack>,
+    old: Option<&ItemStack>,
+    new: Option<&ItemStack>,
     player: Option<i32>,
     cx: &mut TickContext,
 ) {
     cx.effects.push(Effect::HeldItems {
         player,
-        slots: vec![SlotEdit { slot: 0, old, new }],
+        slots: vec![SlotEdit::of(0, old, new)],
     });
 }
 

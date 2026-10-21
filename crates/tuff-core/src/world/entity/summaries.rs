@@ -482,7 +482,7 @@ pub struct GroundPickup<'a> {
     /// Only creative players take it, and they get nothing.
     pub creative_only: bool,
     /// What a player taking it gets.
-    pub stack: Option<ItemStack>,
+    pub stack: Option<&'a mut ItemStack>,
     /// Only the player with this UUID may take it (a thrown trident).
     pub only: Option<u128>,
 }
