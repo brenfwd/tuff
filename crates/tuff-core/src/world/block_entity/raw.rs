@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use tuff_vanilla_data::registry::{BlockEntityType, DataComponentType};
 
-use tuff_item::item::{Components, ItemStack, MintReason};
+use tuff_item::item::{Components, ItemStack};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -262,7 +262,7 @@ fn get(kind: BlockEntityType, nbt: &Compound, field: Field) -> Option<Tag> {
                     let slot = entry.get_byte("Slot")?;
                     let mut item = entry.clone();
                     item.remove("Slot");
-                    ItemStack::mint_from_nbt(&item, MintReason::Template)?;
+                    ItemStack::picture_from_nbt(&item).map(drop)?;
                     Some(Tag::Compound(
                         Compound::new().with("slot", slot as i32).with("item", item),
                     ))
@@ -272,7 +272,7 @@ fn get(kind: BlockEntityType, nbt: &Compound, field: Field) -> Option<Tag> {
         }
         Field::SingleItem(key) => {
             let item = nbt.get_compound(key)?;
-            ItemStack::mint_from_nbt(item, MintReason::Template)?;
+            ItemStack::picture_from_nbt(item).map(drop)?;
             Some(Tag::List(vec![Tag::Compound(
                 Compound::new().with("slot", 0).with("item", item.clone()),
             )]))
@@ -481,8 +481,8 @@ pub fn held_drop(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuff_item::item::ComponentPatch;
     use tuff_item::item::decor::BannerLayer;
+    use tuff_item::item::{ComponentPatch, MintReason};
     use tuff_item::text::TextComponent;
     use tuff_vanilla_data::Item;
     use tuff_vanilla_data::item::DyeColor;

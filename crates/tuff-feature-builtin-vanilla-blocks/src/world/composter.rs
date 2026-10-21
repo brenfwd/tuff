@@ -123,7 +123,11 @@ impl ItemPort for ComposterPort {
         let empty = with_level(state, 0);
         world.set_block_flags(at.pos, empty, UPDATE_ALL);
         changed(world, at.pos, empty, at.by);
-        (!by_hand).then_some(meal)
+        if by_hand {
+            meal.burn(tuff_item::item::BurnReason::Template);
+            return None;
+        }
+        Some(meal)
     }
 }
 
@@ -139,7 +143,10 @@ impl ItemPort for PotPort {
         let Some(nbt) = world.raw_block_entity_mut(at.pos) else {
             return false;
         };
-        let merged = match nbt.get_compound(POT_ITEM).and_then(ItemStack::from_storage) {
+        let merged = match nbt
+            .get_compound(POT_ITEM)
+            .and_then(ItemStack::picture_from_nbt)
+        {
             None => ItemStack::mint_like(stack, 1, MintReason::Transform),
             Some(mut held) => {
                 if !held.stacks_with(stack) || held.count() >= held.max_stack_size() {
@@ -150,6 +157,7 @@ impl ItemPort for PotPort {
             }
         };
         let compound: Compound = merged.to_nbt();
+        tuff_item::item::conservation::release(merged);
         nbt.insert(POT_ITEM, compound);
         world.mark_blocks_dirty(at.pos);
         true

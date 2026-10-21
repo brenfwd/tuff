@@ -105,6 +105,11 @@ pub(super) fn read_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Optio
 }
 
 pub(super) fn write_slot(nbt: &mut Compound, id: i32, holder: Holder, value: Option<ItemStack>) {
+    tuff_item::item::conservation::releasing(|| write_slot_nbt(nbt, id, holder, value));
+}
+
+/// The stack is kept as the holder's saved NBT.
+fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<ItemStack>) {
     if let Holder::Container(_, Some(key)) = holder {
         if id == 0 {
             match value {

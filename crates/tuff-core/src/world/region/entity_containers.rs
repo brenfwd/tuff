@@ -205,6 +205,13 @@ impl RegionActor {
         mut pool: Vec<ItemStack>,
     ) {
         let holder = self.entity_holder(entity);
+        let quarantined = self.quarantined();
+        let at = self
+            .ents
+            .entities
+            .get(&entity)
+            .map_or([0.0; 3], |tracked| tracked.entity.base().position)
+            .map(|axis| axis.floor() as i32);
         let viewing = self
             .menus
             .entity_viewers
@@ -219,14 +226,15 @@ impl RegionActor {
             self.answer_entity_transaction(&player, window_id, false, Vec::new(), pool);
             return;
         };
-        let valid = changes.iter().enumerate().all(|(index, change)| {
-            !changes[..index]
-                .iter()
-                .any(|other| other.slot == change.slot)
-                && container
-                    .get(change.slot)
-                    .is_some_and(|slot| holds(slot.as_ref(), change.expected.as_ref()))
-        });
+        let valid = !quarantined
+            && changes.iter().enumerate().all(|(index, change)| {
+                !changes[..index]
+                    .iter()
+                    .any(|other| other.slot == change.slot)
+                    && container
+                        .get(change.slot)
+                        .is_some_and(|slot| holds(slot.as_ref(), change.expected.as_ref()))
+            });
         let mut slots: Vec<Option<ItemStack>> = if valid {
             changes
                 .iter()
@@ -236,7 +244,26 @@ impl RegionActor {
             Vec::new()
         };
         let new: Vec<Option<ItemSnapshot>> = changes.iter().map(|c| c.new.clone()).collect();
-        let applied = valid && settle::apply(&mut slots, &new, &mut pool);
+        let refuse = valid && self.shared.conservation.take_injected_failure();
+        let settled = if valid {
+            settle::apply(&mut slots, &new, &mut pool, refuse)
+        } else {
+            settle::Settled::Refused
+        };
+        let (applied, violated) = match settled {
+            settle::Settled::Applied => (true, None),
+            settle::Settled::Refused => (false, None),
+            settle::Settled::Violated { applied, detail } => (applied, Some(detail)),
+        };
+        let violation = violated.map(|detail| crate::world::conservation::ItemViolation {
+            operation: "entity container transaction",
+            player: Some(player.id),
+            pos: BlockPos::new(at[0], at[1], at[2]),
+            item: changes
+                .iter()
+                .find_map(|change| change.new.clone().or(change.expected.clone())),
+            detail,
+        });
         if !applied {
             for (change, stack) in changes.iter().zip(slots) {
                 container[change.slot] = stack;
@@ -245,6 +272,9 @@ impl RegionActor {
                 .iter()
                 .map(|slot| slot.as_ref().map(ItemSnapshot::of))
                 .collect();
+            if let Some(violation) = violation {
+                self.item_violation(Some(&player), violation);
+            }
             self.answer_entity_transaction(&player, window_id, false, contents, pool);
             return;
         }
@@ -263,6 +293,9 @@ impl RegionActor {
         }
         if let Some(holder) = holder {
             self.report_container_edit(holder, edits);
+        }
+        if let Some(violation) = violation {
+            self.item_violation(Some(&player), violation);
         }
         self.answer_entity_transaction(&player, window_id, true, Vec::new(), pool);
         self.entity_slots_changed(entity, &changed, Some(player.id));

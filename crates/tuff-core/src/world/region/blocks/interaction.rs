@@ -246,6 +246,12 @@ impl RegionActor {
     /// Puts one of `stack` on the campfire at `pos`; false if it has no
     /// campfire recipe or no free slot.
     pub(crate) fn place_campfire_food(&mut self, pos: BlockPos, stack: ItemStack) -> bool {
+        let placed = self.place_campfire_copy(pos, &stack);
+        stack.burn(tuff_item::item::BurnReason::Template);
+        placed
+    }
+
+    fn place_campfire_copy(&mut self, pos: BlockPos, stack: &ItemStack) -> bool {
         let recipes = self.shared.recipes();
         if !self.ensure_block_entity(pos, ContainerKind::Campfire) {
             return false;
@@ -254,7 +260,7 @@ impl RegionActor {
             let entity = self.block_entity_mut(pos).expect("ensured above");
             let mut items = std::mem::take(&mut entity.items);
             let campfire = entity.campfire_mut().expect("a campfire");
-            let placed = recipes.place_food(&mut items, campfire, &stack);
+            let placed = recipes.place_food(&mut items, campfire, stack);
             entity.items = items;
             placed
         };

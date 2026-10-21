@@ -146,7 +146,7 @@ impl ItemUseExt for PlayerSession {
             })
             .unwrap_or_default();
         if !self.mode.abilities.instabuild {
-            self.inventory.take_from_hand(off_hand, 1);
+            self.inventory.consume_from_hand(off_hand, 1);
             self.send_inventory();
         }
         let set = self.shared.recipes();
@@ -778,7 +778,7 @@ impl ItemUseExt for PlayerSession {
             .stats
             .award(Stat::item(StatType::Used, Item::WindCharge), 1);
         if !self.mode.abilities.instabuild {
-            self.inventory.take_from_hand(off_hand, 1);
+            self.inventory.consume_from_hand(off_hand, 1);
         }
         if let Some(cooldown) = Item::WindCharge.use_cooldown() {
             self.add_cooldown(Item::WindCharge, cooldown.ticks());
@@ -1011,7 +1011,7 @@ impl ItemUseExt for PlayerSession {
         }
         if !self.mode.abilities.instabuild {
             let before = self.inventory.hand(off_hand).map_or(0, |s| s.count());
-            self.inventory.take_from_hand(off_hand, 1);
+            self.inventory.consume_from_hand(off_hand, 1);
             if before > 0
                 && let Some(remainder) = consumed.as_deref().and_then(ItemStack::use_remainder)
             {

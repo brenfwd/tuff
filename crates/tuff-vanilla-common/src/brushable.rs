@@ -169,13 +169,18 @@ fn unpack_loot(
     };
     nbt.remove(LOOT_TABLE);
     nbt.remove(LOOT_TABLE_SEED);
-    match rolled.into_iter().next() {
+    let mut rolled = rolled.into_iter();
+    match rolled.next() {
         Some(stack) => {
             nbt.insert(ITEM, stack.to_nbt());
+            tuff_item::item::conservation::release(stack);
         }
         None => {
             nbt.remove(ITEM);
         }
+    }
+    for extra in rolled {
+        extra.burn(tuff_item::item::BurnReason::Loot);
     }
     world.mark_blocks_dirty(pos);
     player.send(PlayerEvent::Advancement(Box::new(

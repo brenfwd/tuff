@@ -52,7 +52,12 @@ pub fn enchant<S: AsRef<str>>(mut stack: ItemStack, chosen: &[(S, i32)]) -> Item
         return stack;
     }
     if stack.item == Item::Book {
-        stack = ItemStack::mint(Item::EnchantedBook, stack.count, MintReason::Transform);
+        let count = stack.count;
+        std::mem::replace(
+            &mut stack,
+            ItemStack::mint(Item::EnchantedBook, count, MintReason::Transform),
+        )
+        .burn(crate::item::BurnReason::Transform);
     }
     let target = if stack.item == Item::EnchantedBook {
         &mut stack.components.stored_enchantments

@@ -73,18 +73,23 @@ fn set_has_record<W: RegionWorld + ?Sized>(
 
 /// Puts `record` (one item) into the empty jukebox at `pos` and starts
 /// its song. False when there is no empty jukebox there.
-pub fn insert<W: RegionWorld + ?Sized>(world: &mut W, pos: BlockPos, record: ItemStack) -> bool {
+pub fn insert<W: RegionWorld + ?Sized>(
+    world: &mut W,
+    pos: BlockPos,
+    record: ItemStack,
+) -> Result<(), ItemStack> {
     let Some(state) = jukebox_at(world, pos) else {
-        return false;
+        return Err(record);
     };
     let Some(nbt) = world.raw_block_entity_mut(pos) else {
-        return false;
+        return Err(record);
     };
     if nbt.contains_key(RECORD) {
-        return false;
+        return Err(record);
     }
     nbt.insert(RECORD, record.to_nbt());
     let song = song_id(&record);
+    tuff_item::item::conservation::release(record);
     if song.is_some() {
         nbt.insert(TICKS, Tag::Long(0));
     }
@@ -96,7 +101,7 @@ pub fn insert<W: RegionWorld + ?Sized>(world: &mut W, pos: BlockPos, record: Ite
     } else {
         world.mark_blocks_dirty(pos);
     }
-    true
+    Ok(())
 }
 
 /// Swaps the jukebox's item for `record` (any item, as `/item` does): the
@@ -106,13 +111,24 @@ pub fn replace<W: RegionWorld + ?Sized>(
     pos: BlockPos,
     record: Option<ItemStack>,
 ) -> bool {
+    let refuse = |record: Option<ItemStack>| {
+        if let Some(record) = record {
+            record.burn(tuff_item::item::BurnReason::Template);
+        }
+        false
+    };
     let Some(state) = jukebox_at(world, pos) else {
-        return false;
+        return refuse(record);
     };
     let Some(nbt) = world.raw_block_entity_mut(pos) else {
-        return false;
+        return refuse(record);
     };
-    nbt.remove(RECORD);
+    if let Some(old) = nbt
+        .remove(RECORD)
+        .and_then(|old| old.as_compound().and_then(ItemStack::from_storage))
+    {
+        old.burn(tuff_item::item::BurnReason::Command);
+    }
     let was_playing = nbt.remove(TICKS).is_some();
     let song = record.as_ref().and_then(song_id);
     if let Some(record) = &record {
@@ -122,6 +138,7 @@ pub fn replace<W: RegionWorld + ?Sized>(
         nbt.insert(TICKS, Tag::Long(0));
     }
     set_has_record(world, pos, state, record.is_some());
+    tuff_item::item::conservation::release(record);
     match song {
         Some(song) => {
             world.level_event(play::level_event::SOUND_PLAY_JUKEBOX_SONG, pos, song as i32);
@@ -256,6 +273,8 @@ impl tuff_core::world::item_port::ItemPort for JukeboxPort {
                 at.pos,
                 ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Transform),
             )
+            .map_err(|refused| refused.burn(tuff_item::item::BurnReason::Template))
+            .is_ok()
     }
 
     fn replace(
@@ -275,7 +294,10 @@ impl tuff_core::world::item_port::ItemPort for JukeboxPort {
         if !world.owns(at.pos) {
             return None;
         }
-        world.raw_block_entity(at.pos).and_then(record)
+        world
+            .raw_block_entity(at.pos)?
+            .get_compound(RECORD)
+            .and_then(ItemStack::from_storage)
     }
 
     fn take(

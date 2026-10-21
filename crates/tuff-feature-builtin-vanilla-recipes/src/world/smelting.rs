@@ -99,7 +99,7 @@ pub fn tick_furnace(
             None => furnace.cooking_timer = 0,
             Some(ingredient) => {
                 if let Some((name, recipe)) = recipe_for(recipes, kind, ingredient) {
-                    let result = result_stack(&recipe.result);
+                    let result = tuff_core::world::crafting::result_template(&recipe.result);
                     if result.count() > 0 && can_burn(items, &result) {
                         if !is_lit {
                             let (burn_ticks, speed) = fuel.map_or((0, 1.0), |fuel| {

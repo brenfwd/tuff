@@ -12,6 +12,7 @@ pub const DEFAULT: Duration = Duration::from_secs(600);
 /// Disarms the watchdog when dropped.
 pub struct Watchdog {
     _disarm: mpsc::Sender<()>,
+    _fixtures: tuff_item::item::conservation::FixtureThread,
 }
 
 /// Aborts the process if the returned guard is still alive after `limit`.
@@ -32,5 +33,8 @@ pub fn arm(limit: Duration) -> Watchdog {
             }
         })
         .expect("cannot start the watchdog thread");
-    Watchdog { _disarm: disarm }
+    Watchdog {
+        _disarm: disarm,
+        _fixtures: tuff_item::item::conservation::fixture_thread(),
+    }
 }

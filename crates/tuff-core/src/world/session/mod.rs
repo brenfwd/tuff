@@ -773,6 +773,7 @@ impl PlayerSession {
             .coordinator
             .send(CoordinatorMessage::Left { player: self.id })
             .await;
+        tuff_item::item::conservation::release(self);
         let _ = done.send(true);
     }
 
@@ -1163,7 +1164,15 @@ impl PlayerSession {
         self.leaving_hooks().await;
         self.detach_from_regions().await;
         self.keep_granted_items();
-        let _ = self.save_task().await;
+        let deferred = self
+            .menus
+            .save_barrier
+            .take()
+            .and_then(|barrier| barrier.ticket);
+        let _ = self.save_task_in(deferred).await;
+        self.shared
+            .conservation
+            .release(crate::world::conservation::Subject::Player(self.id));
         log::info!("{} left the game", self.profile.name);
     }
 

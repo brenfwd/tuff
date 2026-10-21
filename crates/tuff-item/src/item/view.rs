@@ -99,6 +99,7 @@ impl ItemSnapshot {
             item,
             count,
             components,
+            tally: super::ledger::Tally::Picture,
         }))
     }
 

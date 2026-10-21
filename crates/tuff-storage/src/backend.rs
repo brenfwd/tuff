@@ -26,6 +26,13 @@ pub trait Documents: Send + Sync {
     fn read(&self, document: Document<'_>) -> io::Result<Option<Compound>>;
     fn write(&self, document: Document<'_>, root: Compound) -> io::Result<()>;
     fn exists(&self, document: Document<'_>) -> bool;
+    /// Deletes a document (a missing one is fine).
+    fn remove(&self, document: Document<'_>) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!("this storage cannot delete {document:?}"),
+        ))
+    }
     /// Every document currently stored, in no particular order. Used by
     /// offline tools (world conversion) that must copy everything without
     /// knowing document identities ahead of time.
@@ -129,6 +136,16 @@ pub trait WorldBackend: Send + Sync + 'static {
         region: FileRegionPos,
     ) -> io::Result<Box<dyn RegionStore>>;
     fn blob_codec(&self) -> Arc<dyn BlobCodec>;
+    /// The journal that makes each world save land whole, for a backend
+    /// opened through [`crate::journal::JournaledBackend`].
+    fn save_journal(&self) -> Option<Arc<crate::journal::SaveJournal>> {
+        None
+    }
+    /// Where a backend keeping everything in one file keeps its save
+    /// journal; `None` puts it in a directory beside the world.
+    fn journal_store(&self) -> Option<Box<dyn crate::journal::JournalStore>> {
+        None
+    }
     /// Where the server keeps its configuration, for a backend that holds
     /// it alongside the world. `None` leaves it in the instance directory.
     fn config(&self) -> Option<Arc<dyn ConfigStore>> {

@@ -615,4 +615,6 @@ pub struct SaveBarrier {
     pub release: oneshot::Receiver<()>,
     /// Told once the player's data is written.
     pub written: Option<oneshot::Sender<()>>,
+    /// The world save the player's data belongs to.
+    pub ticket: Option<tuff_storage::journal::EpochTicket>,
 }

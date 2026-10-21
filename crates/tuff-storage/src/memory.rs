@@ -129,6 +129,11 @@ impl Documents for MemoryBackend {
             .contains_key(&Key::of(document))
     }
 
+    fn remove(&self, document: Document<'_>) -> io::Result<()> {
+        self.documents.lock().unwrap().remove(&Key::of(document));
+        Ok(())
+    }
+
     fn list(&self) -> io::Result<Vec<DocumentId>> {
         Ok(self
             .documents

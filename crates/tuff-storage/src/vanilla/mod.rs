@@ -20,6 +20,8 @@ use tuff_world_model::pos::{ChunkPos, FileRegionPos};
 pub const NAME: &str = "vanilla";
 use crate::files::{read_nbt_file, safe_replace, write_nbt_file};
 const SESSION_LOCK: &str = "session.lock";
+/// The save journal's directory inside the world (see [`crate::journal`]).
+pub const JOURNAL_DIR: &str = "tuff-journal";
 /// Vanilla writes a snowman (U+2603) into `session.lock`.
 const SESSION_LOCK_CONTENT: &[u8] = b"\xE2\x98\x83";
 
@@ -291,7 +293,7 @@ fn list_region_files(dir: &Path) -> io::Result<Vec<FileRegionPos>> {
 fn is_modeled_path(rel: &Path) -> bool {
     let mut components = rel.components().map(|c| c.as_os_str().to_string_lossy());
     match components.next().as_deref() {
-        Some("level.dat" | "level.dat_old" | "session.lock") => true,
+        Some("level.dat" | "level.dat_old" | "session.lock" | JOURNAL_DIR) => true,
         Some("data") => true,
         Some("players") => matches!(
             components.next().as_deref(),
@@ -603,6 +605,13 @@ impl Documents for VanillaBackend {
 
     fn exists(&self, document: Document<'_>) -> bool {
         self.path(document).exists()
+    }
+
+    fn remove(&self, document: Document<'_>) -> io::Result<()> {
+        match fs::remove_file(self.path(document)) {
+            Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
+            _ => Ok(()),
+        }
     }
 
     fn list(&self) -> io::Result<Vec<DocumentId>> {

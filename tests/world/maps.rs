@@ -919,6 +919,7 @@ mod explorer {
                     blocks: Some(blob),
                     entities: EntityWrite::Keep,
                     pois: EntityWrite::Keep,
+                    ticket: None,
                 }],
             )
             .await

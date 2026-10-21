@@ -199,7 +199,7 @@ pub trait Interact: RegionWorld + Rest {
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
-                .and_then(ItemStack::from_storage);
+                .and_then(ItemStack::picture_from_nbt);
             let old = stored.as_ref().map(tuff_item::item::ItemSnapshot::of);
             let next = match stored {
                 None => held,
@@ -224,6 +224,7 @@ pub trait Interact: RegionWorld + Rest {
                 tuff_core::world::region_api::ContainerHolder::Block(pos),
                 &[(0, old.as_deref(), Some(&next))],
             );
+            tuff_item::item::conservation::release(next);
             Some((item, ratio))
         });
         let Some((item, ratio)) = inserted else {

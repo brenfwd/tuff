@@ -117,6 +117,10 @@ fn pulse(world: &mut dyn RegionWorld, pos: BlockPos) {
 }
 
 fn place_book(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState, book: ItemStack) {
+    tuff_item::item::conservation::releasing(|| store_book(world, pos, state, book));
+}
+
+fn store_book(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState, book: ItemStack) {
     let Some(next) = state.with("has_book", "true") else {
         return;
     };
@@ -170,14 +174,17 @@ impl RegionHooks for Lecterns {
         let Some((book, page)) = book(world, pos) else {
             return true;
         };
+        if button == BUTTON_TAKE && may_build {
+            take(world, pos, state, book, player);
+            return true;
+        }
         match button {
-            BUTTON_TAKE if !may_build => {}
-            BUTTON_TAKE => take(world, pos, state, book, player),
             BUTTON_PREVIOUS => set_page(world, pos, page - 1, &book),
             BUTTON_NEXT => set_page(world, pos, page + 1, &book),
             b if b >= BUTTON_PAGE => set_page(world, pos, b - BUTTON_PAGE, &book),
             _ => {}
         }
+        tuff_item::item::conservation::release(book);
         true
     }
 }

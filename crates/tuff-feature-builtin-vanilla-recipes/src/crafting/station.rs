@@ -4,7 +4,7 @@
 use tuff_core::protocol::recipe::{RecipeDisplay, SlotDisplay};
 use tuff_core::registry::Registries;
 use tuff_core::world::crafting::{
-    CookingStation, Placement, Recipe, SmithingSlots, register_unlocked, result_stack, static_name,
+    CookingStation, Placement, Recipe, SmithingSlots, register_unlocked, static_name,
     with_input_components,
 };
 use tuff_item::item::ItemStack;
@@ -118,7 +118,9 @@ impl Recipe for Cooking {
         vec![RecipeDisplay::Furnace {
             ingredient: slot(self.recipe.ingredient.clone()),
             fuel: SlotDisplay::AnyFuel,
-            result: SlotDisplay::template(result_stack(&self.recipe.result)),
+            result: SlotDisplay::template(tuff_core::world::crafting::result_template(
+                &self.recipe.result,
+            )),
             station: SlotDisplay::Item(self.station.icon()),
             duration: self.recipe.cooking_time as u32,
             experience: self.recipe.experience,
@@ -183,7 +185,9 @@ impl Recipe for Stonecutting {
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Stonecutter {
             input: slot(self.recipe.ingredient.clone()),
-            result: SlotDisplay::template(result_stack(&self.recipe.result)),
+            result: SlotDisplay::template(tuff_core::world::crafting::result_template(
+                &self.recipe.result,
+            )),
             station: SlotDisplay::Item(Item::Stonecutter),
         }]
     }
@@ -253,7 +257,9 @@ impl Recipe for SmithingTransform {
             template: optional_slot(self.recipe.template.clone()),
             base: slot(self.recipe.base.clone()),
             addition: optional_slot(self.recipe.addition.clone()),
-            result: SlotDisplay::template(result_stack(&self.recipe.result)),
+            result: SlotDisplay::template(tuff_core::world::crafting::result_template(
+                &self.recipe.result,
+            )),
             station: SlotDisplay::Item(Item::SmithingTable),
         }]
     }

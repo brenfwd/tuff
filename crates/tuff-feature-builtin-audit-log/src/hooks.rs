@@ -494,6 +494,38 @@ impl RegionHooks for ItemHooks {
         ));
     }
 
+    fn item_violation(
+        &self,
+        world: &mut dyn RegionWorld,
+        violation: &tuff_core::world::conservation::ItemViolation,
+    ) {
+        let shared = world.shared().clone();
+        let Some(log) = service(&shared) else {
+            return;
+        };
+        let who = violation.player.map_or_else(
+            || Who::cause("#server"),
+            |player_id| player(world, player_id),
+        );
+        let mut record = Record::new(
+            now_ms(),
+            who,
+            Kind::Custom,
+            world.dimension_id(),
+            block_pos(violation.pos),
+        );
+        record.material = Some("tuff:item_conservation".to_owned());
+        record.text = Some(format!(
+            "{} refused: {}",
+            violation.operation, violation.detail
+        ));
+        if let Some(item) = &violation.item {
+            record.amount = i32::from(item.count());
+            record.data = Some(item.to_nbt());
+        }
+        log.log(record);
+    }
+
     fn entity_died(&self, world: &mut dyn RegionWorld, death: &EntityDeath) {
         let shared = world.shared().clone();
         let Some(log) = service(&shared).filter(|log| log.enabled(Kind::Kill)) else {

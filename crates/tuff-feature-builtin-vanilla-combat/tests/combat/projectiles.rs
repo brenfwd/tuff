@@ -296,7 +296,11 @@ async fn loaded(region: &RegionHandle, id: i32) -> Vec<ItemStack> {
     nbt.get("equipment")
         .and_then(|e| e.as_compound()?.get("mainhand")?.as_compound())
         .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
-        .and_then(|crossbow| crossbow.components.into_patch().charged_projectiles)
+        .and_then(|mut crossbow| {
+            std::mem::take(&mut crossbow.components)
+                .into_patch()
+                .charged_projectiles
+        })
         .unwrap_or_default()
 }
 

@@ -68,6 +68,10 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
 }
 
 impl RegionEntity for OminousItemSpawner {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.item.take().into_iter().collect()
+    }
+
     fn ignores_pistons(&self) -> bool {
         true
     }

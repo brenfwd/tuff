@@ -333,6 +333,7 @@ pub fn map_on_threads<T: Sync, R: Send>(items: &[T], map: impl Fn(&T) -> R + Syn
         let workers: Vec<_> = (0..threads)
             .map(|_| {
                 scope.spawn(|| {
+                    let _fixtures = tuff_item::item::conservation::fixture_thread();
                     tuff_datapack::tags::built_in_scope(|| {
                         let mut done = Vec::new();
                         loop {

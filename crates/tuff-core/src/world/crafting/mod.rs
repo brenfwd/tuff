@@ -296,14 +296,25 @@ impl Placement {
 /// The stack a data recipe's result describes.
 pub fn result_stack(result: &RecipeResult) -> ItemStack {
     let count = result.count.clamp(1, MAX_RESULT_COUNT) as u8;
-    let components = result
+    ItemStack::mint(result.item, count, MintReason::Crafting)
+        .with_components(result_components(result))
+}
+
+/// A picture of what `result` makes: for displays and previews.
+pub fn result_template(result: &RecipeResult) -> ItemStack {
+    let count = result.count.clamp(1, MAX_RESULT_COUNT) as u8;
+    ItemStack::mint(result.item, count, MintReason::Template)
+        .with_components(result_components(result))
+}
+
+fn result_components(result: &RecipeResult) -> Components {
+    result
         .components
         .as_deref()
         .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
         .and_then(|value| tuff_item::registries::codecs::json_to_nbt(&value))
         .and_then(|tag| tag.as_compound().map(Components::from_nbt))
-        .unwrap_or_default();
-    ItemStack::mint(result.item, count, MintReason::Crafting).with_components(components)
+        .unwrap_or_default()
 }
 
 /// A result stack built over an input's components: the input's component
@@ -318,7 +329,7 @@ pub fn with_input_components(
         Some(result) => (
             result.item,
             result.count + extra_count,
-            result_stack(result).components,
+            result_components(result),
         ),
         None => (input.item, 1 + extra_count, Components::default()),
     };
@@ -872,7 +883,7 @@ impl RecipeSet {
             .map(|cutting| {
                 (
                     cutting.ingredient.clone(),
-                    SlotDisplay::template(result_stack(&cutting.result)),
+                    SlotDisplay::template(result_template(&cutting.result)),
                 )
             })
             .collect()

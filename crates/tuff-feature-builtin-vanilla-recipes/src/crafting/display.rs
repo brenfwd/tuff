@@ -7,7 +7,6 @@ use tuff_vanilla_data::recipe::{Ingredient, Recipe};
 use tuff_vanilla_data::registry::{DataComponentType, RecipeBookCategory};
 use tuff_vanilla_data::{Frozen, Item};
 
-use super::result_stack;
 use super::{Shaped, Shapeless};
 use tuff_core::world::crafting::{Recipe as _, crafting_category};
 use tuff_item::item::{ItemStack, MintReason};
@@ -80,7 +79,7 @@ pub fn displays_of(recipe: &Recipe) -> Vec<RecipeDisplay> {
                 let count = super::transmute_count(transmute, materials);
                 let result = match &transmute.result {
                     Some(result) => {
-                        let mut shown = result_stack(result);
+                        let mut shown = tuff_core::world::crafting::result_template(result);
                         shown.resize(
                             count.min(99) as u8,
                             MintReason::Template,
@@ -135,7 +134,9 @@ pub fn displays_of(recipe: &Recipe) -> Vec<RecipeDisplay> {
                 width: 3,
                 height: 3,
                 ingredients: vec![m(), m(), m(), m(), source, m(), m(), m(), m()],
-                result: SlotDisplay::WithAnyPotion(Box::new(stack(result_stack(&imbue.result)))),
+                result: SlotDisplay::WithAnyPotion(Box::new(stack(
+                    tuff_core::world::crafting::result_template(&imbue.result),
+                ))),
                 station: crafting_table(),
             }]
         }

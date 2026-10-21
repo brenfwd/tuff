@@ -1189,7 +1189,7 @@ fn dispensing_items(
     world: &dyn RegionWorld,
     config: &Config,
     pos: BlockPos,
-) -> Vec<(ItemStack, u64)> {
+) -> Vec<(tuff_item::item::ItemSnapshot, u64)> {
     let mut rng = StdRng::seed_from_u64(low_resolution_seed(world, pos));
     world
         .shared()
@@ -1198,7 +1198,7 @@ fn dispensing_items(
         .into_iter()
         .map(|stack| {
             let weight = u64::from(stack.count());
-            (stack.keep(1, BurnReason::Loot), weight)
+            (stack.keep(1, BurnReason::Loot).into_template(), weight)
         })
         .collect()
 }

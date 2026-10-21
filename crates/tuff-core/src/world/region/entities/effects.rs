@@ -428,6 +428,10 @@ impl RegionActor {
         self.apply_effects(target, chunk, effects);
         if !outcome.is_some_and(|o| o.hurt) {
             self.rebound(&hit);
+        } else if let Some(mut spent) = hit.rebound.as_ref().and_then(|r| r.take()) {
+            for stack in spent.take_items() {
+                stack.burn(tuff_item::item::BurnReason::Consumed);
+            }
         }
     }
 

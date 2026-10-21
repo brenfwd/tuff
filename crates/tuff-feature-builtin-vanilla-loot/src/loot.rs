@@ -264,7 +264,7 @@ pub fn table_drops_in(
     let Some(table) = tables.get(name) else {
         return Vec::new();
     };
-    let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Loot));
+    let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Template));
     let context = Context {
         tables,
         visiting: RefCell::default(),
@@ -567,8 +567,8 @@ fn modify_stack(
         }
         "minecraft:set_item" => {
             if let Some(item) = params["item"].as_str().and_then(Item::from_name) {
-                stack = ItemStack::mint(item, stack.count(), MintReason::Loot)
-                    .with_components(stack.components);
+                let count = stack.count();
+                stack = stack.into_item(item, count, MintReason::Loot, BurnReason::Loot);
             }
         }
         "minecraft:furnace_smelt" => {
@@ -579,8 +579,8 @@ fn modify_stack(
                 None => smelting_recipe(stack.item).map(|recipe| recipe.result.item),
             };
             if let Some(item) = smelted {
-                stack = ItemStack::mint(item, stack.count(), MintReason::Loot)
-                    .with_components(stack.components);
+                let count = stack.count();
+                stack = stack.into_item(item, count, MintReason::Loot, BurnReason::Loot);
             }
         }
         "minecraft:set_name" => {
@@ -631,8 +631,13 @@ fn modify_stack(
         "minecraft:set_enchantments" => {
             let add = params["add"].as_bool() == Some(true);
             if stack.item == Item::Book {
-                stack = ItemStack::mint(Item::EnchantedBook, stack.count(), MintReason::Loot)
-                    .with_components(stack.components);
+                let count = stack.count();
+                stack = stack.into_item(
+                    Item::EnchantedBook,
+                    count,
+                    MintReason::Loot,
+                    BurnReason::Loot,
+                );
             }
             let target = if stack.item == Item::EnchantedBook {
                 &mut stack.components.stored_enchantments

@@ -111,11 +111,79 @@ pub fn covers<'a>(
     })
 }
 
+/// How [`apply`] went.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Settled {
+    Applied,
+    /// The pool could not cover the gains: nothing changed.
+    Refused,
+    /// The items before and after differ. With `applied` false nothing
+    /// changed; otherwise the stacks moved and the actors involved must
+    /// not be saved.
+    Violated {
+        applied: bool,
+        detail: String,
+    },
+}
+
+/// Counts of each item across `slots` and `pool`.
+fn census<'a>(stacks: impl Iterator<Item = &'a ItemStack>) -> Vec<(Item, u64)> {
+    let mut counts: Vec<(Item, u64)> = Vec::new();
+    for stack in stacks.filter(|stack| !stack.is_empty()) {
+        match counts.iter_mut().find(|(item, _)| *item == stack.item) {
+            Some((_, count)) => *count += u64::from(stack.count()),
+            None => counts.push((stack.item, u64::from(stack.count()))),
+        }
+    }
+    counts.sort_unstable_by_key(|(item, _)| *item as u32);
+    counts
+}
+
+fn census_of(slots: &[Option<ItemStack>], pool: &[ItemStack]) -> Vec<(Item, u64)> {
+    census(slots.iter().flatten().chain(pool))
+}
+
+/// [`apply_moves`] with the conservation check: the items in `slots` and
+/// `pool` together are the same before and after. `refuse_check` makes
+/// the check fail before anything moves (failure injection in tests).
+pub fn apply(
+    slots: &mut [Option<ItemStack>],
+    new: &[Option<ItemSnapshot>],
+    pool: &mut Vec<ItemStack>,
+    refuse_check: bool,
+) -> Settled {
+    if refuse_check {
+        return Settled::Violated {
+            applied: false,
+            detail: "the transfer check was made to fail".to_owned(),
+        };
+    }
+    if !tuff_item::item::conservation::checks() {
+        return match apply_moves(slots, new, pool) {
+            true => Settled::Applied,
+            false => Settled::Refused,
+        };
+    }
+    let before = census_of(slots, pool);
+    if !apply_moves(slots, new, pool) {
+        return Settled::Refused;
+    }
+    let after = census_of(slots, pool);
+    if before == after {
+        Settled::Applied
+    } else {
+        Settled::Violated {
+            applied: true,
+            detail: format!("held {before:?} before and {after:?} after"),
+        }
+    }
+}
+
 /// Applies a transaction to `slots`, each holding what the sender
 /// expected: what each loses goes into `pool`, then what each gains comes
 /// out of it. When the pool cannot cover the gains nothing changes and
 /// the answer is false.
-pub fn apply(
+fn apply_moves(
     slots: &mut [Option<ItemStack>],
     new: &[Option<ItemSnapshot>],
     pool: &mut Vec<ItemStack>,
@@ -257,7 +325,7 @@ mod tests {
         let mut slots = vec![Some(stack(Item::Stone, 10)), None];
         let mut pool = vec![stack(Item::Dirt, 3)];
         let new = vec![picture(Item::Stone, 4), picture(Item::Dirt, 3)];
-        assert!(apply(&mut slots, &new, &mut pool));
+        assert_eq!(apply(&mut slots, &new, &mut pool, false), Settled::Applied);
         assert_eq!(slots[0].as_ref().map(ItemStack::count), Some(4));
         assert_eq!(
             slots[1].as_ref().map(|s| (s.item, s.count())),
@@ -273,11 +341,26 @@ mod tests {
         let mut slots = vec![Some(stack(Item::Stone, 10)), None];
         let mut pool = vec![stack(Item::Dirt, 2)];
         let new = vec![None, picture(Item::Dirt, 3)];
-        assert!(!apply(&mut slots, &new, &mut pool));
+        assert_eq!(apply(&mut slots, &new, &mut pool, false), Settled::Refused);
         assert_eq!(slots[0].as_ref().map(ItemStack::count), Some(10));
         assert!(slots[1].is_none());
         assert_eq!(pool.len(), 1);
         assert_eq!(pool[0].count(), 2);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_failed_transfer_check_moves_nothing() {
+        let mut slots = vec![Some(stack(Item::Stone, 10)), None];
+        let mut pool = vec![stack(Item::Dirt, 3)];
+        let new = vec![picture(Item::Stone, 4), picture(Item::Dirt, 3)];
+        assert!(matches!(
+            apply(&mut slots, &new, &mut pool, true),
+            Settled::Violated { applied: false, .. }
+        ));
+        assert_eq!(slots[0].as_ref().map(ItemStack::count), Some(10));
+        assert!(slots[1].is_none());
+        assert_eq!((pool[0].item, pool[0].count()), (Item::Dirt, 3));
     }
 
     #[tuff_core::watchdog]

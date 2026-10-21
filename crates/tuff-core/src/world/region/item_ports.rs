@@ -82,7 +82,9 @@ impl RegionActor {
         {
             return Some(false);
         }
-        port.take(self, &at);
+        if let Some(shown) = port.take(self, &at) {
+            shown.burn(tuff_item::item::BurnReason::Template);
+        }
         Some(true)
     }
 
@@ -96,7 +98,9 @@ impl RegionActor {
         if self.insert_into_entity(id, record).is_some() {
             return Some(false);
         }
-        port.take(self, &at);
+        if let Some(shown) = port.take(self, &at) {
+            shown.burn(tuff_item::item::BurnReason::Template);
+        }
         Some(true)
     }
 }

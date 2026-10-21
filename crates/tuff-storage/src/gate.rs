@@ -502,6 +502,10 @@ impl WorldBackend for GatedBackend {
         self.inner.sql_console()
     }
 
+    fn save_journal(&self) -> Option<Arc<crate::journal::SaveJournal>> {
+        self.inner.save_journal()
+    }
+
     fn documents(&self) -> &dyn Documents {
         &self.documents
     }

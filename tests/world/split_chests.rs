@@ -1080,6 +1080,7 @@ async fn a_world_save_snapshots_the_player_only_between_transactions() {
             snapshotted,
             release: released,
             written: None,
+            ticket: None,
         }))
         .await;
     assert!(

@@ -172,7 +172,11 @@ impl RegionActor {
                     }
                 }
             }
-            RegionInternal::SaveAll { done, snapshotted } => {
+            RegionInternal::SaveAll {
+                done,
+                snapshotted,
+                epoch,
+            } => {
                 if self.shared.saves().saves() {
                     let dirty: Vec<ChunkPos> = self
                         .columns
@@ -181,7 +185,7 @@ impl RegionActor {
                         .map(|(pos, _)| *pos)
                         .collect();
                     for pos in dirty {
-                        self.start_save(pos);
+                        self.start_save_in(pos, epoch.as_ref());
                     }
                 }
                 if let Some(snapshotted) = snapshotted {
