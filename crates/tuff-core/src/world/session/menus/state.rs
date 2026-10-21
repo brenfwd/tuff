@@ -46,6 +46,9 @@ pub struct MenuState {
     /// A world save waiting for the pending container transaction to be
     /// answered before the player snapshots.
     pub save_barrier: Option<crate::world::messages::SaveBarrier>,
+    /// Two-region transactions still waiting on a vote after their menu
+    /// closed.
+    pub abandoned: Vec<super::AbandonedSplit>,
 }
 
 impl Default for MenuState {
@@ -58,6 +61,7 @@ impl Default for MenuState {
             creative_drops: 0,
             deferred: std::sync::Mutex::new(VecDeque::new()),
             save_barrier: None,
+            abandoned: Vec::new(),
         }
     }
 }

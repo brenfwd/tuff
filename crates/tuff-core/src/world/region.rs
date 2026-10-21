@@ -1100,7 +1100,6 @@ impl RegionActor {
             } => self.set_beacon_effects(pos, primary, secondary),
             RegionRequest::RefreshContainer { player, pos } => self.refresh_container(&player, pos),
             RegionRequest::CloseContainer { player, positions } => {
-                self.drop_prepared(player);
                 for pos in positions {
                     self.remove_viewer(pos, player);
                 }

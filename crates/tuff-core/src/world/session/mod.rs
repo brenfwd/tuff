@@ -347,7 +347,8 @@ pub struct Pending {
 /// both regions' votes.
 pub struct SplitTransaction {
     pub txn: u64,
-    pub votes: u8,
+    pub near_voted: bool,
+    pub far_voted: bool,
     pub prepared: bool,
     pub contents: Vec<(BlockPos, Vec<Option<tuff_item::item::ItemSnapshot>>)>,
     /// What the player's side gave up.
@@ -357,6 +358,15 @@ pub struct SplitTransaction {
     /// What each region took out of its slots once prepared.
     pub near_taken: Vec<ItemStack>,
     pub far_taken: Vec<ItemStack>,
+}
+
+/// A two-region transaction whose menu closed before every region voted:
+/// a late vote's taken stacks go straight back to its region.
+pub struct AbandonedSplit {
+    pub txn: u64,
+    pub far_pos: Option<BlockPos>,
+    pub near: Option<RegionHandle>,
+    pub far: Option<RegionHandle>,
 }
 
 /// The state of a crafting station menu beyond its slots.
@@ -1155,6 +1165,9 @@ impl PlayerSession {
         self.progress.stats.award_custom(CustomStat::LeaveGame, 1);
         self.disconnected = true;
         self.close_menu(false).await;
+        if let Some(menu) = self.menus.menu.as_mut() {
+            menu.pending = None;
+        }
         self.finish_menu_close().await;
         for stack in self.inventory.close() {
             self.throw_item(stack).await;
@@ -1163,7 +1176,7 @@ impl PlayerSession {
         self.leave_vehicle_offline().await;
         self.leaving_hooks().await;
         self.detach_from_regions().await;
-        self.keep_granted_items();
+        self.keep_granted_items().await;
         let deferred = self
             .menus
             .save_barrier
@@ -1177,14 +1190,34 @@ impl PlayerSession {
     }
 
     /// Stops taking events and keeps every item a region already gave
-    /// up for this player, so a pickup granted while leaving is saved.
-    fn keep_granted_items(&mut self) {
+    /// up for this player, so a pickup granted or a transaction answered
+    /// while leaving is saved, and hands a late two-region vote's stacks
+    /// back to its region.
+    async fn keep_granted_items(&mut self) {
         self.conn.events.close();
         while let Ok(event) = self.conn.events.try_recv() {
-            if let PlayerEvent::ItemGranted { stack, .. } = event
-                && let Some(lost) = self.inventory.add(stack)
-            {
-                log::warn!("{} lost {lost:?} granted while leaving", self.profile.name);
+            let stacks = match event {
+                PlayerEvent::ItemGranted { stack, .. } => vec![stack],
+                PlayerEvent::Transaction { pool, .. }
+                | PlayerEvent::EntityTransaction { pool, .. } => pool,
+                PlayerEvent::TransactionPrepared {
+                    txn,
+                    contents,
+                    taken,
+                    ..
+                } => match self.abandoned_vote(txn, &contents) {
+                    Some(region) => {
+                        self.resolve_share(region, txn, false, taken).await;
+                        Vec::new()
+                    }
+                    None => taken,
+                },
+                _ => Vec::new(),
+            };
+            for stack in stacks {
+                if let Some(lost) = self.inventory.add(stack) {
+                    log::warn!("{} lost {lost:?} granted while leaving", self.profile.name);
+                }
             }
         }
     }

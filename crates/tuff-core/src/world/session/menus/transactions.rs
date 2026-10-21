@@ -441,7 +441,8 @@ impl PlayerSession {
         let menu = self.menus.menu.as_mut().expect("checked above");
         menu.split = Some(SplitTransaction {
             txn,
-            votes: 0,
+            near_voted: false,
+            far_voted: false,
             prepared: true,
             contents: Vec::new(),
             pool,
@@ -525,31 +526,35 @@ impl PlayerSession {
         contents: Vec<(BlockPos, Vec<Option<ItemSnapshot>>)>,
         taken: Vec<ItemStack>,
     ) {
-        let Some(menu) = self.menus.menu.as_mut() else {
-            self.give_back(taken).await;
-            return;
-        };
-        let far_pos = menu.remote.as_ref().map(|(pos, _)| *pos);
-        let Some(split) = menu
-            .split
-            .as_mut()
-            .filter(|split| menu.window_id == window_id && split.txn == txn)
-        else {
-            self.give_back(taken).await;
+        let split = self.menus.menu.as_mut().and_then(|menu| {
+            let far_pos = menu.remote.as_ref().map(|(pos, _)| *pos);
+            let window = menu.window_id;
+            menu.split
+                .as_mut()
+                .filter(|split| window == window_id && split.txn == txn)
+                .map(|split| (split, far_pos))
+        });
+        let Some((split, far_pos)) = split else {
+            match self.abandoned_vote(txn, &contents) {
+                Some(region) => self.resolve_share(region, txn, false, taken).await,
+                None => self.give_back(taken).await,
+            }
             return;
         };
         let from_far = contents.iter().any(|(pos, _)| Some(*pos) == far_pos);
-        split.votes += 1;
         split.prepared &= prepared;
         split.contents.extend(contents);
         if from_far {
+            split.far_voted = true;
             split.far_taken.extend(taken);
         } else {
+            split.near_voted = true;
             split.near_taken.extend(taken);
         }
-        if split.votes < 2 {
+        if !(split.near_voted && split.far_voted) {
             return;
         }
+        let menu = self.menus.menu.as_mut().expect("checked above");
         let SplitTransaction {
             prepared,
             contents,
@@ -585,9 +590,70 @@ impl PlayerSession {
             .await;
     }
 
+    /// Aborts a two-region transaction whose menu closed before both
+    /// regions voted: the player's pool comes back, a region that voted
+    /// gets back what it took out, and a region yet to vote is remembered
+    /// so its late vote is aborted the same way.
+    pub(in crate::world::session) async fn abandon_split(
+        &mut self,
+        split: SplitTransaction,
+        near: &RegionHandle,
+        remote: Option<&(BlockPos, RegionHandle)>,
+    ) {
+        let SplitTransaction {
+            txn,
+            near_voted,
+            far_voted,
+            pool,
+            near_taken,
+            far_taken,
+            ..
+        } = split;
+        let far = remote.map(|(_, region)| region.clone());
+        if near_voted {
+            self.resolve_share(Some(near.clone()), txn, false, near_taken)
+                .await;
+        }
+        if far_voted {
+            self.resolve_share(far.clone(), txn, false, far_taken).await;
+        }
+        if !(near_voted && far_voted) {
+            self.menus.abandoned.push(AbandonedSplit {
+                txn,
+                far_pos: remote.map(|(pos, _)| *pos),
+                near: (!near_voted).then(|| near.clone()),
+                far: if far_voted { None } else { far },
+            });
+        }
+        self.give_back(pool).await;
+    }
+
+    /// The region a late vote on an abandoned transaction came from, if
+    /// it is one; forgets the transaction once every region voted.
+    pub(in crate::world::session) fn abandoned_vote(
+        &mut self,
+        txn: u64,
+        contents: &[(BlockPos, Vec<Option<ItemSnapshot>>)],
+    ) -> Option<Option<RegionHandle>> {
+        let index = self.menus.abandoned.iter().position(|a| a.txn == txn)?;
+        let abandoned = &mut self.menus.abandoned[index];
+        let from_far = contents
+            .iter()
+            .any(|(pos, _)| Some(*pos) == abandoned.far_pos);
+        let region = if from_far {
+            abandoned.far.take()
+        } else {
+            abandoned.near.take()
+        };
+        if abandoned.near.is_none() && abandoned.far.is_none() {
+            self.menus.abandoned.swap_remove(index);
+        }
+        Some(region)
+    }
+
     /// Ends one region's share of a two-region transaction, handing it
     /// `items`; if the region is gone, they come back to the player.
-    async fn resolve_share(
+    pub(in crate::world::session) async fn resolve_share(
         &mut self,
         region: Option<RegionHandle>,
         txn: u64,
