@@ -462,11 +462,14 @@ enters or leaves crowd mode. Off, behaviour is vanilla.
 
 ### Item conservation and save safety
 
-Items are never copied: a stack moves between players, containers,
-entities and regions, and only appears (loot, crafting, `/give`) or
-disappears (eating, burning, `/clear`) through a few audited doors;
-plugins follow the same rules (see What the ABI offers). Moves
-between actors are checked; in release builds the checks are on unless
+Item stacks are move-only: a stack moves between players, containers,
+entities and regions instead of being copied, and appears (loot,
+crafting, `/give`) or disappears (eating, burning, `/clear`) only through
+a few audited doors; plugins follow the same rules (see What the ABI
+offers). Menu clicks and container and entity-container transactions
+between a player and a region are checked; other transfers (dropped items,
+hoppers and item ports across regions, hand-to-mob handovers) are not yet.
+In release builds the checks are on unless
 `tuff.items.conservationChecks` is `false`. An operation that would make
 or lose items is refused instead of applied: the server logs it, writes a
 `tuff:item_conservation` row to the audit log, and quarantines the region
