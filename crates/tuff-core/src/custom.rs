@@ -77,6 +77,15 @@ impl CustomItemDef {
 
     /// A stack of this item.
     pub fn stack(&self, count: u8) -> ItemStack {
+        ItemStack::mint(self.base, count, MintReason::Command).with_components(self.components())
+    }
+
+    /// A picture of one of this item, never a real item.
+    pub fn template(&self) -> tuff_item::item::ItemSnapshot {
+        tuff_item::item::ItemSnapshot::describe(self.base, 1, self.components())
+    }
+
+    fn components(&self) -> Components {
         let mut components = self.components.clone();
         if let Some(model) = &self.model {
             components.other.insert(ITEM_MODEL, model.as_str());
@@ -98,7 +107,7 @@ impl CustomItemDef {
                 }
             }
         }
-        ItemStack::mint(self.base, count, MintReason::Command).with_components(components)
+        components
     }
 }
 

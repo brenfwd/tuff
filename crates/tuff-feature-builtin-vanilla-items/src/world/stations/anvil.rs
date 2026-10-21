@@ -3,7 +3,7 @@
 use tuff_core::world::anvil::AnvilOutcome;
 use tuff_item::enchantment::{self, EnchantmentRegistry};
 use tuff_item::item::enchanting::Choice;
-use tuff_item::item::{Enchantments, ItemStack};
+use tuff_item::item::{Enchantments, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::Item;
 
@@ -60,7 +60,7 @@ pub fn compute(
     let Some(input) = input else {
         return AnvilOutcome::NOTHING;
     };
-    let mut result = input.dup_unchecked();
+    let mut result = ItemStack::mint_like(input, input.count(), MintReason::Crafting);
     let registry = enchantment::current();
     let mut enchantments = crafting_enchantments(&registry, &result);
     let tax = i64::from(input.components.repair_cost.unwrap_or(0))

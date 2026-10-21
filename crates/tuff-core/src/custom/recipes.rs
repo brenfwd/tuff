@@ -11,23 +11,23 @@ use super::{CustomItemDef, item_id};
 use crate::protocol::recipe::{RecipeDisplay, SlotDisplay};
 use crate::registry::Registries;
 use crate::world::crafting::{CraftingInput, Placement, Recipe, unlock_advancement};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
 use tuff_item::load::LoadError;
 
 /// One grid cell's requirement.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CustomIngredient {
     /// A plain (not custom) stack of one of these items.
     Item(Ingredient),
     /// The custom item with this id; `display` is how the book shows it.
-    Custom { id: String, display: Box<ItemStack> },
+    Custom { id: String, display: ItemSnapshot },
 }
 
 impl CustomIngredient {
     pub fn custom(def: &CustomItemDef) -> Self {
         Self::Custom {
             id: def.id.clone(),
-            display: Box::new(def.stack(1)),
+            display: def.template(),
         }
     }
 
@@ -41,7 +41,7 @@ impl CustomIngredient {
     fn display(&self) -> SlotDisplay {
         match self {
             Self::Item(ingredient) => SlotDisplay::Ingredient(ingredient.clone()),
-            Self::Custom { display, .. } => SlotDisplay::Stack((**display).dup_unchecked()),
+            Self::Custom { display, .. } => SlotDisplay::Stack(display.clone()),
         }
     }
 
@@ -195,7 +195,11 @@ impl Recipe for CustomShaped {
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(self.result.dup_unchecked())
+        Some(ItemStack::mint_like(
+            &self.result,
+            self.result.count(),
+            MintReason::Crafting,
+        ))
     }
 
     fn accepts_custom_items(&self) -> bool {
@@ -211,7 +215,7 @@ impl Recipe for CustomShaped {
                 .iter()
                 .map(|cell| cell.as_ref().map_or(SlotDisplay::Empty, |i| i.display()))
                 .collect(),
-            result: SlotDisplay::Stack(self.result.dup_unchecked()),
+            result: SlotDisplay::Stack(ItemSnapshot::of(&self.result)),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -303,7 +307,11 @@ impl Recipe for CustomShapeless {
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(self.result.dup_unchecked())
+        Some(ItemStack::mint_like(
+            &self.result,
+            self.result.count(),
+            MintReason::Crafting,
+        ))
     }
 
     fn accepts_custom_items(&self) -> bool {
@@ -313,7 +321,7 @@ impl Recipe for CustomShapeless {
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: self.ingredients.iter().map(|i| i.display()).collect(),
-            result: SlotDisplay::Stack(self.result.dup_unchecked()),
+            result: SlotDisplay::Stack(ItemSnapshot::of(&self.result)),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -341,7 +349,7 @@ mod tests {
     use tuff_item::item::DupUnchecked;
     use tuff_item::item::MintReason;
 
-    fn grid(cells: &[Option<ItemStack>], width: usize) -> CraftingInput {
+    fn grid(cells: &[Option<ItemStack>], width: usize) -> CraftingInput<'_> {
         CraftingInput::positioned(width, cells.len() / width, cells).input
     }
 
@@ -466,7 +474,7 @@ mod tests {
         );
         let set = RecipeSet::new([("ex:emerald_dust".into(), Arc::new(block) as Arc<dyn Recipe>)])
             .with_custom(content.clone());
-        let input = |stack: ItemStack| grid(&[Some(stack)], 1);
+        let input = |stack: ItemStack| grid(vec![Some(stack)].leak(), 1);
         assert!(
             set.find(&input(ItemStack::mint(Item::Emerald, 1, MintReason::Test)))
                 .is_some()
@@ -489,7 +497,7 @@ mod tests {
         let recipe = CustomShapeless::new(
             "ex:crown",
             vec![Item::GoldIngot.into(), (&ruby).into()],
-            result.dup_unchecked(),
+            ItemStack::mint_like(&result, result.count(), MintReason::Test),
         );
         let displays = recipe.displays();
         let [
@@ -502,8 +510,8 @@ mod tests {
         else {
             panic!("one shapeless display");
         };
-        assert_eq!(shown, &SlotDisplay::Stack(result));
+        assert_eq!(shown, &SlotDisplay::Stack(ItemSnapshot::of(&result)));
         assert!(matches!(ingredients[0], SlotDisplay::Ingredient(_)));
-        assert_eq!(ingredients[1], SlotDisplay::Stack(ruby.stack(1)));
+        assert_eq!(ingredients[1], SlotDisplay::Stack(ruby.template()));
     }
 }

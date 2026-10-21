@@ -8,17 +8,17 @@ use tuff_vanilla_data::registry::{
 };
 
 use crate::protocol::codec::WriteExt;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack};
 use tuff_wire::PacketWriter;
 
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SlotDisplay {
     Empty,
     AnyFuel,
     WithAnyPotion(Box<SlotDisplay>),
     OnlyWithComponent(Box<SlotDisplay>, DataComponentType),
     Item(Item),
-    Stack(ItemStack),
+    Stack(ItemSnapshot),
     /// The items an ingredient accepts, sent as an inline id set.
     Ingredient(Ingredient),
     Dyed {
@@ -36,6 +36,15 @@ pub enum SlotDisplay {
         remainder: Box<SlotDisplay>,
     },
     Composite(Vec<SlotDisplay>),
+}
+
+impl SlotDisplay {
+    /// Shows `stack`, a template that never becomes a real item.
+    pub fn template(stack: ItemStack) -> Self {
+        let shown = ItemSnapshot::of(&stack);
+        stack.burn(BurnReason::Template);
+        Self::Stack(shown)
+    }
 }
 
 #[derive(Debug, PartialEq)]

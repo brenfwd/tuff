@@ -282,7 +282,7 @@ async fn directives_change_the_players_inventory_and_experience() {
     let reply = session
         .apply_directive(
             Directive::Give {
-                stack: stone.dup_unchecked(),
+                stack: tuff_item::item::ItemSnapshot::of(&stone),
                 count: 70,
             },
             source(),

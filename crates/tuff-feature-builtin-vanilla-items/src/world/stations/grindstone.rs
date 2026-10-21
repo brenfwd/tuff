@@ -4,7 +4,7 @@ use super::anvil::{crafting_enchantments, increased_repair_cost, set_enchantment
 use rand::Rng;
 use tuff_core::world::menu::holds_enchantments;
 use tuff_item::enchantment;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::item::enchanting::Choice;
 use tuff_vanilla_data::Item;
 
@@ -54,7 +54,7 @@ fn merged(input: &ItemStack, additional: &ItemStack) -> Option<ItemStack> {
         }
         count = 2;
     }
-    let mut result = input.dup_count_unchecked(count);
+    let mut result = ItemStack::mint_like(input, count, MintReason::Crafting);
     if result.is_damageable() {
         result.components.max_damage = Some(durability);
         result.set_damage(durability.saturating_sub(remaining));
@@ -92,7 +92,7 @@ pub fn compute(input: Option<&ItemStack>, additional: Option<&ItemStack>) -> Opt
     match (input, additional) {
         (Some(input), Some(additional)) => merged(input, additional),
         (Some(only), None) | (None, Some(only)) => {
-            holds_enchantments(only).then(|| without_non_curses(only.dup_unchecked()))
+            holds_enchantments(only).then(|| without_non_curses(ItemStack::mint_like(only, only.count(), MintReason::Crafting)))
         }
         (None, None) => None,
     }

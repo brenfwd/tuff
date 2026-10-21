@@ -459,7 +459,7 @@ async fn item_arguments_name_custom_items() {
     player
         .apply_directive(
             Directive::Give {
-                stack: charm.stack(1),
+                stack: charm.template(1),
                 count: 2,
             },
             source,
