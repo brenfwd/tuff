@@ -677,7 +677,7 @@ pub struct EntityHit {
     /// Seconds of fire the hit sets the victim alight for, if it lands.
     pub ignite: f32,
     /// The attacker's weapon: its enchantments act on the victim.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// The part hit, for entities made of parts.
     pub part: Option<usize>,
     /// Status effects the victim gets if the hit lands (a wither

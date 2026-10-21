@@ -457,7 +457,7 @@ fn transmute_result(recipe: &TransmuteRecipe, input: &ItemStack, materials: u64)
     }
 }
 
-fn repair_pair(input: &CraftingInput) -> Option<(&ItemStack, &ItemStack)> {
+fn repair_pair<'a>(input: &CraftingInput<'a>) -> Option<(&'a ItemStack, &'a ItemStack)> {
     if input.ingredient_count() != 2 {
         return None;
     }
@@ -673,7 +673,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             Some(result)
         }
         Recipe::CraftingDecoratedPot(pot) => {
-            let side = |x, y| input.get(x, y).map(|stack| stack.dup_count_unchecked(1));
+            let side = |x, y| input.get(x, y).map(|stack| ItemStack::mint_like(stack, 1, MintReason::Crafting));
             let mut result = result_stack(&pot.result);
             result.components.other.insert(
                 "minecraft:pot_decorations",
@@ -687,7 +687,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             Some(result)
         }
         Recipe::CraftingSpecialMapExtending(_) => {
-            let mut result = input.get(1, 1)?.dup_count_unchecked(1);
+            let mut result = ItemStack::mint_like(input.get(1, 1)?, 1, MintReason::Crafting);
             result
                 .components
                 .other
@@ -710,18 +710,17 @@ pub fn remaining_items(recipe: &Recipe, input: &CraftingInput) -> Vec<Option<Ite
                         && stack.components.written_book.is_some()
                 })
             }) {
-                remaining[index] = input.items[index]
-                    .as_ref()
-                    .map(|s| ItemStack::mint_like(s, 1, MintReason::Crafting));
+                remaining[index] =
+                    input.items[index].map(|s| ItemStack::mint_like(s, 1, MintReason::Crafting));
             }
         }
         Recipe::CraftingSpecialBannerDuplicate(_) => {
             for (index, slot) in input.items.iter().enumerate() {
-                if let Some(stack) = slot
+                if let Some(stack) = *slot
                     && stack.item.crafting_remainder().is_none()
                     && banner_layers(stack) > 0
                 {
-                    remaining[index] = Some(stack.dup_count_unchecked(1));
+                    remaining[index] = Some(ItemStack::mint_like(stack, 1, MintReason::Remainder));
                 }
             }
         }
@@ -745,7 +744,7 @@ pub fn apply_trim(
     if base.components.trim.as_deref() == Some(&trim) {
         return None;
     }
-    let mut result = base.dup_count_unchecked(1);
+    let mut result = ItemStack::mint_like(base, 1, MintReason::Crafting);
     result.components.trim = Some(Box::new(trim));
     Some(result)
 }

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::recipe::{CraftingCategory, Ingredient};
@@ -53,7 +52,10 @@ impl Recipe for KeepsBook {
         input
             .items
             .iter()
-            .map(|slot| slot.dup_unchecked().filter(|s| s.item == Item::Book))
+            .map(|slot| {
+                slot.filter(|s| s.item == Item::Book)
+                    .map(|s| ItemStack::mint_like(s, s.count(), MintReason::Test))
+            })
             .collect()
     }
 }

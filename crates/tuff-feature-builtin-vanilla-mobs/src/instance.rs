@@ -3,7 +3,6 @@
 //! feature) is one `Species` impl and a registry entry.
 
 use std::fmt::Debug;
-use tuff_item::item::DupUnchecked;
 
 use rand::Rng;
 use rand::rngs::StdRng;
@@ -310,7 +309,7 @@ impl<S: Species> Mob<S> {
                 amount,
                 core.attribute(Attribute::Armor) as f32,
                 core.attribute(Attribute::ArmorToughness) as f32,
-                damage.weapon.as_ref(),
+                damage.weapon.as_deref(),
                 &damage.context(kind),
                 cx.rng,
             );
@@ -384,7 +383,7 @@ impl<S: Species> Mob<S> {
                             .map(|w| {
                                 (
                                     tuff_vanilla_data::item::EquipmentSlot::Mainhand,
-                                    w.dup_unchecked(),
+                                    w.clone(),
                                 )
                             })
                             .collect(),
@@ -445,7 +444,7 @@ impl<S: Species> Mob<S> {
             let mut facts = EntityFacts {
                 kind: Some(self.core.base.kind),
                 on_fire: self.core.base.on_fire(),
-                attacker_weapon: damage.weapon.dup_unchecked(),
+                attacker_weapon: damage.weapon.clone(),
                 attacker_kind: damage.attacker.map(|(_, kind)| kind),
                 killed_by_player: player_killed,
                 damage_kind: Some(damage.kind),
@@ -474,7 +473,7 @@ impl<S: Species> Mob<S> {
                 }
             }
             let context = damage.context(self.core.base.kind);
-            let weapon = damage.weapon.dup_unchecked();
+            let weapon = damage.weapon.clone();
             let boost = |chance: f32, rng: &mut rand::rngs::StdRng| match &weapon {
                 Some(weapon) => combat::equipment_drop_chance(weapon, &context, chance, rng),
                 None => chance,

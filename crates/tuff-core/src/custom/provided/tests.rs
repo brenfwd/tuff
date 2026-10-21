@@ -30,8 +30,8 @@ fn ruby(owner: &str) -> ProvidedContent {
     }
 }
 
-fn grid(slots: Vec<Option<ItemStack>>) -> CraftingInput {
-    CraftingInput::positioned(3, 3, &slots).input
+fn grid(slots: Vec<Option<ItemStack>>) -> CraftingInput<'static> {
+    CraftingInput::positioned(3, 3, slots.leak()).input
 }
 
 #[tuff_core::watchdog]

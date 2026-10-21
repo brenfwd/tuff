@@ -516,7 +516,7 @@ async fn a_plugin_give_lands_in_the_inventory() {
         .session
         .on_event(PlayerEvent::PluginInventory(vec![
             tuff_core::world::session::plugin_inventory::InventoryOp::Give {
-                stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
+                stack: tuff_item::item::ItemSnapshot::describe(Item::Stone, 1, Default::default()),
                 count: 70,
             },
         ]))
@@ -554,7 +554,7 @@ async fn plugin_inventory_ops_take_clear_set_and_keep() {
     client
         .session
         .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::Give {
-            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
+            stack: tuff_item::item::ItemSnapshot::describe(Item::Stone, 1, Default::default()),
             count: 70,
         }]))
         .await;
@@ -619,7 +619,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
                 all_or_nothing: true,
             },
             InventoryOp::Give {
-                stack: ItemStack::mint(Item::Elytra, 1, MintReason::Test),
+                stack: tuff_item::item::ItemSnapshot::describe(Item::Elytra, 1, Default::default()),
                 count: 1,
             },
         ])
@@ -627,7 +627,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
     client
         .session
         .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::Give {
-            stack: ItemStack::mint(Item::Diamond, 1, MintReason::Test),
+            stack: tuff_item::item::ItemSnapshot::describe(Item::Diamond, 1, Default::default()),
             count: 4,
         }]))
         .await;
@@ -637,7 +637,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
     client
         .session
         .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::Give {
-            stack: ItemStack::mint(Item::Diamond, 1, MintReason::Test),
+            stack: tuff_item::item::ItemSnapshot::describe(Item::Diamond, 1, Default::default()),
             count: 6,
         }]))
         .await;

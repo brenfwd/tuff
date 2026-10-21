@@ -98,12 +98,12 @@ fn enchanted(session: &PlayerSession) -> bool {
 fn fire(
     session: &mut PlayerSession,
     component: fn(&EnchantmentEffects) -> &[Conditional<EntityEffect>],
-    equipment: &[(EquipmentSlot, ItemStack)],
+    equipment: &[(EquipmentSlot, tuff_item::item::ItemSnapshot)],
     facts: &EntityFacts,
 ) -> Vec<fx::Fired> {
     let worn: Vec<(EquipmentSlot, &ItemStack)> = equipment
         .iter()
-        .map(|(slot, stack)| (*slot, stack))
+        .map(|(slot, stack)| (*slot, &**stack))
         .collect();
     let body = body(session);
     let mut rng = std::mem::replace(&mut session.rng, rand::SeedableRng::seed_from_u64(0));
@@ -136,7 +136,7 @@ pub async fn tick(session: &mut PlayerSession) {
 
 async fn location(
     session: &mut PlayerSession,
-    equipment: &[(EquipmentSlot, ItemStack)],
+    equipment: &[(EquipmentSlot, tuff_item::item::ItemSnapshot)],
     facts: &EntityFacts,
 ) {
     let position = session.pose.position;
@@ -158,7 +158,7 @@ async fn location(
     let was_active = std::mem::take(&mut tracked.active);
     let worn: Vec<(EquipmentSlot, &ItemStack)> = equipment
         .iter()
-        .map(|(slot, stack)| (*slot, stack))
+        .map(|(slot, stack)| (*slot, &**stack))
         .collect();
     let body = body(session);
     let mut rng = std::mem::replace(&mut session.rng, rand::SeedableRng::seed_from_u64(0));
@@ -180,7 +180,7 @@ async fn location(
 
 /// The weapon's `post_piercing_attack` effects after a stab.
 pub async fn post_piercing_attack(session: &mut PlayerSession, weapon: &ItemStack) {
-    let equipment = [(EquipmentSlot::Mainhand, weapon.dup_unchecked())];
+    let equipment = [(EquipmentSlot::Mainhand, tuff_item::item::ItemSnapshot::of(weapon))];
     let facts = session.player_facts();
     for fired in fire(session, |e| &e.post_piercing_attack, &equipment, &facts) {
         Box::pin(apply(session, fired.slot, fired.actions)).await;

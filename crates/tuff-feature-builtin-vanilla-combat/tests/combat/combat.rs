@@ -55,7 +55,7 @@ fn hit(damage: f32, from: [f64; 3], weapon: Option<Item>) -> PlayerEvent {
         attacker,
         attacker_name: "Attacker".to_owned(),
         attacker_uuid: 0,
-        weapon: weapon.map(|item| ItemStack::mint(item, 1, MintReason::Test)),
+        weapon: weapon.map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
         attacker_position: from,
         attacker_yaw: 180.0,
         damage,
@@ -254,7 +254,7 @@ fn direct(attacker: &PlayerHandle, damage: f32, weapon: Option<ItemStack>) -> Pl
         attacker: attacker.clone(),
         attacker_name: "Attacker".to_owned(),
         attacker_uuid: 0,
-        weapon,
+        weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
         attacker_position: FRONT,
         attacker_yaw: 180.0,
         damage,
@@ -449,7 +449,7 @@ async fn landed_sweeps_hit_players_beside_the_target_and_wear_the_sword() {
     attacker.see_player(&far, [3.5, 64.0, 2.5]);
     attacker
         .handle_event(PlayerEvent::AttackLanded {
-            weapon: Some(sword.dup_unchecked()),
+            weapon: Some(tuff_item::item::ItemSnapshot::of(&sword)),
             target: 2,
             target_position: target,
             knockback: true,
@@ -540,7 +540,7 @@ async fn a_stacks_own_weapon_component_disables_shields_and_sets_its_wear() {
         .set_slot(Inventory::hotbar_slot(0), Some(hammer.dup_unchecked()));
     wielder
         .handle_event(PlayerEvent::AttackLanded {
-            weapon: Some(hammer),
+            weapon: Some(tuff_item::item::ItemSnapshot::of(&hammer)),
             target: 1,
             target_position: FRONT,
             knockback: false,

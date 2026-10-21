@@ -529,7 +529,7 @@ impl Recipe for DirtToDiamond {
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: vec![SlotDisplay::Ingredient(Self::DIRT)],
-            result: SlotDisplay::Stack(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting)),
+            result: SlotDisplay::template(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting)),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -546,7 +546,7 @@ pub const DIAMOND_REPAIR: &str = "example:diamond_repair";
 pub struct DiamondRepair;
 
 impl DiamondRepair {
-    fn damaged_tool(input: &CraftingInput) -> Option<&ItemStack> {
+    fn damaged_tool<'a>(input: &CraftingInput<'a>) -> Option<&'a ItemStack> {
         if input.ingredient_count() != 2 || !input.stacks().any(|s| s.item == Item::Diamond) {
             return None;
         }
@@ -562,7 +562,7 @@ impl Recipe for DiamondRepair {
     }
 
     fn assemble(&self, input: &CraftingInput) -> Option<ItemStack> {
-        let mut repaired = Self::damaged_tool(input)?.dup_count_unchecked(1);
+        let mut repaired = ItemStack::mint_like(Self::damaged_tool(input)?, 1, MintReason::Crafting);
         repaired.set_damage(0);
         Some(repaired)
     }

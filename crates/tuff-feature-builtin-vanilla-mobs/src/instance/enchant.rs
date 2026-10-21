@@ -2,6 +2,7 @@
 //! tick and `location_changed` when it changes block or gear.
 
 use std::collections::BTreeSet;
+use tuff_item::item::ItemSnapshot;
 use tuff_item::item::DupUnchecked;
 
 use tuff_core::world::entity::TickContext;
@@ -36,14 +37,14 @@ impl<S: Species> Mob<S> {
         if !enchanted && core.enchanted_location.is_none() {
             return;
         }
-        let gear: Vec<(EquipmentSlot, ItemStack)> = core
+        let gear: Vec<(EquipmentSlot, ItemSnapshot)> = core
             .equipment
             .worn()
             .into_iter()
-            .map(|(slot, stack)| (slot, stack.dup_unchecked()))
+            .map(|(slot, stack)| (slot, ItemSnapshot::of(stack)))
             .collect();
         let worn: Vec<(EquipmentSlot, &ItemStack)> =
-            gear.iter().map(|(slot, stack)| (*slot, stack)).collect();
+            gear.iter().map(|(slot, stack)| (*slot, &**stack)).collect();
         let facts = EntityFacts {
             kind: Some(core.base.kind),
             entity_id: Some(core.base.id),
@@ -55,7 +56,7 @@ impl<S: Species> Mob<S> {
                 baby: core.is_baby(),
                 ..Default::default()
             },
-            equipment: gear.dup_unchecked(),
+            equipment: gear.clone(),
             tick_count: Some(cx.tick as i64),
             movement: Some(core.base.velocity),
             fall_distance: Some(core.base.fall_distance),

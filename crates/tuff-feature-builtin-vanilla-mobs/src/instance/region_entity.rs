@@ -1,6 +1,5 @@
 use super::*;
 use tuff_core::world::entity_slots::{ContainerSlots, ContainerSlotsMut};
-use tuff_item::item::DupUnchecked;
 
 impl<S: Species> RegionEntity for Mob<S> {
     fn base(&self) -> &EntityBase {
@@ -247,7 +246,7 @@ impl<S: Species> RegionEntity for Mob<S> {
             projectile: None,
             projectile_id: None,
             position: Some(attack.attacker_position),
-            weapon: attack.weapon.dup_unchecked(),
+            weapon: attack.weapon.clone(),
             aim: Some(crate::Aim {
                 eye: [
                     attack.attacker_position[0],

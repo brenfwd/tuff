@@ -50,7 +50,7 @@ fn ingredient(ingredient: &Ingredient) -> SlotDisplay {
 }
 
 fn stack(stack: ItemStack) -> SlotDisplay {
-    SlotDisplay::Stack(stack)
+    SlotDisplay::template(stack)
 }
 
 fn crafting_table() -> SlotDisplay {

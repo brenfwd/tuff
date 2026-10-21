@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::DupUnchecked;
 
 impl RegionActor {
     /// A player's melee hit on one of this region's entities.
@@ -118,17 +117,14 @@ impl RegionActor {
                         source: None,
                         direct: None,
                     },
-                    weapon: attack
-                        .weapon
-                        .as_ref()
-                        .map(tuff_item::item::ItemSnapshot::of),
+                    weapon: attack.weapon.clone(),
                     dealt: attack.damage,
                     taken: outcome.health_lost,
                 },
             )));
             if !attack.sweep {
                 attacker.send(PlayerEvent::AttackLanded {
-                    weapon: attack.weapon.dup_unchecked(),
+                    weapon: attack.weapon.clone(),
                     target,
                     target_position: position,
                     knockback: attack.knockback > 0.0,

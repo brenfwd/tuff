@@ -678,7 +678,7 @@ async fn a_fake_item_appears_and_leaves_without_being_collectable() {
     let at = s.above;
     s.region
         .request(RegionRequest::SpawnFakeItem {
-            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
+            stack: tuff_item::item::ItemSnapshot::describe(Item::Stone, 1, Default::default()),
             position: [at.x as f64 + 0.5, at.y as f64 + 3.0, at.z as f64 + 0.5],
         })
         .await;

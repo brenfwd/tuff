@@ -284,7 +284,7 @@ async fn item_slots_are_replaced_filled_and_overridden() {
     let set = |name: &str, mode| Directive::SetSlots {
         ids: ids(name),
         name: name.to_owned(),
-        stack: stick.dup_unchecked(),
+        stack: tuff_item::item::ItemSnapshot::of(&stick),
         mode,
     };
 

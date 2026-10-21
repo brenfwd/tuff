@@ -30,7 +30,7 @@ use tuff_core::world::entity::{
     take_number,
 };
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{BurnReason, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 const COW_VOLUME: f32 = 0.4;
@@ -665,18 +665,26 @@ fn mixed_color(recipes: &RecipeSet, a: DyeColor, b: DyeColor) -> Option<DyeColor
     };
     for first in dyes(a) {
         for second in dyes(b) {
+            let probes = [
+                ItemStack::mint(first, 1, MintReason::Template),
+                ItemStack::mint(second, 1, MintReason::Template),
+            ];
             let input = CraftingInput {
                 width: 2,
                 height: 1,
-                items: vec![
-                    Some(ItemStack::mint(first, 1, MintReason::Spawn)),
-                    Some(ItemStack::mint(second, 1, MintReason::Spawn)),
-                ],
+                items: probes.iter().map(Some).collect(),
             };
-            if let Some((_, recipe)) = recipes.find(&input)
-                && let Some(color) = recipe.assemble(&input).and_then(|stack| stack.item.dye())
-            {
-                return Some(color);
+            let color = recipes.find(&input).and_then(|(_, recipe)| {
+                let result = recipe.assemble(&input)?;
+                let color = result.item.dye();
+                result.burn(BurnReason::Template);
+                color
+            });
+            for probe in probes {
+                probe.burn(BurnReason::Template);
+            }
+            if color.is_some() {
+                return color;
             }
         }
     }

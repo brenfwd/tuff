@@ -158,7 +158,7 @@ pub fn entity_drops(name: &str, facts: &EntityFacts, rng: &mut impl Rng) -> Vec<
         visiting: RefCell::default(),
         state: Block::Air.default_state(),
         entity: Some(facts),
-        tool: facts.attacker_weapon.as_ref(),
+        tool: facts.attacker_weapon.as_deref(),
         explosion_radius: None,
         block_entity: None,
         location: facts.origin.as_ref(),
@@ -1066,7 +1066,7 @@ fn create_entry_leaf(
                         };
                         let level = context
                             .entity
-                            .and_then(|e| e.attacker_weapon.as_ref())
+                            .and_then(|e| e.attacker_weapon.as_deref())
                             .map_or(0, |weapon| weapon.enchantment_level(enchantment));
                         if level > 0 {
                             let per_level =

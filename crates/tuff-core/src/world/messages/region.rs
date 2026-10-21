@@ -399,7 +399,7 @@ pub enum RegionRequest {
     /// A dropped item that cannot be picked up and despawns on its first
     /// tick (the visual of a full `/give`).
     SpawnFakeItem {
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         position: [f64; 3],
     },
     /// Adds a new entity (a player's arrow or thrown item).

@@ -325,7 +325,7 @@ impl SpearUse {
             attacker.owner_name = None;
             hit.attacker = Some(attacker);
             hit.position = Some(mob.base.position);
-            hit.weapon = Some(stack.dup_unchecked());
+            hit.weapon = Some(tuff_item::item::ItemSnapshot::of(&stack));
             if knocks {
                 hit.knockback =
                     Some((STAB_KNOCKBACK + knockback_base / 2.0, yaw.sin(), -yaw.cos()));

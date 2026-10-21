@@ -71,10 +71,10 @@ async fn start_gems(grant: Option<&str>) -> (TestDir, TestWorld) {
     (dir, world)
 }
 
-fn shapeless(stacks: Vec<ItemStack>) -> CraftingInput {
+fn shapeless(stacks: Vec<ItemStack>) -> CraftingInput<'static> {
     let mut slots: Vec<Option<ItemStack>> = stacks.into_iter().map(Some).collect();
     slots.resize_with(9, || None);
-    CraftingInput::positioned(3, 3, &slots).input
+    CraftingInput::positioned(3, 3, slots.leak()).input
 }
 
 #[tuff_core::watchdog]

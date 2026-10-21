@@ -5,7 +5,6 @@
 //! [`Registry`]; the concrete kinds live in the vanilla-recipes feature.
 
 use tuff_item::item::BurnReason;
-use tuff_item::item::DupUnchecked;
 pub mod brewing;
 pub mod place;
 pub mod smelting;
@@ -132,10 +131,10 @@ pub trait DataRecipes: Send + Sync {
 /// The occupied part of a crafting grid, trimmed to its bounding box the
 /// way the game presents grids to recipes.
 #[derive(Debug, PartialEq)]
-pub struct CraftingInput {
+pub struct CraftingInput<'a> {
     pub width: usize,
     pub height: usize,
-    pub items: Vec<Option<ItemStack>>,
+    pub items: Vec<Option<&'a ItemStack>>,
 }
 
 /// What a crafter made.
@@ -148,20 +147,20 @@ pub struct Crafted {
 
 /// A trimmed input plus where it sat in the full grid.
 #[derive(Debug, PartialEq)]
-pub struct Positioned {
-    pub input: CraftingInput,
+pub struct Positioned<'a> {
+    pub input: CraftingInput<'a>,
     pub left: usize,
     pub top: usize,
 }
 
-impl CraftingInput {
+impl<'a> CraftingInput<'a> {
     pub const EMPTY: Self = Self {
         width: 0,
         height: 0,
         items: Vec::new(),
     };
 
-    pub fn positioned(width: usize, height: usize, slots: &[Option<ItemStack>]) -> Positioned {
+    pub fn positioned(width: usize, height: usize, slots: &'a [Option<ItemStack>]) -> Positioned<'a> {
         let empty = Positioned {
             input: Self::EMPTY,
             left: 0,
@@ -192,15 +191,12 @@ impl CraftingInput {
         }
         let (new_width, new_height) = (right - left + 1, bottom - top + 1);
         let items = if (new_width, new_height) == (width, height) {
-            slots
-                .iter()
-                .map(DupUnchecked::dup_unchecked)
-                .collect::<Vec<_>>()
+            slots.iter().map(Option::as_ref).collect::<Vec<_>>()
         } else {
             let mut items = Vec::with_capacity(new_width * new_height);
             for y in 0..new_height {
                 for x in 0..new_width {
-                    items.push(slots[x + left + (y + top) * width].dup_unchecked());
+                    items.push(slots[x + left + (y + top) * width].as_ref());
                 }
             }
             items
@@ -216,8 +212,8 @@ impl CraftingInput {
         }
     }
 
-    pub fn get(&self, x: usize, y: usize) -> Option<&ItemStack> {
-        self.items[x + y * self.width].as_ref()
+    pub fn get(&self, x: usize, y: usize) -> Option<&'a ItemStack> {
+        self.items[x + y * self.width]
     }
 
     pub fn ingredient_count(&self) -> usize {
@@ -228,8 +224,8 @@ impl CraftingInput {
         self.ingredient_count() == 0
     }
 
-    pub fn stacks(&self) -> impl Iterator<Item = &ItemStack> {
-        self.items.iter().flatten()
+    pub fn stacks(&self) -> impl Iterator<Item = &'a ItemStack> + '_ {
+        self.items.iter().flatten().copied()
     }
 
     /// One of each occupied cell's item, for matching shapeless lists.
@@ -246,8 +242,7 @@ impl CraftingInput {
         self.items
             .iter()
             .map(|slot| {
-                slot.as_ref()
-                    .and_then(|stack| stack.item.crafting_remainder())
+                slot.and_then(|stack| stack.item.crafting_remainder())
                     .map(|(item, count)| ItemStack::mint(item, count, MintReason::Crafting))
             })
             .collect()
@@ -779,12 +774,14 @@ impl RecipeSet {
             None => input.crafting_remainders(),
         };
         remaining.resize_with(input.items.len(), || None);
+        let (left, top, input_width, input_height) =
+            (positioned.left, positioned.top, input.width, input.height);
         let mut leftovers = Vec::new();
-        for y in 0..input.height {
-            for x in 0..input.width {
-                let slot = x + positioned.left + (y + positioned.top) * width;
+        for y in 0..input_height {
+            for x in 0..input_width {
+                let slot = x + left + (y + top) * width;
                 ItemStack::burn_from(&mut grid[slot], 1, BurnReason::CraftingInput);
-                let Some(replacement) = remaining[x + y * input.width].take() else {
+                let Some(replacement) = remaining[x + y * input_width].take() else {
                     continue;
                 };
                 match &mut grid[slot] {
@@ -870,7 +867,7 @@ impl RecipeSet {
             .map(|cutting| {
                 (
                     cutting.ingredient.clone(),
-                    SlotDisplay::Stack(result_stack(&cutting.result)),
+                    SlotDisplay::template(result_stack(&cutting.result)),
                 )
             })
             .collect()

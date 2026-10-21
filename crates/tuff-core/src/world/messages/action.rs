@@ -98,7 +98,7 @@ pub struct Attack {
     pub attacker_uuid: u128,
     /// The attacker's main-hand stack: its enchantments act on the victim,
     /// it may disable a shield, and it is reported back if the hit lands.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     pub attacker_position: [f64; 3],
     pub attacker_yaw: f32,
     pub damage: f32,

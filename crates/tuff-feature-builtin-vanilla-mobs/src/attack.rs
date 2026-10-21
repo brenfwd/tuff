@@ -2,7 +2,6 @@
 //! chases a target down to hit it.
 
 use rand::Rng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::Attribute;
 
@@ -47,7 +46,7 @@ impl MobCore {
             .map(|p| p.name.to_string());
         hit.attacker = Some(attacker);
         hit.position = Some(self.base.position);
-        hit.weapon = self.equipment.main_hand().map(DupUnchecked::dup_unchecked);
+        hit.weapon = self.equipment.main_hand().map(tuff_item::item::ItemSnapshot::of);
         if knockback > 0.0 {
             hit.knockback = Some((
                 f64::from(knockback),

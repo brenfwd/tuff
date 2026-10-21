@@ -294,7 +294,7 @@ pub enum PlayerEvent {
     /// with wears, the attacker stops sprinting if it knocked the target
     /// back, and a sweep hits the players around the target.
     AttackLanded {
-        weapon: Option<ItemStack>,
+        weapon: Option<tuff_item::item::ItemSnapshot>,
         target: PlayerId,
         target_position: [f64; 3],
         knockback: bool,

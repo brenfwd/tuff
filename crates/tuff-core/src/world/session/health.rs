@@ -16,7 +16,7 @@ use crate::world::stats::Stat;
 use crate::world::{EYE_HEIGHT, block_contact, framed, message_plain, packets};
 use rand::Rng;
 use tuff_item::item::DupUnchecked;
-use tuff_item::item::{Hurt, ItemStack, MintReason};
+use tuff_item::item::{Hurt, ItemSnapshot, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -35,11 +35,7 @@ impl PlayerSession {
 
     /// How this player's gear and effects change its mining speed.
     pub fn miner(&self) -> player::Miner {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         let modifiers = attributes::Modifiers {
             equipment: &worn,
@@ -61,11 +57,7 @@ impl PlayerSession {
 
     /// The value of one of this player's attributes.
     pub fn attribute(&self, attribute: Attribute) -> f64 {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         attributes::Modifiers {
             equipment: &worn,
@@ -121,7 +113,7 @@ impl PlayerSession {
                     attacker: hit.attacker.clone(),
                     projectile: hit.projectile,
                     position: hit.position,
-                    weapon: hit.weapon.dup_unchecked(),
+                    weapon: hit.weapon.clone(),
                     direct: hit.projectile.is_none(),
                 },
                 hit.amount,
@@ -253,10 +245,17 @@ impl PlayerSession {
     }
 
     /// The equipment worn and held, by slot.
-    pub fn equipment(&self) -> Vec<(EquipmentSlot, ItemStack)> {
+    pub fn worn(&self) -> Vec<attributes::Equipped<'_>> {
         EQUIPMENT_SLOTS
             .into_iter()
-            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?.dup_unchecked())))
+            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?)))
+            .collect()
+    }
+
+    pub fn equipment(&self) -> Vec<(EquipmentSlot, ItemSnapshot)> {
+        EQUIPMENT_SLOTS
+            .into_iter()
+            .filter_map(|slot| Some((slot, ItemSnapshot::of(self.inventory.equipped(slot)?))))
             .collect()
     }
 

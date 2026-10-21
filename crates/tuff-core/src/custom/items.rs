@@ -11,7 +11,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tuff_item::item::DupUnchecked;
+
 
 use tuff_vanilla_data::registry::DataComponentType;
 use tuff_vanilla_data::{BlockState, Item};
@@ -24,7 +24,7 @@ use crate::world::region_api::RegionWorld;
 use crate::world::session::PlayerSession;
 use tuff_item::item::display::{ModelData, full_identifier};
 use tuff_item::item::identity::{IDENTITY_KEY, ITEM_KEY, PRIVATE_KEY, client_custom_data};
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemSnapshot, ItemStack};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 
@@ -295,7 +295,7 @@ pub fn seen_by_entity(
 
 /// Recently replaced creative stacks with private data, newest last.
 #[derive(Default)]
-struct PrivateStash(Vec<ItemStack>);
+struct PrivateStash(Vec<ItemSnapshot>);
 
 fn client_view(stack: &ItemStack) -> Components {
     let mut components = stack.components.clone();
@@ -357,13 +357,9 @@ impl PlayerSession {
             return stack;
         }
         if let Some(previous) = slot
-            .and_then(|slot| {
-                self.inventory
-                    .slots()
-                    .get(slot)
-                    .and_then(DupUnchecked::dup_unchecked)
-            })
-            .filter(is_private)
+            .and_then(|slot| self.inventory.slots().get(slot).and_then(Option::as_ref))
+            .filter(|stack| is_private(stack))
+            .map(ItemSnapshot::of)
         {
             let stash = &mut self.ext.entry::<PrivateStash>().0;
             stash.retain(|stashed| *stashed != previous);
@@ -386,8 +382,8 @@ impl PlayerSession {
                     stashed.item == stack.item && client_view(stashed) == stack.components
                 })
             })
-            .map(DupUnchecked::dup_unchecked)
-            .unwrap_or_else(|| def.stack(1));
+            .cloned()
+            .unwrap_or_else(|| def.template());
         if let Some(data) = source.components.other.get(CUSTOM_DATA) {
             stack.components.other.insert(CUSTOM_DATA, data.clone());
         }

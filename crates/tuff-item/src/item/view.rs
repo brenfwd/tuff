@@ -79,6 +79,15 @@ impl ItemSnapshot {
         ItemView(&self.0)
     }
 
+    /// A picture of `count` of `item` with `components`, never a real item.
+    pub fn describe(item: tuff_vanilla_data::Item, count: u8, components: super::Components) -> Self {
+        Self(Arc::new(ItemStack {
+            item,
+            count,
+            components,
+        }))
+    }
+
     /// The same picture showing `count` items.
     pub fn with_count(self, count: u8) -> Self {
         let mut stack = Arc::try_unwrap(self.0).unwrap_or_else(|shared| shared.snapshot_copy());

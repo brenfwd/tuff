@@ -465,7 +465,7 @@ impl ItemUseExt for PlayerSession {
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.100_000_001_490_116_12, eye[2]];
         let mut arrow = ArrowShot::new(ammo.dup_count_unchecked(1), velocity);
-        arrow.weapon = Some(bow.dup_unchecked());
+        arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&bow));
         arrow.crit = power == 1.0;
         if uses == 0 {
             arrow.pickup = Some(Pickup::CreativeOnly);

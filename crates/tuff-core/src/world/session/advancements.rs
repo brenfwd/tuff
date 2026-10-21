@@ -158,8 +158,7 @@ impl PlayerSession {
                     };
                     let drops = loot.entity_drops(table, &facts, &mut self.rng);
                     for stack in drops {
-                        let count = i32::from(stack.count());
-                        self.give_items(stack, count).await;
+                        self.give_stack(stack).await;
                     }
                 }
                 if let Some(function) = &reward.function {
@@ -370,7 +369,7 @@ impl PlayerSession {
                 taken,
             } => {
                 let victim = here(victim);
-                self.hurt_entity_facts(weapon.as_deref(), &victim, &damage, dealt, taken);
+                self.hurt_entity_facts(weapon.as_ref(), &victim, &damage, dealt, taken);
             }
             AdvancementEvent::InteractedWithEntity { item, entity } => {
                 let entity = here(entity);
@@ -571,7 +570,7 @@ impl PlayerSession {
             equipment: attack
                 .weapon
                 .iter()
-                .map(|weapon| (EquipmentSlot::Mainhand, weapon.dup_unchecked()))
+                .map(|weapon| (EquipmentSlot::Mainhand, weapon.clone()))
                 .collect(),
             ..EntityFacts::default()
         };
@@ -589,7 +588,7 @@ impl PlayerSession {
 
     fn hurt_entity_facts(
         &mut self,
-        weapon: Option<&tuff_item::item::ItemStack>,
+        weapon: Option<&tuff_item::item::ItemSnapshot>,
         victim: &EntityFacts,
         damage: &crate::world::predicate::DamageFacts,
         dealt: f32,
@@ -603,7 +602,7 @@ impl PlayerSession {
                 .retain(|(slot, _)| *slot != EquipmentSlot::Mainhand);
             attacker
                 .equipment
-                .push((EquipmentSlot::Mainhand, weapon.dup_unchecked()));
+                .push((EquipmentSlot::Mainhand, weapon.clone()));
         }
         let damage = crate::world::predicate::DamageFacts {
             kind: damage.kind,
@@ -622,7 +621,7 @@ impl PlayerSession {
     /// This player's melee hit landed on an entity of type `kind`.
     pub fn hurt_entity(
         &mut self,
-        weapon: Option<&tuff_item::item::ItemStack>,
+        weapon: Option<&tuff_item::item::ItemSnapshot>,
         kind: EntityType,
         position: [f64; 3],
         dealt: f32,
@@ -637,7 +636,7 @@ impl PlayerSession {
                 .retain(|(slot, _)| *slot != EquipmentSlot::Mainhand);
             attacker
                 .equipment
-                .push((EquipmentSlot::Mainhand, weapon.dup_unchecked()));
+                .push((EquipmentSlot::Mainhand, weapon.clone()));
         }
         let entity = EntityFacts {
             kind: Some(kind),

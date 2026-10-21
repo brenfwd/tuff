@@ -115,9 +115,12 @@ impl RegionActor {
             return Some(EnchantAnswer::Itemless);
         };
         Some(match enchant_stack(stack.get(), enchantment, level) {
-            Ok(updated) => {
-                if let Some(old) = tracked.entity.replace_main_hand_item(Some(updated)) {
-                    old.burn(tuff_item::item::BurnReason::Transform);
+            Ok(enchantments) => {
+                if let Some(mut stack) = tracked.entity.replace_main_hand_item(None) {
+                    stack.components.enchantments = enchantments;
+                    if let Some(other) = tracked.entity.replace_main_hand_item(Some(stack)) {
+                        other.burn(tuff_item::item::BurnReason::Transform);
+                    }
                 }
                 EnchantAnswer::Done
             }

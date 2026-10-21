@@ -25,7 +25,10 @@ pub enum InventoryOp {
     /// Overrides the `keep_inventory` rule for this player; `None` clears.
     KeepInventory(Option<bool>),
     /// Gives `count` of `stack`, dropping what does not fit.
-    Give { stack: ItemStack, count: i32 },
+    Give {
+        stack: tuff_item::item::ItemSnapshot,
+        count: i32,
+    },
 }
 
 impl PlayerSession {
@@ -40,7 +43,8 @@ impl PlayerSession {
     pub async fn apply_inventory_ops(&mut self, ops: Vec<InventoryOp>) {
         for op in ops {
             if let InventoryOp::Give { stack, count } = op {
-                self.give_items(stack, count).await;
+                self.give_items(stack.view(), count, tuff_item::item::MintReason::Plugin)
+                    .await;
             } else if !self.apply_inventory_op(op) {
                 break;
             }

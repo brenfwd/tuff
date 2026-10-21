@@ -11,12 +11,12 @@ fn stack(item: Item, count: u8) -> Option<ItemStack> {
     Some(ItemStack::mint(item, count, MintReason::Test))
 }
 
-fn grid3(cells: [Option<ItemStack>; 9]) -> CraftingInput {
-    CraftingInput::positioned(3, 3, &cells).input
+fn grid3(cells: [Option<ItemStack>; 9]) -> CraftingInput<'static> {
+    CraftingInput::positioned(3, 3, Vec::from(cells).leak()).input
 }
 
-fn grid2(cells: [Option<ItemStack>; 4]) -> CraftingInput {
-    CraftingInput::positioned(2, 2, &cells).input
+fn grid2(cells: [Option<ItemStack>; 4]) -> CraftingInput<'static> {
+    CraftingInput::positioned(2, 2, Vec::from(cells).leak()).input
 }
 
 struct Found {
@@ -662,7 +662,7 @@ fn displays_follow_the_game_shapes() {
             assert_eq!(ingredients.len(), 2);
             assert_eq!(
                 *result,
-                SlotDisplay::Stack(ItemStack::mint(Item::Torch, 4, MintReason::Test))
+                SlotDisplay::template(ItemStack::mint(Item::Torch, 4, MintReason::Test))
             );
             assert_eq!(*station, SlotDisplay::Item(Item::CraftingTable));
         }

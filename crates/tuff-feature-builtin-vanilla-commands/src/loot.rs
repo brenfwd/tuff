@@ -8,8 +8,7 @@ use tuff_core::command::CommandError;
 use tuff_core::command::args::Value;
 use tuff_core::world::drops::EntityFacts;
 use tuff_core::world::messages::{Directive, RegionRequest, SlotFill};
-use tuff_item::item::DupUnchecked;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::Compound;
 use tuff_world_model::pos::ChunkPos;
@@ -174,14 +173,18 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
     }
 }
 
-fn empty() -> ItemStack {
-    ItemStack::empty()
+fn mint(template: &ItemStack) -> ItemStack {
+    ItemStack::mint_like(template, template.count(), MintReason::Loot)
+}
+
+fn mint_some(template: &ItemStack) -> Option<ItemStack> {
+    (template.count() > 0).then(|| mint(template))
 }
 
 async fn replace_entities(
     ctx: &mut Context<'_>,
-    items: &[ItemStack],
-    tracked: &mut Vec<ItemStack>,
+    items: &[ItemSnapshot],
+    tracked: &mut Vec<ItemSnapshot>,
 ) -> Result<(), CommandError> {
     let Some(Value::Selector(selector)) = ctx.arg("entities").cloned() else {
         return Err(CommandError::simple("argument.entity.notfound.entity"));
@@ -199,8 +202,8 @@ async fn replace_entities(
         for index in 0..count {
             let stack = items
                 .get(index)
-                .map(DupUnchecked::dup_unchecked)
-                .unwrap_or_else(empty);
+                .cloned()
+                .unwrap_or_else(|| ItemSnapshot::of(&ItemStack::empty()));
             let slot = start + index as i32;
             match target {
                 Target::Player(player) => {
@@ -208,7 +211,7 @@ async fn replace_entities(
                         Directive::SetSlots {
                             ids: vec![slot],
                             name: name.clone(),
-                            stack: stack.dup_unchecked(),
+                            stack: stack.clone(),
                             mode: SlotFill::Replace,
                         }
                     })
@@ -224,12 +227,7 @@ async fn replace_entities(
                     if !has_slot(slot, Holder::Mob, &data) {
                         continue;
                     }
-                    write_slot(
-                        &mut data,
-                        slot,
-                        Holder::Mob,
-                        (stack.count() > 0).then(|| stack.dup_unchecked()),
-                    );
+                    write_slot(&mut data, slot, Holder::Mob, mint_some(&stack));
                     let id = entity.id;
                     let _ = region
                         .ask(move |world| world.replace_entity(id, data))
@@ -251,8 +249,8 @@ fn block_pos(ctx: &Context<'_>) -> Result<[i32; 3], CommandError> {
 
 async fn replace_block(
     ctx: &mut Context<'_>,
-    items: &[ItemStack],
-    tracked: &mut Vec<ItemStack>,
+    items: &[ItemSnapshot],
+    tracked: &mut Vec<ItemSnapshot>,
 ) -> Result<(), CommandError> {
     let pos = block_pos(ctx)?;
     let Some(Value::Slots { name, ids }) = ctx.arg("slot").cloned() else {
@@ -278,14 +276,9 @@ async fn replace_block(
         }
         let stack = items
             .get(index)
-            .map(DupUnchecked::dup_unchecked)
-            .unwrap_or_else(empty);
-        write_slot(
-            &mut data,
-            slot,
-            holder,
-            (stack.count() > 0).then(|| stack.dup_unchecked()),
-        );
+            .cloned()
+            .unwrap_or_else(|| ItemSnapshot::of(&ItemStack::empty()));
+        write_slot(&mut data, slot, holder, mint_some(&stack));
         tracked.push(stack);
     }
     let dimension = ctx.source.dimension;
@@ -304,7 +297,7 @@ fn distribute(data: &mut Compound, holder: Holder, size: i32, mut stack: ItemSta
         };
         match current {
             None => {
-                write_slot(data, slot, holder, Some(stack.dup_unchecked()));
+                write_slot(data, slot, holder, Some(stack));
                 return true;
             }
             Some(mut current) if current.stacks_with(&stack) => {
@@ -314,18 +307,23 @@ fn distribute(data: &mut Compound, holder: Holder, size: i32, mut stack: ItemSta
                     current.transfer(&mut stack, moved);
                     write_slot(data, slot, holder, Some(current));
                     changed = true;
+                } else {
+                    current.burn(BurnReason::Template);
                 }
             }
-            Some(_) => {}
+            Some(other) => other.burn(BurnReason::Template),
         }
+    }
+    if stack.count() > 0 {
+        stack.burn(BurnReason::Loot);
     }
     changed
 }
 
 async fn insert_block(
     ctx: &mut Context<'_>,
-    items: &[ItemStack],
-    tracked: &mut Vec<ItemStack>,
+    items: &[ItemSnapshot],
+    tracked: &mut Vec<ItemSnapshot>,
 ) -> Result<(), CommandError> {
     let pos = block_pos(ctx)?;
     let (state, mut data, holder) =
@@ -335,8 +333,8 @@ async fn insert_block(
         _ => 0,
     };
     for stack in items {
-        if distribute(&mut data, holder, size, stack.dup_unchecked()) {
-            tracked.push(stack.dup_unchecked());
+        if distribute(&mut data, holder, size, mint(stack)) {
+            tracked.push(stack.clone());
         }
     }
     let dimension = ctx.source.dimension;
@@ -346,8 +344,8 @@ async fn insert_block(
 
 async fn give_players(
     ctx: &mut Context<'_>,
-    items: &[ItemStack],
-    tracked: &mut Vec<ItemStack>,
+    items: &[ItemSnapshot],
+    tracked: &mut Vec<ItemSnapshot>,
 ) -> Result<(), CommandError> {
     let Some(Value::Selector(selector)) = ctx.arg("players").cloned() else {
         return Err(CommandError::simple("argument.entity.notfound.player"));
@@ -355,15 +353,15 @@ async fn give_players(
     let players = targets::select_players(ctx, &selector).await?;
     for stack in items {
         let count = i32::from(stack.count());
-        let one = stack.dup_count_unchecked(1);
+        let one = stack.clone().with_count(1);
         let replies = targets::dispatch_wait(ctx, &players, |_| Directive::Give {
-            stack: one.dup_unchecked(),
+            stack: one.clone(),
             count,
         })
         .await;
         for reply in replies {
             if reply.affected {
-                tracked.push(stack.dup_unchecked());
+                tracked.push(stack.clone());
             }
         }
     }
@@ -372,8 +370,8 @@ async fn give_players(
 
 async fn spawn_items(
     ctx: &mut Context<'_>,
-    items: &[ItemStack],
-    tracked: &mut Vec<ItemStack>,
+    items: &[ItemSnapshot],
+    tracked: &mut Vec<ItemSnapshot>,
 ) -> Result<(), CommandError> {
     let position = match ctx.arg("targetPos") {
         Some(Value::Coordinates(coordinates)) => coordinates.position(&ctx.source.pose()),
@@ -392,13 +390,13 @@ async fn spawn_items(
         let velocity = [rng.gen_range(-0.1..0.1), 0.2, rng.gen_range(-0.1..0.1)];
         region
             .request(RegionRequest::SpawnItem {
-                stack: stack.dup_unchecked(),
+                stack: mint(stack),
                 position,
                 velocity,
                 pickup_delay: 10,
             })
             .await;
-        tracked.push(stack.dup_unchecked());
+        tracked.push(stack.clone());
     }
     Ok(())
 }
@@ -415,6 +413,14 @@ impl Executor for Loot {
                 .find(|literal| matches!(*literal, "fish" | "loot" | "kill" | "mine"))
                 .unwrap_or_default();
             let Drops { items, table } = drops(ctx, source).await?;
+            let items: Vec<ItemSnapshot> = items
+                .into_iter()
+                .map(|stack| {
+                    let template = ItemSnapshot::of(&stack);
+                    stack.burn(BurnReason::Template);
+                    template
+                })
+                .collect();
             let mut tracked = Vec::new();
             match (destination, literals.contains(&"entity")) {
                 ("replace", true) => replace_entities(ctx, &items, &mut tracked).await?,

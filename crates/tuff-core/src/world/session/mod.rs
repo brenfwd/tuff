@@ -243,7 +243,7 @@ pub struct DamageSource {
     /// Where it comes from, for shields and knockback.
     pub position: Option<[f64; 3]>,
     /// The attacker's weapon, which may disable a shield.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// The attacker dealt it itself (a melee hit, not a projectile or
     /// TNT); only such hits knock a shield holder back.
     pub direct: bool,
@@ -1183,11 +1183,7 @@ impl PlayerSession {
     /// The full value of `attribute`: its base with the commands', gear's
     /// and effects' modifiers.
     pub fn attribute_value(&self, attribute: Attribute) -> f64 {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         attributes::Modifiers {
             equipment: &worn,

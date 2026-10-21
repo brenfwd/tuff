@@ -174,7 +174,7 @@ pub fn attack(damage: f32, weapon: Option<ItemStack>) -> EntityAttack {
         attacker_pitch: 0.0,
         damage,
         knockback: 0.0,
-        weapon,
+        weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
         critical: false,
         magic: false,
         sweep: false,
