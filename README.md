@@ -464,7 +464,8 @@ enters or leaves crowd mode. Off, behaviour is vanilla.
 
 Items are never copied: a stack moves between players, containers,
 entities and regions, and only appears (loot, crafting, `/give`) or
-disappears (eating, burning, `/clear`) through a few audited doors. Moves
+disappears (eating, burning, `/clear`) through a few audited doors;
+plugins follow the same rules (see What the ABI offers). Moves
 between actors are checked; in release builds the checks are on unless
 `tuff.items.conservationChecks` is `false`. An operation that would make
 or lose items is refused instead of applied: the server logs it, writes a
@@ -770,6 +771,11 @@ backend that emits a core module can target it.
   65,536 changes.
 - Block events: a player broke or placed a block (payload: `x y z
   dimension state`). They arrive after the change and cannot cancel it.
+- Items: a plugin holds items only in host-owned stashes (`stash-new`,
+  `stash-mint`, `stash-split`, `stash-merge`, `stash-burn`) and moves them
+  with `give-stash` and `take-into-stash`, so it can make, move and use up
+  items but never copy one. Up to 1024 stashes at once; a stash still
+  holding items when the plugin unloads or faults is used up.
 - Messages to another loaded plugin, delivered after the call to its
   `tuff_message` with the sender's id, followed at most 8 deep when
   handlers answer each other.
