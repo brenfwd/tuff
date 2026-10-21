@@ -104,6 +104,14 @@ impl RegionHandle {
         self.internal.send(message).is_ok()
     }
 
+    /// Like [`Self::internal`], but hands the message back when the region
+    /// is gone, so the stacks it carries go back to their sender.
+    pub fn try_internal(&self, message: RegionInternal) -> Result<(), Box<RegionInternal>> {
+        self.internal
+            .send(message)
+            .map_err(|error| Box::new(error.0))
+    }
+
     /// Like [`Self::internal`], but hands the message back if the region is
     /// gone, so nothing it carries is lost.
     pub fn try_entity(

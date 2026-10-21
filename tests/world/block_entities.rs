@@ -709,7 +709,12 @@ async fn brewing_stands_brew_with_blaze_powder_and_show_their_bottles() {
         PlayerEvent::ContainerSlots { pos, slots, .. }
             if pos == block && slots.iter().any(|(slot, _)| *slot == 1) =>
         {
-            Some(slots)
+            Some(
+                slots
+                    .into_iter()
+                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                    .collect::<Vec<_>>(),
+            )
         }
         _ => None,
     })

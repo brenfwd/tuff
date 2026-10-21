@@ -25,7 +25,7 @@ async fn preview(b: &mut Bench, pos: BlockPos) -> Option<ItemStack> {
         PlayerEvent::ContainerSlots { pos: at, slots, .. } if at == pos => slots
             .into_iter()
             .find(|(slot, _)| *slot == crate::world::menu::crafter::PREVIEW)
-            .map(|(_, stack)| stack),
+            .map(|(_, stack)| stack.as_deref().map(ItemStack::dup_unchecked)),
         _ => None,
     })
     .await

@@ -528,7 +528,10 @@ mod tests {
     #[test]
     fn split_and_merge_keep_the_total() {
         let (taken, rest) = stack(10).split(3);
-        assert_eq!((taken.count(), rest.as_ref().map(ItemStack::count)), (3, Some(7)));
+        assert_eq!(
+            (taken.count(), rest.as_ref().map(ItemStack::count)),
+            (3, Some(7))
+        );
         let merged = ItemStack::merge(taken, rest.unwrap()).unwrap();
         assert_eq!(merged.count(), 10);
         let (all, none) = merged.split(200);
@@ -548,7 +551,10 @@ mod tests {
         let rest = target.absorb(source, 64).unwrap();
         assert_eq!((target.count(), rest.count()), (64, 6));
         let mut slot = Some(rest);
-        assert_eq!(ItemStack::take_from(&mut slot, 2).map(|s| s.count()), Some(2));
+        assert_eq!(
+            ItemStack::take_from(&mut slot, 2).map(|s| s.count()),
+            Some(2)
+        );
         assert_eq!(ItemStack::burn_from(&mut slot, 10, BurnReason::Test), 4);
         assert!(slot.is_none());
         let mut holder = stack(250);

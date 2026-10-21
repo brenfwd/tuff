@@ -234,7 +234,11 @@ impl PlayerSession {
             .await;
     }
 
-    pub fn entity_slots_changed(&mut self, entity: i32, slots: Vec<(usize, Option<ItemStack>)>) {
+    pub fn entity_slots_changed(
+        &mut self,
+        entity: i32,
+        slots: Vec<(usize, Option<tuff_item::item::ItemSnapshot>)>,
+    ) {
         let Some(menu) = self.menus.menu.as_mut() else {
             return;
         };
@@ -245,7 +249,7 @@ impl PlayerSession {
         let mut updates = Vec::new();
         for (slot, item) in slots {
             if slot < menu.container.len() {
-                menu.container[slot] = item.dup_unchecked();
+                menu.container[slot] = item.as_deref().map(ItemStack::dup_unchecked);
                 updates.push((menu.next_state_id(), menu.kind.wire_slot(slot) as i16, item));
             }
         }
@@ -254,7 +258,7 @@ impl PlayerSession {
                 window_id,
                 state_id,
                 slot,
-                item: item.as_ref().map(ItemStack::view),
+                item: item.as_ref().map(tuff_item::item::ItemSnapshot::view),
             });
         }
     }
@@ -326,7 +330,7 @@ impl PlayerSession {
     pub fn container_slots_changed(
         &mut self,
         pos: BlockPos,
-        slots: Vec<(usize, Option<ItemStack>)>,
+        slots: Vec<(usize, Option<tuff_item::item::ItemSnapshot>)>,
     ) {
         let Some(menu) = self.menus.menu.as_mut() else {
             return;
@@ -339,7 +343,7 @@ impl PlayerSession {
         for (slot, item) in slots {
             let index = offset + slot;
             if index < menu.container.len() {
-                menu.container[index] = item.dup_unchecked();
+                menu.container[index] = item.as_deref().map(ItemStack::dup_unchecked);
                 updates.push((
                     menu.next_state_id(),
                     menu.kind.wire_slot(index) as i16,
@@ -352,7 +356,7 @@ impl PlayerSession {
                 window_id,
                 state_id,
                 slot,
-                item: item.as_ref().map(ItemStack::view),
+                item: item.as_ref().map(tuff_item::item::ItemSnapshot::view),
             });
         }
     }

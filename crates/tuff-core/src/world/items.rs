@@ -67,7 +67,7 @@ pub enum BorderMerge {
     Probe {
         from: tuff_world_model::pos::RegionPos,
         item: i32,
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         owner: Option<tuff_nbt::Tag>,
         reach: [f64; 6],
     },

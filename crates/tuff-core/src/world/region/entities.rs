@@ -1039,18 +1039,18 @@ impl RegionActor {
                     } else {
                         other.absorb(item);
                     }
-                    (item.stack.dup_unchecked(), other.stack.dup_unchecked())
+                    (item.stack.count(), other.stack.count())
                 });
             self.ents.entities.insert(id, own);
-            let Some((own_stack, other_stack)) = result else {
+            let Some((own_count, other_count)) = result else {
                 continue;
             };
             touched.extend([id, other_id]);
-            for (entity, stack) in [(other_id, other_stack), (id, own_stack)] {
-                if stack.count() == 0 {
+            for (entity, count) in [(other_id, other_count), (id, own_count)] {
+                if count == 0 {
                     self.remove_entity(entity, &[]);
                 } else {
-                    self.set_item_stack(entity, stack);
+                    self.refresh_item_stack(entity);
                 }
             }
             if !self.ents.entities.contains_key(&id) {

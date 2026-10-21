@@ -7,7 +7,7 @@ use rand::rngs::StdRng;
 use tuff_item::item::DupUnchecked;
 
 use super::*;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::block::Facing;
 
@@ -229,15 +229,15 @@ impl RegionActor {
         let mut slots = Vec::with_capacity(changes.len());
         let mut edits = Vec::new();
         for change in changes {
-            let old = std::mem::replace(&mut container[change.slot], change.new.dup_unchecked());
             if holder.is_some() {
-                edits.push(SlotEdit {
-                    slot: change.slot,
-                    old,
-                    new: change.new.dup_unchecked(),
-                });
+                edits.push(SlotEdit::of(
+                    change.slot,
+                    container[change.slot].as_ref(),
+                    change.new.as_ref(),
+                ));
             }
-            slots.push((change.slot, change.new));
+            container[change.slot] = change.new;
+            slots.push(change.slot);
         }
         if let Some(holder) = holder {
             self.report_container_edit(holder, edits);
@@ -247,7 +247,7 @@ impl RegionActor {
             accepted: true,
             contents: Vec::new(),
         });
-        self.entity_slots_changed(entity, slots, Some(player.id));
+        self.entity_slots_changed(entity, &slots, Some(player.id));
     }
 
     /// Marks the entity for saving and shows its changed slots to everyone
@@ -255,7 +255,7 @@ impl RegionActor {
     pub(super) fn entity_slots_changed(
         &mut self,
         entity: i32,
-        slots: Vec<(usize, Option<ItemStack>)>,
+        changed: &[usize],
         except: Option<PlayerId>,
     ) {
         if let Some(chunk) = self.ents.entities.get(&entity).map(|t| t.chunk())
@@ -264,13 +264,28 @@ impl RegionActor {
             column.entities_dirty = true;
         }
         let dimension = self.dimension;
+        if !self.menus.entity_viewers.contains_key(&entity) {
+            return;
+        }
+        let Some(items) = self
+            .ents
+            .entities
+            .get(&entity)
+            .and_then(|tracked| tracked.entity.container())
+        else {
+            return;
+        };
+        let slots: Vec<(usize, Option<ItemSnapshot>)> = changed
+            .iter()
+            .filter_map(|&slot| Some((slot, items.get(slot)?.as_ref().map(ItemSnapshot::of))))
+            .collect();
         if let Some(viewers) = self.menus.entity_viewers.get_mut(&entity) {
             viewers.retain(|viewer| {
                 Some(viewer.id) == except
                     || viewer.send(PlayerEvent::EntitySlots {
                         dimension,
                         entity,
-                        slots: slots.dup_unchecked(),
+                        slots: slots.clone(),
                     })
             });
         }
@@ -328,38 +343,34 @@ impl RegionActor {
         let before = holder.map(|_| {
             items
                 .iter()
-                .map(DupUnchecked::dup_unchecked)
+                .map(|stack| stack.as_ref().map(ItemSnapshot::of))
                 .collect::<Vec<_>>()
         });
         let mut changed = Vec::new();
         let rest = block_entity::insert(&recipes, kind, items, None, stack, &mut changed, 0);
-        let slots = changed
-            .into_iter()
-            .map(|slot| (slot, items[slot].dup_unchecked()))
-            .collect::<Vec<_>>();
         if let (Some(holder), Some(before)) = (holder, before) {
-            let edits = slots
+            let edits = changed
                 .iter()
-                .map(|(slot, new)| SlotEdit {
-                    slot: *slot,
-                    old: before[*slot].dup_unchecked(),
-                    new: new.dup_unchecked(),
+                .map(|&slot| SlotEdit {
+                    slot,
+                    old: before[slot].clone(),
+                    new: items[slot].as_ref().map(ItemSnapshot::of),
                 })
                 .collect();
             self.report_container_edit(holder, edits);
         }
-        if !slots.is_empty() {
-            self.entity_slots_changed(entity, slots, None);
+        if !changed.is_empty() {
+            self.entity_slots_changed(entity, &changed, None);
         }
         rest
     }
 
-    /// Takes one item out of the first non-empty slot of `entity`'s
-    /// container that `accept` takes whole.
+    /// Moves one item out of the first non-empty slot of `entity`'s
+    /// container that `accept` takes; a refused item goes back.
     pub(super) fn extract_from_entity(
         &mut self,
         entity: i32,
-        mut accept: impl FnMut(&mut Self, ItemStack) -> bool,
+        mut accept: impl FnMut(&mut Self, ItemStack) -> Result<(), ItemStack>,
     ) -> bool {
         let size = self
             .ents
@@ -367,45 +378,52 @@ impl RegionActor {
             .get(&entity)
             .and_then(|tracked| tracked.entity.container())
             .map_or(0, <[_]>::len);
+        let at = self
+            .ents
+            .entities
+            .get(&entity)
+            .map_or([0.0; 3], |tracked| tracked.entity.base().position);
         for slot in 0..size {
-            let Some(one) = self
-                .ents
-                .entities
-                .get(&entity)
-                .and_then(|tracked| tracked.entity.container()?[slot].as_ref())
-                .map(|stack| stack.dup_count_unchecked(1))
-            else {
-                continue;
-            };
-            if !accept(self, one) {
-                continue;
-            }
             let holder = self.entity_holder(entity);
-            let Some(items) = self
+            let Some(held) = self
                 .ents
                 .entities
                 .get_mut(&entity)
-                .and_then(|tracked| tracked.entity.container_mut())
+                .and_then(|tracked| tracked.entity.container_mut()?.get_mut(slot))
             else {
-                return true;
+                continue;
             };
-            let old = holder.and(items[slot].dup_unchecked());
-            if let Some(stack) = items[slot].as_mut() {
-                stack.set_count_unchecked(stack.count() - 1);
-                if stack.count() == 0 {
-                    items[slot] = None;
+            let old = holder.and_then(|_| held.as_ref().map(ItemSnapshot::of));
+            let Some(one) = ItemStack::take_from(held, 1) else {
+                continue;
+            };
+            match accept(self, one) {
+                Ok(()) => {}
+                Err(one) => {
+                    if let Some(held) = self
+                        .ents
+                        .entities
+                        .get_mut(&entity)
+                        .and_then(|tracked| tracked.entity.container_mut()?.get_mut(slot))
+                    {
+                        ItemStack::put_back(held, one);
+                    } else {
+                        debug_assert!(false, "a container entity vanished mid-move");
+                        self.spawn_item_at(one, at, [0.0; 3], 0);
+                    }
+                    continue;
                 }
             }
-            let value = items[slot].dup_unchecked();
             if let Some(holder) = holder {
-                let edit = SlotEdit {
-                    slot,
-                    old,
-                    new: value.dup_unchecked(),
-                };
-                self.report_container_edit(holder, vec![edit]);
+                let new = self
+                    .ents
+                    .entities
+                    .get(&entity)
+                    .and_then(|tracked| tracked.entity.container()?.get(slot)?.as_ref())
+                    .map(ItemSnapshot::of);
+                self.report_container_edit(holder, vec![SlotEdit { slot, old, new }]);
             }
-            self.entity_slots_changed(entity, vec![(slot, value)], None);
+            self.entity_slots_changed(entity, &[slot], None);
             return true;
         }
         false
@@ -495,7 +513,7 @@ impl RegionActor {
                 .filter(|other| *other != id)
                 .map(|other| {
                     self.extract_from_entity(other, |region, one| {
-                        region.insert_into_entity(id, one).is_none()
+                        region.insert_into_entity(id, one).map_or(Ok(()), Err)
                     })
                 })
         };
@@ -530,20 +548,19 @@ impl RegionActor {
             bounds[5] + CART_REACH,
         ]));
         let mut seen = HashSet::new();
-        for (item, stack) in items {
+        for item in items {
             if !seen.insert(item) {
                 continue;
             }
-            match self.insert_into_entity(id, stack.dup_unchecked()) {
-                Some(rest) if rest.count() == stack.count() => continue,
-                Some(rest) => {
-                    self.set_item_stack(item, rest);
-                    return true;
-                }
-                None => {
-                    self.remove_entity(item, &[]);
-                    return true;
-                }
+            let Some(stack) = self.take_item_stack(item) else {
+                continue;
+            };
+            let before = stack.count();
+            let rest = self.insert_into_entity(id, stack);
+            let left = rest.as_ref().map_or(0, ItemStack::count);
+            self.return_item_stack(item, rest, before);
+            if left != before {
+                return true;
             }
         }
         false

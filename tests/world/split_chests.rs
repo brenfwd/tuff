@@ -121,7 +121,12 @@ async fn expect_slots(
     container: BlockPos,
 ) -> Vec<(usize, Option<ItemStack>)> {
     expect(events, |event| match event {
-        PlayerEvent::ContainerSlots { pos, slots, .. } if pos == container => Some(slots),
+        PlayerEvent::ContainerSlots { pos, slots, .. } if pos == container => Some(
+            slots
+                .into_iter()
+                .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                .collect::<Vec<_>>(),
+        ),
         _ => None,
     })
     .await
@@ -138,7 +143,13 @@ async fn expect_both(
     while found.iter().any(Option::is_none) {
         let (pos, slots) = expect(events, |event| match event {
             PlayerEvent::ContainerSlots { pos, slots, .. } if pos == first || pos == second => {
-                Some((pos, slots))
+                Some((
+                    pos,
+                    slots
+                        .into_iter()
+                        .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                        .collect::<Vec<_>>(),
+                ))
             }
             _ => None,
         })
@@ -414,7 +425,12 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
         PlayerEvent::ContainerSlots { pos, slots, .. }
             if pos == split.east_pos && slots.len() == 27 =>
         {
-            Some(slots)
+            Some(
+                slots
+                    .into_iter()
+                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                    .collect::<Vec<_>>(),
+            )
         }
         _ => None,
     })
@@ -596,9 +612,12 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
         })
         .await;
     let slots = expect(&mut bob_events, |event| match event {
-        PlayerEvent::ContainerSlots { pos, slots, .. } if pos == left && slots.len() == 27 => {
-            Some(slots)
-        }
+        PlayerEvent::ContainerSlots { pos, slots, .. } if pos == left && slots.len() == 27 => Some(
+            slots
+                .into_iter()
+                .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                .collect::<Vec<_>>(),
+        ),
         _ => None,
     })
     .await;

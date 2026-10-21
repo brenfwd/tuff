@@ -978,7 +978,7 @@ async fn dispenser_slot(b: &mut Bench, dispenser: BlockPos) -> Option<ItemStack>
         PlayerEvent::ContainerSlots { pos, slots, .. } if pos == dispenser => slots
             .into_iter()
             .find(|(slot, _)| *slot == 0)
-            .map(|(_, stack)| stack),
+            .map(|(_, stack)| stack.as_deref().map(ItemStack::dup_unchecked)),
         _ => None,
     })
     .await

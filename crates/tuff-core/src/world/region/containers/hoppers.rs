@@ -102,11 +102,17 @@ impl RegionActor {
     ) {
         let recipes = self.shared.recipes();
         let game_time = self.sched.tick as i64;
+        let viewed = self.menus.viewers.contains_key(&pos);
         let Some(entity) = self.block_entity_mut(pos) else {
             return;
         };
-        let before = std::mem::take(&mut entity.items);
-        let mut items = before.dup_unchecked();
+        let mut items = std::mem::take(&mut entity.items);
+        let before: Option<Vec<Option<ItemSnapshot>>> = viewed.then(|| {
+            items
+                .iter()
+                .map(|stack| stack.as_ref().map(ItemSnapshot::of))
+                .collect()
+        });
         let data_before = entity.data();
         let mut data = std::mem::replace(&mut entity.state, block_entity::State::Plain);
         let mut view = block_entity::TickView {
@@ -125,10 +131,15 @@ impl RegionActor {
         };
         entity.items = items;
         entity.state = data;
-        let changed_slots: Vec<(usize, Option<ItemStack>)> = (0..entity.items.len())
-            .filter(|slot| before[*slot] != entity.items[*slot])
-            .map(|slot| (slot, entity.items[slot].dup_unchecked()))
-            .collect();
+        let changed_slots: Vec<usize> = before.map_or_else(Vec::new, |before| {
+            (0..entity.items.len())
+                .filter(|&slot| match (&before[slot], &entity.items[slot]) {
+                    (None, None) => false,
+                    (Some(old), Some(new)) => old != new,
+                    _ => true,
+                })
+                .collect()
+        });
         let data_after = entity.data();
         let changed_data: Vec<(usize, i32)> = data_after
             .iter()
@@ -139,7 +150,7 @@ impl RegionActor {
         if let Some(next) = outcome.set_state {
             self.put_block(pos, next);
         }
-        self.broadcast_slots(pos, changed_slots);
+        self.broadcast_slots(pos, &changed_slots);
         self.broadcast_data(pos, changed_data);
         self.drop_items(pos, outcome.drops);
         if let Some((event, data)) = outcome.level_event {
@@ -243,14 +254,27 @@ impl RegionActor {
             }
             let mut changed = Vec::new();
             let recipes = self.shared.recipes();
-            let (rest, was_empty, slots) = {
+            let observed = self.observes_containers();
+            let (rest, was_empty, input_was_empty, before) = {
                 let Some(entity) = self.block_entity_mut(*part) else {
                     remaining = Some(stack);
                     continue;
                 };
                 let was_empty = entity.is_empty();
-                let mut items = entity.items.dup_unchecked();
+                let input_was_empty = kind.is_furnace()
+                    && entity
+                        .items
+                        .get(furnace::INPUT)
+                        .is_some_and(Option::is_none);
+                let before = observed.then(|| {
+                    entity
+                        .items
+                        .iter()
+                        .map(|stack| stack.as_ref().map(ItemSnapshot::of))
+                        .collect::<Vec<_>>()
+                });
                 let disabled = entity.crafter().map_or(0, |crafter| crafter.disabled);
+                let mut items = std::mem::take(&mut entity.items);
                 let rest = block_entity::insert(
                     &recipes,
                     kind,
@@ -260,23 +284,21 @@ impl RegionActor {
                     &mut changed,
                     disabled,
                 );
+                entity.items = items;
                 if let Some(crafter) = entity.crafter_mut() {
                     for slot in &changed {
                         crafter.disabled &= !(1 << slot);
                     }
                 }
-                let slots: Vec<(usize, Option<ItemStack>)> = changed
-                    .iter()
-                    .map(|slot| (*slot, items[*slot].dup_unchecked()))
-                    .collect();
-                (rest, was_empty, slots)
+                (rest, was_empty, input_was_empty, before)
             };
-            if !slots.is_empty() {
-                for (slot, stack) in &slots {
-                    self.set_container_slot(*part, *slot, stack.dup_unchecked());
+            if !changed.is_empty() {
+                self.report_block_slots(*part, before, &changed);
+                if input_was_empty && changed.contains(&furnace::INPUT) {
+                    self.furnace_input_changed(*part);
                 }
                 self.hopper_cooldown_after_insert(*part, from, was_empty);
-                self.broadcast_slots(*part, slots);
+                self.broadcast_slots(*part, &changed);
             }
             remaining = rest;
         }
@@ -303,21 +325,21 @@ impl RegionActor {
         if self.menus.container_locks.contains_key(&pos) {
             return None;
         }
-        let entity = self.block_entity(pos)?;
-        let (slot, mut held) = entity.items.iter().enumerate().find_map(|(slot, s)| {
-            Some((
-                slot,
-                s.as_ref().filter(|s| s.stacks_with(stack))?.dup_unchecked(),
-            ))
-        })?;
-        let count = stack.count().min(held.count());
-        if count == 0 {
-            return None;
+        let observed = self.observes_containers();
+        let entity = self.block_entity_mut(pos)?;
+        let slot = entity
+            .items
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|s| s.stacks_with(stack)))?;
+        let held = &mut entity.items[slot];
+        let old = observed
+            .then(|| held.as_ref().map(ItemSnapshot::of))
+            .flatten();
+        let taken = ItemStack::take_from(held, stack.count())?;
+        if observed {
+            self.report_slot(pos, slot, old);
         }
-        let taken = held.take(count);
-        let value = (held.count() > 0).then_some(held);
-        self.write_container_slot(pos, slot, value.dup_unchecked());
-        self.broadcast_slots(pos, vec![(slot, value)]);
+        self.broadcast_slots(pos, &[slot]);
         Some((slot, taken))
     }
 
@@ -352,15 +374,17 @@ impl RegionActor {
                 rest = Some(stack);
                 continue;
             };
-            let before = observed.then(|| entity.items.dup_unchecked());
+            let before = observed.then(|| {
+                entity
+                    .items
+                    .iter()
+                    .map(|stack| stack.as_ref().map(ItemSnapshot::of))
+                    .collect()
+            });
             let mut changed = Vec::new();
             let (left, ended) = block_entity::golem_place(&mut entity.items, stack, &mut changed);
-            let slots = changed
-                .iter()
-                .map(|slot| (*slot, entity.items[*slot].dup_unchecked()))
-                .collect();
             self.report_block_slots(part, before, &changed);
-            self.broadcast_slots(part, slots);
+            self.broadcast_slots(part, &changed);
             rest = left;
             if ended {
                 break;
@@ -390,20 +414,15 @@ impl RegionActor {
         }
         let size = ContainerKind::Hopper.size();
         for slot in 0..size {
-            let Some(one) = self
-                .block_entity(pos)
-                .and_then(|entity| entity.items[slot].as_ref())
-                .map(|stack| stack.dup_count_unchecked(1))
-            else {
+            let Some(one) = self.take_one_out(pos, slot) else {
                 continue;
             };
-            if self
-                .insert_into(kind, &parts, face, one, Some(pos))
-                .is_some()
-            {
+            let shown = self.observes_containers().then(|| ItemSnapshot::of(&one));
+            if let Some(back) = self.insert_into(kind, &parts, face, one, Some(pos)) {
+                self.return_one(pos, slot, back);
                 continue;
             }
-            self.take_one(pos, slot);
+            self.took_one(pos, slot, shown.as_deref());
             return true;
         }
         false
@@ -414,17 +433,15 @@ impl RegionActor {
     pub(super) fn hopper_push_into_entity(&mut self, pos: BlockPos, target: BlockPos) -> bool {
         if let Some(cart) = self.container_entity_at(target) {
             for slot in 0..ContainerKind::Hopper.size() {
-                let Some(one) = self
-                    .block_entity(pos)
-                    .and_then(|entity| entity.items[slot].as_ref())
-                    .map(|stack| stack.dup_count_unchecked(1))
-                else {
+                let Some(one) = self.take_one_out(pos, slot) else {
                     continue;
                 };
-                if self.insert_into_entity(cart, one).is_some() {
+                let shown = self.observes_containers().then(|| ItemSnapshot::of(&one));
+                if let Some(back) = self.insert_into_entity(cart, one) {
+                    self.return_one(pos, slot, back);
                     continue;
                 }
-                self.take_one(pos, slot);
+                self.took_one(pos, slot, shown.as_deref());
                 return true;
             }
         }
@@ -439,28 +456,37 @@ impl RegionActor {
             let face = Some(Facing::Down);
             for part in parts {
                 for slot in kind.slots_for_face(face) {
-                    let Some(one) = self
+                    if !self
                         .part_items(part)
                         .and_then(|items| items[slot].as_ref())
-                        .filter(|stack| kind.can_extract(slot, stack, face))
-                        .map(|stack| stack.dup_count_unchecked(1))
-                    else {
+                        .is_some_and(|stack| kind.can_extract(slot, stack, face))
+                    {
                         continue;
-                    };
+                    }
                     if !self.owns(part) {
-                        if !self.part_accepts(ContainerKind::Hopper, pos, None, &one) {
+                        let accepts = self
+                            .part_items(part)
+                            .and_then(|items| items[slot].as_ref())
+                            .is_some_and(|stack| {
+                                self.part_accepts(ContainerKind::Hopper, pos, None, stack, 1)
+                            });
+                        if !accepts {
                             continue;
                         }
                         self.pull_far(part, slot, pos);
                         return true;
                     }
-                    if self
-                        .insert_into(ContainerKind::Hopper, &[pos], None, one, None)
-                        .is_some()
+                    let Some(one) = self.take_one_out(part, slot) else {
+                        continue;
+                    };
+                    let shown = self.observes_containers().then(|| ItemSnapshot::of(&one));
+                    if let Some(back) =
+                        self.insert_into(ContainerKind::Hopper, &[pos], None, one, None)
                     {
+                        self.return_one(part, slot, back);
                         continue;
                     }
-                    self.take_one(part, slot);
+                    self.took_one(part, slot, shown.as_deref());
                     return true;
                 }
             }
@@ -473,7 +499,7 @@ impl RegionActor {
             return self.extract_from_entity(cart, |region, one| {
                 region
                     .insert_into(ContainerKind::Hopper, &[pos], None, one, None)
-                    .is_none()
+                    .map_or(Ok(()), Err)
             });
         }
         let blocked = self.block(above).is_some_and(|state| {
@@ -494,24 +520,16 @@ impl RegionActor {
             pos.y as f64 + HOPPER_SUCK_MAX_Y,
             pos.z as f64 + 1.0,
         ];
-        for (id, stack) in self.items_in(suck) {
-            let rest = self.insert_into(
-                ContainerKind::Hopper,
-                &[pos],
-                None,
-                stack.dup_unchecked(),
-                None,
-            );
-            match rest {
-                Some(rest) if rest.count() == stack.count() => continue,
-                Some(rest) => {
-                    self.set_item_stack(id, rest);
-                    return true;
-                }
-                None => {
-                    self.remove_entity(id, &[]);
-                    return true;
-                }
+        for id in self.items_in(suck) {
+            let Some(stack) = self.take_item_stack(id) else {
+                continue;
+            };
+            let before = stack.count();
+            let rest = self.insert_into(ContainerKind::Hopper, &[pos], None, stack, None);
+            let left = rest.as_ref().map_or(0, ItemStack::count);
+            self.return_item_stack(id, rest, before);
+            if left != before {
+                return true;
             }
         }
         false

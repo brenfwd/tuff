@@ -2,7 +2,6 @@
 //! them from, blocks that features register an item port for.
 
 use std::sync::Arc;
-use tuff_item::item::DupUnchecked;
 
 use super::RegionActor;
 use crate::world::block_entity::ContainerKind;
@@ -57,17 +56,15 @@ impl RegionActor {
     ) -> Option<bool> {
         let (port, at) = self.port_at(target, face, Porter::Hopper(pos))?;
         for slot in 0..ContainerKind::Hopper.size() {
-            let Some(one) = self
-                .block_entity(pos)
-                .and_then(|entity| entity.items[slot].as_ref())
-                .map(|stack| stack.dup_count_unchecked(1))
-            else {
+            let Some(one) = self.take_one_out(pos, slot) else {
                 continue;
             };
             if port.offer(self, &at, &one) {
-                self.take_hopper_item(pos, slot);
+                self.took_one(pos, slot, Some(&one));
+                one.burn(tuff_item::item::BurnReason::Plugin);
                 return Some(true);
             }
+            self.return_one(pos, slot, one);
         }
         Some(false)
     }
@@ -101,20 +98,5 @@ impl RegionActor {
         }
         port.take(self, &at);
         Some(true)
-    }
-
-    pub(super) fn take_hopper_item(&mut self, pos: BlockPos, slot: usize) {
-        let Some(entity) = self.block_entity_mut(pos) else {
-            return;
-        };
-        let Some(stack) = entity.items[slot].as_mut() else {
-            return;
-        };
-        stack.set_count_unchecked(stack.count() - 1);
-        if stack.count() == 0 {
-            entity.items[slot] = None;
-        }
-        let value = entity.items[slot].dup_unchecked();
-        self.broadcast_slots(pos, vec![(slot, value)]);
     }
 }

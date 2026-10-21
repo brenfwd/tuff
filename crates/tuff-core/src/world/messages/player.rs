@@ -102,6 +102,12 @@ impl PlayerHandle {
         self.events.send(event).is_ok()
     }
 
+    /// Like [`Self::send`], but hands the event back when the session is
+    /// gone, so the stacks it carries go back to their sender.
+    pub fn try_send(&self, event: PlayerEvent) -> Result<(), Box<PlayerEvent>> {
+        self.events.send(event).map_err(|error| Box::new(error.0))
+    }
+
     pub fn is_connected(&self) -> bool {
         !self.events.is_closed()
     }
@@ -237,7 +243,7 @@ pub enum PlayerEvent {
     OfferItem {
         item: i32,
         offer: u64,
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         region: RegionHandle,
     },
     /// What the region handed over for an accepted offer; the session
@@ -485,7 +491,7 @@ pub enum PlayerEvent {
     ContainerSlots {
         dimension: DimensionId,
         pos: BlockPos,
-        slots: Vec<(usize, Option<ItemStack>)>,
+        slots: Vec<(usize, Option<tuff_item::item::ItemSnapshot>)>,
     },
     /// Container data (a furnace's burn and cook progress) of a block
     /// container this player is viewing changed, as `(property, value)`.
@@ -528,7 +534,7 @@ pub enum PlayerEvent {
     EntitySlots {
         dimension: DimensionId,
         entity: i32,
-        slots: Vec<(usize, Option<ItemStack>)>,
+        slots: Vec<(usize, Option<tuff_item::item::ItemSnapshot>)>,
     },
     /// The entity whose container this player views is gone from its
     /// region (broken, unloaded, handed off); the menu must close.

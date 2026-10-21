@@ -78,6 +78,13 @@ impl ItemSnapshot {
     pub fn view(&self) -> ItemView<'_> {
         ItemView(&self.0)
     }
+
+    /// The same picture showing `count` items.
+    pub fn with_count(self, count: u8) -> Self {
+        let mut stack = Arc::try_unwrap(self.0).unwrap_or_else(|shared| shared.snapshot_copy());
+        stack.count = count;
+        Self(Arc::new(stack))
+    }
 }
 
 impl Deref for ItemSnapshot {
