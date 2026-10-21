@@ -365,7 +365,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
 fn slot_encoding_matches_the_game() {
     for case in game_encoded_stacks().iter().filter(|case| case.exact) {
         let mut w = PacketWriter::new();
-        w.write_slot(Some(&case.stack));
+        w.write_slot(Some(case.stack.view()));
         assert_eq!(hex(&w.into_bytes()), case.slot, "{:?}", case.stack);
     }
     let mut w = PacketWriter::new();
@@ -571,7 +571,7 @@ fn display_components_round_trip_on_the_wire() {
     assert_eq!(r.remaining(), 0);
 
     let mut w = PacketWriter::new();
-    w.write_item_template(&stack);
+    w.write_item_template(stack.view());
     assert_eq!(
         reader(w).read_item_template(0).unwrap(),
         Some(stack.clone())
@@ -648,7 +648,7 @@ fn charged_crossbows_round_trip_their_projectiles_as_templates() {
     assert_eq!(r.remaining(), 0);
 
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&crossbow));
+    w.write_slot(Some(crossbow.view()));
     let mut r = reader(w);
     assert_eq!(r.read_var_int().unwrap(), 1);
     assert_eq!(r.read_var_int().unwrap(), Item::Crossbow.id() as i32);
@@ -690,7 +690,7 @@ fn pot_decorations_are_sent_as_optional_templates_per_side() {
     assert_eq!(r.remaining(), 0);
 
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&pot));
+    w.write_slot(Some(pot.view()));
     let mut r = reader(w);
     for _ in 0..4 {
         r.read_var_int().unwrap();
@@ -732,7 +732,7 @@ fn inline_banner_and_trim_definitions_are_sent_in_full() {
         color: DyeColor::Red,
     }]);
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&banner));
+    w.write_slot(Some(banner.view()));
     let bytes = w.finish();
     assert!(
         bytes
@@ -748,7 +748,7 @@ fn inline_banner_and_trim_definitions_are_sent_in_full() {
     });
     armor.components.trim = Some(Box::new(trim));
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&armor));
+    w.write_slot(Some(armor.view()));
     let bytes = w.finish();
     assert!(bytes.windows(11).any(|w| w == b"\x00\x09tuff:glow"));
 }
@@ -798,7 +798,7 @@ fn container_components_round_trip_and_bound_their_nesting() {
     assert_eq!(r.remaining(), 0);
 
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&shulker));
+    w.write_slot(Some(shulker.view()));
     let mut r = reader(w);
     assert_eq!(r.read_var_int().unwrap(), 1);
     assert_eq!(r.read_var_int().unwrap(), Item::ShulkerBox.id() as i32);
@@ -866,7 +866,7 @@ fn typed_entity_data_without_a_known_id_stays_off_the_wire() {
             .with("Small", 1i8),
     );
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&stack));
+    w.write_slot(Some(stack.view()));
     assert_eq!(hex(&w.into_bytes()), "01fd0a0000");
     let mut stack = ItemStack::new(Item::Chest, 1);
     stack.components.other.insert(
@@ -874,7 +874,7 @@ fn typed_entity_data_without_a_known_id_stays_off_the_wire() {
         Compound::new().with("Lock", "x"),
     );
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&stack));
+    w.write_slot(Some(stack.view()));
     assert_eq!(hex(&w.into_bytes()), "0194030000");
     let unknown_type = "01fd0a01003c0cff7f0a010005536d616c6c0100";
     assert!(
@@ -889,7 +889,7 @@ fn typed_entity_data_without_a_known_id_stays_off_the_wire() {
 fn slot_wire_layout_matches_the_wiki() {
     let stack = damaged_named_pickaxe();
     let mut w = PacketWriter::new();
-    w.write_slot(Some(&stack));
+    w.write_slot(Some(stack.view()));
     let mut r = reader(w);
     assert_eq!(r.read_var_int().unwrap(), 1);
     assert_eq!(r.read_var_int().unwrap(), Item::DiamondPickaxe.id() as i32);
@@ -1017,19 +1017,19 @@ fn hashed_slots_match_component_checksums() {
         ],
         vec![DataComponentType::Tool],
     );
-    assert!(HashedSlot::matches(Some(&exact), Some(&stack)));
+    assert!(HashedSlot::matches(Some(&exact), Some(stack.view())));
     let mut wrong_hash = exact.clone();
     wrong_hash.added[0].1 += 1;
-    assert!(!HashedSlot::matches(Some(&wrong_hash), Some(&stack)));
+    assert!(!HashedSlot::matches(Some(&wrong_hash), Some(stack.view())));
     let mut missing = exact.clone();
     missing.added.pop();
-    assert!(!HashedSlot::matches(Some(&missing), Some(&stack)));
+    assert!(!HashedSlot::matches(Some(&missing), Some(stack.view())));
     let mut no_removed = exact.clone();
     no_removed.removed.clear();
-    assert!(!HashedSlot::matches(Some(&no_removed), Some(&stack)));
+    assert!(!HashedSlot::matches(Some(&no_removed), Some(stack.view())));
     let mut count = exact.clone();
     count.count = 2;
-    assert!(!HashedSlot::matches(Some(&count), Some(&stack)));
+    assert!(!HashedSlot::matches(Some(&count), Some(stack.view())));
     assert!(HashedSlot::matches(None, None));
     assert!(!HashedSlot::matches(Some(&exact), None));
     let plain = ItemStack::new(Item::Stone, 3);
@@ -1039,8 +1039,8 @@ fn hashed_slots_match_component_checksums() {
         added: Vec::new(),
         removed: Vec::new(),
     };
-    assert!(HashedSlot::matches(Some(&plain_view), Some(&plain)));
-    assert!(!HashedSlot::matches(Some(&plain_view), Some(&stack)));
+    assert!(HashedSlot::matches(Some(&plain_view), Some(plain.view())));
+    assert!(!HashedSlot::matches(Some(&plain_view), Some(stack.view())));
 }
 
 /// Wire bytes and checksums the game produced for the sample gear

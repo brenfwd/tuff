@@ -86,7 +86,10 @@ impl RegionEntity for OminousItemSpawner {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        vec![(metadata::ITEM_STACK, MetadataValue::Slot(self.item.clone()))]
+        vec![(
+            metadata::ITEM_STACK,
+            MetadataValue::Slot(self.item.as_ref().map(tuff_item::item::ItemSnapshot::of)),
+        )]
     }
 
     fn display_name(&self) -> String {

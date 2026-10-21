@@ -123,7 +123,10 @@ impl RegionEntity for EyeOfEnder {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        vec![(DATA_ITEM, MetadataValue::Slot(Some(self.item.clone())))]
+        vec![(
+            DATA_ITEM,
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&self.item))),
+        )]
     }
 
     fn tick(&mut self, cx: &mut TickContext) -> Tick {

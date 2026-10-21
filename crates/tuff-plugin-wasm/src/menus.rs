@@ -412,7 +412,7 @@ impl SessionHooks for MenuSessions {
                             window_id: WINDOW,
                             state_id,
                             slot: i16::from(slot),
-                            item,
+                            item: item.as_ref().map(ItemStack::view),
                         });
                     }
                 }

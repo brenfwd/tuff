@@ -307,7 +307,10 @@ async fn a_game_is_queued_built_played_decided_and_reset() {
         items: Some(Items {
             stacks: vec![(
                 36,
-                tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::IronIngot, 10),
+                tuff_item::item::ItemSnapshot::of(&tuff_item::item::ItemStack::new(
+                    tuff_vanilla_data::Item::IronIngot,
+                    10,
+                )),
             )],
             ..Items::default()
         }),

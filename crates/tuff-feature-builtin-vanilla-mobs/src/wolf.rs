@@ -92,7 +92,7 @@ fn armor_tier(stack: Option<&ItemStack>) -> usize {
 fn scute_particles(core: &MobCore, cx: &mut TickContext) {
     use tuff_core::protocol::codec::WriteExt;
     let mut options = tuff_wire::PacketWriter::new();
-    options.write_item_template(&ItemStack::new(tuff_vanilla_data::Item::ArmadilloScute, 1));
+    options.write_item_template(ItemStack::new(tuff_vanilla_data::Item::ArmadilloScute, 1).view());
     let options = options.into_bytes();
     let [x, y, z] = core.base.position;
     let packet = tuff_core::world::framed(&tuff_core::protocol::play::ParticlesWithOptions {

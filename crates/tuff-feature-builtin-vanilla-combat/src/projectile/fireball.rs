@@ -180,7 +180,10 @@ impl RegionEntity for SmallFireball {
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
         vec![(
             DATA_ITEM,
-            MetadataValue::Slot(Some(ItemStack::new(Item::FireCharge, 1))),
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&ItemStack::new(
+                Item::FireCharge,
+                1,
+            )))),
         )]
     }
 
@@ -397,7 +400,10 @@ impl RegionEntity for LargeFireball {
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
         vec![(
             DATA_ITEM,
-            MetadataValue::Slot(Some(ItemStack::new(Item::FireCharge, 1))),
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&ItemStack::new(
+                Item::FireCharge,
+                1,
+            )))),
         )]
     }
 

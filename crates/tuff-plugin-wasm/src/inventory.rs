@@ -8,7 +8,7 @@ use tuff_core::protocol::play::Serverbound;
 use tuff_core::world::menu::MenuKind;
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{PacketInterceptor, SessionHooks, Verdict};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, ItemView};
 
 use crate::host::WasmHost;
 use crate::menus::WINDOW;
@@ -98,17 +98,24 @@ fn bars_close(filter: &InventoryFilter, container: &str) -> bool {
         && filter.click == Some(InventoryClickKind::Close)
 }
 
-fn slot_stack(session: &PlayerSession, kind: Option<MenuKind>, slot: i16) -> Option<ItemStack> {
+fn slot_stack(session: &PlayerSession, kind: Option<MenuKind>, slot: i16) -> Option<ItemView<'_>> {
     let slot = usize::try_from(slot).ok()?;
+    let inventory = |index: usize| {
+        session
+            .inventory
+            .slots()
+            .get(index)?
+            .as_ref()
+            .map(ItemStack::view)
+    };
     match kind {
-        None => session.inventory.slots().get(slot).cloned().flatten(),
+        None => inventory(slot),
         Some(kind) => {
             let container = session.menu_container()?;
             if let Some(stack) = container.get(slot) {
-                return stack.clone();
+                return stack.as_ref().map(ItemStack::view);
             }
-            let index = kind.inventory_slot(slot)?;
-            session.inventory.slots().get(index).cloned().flatten()
+            inventory(kind.inventory_slot(slot)?)
         }
     }
 }
@@ -159,7 +166,8 @@ fn click(session: &mut PlayerSession, window: i32, slot: i16, button: i8, mode: 
         return Verdict::Allow;
     };
     let container = container_name(kind);
-    let stack = slot_stack(session, kind, slot).or_else(|| session.inventory.carried().cloned());
+    let stack = slot_stack(session, kind, slot)
+        .or_else(|| session.inventory.carried().map(ItemStack::view));
     let item = stack.as_ref().map(|stack| stack.item.name());
     let cancel = host
         .snapshot()

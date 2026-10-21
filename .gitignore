@@ -16,7 +16,7 @@ examples/rust-discord-relay/target/
 node_modules/
 **/target/
 
-/.dev/
+/.dev
 /CLAUDE.md
 /CLAUDE.local.md
 /AGENTS.md

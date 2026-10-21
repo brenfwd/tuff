@@ -487,7 +487,7 @@ mod tests {
             added: added.iter().map(|c| (c.kind().id(), c.hash())).collect(),
             removed: Vec::new(),
         };
-        assert!(HashedSlot::matches(Some(&hashed), Some(&stack)));
+        assert!(HashedSlot::matches(Some(&hashed), Some(stack.view())));
 
         let public = CustomItemDef::new("ex:open", Item::Paper)
             .with_data(Compound::new().with("door", "vault"))
@@ -550,10 +550,10 @@ mod tests {
             removed,
         };
         let ids = vec![Kind::Consumable.id(), Kind::Food.id()];
-        assert!(HashedSlot::matches(Some(&hashed(ids)), Some(&stack)));
+        assert!(HashedSlot::matches(Some(&hashed(ids)), Some(stack.view())));
         assert!(!HashedSlot::matches(
             Some(&hashed(Vec::new())),
-            Some(&stack)
+            Some(stack.view())
         ));
         let saved = Components::from_nbt(&stack.components.to_nbt());
         assert_eq!(saved, stack.components, "the removal survives saves");

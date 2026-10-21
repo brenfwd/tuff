@@ -479,7 +479,10 @@ fn metadata_attributes_and_equipment_round_trip() {
                     2,
                     MetadataValue::OptionalText(Some(TextComponent::new("Bob"))),
                 ),
-                (8, MetadataValue::Slot(Some(stack.clone()))),
+                (
+                    8,
+                    MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&stack))),
+                ),
                 (6, MetadataValue::Pose(0)),
                 (13, MetadataValue::OptionalVarInt(Some(4))),
                 (
@@ -507,7 +510,7 @@ fn metadata_attributes_and_equipment_round_trip() {
         &play(&SetEquipment {
             entity_id: 1,
             items: &[
-                (equipment_slot::MAIN_HAND, Some(&damaged)),
+                (equipment_slot::MAIN_HAND, Some(damaged.view())),
                 (equipment_slot::HEAD, None),
             ],
         }),
@@ -555,7 +558,7 @@ fn container_packets_round_trip() {
             window_id: 0,
             state_id: 1,
             slot: 36,
-            item: Some(stack.clone()),
+            item: Some(stack.view()),
         }),
         &["slot: 36, item: minecraft:stone x3"],
     );
@@ -563,7 +566,7 @@ fn container_packets_round_trip() {
     has(
         &play(&SetPlayerInventory {
             slot: 5,
-            item: Some(stack.clone()),
+            item: Some(stack.view()),
         }),
         &["slot: 5, item: minecraft:stone x3"],
     );
@@ -1078,7 +1081,7 @@ fn chat_and_scoreboard_packets_round_trip() {
                 display: Some(AdvancementDisplay {
                     title: &text,
                     description: &text,
-                    icon: &icon,
+                    icon: icon.view(),
                     frame: 0,
                     background: Some("minecraft:block/dirt"),
                     show_toast: true,

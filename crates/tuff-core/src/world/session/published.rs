@@ -241,8 +241,12 @@ impl PlayerSession {
                 }),
                 framed(&play::SetEquipment {
                     entity_id: self.id,
-                    items: &EQUIPMENT_SLOTS
-                        .map(|slot| (equipment_slot_id(slot), self.inventory.equipped(slot))),
+                    items: &EQUIPMENT_SLOTS.map(|slot| {
+                        (
+                            equipment_slot_id(slot),
+                            self.inventory.equipped(slot).map(ItemStack::view),
+                        )
+                    }),
                 }),
                 framed(&play::RotateHead {
                     entity_id: self.id,
@@ -447,10 +451,10 @@ impl PlayerSession {
         blast_state.1 = self.mode.abilities.flying && self.mode.abilities.instabuild;
         if self.published.last_equipment != equipment || force {
             blast_state.0 = self.attribute(Attribute::ExplosionKnockbackResistance);
-            let items: Vec<(u8, Option<&ItemStack>)> = EQUIPMENT_SLOTS
+            let items: Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> = EQUIPMENT_SLOTS
                 .into_iter()
                 .zip(&equipment)
-                .map(|(slot, stack)| (equipment_slot_id(slot), stack.as_ref()))
+                .map(|(slot, stack)| (equipment_slot_id(slot), stack.as_ref().map(ItemStack::view)))
                 .collect();
             update.push(framed(&play::SetEquipment {
                 entity_id: self.id,

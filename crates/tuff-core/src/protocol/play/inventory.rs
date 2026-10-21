@@ -6,7 +6,7 @@ use crate::protocol::codec::WriteExt;
 use crate::protocol::recipe::{DisplayEntry, RecipeDisplay, SlotDisplay};
 use crate::protocol::recipe::{write_ingredient, write_recipe_display, write_slot_display};
 use crate::protocol::{Encode, Packet};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, ItemView};
 use tuff_item::text::TextComponent;
 use tuff_wire::PacketWriter;
 
@@ -38,7 +38,7 @@ pub struct ContainerSetContent<'a> {
     pub window_id: i32,
     pub state_id: i32,
     pub slots: &'a [Option<ItemStack>],
-    pub carried: Option<&'a ItemStack>,
+    pub carried: Option<ItemView<'a>>,
 }
 
 impl Encode for ContainerSetContent<'_> {
@@ -49,7 +49,7 @@ impl Encode for ContainerSetContent<'_> {
         w.write_var_int(self.state_id);
         w.write_var_int(self.slots.len() as i32);
         for slot in self.slots {
-            w.write_slot(slot.as_ref());
+            w.write_slot(slot.as_ref().map(ItemStack::view));
         }
         w.write_slot(self.carried);
     }
@@ -57,14 +57,14 @@ impl Encode for ContainerSetContent<'_> {
 
 #[derive(Packet)]
 #[packet(id = Id::ContainerSetSlot, encode_only)]
-pub struct ContainerSetSlot {
+pub struct ContainerSetSlot<'a> {
     #[packet(var_int)]
     pub window_id: i32,
     #[packet(var_int)]
     pub state_id: i32,
     pub slot: i16,
     #[packet(slot)]
-    pub item: Option<ItemStack>,
+    pub item: Option<ItemView<'a>>,
 }
 
 /// Open Screen: shows a container window of `menu_type` (a
@@ -128,7 +128,7 @@ impl Encode for MerchantOffers<'_> {
         w.write_var_int(self.offers.len() as i32);
         for offer in self.offers {
             write_trade_item(w, &offer.buy);
-            w.write_slot(Some(&offer.sell));
+            w.write_slot(Some(offer.sell.view()));
             w.write_bool(offer.buy_b.is_some());
             if let Some(cost) = &offer.buy_b {
                 write_trade_item(w, cost);
@@ -272,13 +272,13 @@ impl Encode for PlaceGhostRecipe<'_> {
 
 #[derive(Packet)]
 #[packet(id = Id::SetPlayerInventory, encode_only)]
-pub struct SetPlayerInventory {
+pub struct SetPlayerInventory<'a> {
     #[packet(var_int)]
     pub slot: i32,
     #[packet(slot)]
-    pub item: Option<ItemStack>,
+    pub item: Option<ItemView<'a>>,
 }
 
 #[derive(Packet)]
 #[packet(id = Id::SetCursorItem, encode_only)]
-pub struct SetCursorItem(#[packet(slot)] pub Option<ItemStack>);
+pub struct SetCursorItem<'a>(#[packet(slot)] pub Option<ItemView<'a>>);

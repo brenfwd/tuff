@@ -93,8 +93,8 @@ async fn drops_swaps_pickups_and_crafts_are_reported_and_cancelled_by_filter() {
     );
 
     let egg = ItemStack::new(Item::Egg, 2);
-    assert!(!Pickups.allows_item_pickup(&client.session, &egg));
-    assert!(Pickups.allows_item_pickup(&client.session, &ItemStack::new(Item::Stick, 2)));
+    assert!(!Pickups.allows_item_pickup(&client.session, egg.view()));
+    assert!(Pickups.allows_item_pickup(&client.session, ItemStack::new(Item::Stick, 2).view()));
 
     *client.session.inventory.slot_mut(0) = Some(ItemStack::new(Item::Stick, 4));
     let take = Serverbound::ContainerClick {

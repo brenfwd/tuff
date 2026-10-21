@@ -199,12 +199,12 @@ impl PlayerSession {
                         .is_some_and(|stack| {
                             crate::protocol::codec::HashedSlot::matches(
                                 view.as_ref(),
-                                stack.as_ref(),
+                                stack.as_ref().map(ItemStack::view),
                             )
                         })
                 }) && crate::protocol::codec::HashedSlot::matches(
                     carried.as_ref(),
-                    self.inventory.carried(),
+                    self.inventory.carried().map(ItemStack::view),
                 );
                 if !in_sync {
                     self.send_inventory();

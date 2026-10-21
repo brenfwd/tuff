@@ -394,7 +394,7 @@ impl RegionEntity for ItemEntity {
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
         vec![(
             metadata::ITEM_STACK,
-            MetadataValue::Slot(Some(self.stack.clone())),
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&self.stack))),
         )]
     }
 

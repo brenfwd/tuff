@@ -278,7 +278,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        &ItemStack::new(item, 1),
+                        ItemStack::new(item, 1).view(),
                     );
                     self.progress
                         .stats
@@ -610,7 +610,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        &ItemStack::new(item, 1),
+                        ItemStack::new(item, 1).view(),
                     );
                     self.progress
                         .stats

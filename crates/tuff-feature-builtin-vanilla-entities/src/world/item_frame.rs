@@ -483,7 +483,10 @@ impl RegionEntity for ItemFrame {
             MetadataValue::Direction(self.facing.id() as i32),
         ));
         if self.item.is_some() {
-            values.push((DATA_ITEM, MetadataValue::Slot(self.item.clone())));
+            values.push((
+                DATA_ITEM,
+                MetadataValue::Slot(self.item.as_ref().map(tuff_item::item::ItemSnapshot::of)),
+            ));
         }
         if self.rotation != 0 {
             values.push((DATA_ROTATION, MetadataValue::VarInt(self.rotation.into())));
@@ -498,7 +501,9 @@ impl RegionEntity for ItemFrame {
             .into_iter()
             .map(|index| {
                 let value = match index {
-                    DATA_ITEM => MetadataValue::Slot(self.item.clone()),
+                    DATA_ITEM => MetadataValue::Slot(
+                        self.item.as_ref().map(tuff_item::item::ItemSnapshot::of),
+                    ),
                     _ => MetadataValue::VarInt(self.rotation.into()),
                 };
                 (index, value)
