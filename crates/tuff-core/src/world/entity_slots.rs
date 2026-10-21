@@ -167,6 +167,7 @@ mod tests {
     use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
+    #[tuff_core::watchdog]
     #[test]
     fn a_head_comes_before_the_rest() {
         let mut saddle = Some(ItemStack::mint(Item::Saddle, 1, MintReason::Spawn));
