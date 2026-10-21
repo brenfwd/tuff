@@ -141,7 +141,7 @@ pub struct Items {
     /// Every occupied slot: its index, item id and count.
     pub slots: Vec<(u8, String, u8)>,
     /// Every occupied slot's whole stack.
-    pub stacks: Vec<(u8, tuff_item::item::ItemStack)>,
+    pub stacks: Vec<(u8, tuff_item::item::ItemSnapshot)>,
 }
 
 impl Player {

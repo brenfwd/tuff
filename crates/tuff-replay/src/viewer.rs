@@ -294,7 +294,7 @@ impl Viewer {
                 window_id: 0,
                 state_id: 0,
                 slot: HOTBAR_FIRST_SLOT + i as i16,
-                item: if self.hotbar { Some(item) } else { None },
+                item: if self.hotbar { Some(item.view()) } else { None },
             }));
         }
     }

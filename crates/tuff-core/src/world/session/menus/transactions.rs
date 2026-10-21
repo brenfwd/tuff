@@ -253,7 +253,7 @@ impl PlayerSession {
                 window_id,
                 state_id,
                 slot,
-                item,
+                item: item.as_ref().map(ItemStack::view),
             });
         }
     }
@@ -351,7 +351,7 @@ impl PlayerSession {
                 window_id,
                 state_id,
                 slot,
-                item,
+                item: item.as_ref().map(ItemStack::view),
             });
         }
     }

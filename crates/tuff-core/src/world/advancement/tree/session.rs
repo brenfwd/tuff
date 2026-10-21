@@ -196,7 +196,7 @@ pub(super) fn flush_advancements(session: &mut PlayerSession, tree: &Tree, show:
                     .map(|display| play::AdvancementDisplay {
                         title: &display.title,
                         description: &display.description,
-                        icon: &display.icon,
+                        icon: display.icon.view(),
                         frame: display.frame.id(),
                         background: display.background.as_deref(),
                         show_toast: display.show_toast,

@@ -20,7 +20,6 @@ use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{
     HookFuture, ItemAction, PacketInterceptor, SessionHooks, Verdict,
 };
-use tuff_item::item::ItemStack;
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_data::{Block, BlockState};
 use tuff_world_model::BlockPos;
@@ -437,7 +436,7 @@ fn item_record(
     kind: Kind,
     world: &dyn RegionWorld,
     at: [f64; 3],
-    stack: &ItemStack,
+    stack: tuff_item::item::ItemView<'_>,
 ) -> Record {
     let mut record = Record::new(now_ms(), who, kind, world.dimension_id(), world_pos(at));
     record.material = Some(stack.item.name().to_owned());
@@ -473,7 +472,7 @@ impl RegionHooks for ItemHooks {
             Kind::ItemRemove,
             world,
             item.base.position,
-            &item.stack,
+            item.stack.view(),
         ));
     }
 
@@ -491,7 +490,7 @@ impl RegionHooks for ItemHooks {
             Kind::ItemAdd,
             world,
             pickup.position,
-            &pickup.stack,
+            pickup.stack.view(),
         ));
     }
 
@@ -538,7 +537,11 @@ fn session_record(session: &PlayerSession, kind: Kind) -> Record {
 }
 
 /// `record` filled in as the row for `action` on `stack`.
-fn action_record(mut record: Record, action: ItemAction, stack: &ItemStack) -> Record {
+fn action_record(
+    mut record: Record,
+    action: ItemAction,
+    stack: tuff_item::item::ItemView<'_>,
+) -> Record {
     record.material = Some(stack.item.name().to_owned());
     record.amount = i32::from(stack.count);
     record.data = Some(stack.to_nbt());
@@ -556,7 +559,12 @@ fn log_session(session: &PlayerSession, kind: Kind) {
 pub struct Sessions;
 
 impl SessionHooks for Sessions {
-    fn item_action(&self, session: &PlayerSession, action: ItemAction, stack: &ItemStack) {
+    fn item_action(
+        &self,
+        session: &PlayerSession,
+        action: ItemAction,
+        stack: tuff_item::item::ItemView<'_>,
+    ) {
         let kind = match action {
             ItemAction::Crafted => Kind::ItemAdd,
             ItemAction::Shot | ItemAction::Broken => Kind::ItemRemove,
@@ -800,7 +808,7 @@ mod action_tests {
         let row = action_record(
             base,
             ItemAction::Broken,
-            &ItemStack::new(tuff_vanilla_data::Item::IronPickaxe, 1),
+            tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::IronPickaxe, 1).view(),
         );
         assert_eq!(row.text.as_deref(), Some("break"));
         assert_eq!(row.material.as_deref(), Some("minecraft:iron_pickaxe"));

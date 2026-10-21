@@ -130,12 +130,12 @@ pub enum Tamper {
 }
 
 /// Checks a client-made stack, its contents and their NBT.
-pub fn tampered(stack: &ItemStack) -> Option<Tamper> {
+pub fn tampered(stack: tuff_item::item::ItemView<'_>) -> Option<Tamper> {
     let mut bytes = 0;
     walk(stack, &mut bytes).err()
 }
 
-fn walk(stack: &ItemStack, bytes: &mut usize) -> Result<(), Tamper> {
+fn walk(stack: tuff_item::item::ItemView<'_>, bytes: &mut usize) -> Result<(), Tamper> {
     let max = stack.max_stack_size();
     if stack.count == 0 || stack.count > max {
         return Err(Tamper::Count);
@@ -152,14 +152,14 @@ fn walk(stack: &ItemStack, bytes: &mut usize) -> Result<(), Tamper> {
             return Err(Tamper::BundleWeight);
         }
         for inner in bundle.items() {
-            walk(inner, bytes)?;
+            walk(inner.view(), bytes)?;
         }
     }
     for inner in components.container.iter().flatten().flatten() {
-        walk(inner, bytes)?;
+        walk(inner.view(), bytes)?;
     }
     for inner in components.charged_projectiles.iter().flatten() {
-        walk(inner, bytes)?;
+        walk(inner.view(), bytes)?;
     }
     Ok(())
 }
@@ -224,7 +224,7 @@ impl ItemIntegrity {
     fn creative(stack: &CreativeSlot) -> Option<Flag> {
         match stack {
             CreativeSlot::Invalid => Flag::resync(STACK_COUNT, 5.0),
-            CreativeSlot::Stack(stack) => match tampered(stack)? {
+            CreativeSlot::Stack(stack) => match tampered(stack.view())? {
                 Tamper::Count => Flag::resync(STACK_COUNT, 5.0),
                 Tamper::NbtDepth | Tamper::NbtSize => Flag::resync(ITEM_DATA, 10.0),
                 Tamper::DamageableStack | Tamper::BundleWeight => Flag::resync(ITEM_DATA, 5.0),
@@ -333,10 +333,10 @@ mod tests {
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Empty)), None);
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Unsupported)), None);
         let data = with_data(Item::Stick, nested(MAX_NBT_DEPTH - 1));
-        assert_eq!(tampered(&data), None);
+        assert_eq!(tampered(data.view()), None);
         let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
         shulker.components.container = Some(vec![Some(ItemStack::new(Item::Dirt, 64)), None]);
-        assert_eq!(tampered(&shulker), None);
+        assert_eq!(tampered(shulker.view()), None);
     }
 
     #[tuff_core::watchdog]
@@ -348,7 +348,7 @@ mod tests {
             Some(STACK_COUNT)
         );
         let swords = ItemStack::new(Item::DiamondSword, 2);
-        assert_eq!(tampered(&swords), Some(Tamper::Count));
+        assert_eq!(tampered(swords.view()), Some(Tamper::Count));
         let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
         shulker.components.container = Some(vec![None, Some(ItemStack::new(Item::Dirt, 65))]);
         assert_eq!(
@@ -357,7 +357,7 @@ mod tests {
         );
         let mut crossbow = ItemStack::new(Item::Crossbow, 1);
         crossbow.components.charged_projectiles = Some(vec![ItemStack::new(Item::Arrow, 0)]);
-        assert_eq!(tampered(&crossbow), Some(Tamper::Count));
+        assert_eq!(tampered(crossbow.view()), Some(Tamper::Count));
     }
 
     #[tuff_core::watchdog]
@@ -368,7 +368,7 @@ mod tests {
             .components
             .other
             .insert("minecraft:max_stack_size", Tag::Int(16));
-        assert_eq!(tampered(&sword), Some(Tamper::DamageableStack));
+        assert_eq!(tampered(sword.view()), Some(Tamper::DamageableStack));
         assert_eq!(
             flag_of(&facts(), &creative(CreativeSlot::Stack(sword))),
             Some(ITEM_DATA)
@@ -379,17 +379,17 @@ mod tests {
     #[test]
     fn deep_or_huge_nbt_is_flagged() {
         let deep = with_data(Item::Stick, nested(MAX_NBT_DEPTH + 1));
-        assert_eq!(tampered(&deep), Some(Tamper::NbtDepth));
+        assert_eq!(tampered(deep.view()), Some(Tamper::NbtDepth));
         let wide = Tag::List(vec![Tag::String("x".repeat(1024)); 300]);
         assert_eq!(
-            tampered(&with_data(Item::Stick, wide)),
+            tampered(with_data(Item::Stick, wide).view()),
             Some(Tamper::NbtSize)
         );
         let small = Tag::List(vec![Tag::String("x".repeat(1024)); 100]);
         let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
         shulker.components.container = Some(vec![Some(with_data(Item::Stick, small.clone())); 3]);
-        assert_eq!(tampered(&shulker), Some(Tamper::NbtSize));
-        assert_eq!(tampered(&with_data(Item::Stick, small)), None);
+        assert_eq!(tampered(shulker.view()), Some(Tamper::NbtSize));
+        assert_eq!(tampered(with_data(Item::Stick, small).view()), None);
         assert_eq!(
             flag_of(
                 &facts(),

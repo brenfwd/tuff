@@ -2,7 +2,7 @@ use tuff_vanilla_data::packet::play::Clientbound as Id;
 
 use crate::protocol::codec::WriteExt;
 use crate::protocol::{Encode, Packet};
-use tuff_item::item::ItemStack;
+use tuff_item::item::ItemView;
 use tuff_item::text::TextComponent;
 use tuff_wire::PacketWriter;
 
@@ -92,7 +92,7 @@ pub struct AdvancementEntry<'a> {
 pub struct AdvancementDisplay<'a> {
     pub title: &'a TextComponent,
     pub description: &'a TextComponent,
-    pub icon: &'a ItemStack,
+    pub icon: ItemView<'a>,
     pub frame: u8,
     pub background: Option<&'a str>,
     pub show_toast: bool,

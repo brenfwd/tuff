@@ -288,7 +288,10 @@ impl RegionEntity for Thrown {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        vec![(DATA_ITEM, MetadataValue::Slot(Some(self.item.clone())))]
+        vec![(
+            DATA_ITEM,
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&self.item))),
+        )]
     }
 
     fn spawn_data(&self) -> i32 {

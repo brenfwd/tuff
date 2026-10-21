@@ -302,7 +302,10 @@ pub fn synced_values(kind: EntityType, nbt: &Compound) -> Vec<(u8, MetadataValue
         )),
         EntityType::ItemDisplay => {
             let stack = nbt.get_compound("item").and_then(ItemStack::from_nbt);
-            values.push((SUBTYPE, MetadataValue::Slot(stack)));
+            values.push((
+                SUBTYPE,
+                MetadataValue::Slot(stack.as_ref().map(tuff_item::item::ItemSnapshot::of)),
+            ));
             values.push((
                 SUBTYPE + 1,
                 MetadataValue::Byte(item_context(nbt.get_str("item_display"))),

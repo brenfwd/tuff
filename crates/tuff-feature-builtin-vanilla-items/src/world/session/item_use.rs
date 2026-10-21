@@ -386,7 +386,10 @@ impl ItemUseExt for PlayerSession {
             _ => None,
         };
         if let Some(stack) = launched {
-            self.item_action_hooks(tuff_core::world::session::hooks::ItemAction::Shot, &stack);
+            self.item_action_hooks(
+                tuff_core::world::session::hooks::ItemAction::Shot,
+                stack.view(),
+            );
         }
         let id = self.shared.next_entity_id();
         let owner = Owner::of(

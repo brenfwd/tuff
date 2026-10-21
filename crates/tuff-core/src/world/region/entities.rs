@@ -1084,9 +1084,9 @@ impl RegionActor {
         }
         tracked.refresh_spawn();
         let items = tracked.entity.equipment();
-        let items: Vec<(u8, Option<&ItemStack>)> = items
+        let items: Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> = items
             .iter()
-            .map(|(slot, stack)| (*slot, stack.as_ref()))
+            .map(|(slot, stack)| (*slot, stack.as_ref().map(ItemStack::view)))
             .collect();
         let packet = packets([framed(&play::SetEquipment {
             entity_id: tracked.id(),

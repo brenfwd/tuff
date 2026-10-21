@@ -13,6 +13,8 @@ pub mod equippable;
 pub mod gear;
 pub mod hash;
 pub mod identity;
+mod view;
+pub use view::{ItemSnapshot, ItemView};
 
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;

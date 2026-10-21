@@ -39,7 +39,7 @@ impl PlayerSession {
         if made > 0 {
             self.item_action_hooks(
                 super::hooks::ItemAction::Crafted,
-                &ItemStack::new(item, made.clamp(1, i32::from(i8::MAX)) as _),
+                ItemStack::new(item, made.clamp(1, i32::from(i8::MAX)) as _).view(),
             );
             self.progress
                 .stats

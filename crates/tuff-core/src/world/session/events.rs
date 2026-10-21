@@ -196,7 +196,7 @@ impl PlayerSession {
                     || region.dimension != self.dimension
                     || !hooks
                         .iter()
-                        .all(|hook| hook.allows_item_pickup(self, &stack))
+                        .all(|hook| hook.allows_item_pickup(self, stack.view()))
                 {
                     0
                 } else {

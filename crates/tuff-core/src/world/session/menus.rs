@@ -115,7 +115,7 @@ impl PlayerSession {
                 window_id: 0,
                 state_id,
                 slot: 0,
-                item: result,
+                item: result.as_ref().map(ItemStack::view),
             });
         }
     }
@@ -138,7 +138,7 @@ impl PlayerSession {
             window_id,
             state_id,
             slot: wire as i16,
-            item,
+            item: item.as_ref().map(ItemStack::view),
         });
     }
 
@@ -629,7 +629,7 @@ impl PlayerSession {
             window_id: 0,
             state_id,
             slots: self.inventory.slots(),
-            carried: self.inventory.carried(),
+            carried: self.inventory.carried().map(ItemStack::view),
         };
         let bytes = framed(&packet);
         self.send_raw(bytes);
@@ -857,7 +857,7 @@ impl PlayerSession {
             window_id,
             state_id,
             slots: &slots,
-            carried: self.inventory.carried(),
+            carried: self.inventory.carried().map(ItemStack::view),
         };
         let bytes = framed(&packet);
         self.send_raw(bytes);
@@ -1211,8 +1211,11 @@ impl PlayerSession {
                         .and_then(|index| self.inventory.slots()[index].as_ref())
                 }
             });
-            HashedSlot::matches(view.as_ref(), value)
-        }) && HashedSlot::matches(click.carried.as_ref(), self.inventory.carried());
+            HashedSlot::matches(view.as_ref(), value.map(ItemStack::view))
+        }) && HashedSlot::matches(
+            click.carried.as_ref(),
+            self.inventory.carried().map(ItemStack::view),
+        );
         if !in_sync || resync {
             self.send_menu_content();
         }

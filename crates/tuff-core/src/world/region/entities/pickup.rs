@@ -548,8 +548,10 @@ impl RegionActor {
         };
         item.stack = stack.clone();
         let chunk = item.base.chunk();
-        let data =
-            tracked.data_packets(&[(metadata::ITEM_STACK, MetadataValue::Slot(Some(stack)))]);
+        let data = tracked.data_packets(&[(
+            metadata::ITEM_STACK,
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&stack))),
+        )]);
         if let Some(column) = self.columns.get_mut(&chunk) {
             column.entities_dirty = true;
         }

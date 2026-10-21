@@ -283,7 +283,10 @@ impl RegionEntity for FireworkRocket {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        let mut values = vec![(DATA_ITEM, MetadataValue::Slot(Some(self.item.clone())))];
+        let mut values = vec![(
+            DATA_ITEM,
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&self.item))),
+        )];
         if self.attached.is_some() {
             values.push((DATA_ATTACHED, MetadataValue::OptionalVarInt(self.attached)));
         }

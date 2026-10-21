@@ -121,7 +121,12 @@ impl PlayerSession {
                 .slots()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| Some((slot as u8, stack.clone()?)))
+                .filter_map(|(slot, stack)| {
+                    Some((
+                        slot as u8,
+                        tuff_item::item::ItemSnapshot::of(stack.as_ref()?),
+                    ))
+                })
                 .collect(),
             miner: Some(self.miner()),
         };

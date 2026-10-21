@@ -185,7 +185,7 @@ fn encode(kind: ParticleType, data: &Compound, w: &mut PacketWriter) -> Result<(
                 return Err(invalid("Missing field item"));
             };
             let stack = ItemStack::from_nbt(item).ok_or_else(|| invalid("Invalid item"))?;
-            w.write_slot(Some(&stack));
+            w.write_slot(Some(stack.view()));
         }
         P::Geyser | P::GeyserPlume => w.write_int(positive(data, "water_blocks")?),
         P::GeyserBase | P::GeyserPoof => {

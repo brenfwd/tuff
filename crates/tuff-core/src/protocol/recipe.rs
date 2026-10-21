@@ -118,7 +118,7 @@ pub fn write_slot_display(w: &mut PacketWriter, display: &SlotDisplay) {
             w.write_var_int(component.id() as i32);
         }
         SlotDisplay::Item(item) => w.write_var_int(item.id() as i32),
-        SlotDisplay::Stack(stack) => w.write_item_template(stack),
+        SlotDisplay::Stack(stack) => w.write_item_template(stack.view()),
         SlotDisplay::Ingredient(ingredient) => write_ingredient(w, ingredient),
         SlotDisplay::Dyed { dye, target } => {
             write_slot_display(w, dye);
