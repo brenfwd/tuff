@@ -2,7 +2,7 @@
 //! post-processing mark (lock or zoom out) that becomes a new map once the
 //! player has taken it.
 
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Tag;
 use tuff_vanilla_data::Item;
 
@@ -52,15 +52,15 @@ pub fn cartography_result(
                 && data.scale < MAX_SCALE =>
         {
             Some(with_post_processing(
-                map.dup_count_unchecked(1),
+                ItemStack::mint_like(map, 1, MintReason::Crafting),
                 Derivation::ZoomOut,
             ))
         }
         Item::GlassPane if !data.locked => Some(with_post_processing(
-            map.dup_count_unchecked(1),
+            ItemStack::mint_like(map, 1, MintReason::Crafting),
             Derivation::Lock,
         )),
-        Item::Map => Some(map.dup_count_unchecked(2)),
+        Item::Map => Some(ItemStack::mint_like(map, 2, MintReason::Crafting)),
         _ => None,
     }
 }

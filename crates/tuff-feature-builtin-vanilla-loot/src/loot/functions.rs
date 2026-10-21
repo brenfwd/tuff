@@ -277,11 +277,11 @@ fn set_instrument(stack: &mut ItemStack, params: &Value, rng: &mut impl Rng) {
 fn filtered(stack: ItemStack, params: &Value, context: &Context, rng: &mut impl Rng) -> ItemStack {
     let mut probe = None;
     if stack.components.map_id.is_none() && crate::exploration::pending(&stack).is_some() {
-        let mut charted = stack.dup_unchecked();
-        charted.components.map_id = Some(0);
+        let mut charted = tuff_item::item::ItemSnapshot::of(&stack);
+        charted.edit_components(|components| components.map_id = Some(0));
         probe = Some(charted);
     }
-    let tested = probe.as_ref().unwrap_or(&stack);
+    let tested = probe.as_deref().unwrap_or(&stack);
     let branch = if match_tool(&params["item_filter"], Some(tested)) {
         "on_pass"
     } else {

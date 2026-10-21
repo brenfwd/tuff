@@ -6,7 +6,7 @@
 
 use crate::world::inventory::{Inventory, SLOTS};
 use tuff_item::item::BurnReason;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack};
 use tuff_item::item::MintReason;
 
 /// Slots an edit looks at: armor, main, hotbar and off hand (never the
@@ -14,12 +14,12 @@ use tuff_item::item::MintReason;
 const OWNED: std::ops::Range<usize> = 5..SLOTS;
 
 /// One edit; `stack` is one of the item, matched with its components.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InventoryEdit {
     /// Removes `count` of `stack`, or nothing unless that many are held.
-    Take { stack: ItemStack, count: u32 },
+    Take { stack: ItemSnapshot, count: u32 },
     /// Adds `count` of `stack`, or nothing unless all of them fit.
-    Give { stack: ItemStack, count: u32 },
+    Give { stack: ItemSnapshot, count: u32 },
 }
 
 impl InventoryEdit {
@@ -101,7 +101,7 @@ mod tests {
         let one = ItemStack::mint(Item::Diamond, 1, MintReason::Test);
         assert!(
             !InventoryEdit::Take {
-                stack: one.dup_unchecked(),
+                stack: tuff_item::item::ItemSnapshot::of(&one),
                 count: 68
             }
             .apply(&mut inventory)
@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(inventory.slots()[36].as_ref().unwrap().count(), 3);
         assert!(
             InventoryEdit::Take {
-                stack: one,
+                stack: tuff_item::item::ItemSnapshot::of(&one),
                 count: 66
             }
             .apply(&mut inventory)
@@ -129,7 +129,7 @@ mod tests {
         );
         assert!(
             !InventoryEdit::Take {
-                stack: named,
+                stack: tuff_item::item::ItemSnapshot::of(&named),
                 count: 1
             }
             .apply(&mut inventory)
@@ -150,7 +150,7 @@ mod tests {
         let dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
         assert!(
             !InventoryEdit::Give {
-                stack: dirt.dup_unchecked(),
+                stack: tuff_item::item::ItemSnapshot::of(&dirt),
                 count: 5
             }
             .apply(&mut inventory)
@@ -158,7 +158,7 @@ mod tests {
         assert_eq!(inventory.slots()[9].as_ref().unwrap().count(), 60);
         assert!(
             InventoryEdit::Give {
-                stack: dirt,
+                stack: tuff_item::item::ItemSnapshot::of(&dirt),
                 count: 4
             }
             .apply(&mut inventory)

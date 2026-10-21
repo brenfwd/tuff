@@ -3,7 +3,7 @@
 
 use tuff_core::world::region_api::{BlockCause, ContainerHolder, SlotEdit};
 use tuff_item::item::BurnReason;
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::Compound;
 
 use crate::record::{Kind, Record, Who};
@@ -12,9 +12,9 @@ use crate::record::{Kind, Record, Who};
 pub const MAX_PENDING: usize = 1024;
 
 /// One item's net change in a container: `stack` is one of it.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Net {
-    pub stack: ItemStack,
+    pub stack: ItemSnapshot,
     pub delta: i64,
     /// The last slot it went into or came out of.
     pub slot: usize,
@@ -40,7 +40,7 @@ impl Pending {
     }
 
     fn add(&mut self, stack: &ItemStack, delta: i64, slot: usize) {
-        let one = stack.dup_count_unchecked(1);
+        let one = ItemSnapshot::of(stack).with_count(1);
         match self.items.iter_mut().find(|net| net.stack == one) {
             Some(net) => {
                 net.delta += delta;
@@ -135,11 +135,11 @@ pub fn parse_text(text: &str) -> Place {
 
 /// One container row to undo: put `amount` of `stack` back in, or take it
 /// out where it still is.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Undo {
     pub id: i64,
     pub entity: Option<u128>,
-    pub stack: ItemStack,
+    pub stack: ItemSnapshot,
     /// The stack's components are unknown: match by item alone.
     pub any_components: bool,
     pub amount: i64,
@@ -187,8 +187,16 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
                     continue;
                 }
                 left -= moved;
-                let stack = items[slot].get_or_insert_with(|| undo.stack.dup_count_unchecked(0));
-                stack.grow(moved as u8, MintReason::Command);
+                match &mut items[slot] {
+                    Some(stack) => stack.grow(moved as u8, MintReason::Command),
+                    empty => {
+                        *empty = Some(ItemStack::mint_like(
+                            &undo.stack,
+                            moved as u8,
+                            MintReason::Command,
+                        ))
+                    }
+                }
             }
         }
     } else {
@@ -215,9 +223,11 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
 }
 
 /// The stack a row's item data names.
-pub fn stack_of(data: Option<&Compound>) -> Option<ItemStack> {
-    ItemStack::mint_from_nbt(data?, MintReason::Template)
-        .map(|stack| stack.keep(1, BurnReason::Template))
+pub fn stack_of(data: Option<&Compound>) -> Option<ItemSnapshot> {
+    let stack = ItemStack::mint_from_nbt(data?, MintReason::Template)?;
+    let one = ItemSnapshot::of(&stack).with_count(1);
+    stack.burn(BurnReason::Template);
+    Some(one)
 }
 
 #[cfg(test)]
@@ -234,7 +244,7 @@ mod tests {
         Undo {
             id: 1,
             entity: None,
-            stack: ItemStack::mint(item, 1, MintReason::Test),
+            stack: ItemSnapshot::describe(item, 1, Default::default()),
             any_components: false,
             amount,
             add,
@@ -296,7 +306,7 @@ mod tests {
         assert_eq!(records[1].amount, 5);
         assert_eq!(
             stack_of(records[1].data.as_ref()),
-            Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test))
+            Some(tuff_item::item::ItemSnapshot::describe(Item::Dirt, 1, Default::default()))
         );
     }
 

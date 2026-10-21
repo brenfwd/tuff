@@ -382,7 +382,7 @@ pub enum Station {
     /// the result is cleared and marked `stale`, and the feature owning
     /// maps fills it in again.
     Cartography {
-        inputs: Box<[Option<ItemStack>; 2]>,
+        inputs: Box<[Option<tuff_item::item::ItemSnapshot>; 2]>,
         stale: bool,
     },
     Grindstone,

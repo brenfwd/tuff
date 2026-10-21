@@ -79,6 +79,16 @@ impl ItemSnapshot {
         ItemView(&self.0)
     }
 
+    /// Changes the pictured components (a template being finished).
+    pub fn edit_components(&mut self, edit: impl FnOnce(&mut super::Components)) {
+        if Arc::get_mut(&mut self.0).is_none() {
+            self.0 = Arc::new(self.0.snapshot_copy());
+        }
+        if let Some(stack) = Arc::get_mut(&mut self.0) {
+            edit(&mut stack.components);
+        }
+    }
+
     /// A picture of `count` of `item` with `components`, never a real item.
     pub fn describe(item: tuff_vanilla_data::Item, count: u8, components: super::Components) -> Self {
         Self(Arc::new(ItemStack {
@@ -116,9 +126,25 @@ impl PartialEq<ItemStack> for ItemSnapshot {
     }
 }
 
+/// Pictures of every slot.
+pub fn snapshot_slots(slots: &[Option<ItemStack>]) -> Vec<Option<ItemSnapshot>> {
+    slots
+        .iter()
+        .map(|slot| slot.as_ref().map(ItemSnapshot::of))
+        .collect()
+}
+
 impl ItemStack {
     pub fn view(&self) -> ItemView<'_> {
         ItemView(self)
+    }
+
+    /// Turns a stack that only describes an item (a recipe result, a
+    /// trade offer, a decoded template) into a picture of it.
+    pub fn into_template(self) -> ItemSnapshot {
+        let shown = ItemSnapshot::of(&self);
+        self.burn(super::BurnReason::Template);
+        shown
     }
 
     fn snapshot_copy(&self) -> ItemStack {

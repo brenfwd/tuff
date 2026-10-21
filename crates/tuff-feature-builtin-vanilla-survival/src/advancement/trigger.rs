@@ -188,7 +188,7 @@ fn loot_tables(conditions: &Value, table: &str) -> bool {
     })
 }
 
-fn slots_match(slots: &Value, inventory: &[Option<ItemStack>]) -> bool {
+fn slots_match(slots: &Value, inventory: &[Option<tuff_item::item::ItemView<'_>>]) -> bool {
     let Some(fields) = slots.as_object() else {
         return false;
     };
@@ -233,7 +233,7 @@ fn inventory_changed(conditions: &Value, event: &Event<'_>, _: &EntityFacts) -> 
         _ => {
             let mut remaining: Vec<&Value> = items.iter().collect();
             for stack in inventory.iter().flatten() {
-                remaining.retain(|predicate| !predicate::item(predicate, stack));
+                remaining.retain(|predicate| !predicate::item(predicate, stack.get()));
                 if remaining.is_empty() {
                     break;
                 }
@@ -728,7 +728,7 @@ mod tests {
         let registry = builtin_registry();
         let trigger = TriggerType::InventoryChanged.name();
         let iron = ItemStack::mint(Item::IronIngot, 1, MintReason::Test);
-        let inventory = vec![Some(iron.dup_unchecked()), None];
+        let inventory = vec![Some(iron.view()), None];
         let event = Event::InventoryChanged {
             changed: Some(&iron),
             inventory: &inventory,

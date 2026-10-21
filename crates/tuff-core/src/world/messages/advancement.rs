@@ -113,7 +113,7 @@ pub enum AdvancementEvent {
 
 /// A kill credited to a player: statistics count `kind`, advancements
 /// test the victim and the killing blow.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Kill {
     pub kind: tuff_vanilla_data::registry::EntityType,
     /// The victim's scoreboard name: a player's name, else its UUID.

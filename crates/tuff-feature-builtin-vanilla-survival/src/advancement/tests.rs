@@ -206,7 +206,7 @@ fn inventory_criteria_are_found_through_the_item_index() {
     let progress = Progress::new();
     let player = EntityFacts::default();
     let redstone = ItemStack::mint(Item::Redstone, 1, MintReason::Test);
-    let inventory = vec![Some(redstone.dup_unchecked())];
+    let inventory = vec![Some(redstone.view())];
     let event = Event::InventoryChanged {
         changed: Some(&redstone),
         inventory: &inventory,
@@ -253,8 +253,8 @@ fn rewarded<'a>(tree: &'a Tree, event: &Event<'_>) -> Vec<&'a str> {
 fn recipe_unlocks_come_from_the_recipe_advancements() {
     let tree = tree();
     let redstone = ItemStack::mint(Item::Redstone, 1, MintReason::Test);
-    let one = vec![Some(redstone.dup_unchecked())];
-    let arrived = |stack: &ItemStack, inventory: &[Option<ItemStack>]| {
+    let one = vec![Some(redstone.view())];
+    let arrived = |stack: &ItemStack, inventory: &[Option<tuff_item::item::ItemView<'_>>]| {
         rewarded(
             &tree,
             &Event::InventoryChanged {
@@ -265,10 +265,10 @@ fn recipe_unlocks_come_from_the_recipe_advancements() {
     };
     assert!(arrived(&redstone, &one).contains(&"minecraft:piston"));
     let wheat = ItemStack::mint(Item::Wheat, 1, MintReason::Test);
-    assert!(arrived(&wheat, &[Some(wheat.dup_unchecked())]).contains(&"minecraft:bread"));
+    assert!(arrived(&wheat, &[Some(wheat.view())]).contains(&"minecraft:bread"));
     let netherite = ItemStack::mint(Item::NetheriteIngot, 1, MintReason::Test);
     assert!(
-        arrived(&netherite, &[Some(netherite.dup_unchecked())])
+        arrived(&netherite, &[Some(netherite.view())])
             .contains(&"minecraft:netherite_sword_smithing")
     );
     assert!(rewarded(&tree, &Event::Tick).contains(&"minecraft:crafting_table"));
@@ -276,12 +276,12 @@ fn recipe_unlocks_come_from_the_recipe_advancements() {
     assert!(rewarded(&tree, &Event::EnterBlock(water)).contains(&"minecraft:oak_boat"));
 
     let dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
-    let mut inventory = (0..43).map(|_| None).collect::<Vec<Option<ItemStack>>>();
+    let mut inventory = (0..43).map(|_| None).collect::<Vec<Option<tuff_item::item::ItemView<'_>>>>();
     for slot in inventory.iter_mut().take(9) {
-        *slot = Some(dirt.dup_unchecked());
+        *slot = Some(dirt.view());
     }
     assert!(!arrived(&dirt, &inventory).contains(&"minecraft:chest"));
-    inventory[40] = Some(dirt.dup_unchecked());
+    inventory[40] = Some(dirt.view());
     assert!(
         arrived(&dirt, &inventory).contains(&"minecraft:chest"),
         "the off hand counts as an occupied slot"
@@ -613,7 +613,7 @@ fn levitating_far_enough_meets_the_levitation_criterion() {
 fn item_criteria_are_indexed_by_the_tags_the_tree_was_built_with() {
     let base = tree();
     let glass = ItemStack::mint(Item::Glass, 1, MintReason::Test);
-    let inventory = vec![Some(glass.dup_unchecked())];
+    let inventory = vec![Some(glass.view())];
     let event = Event::InventoryChanged {
         changed: Some(&glass),
         inventory: &inventory,

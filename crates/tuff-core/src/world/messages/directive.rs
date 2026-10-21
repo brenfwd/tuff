@@ -34,7 +34,7 @@ pub enum SlotFill {
 }
 
 /// What a command does to one player.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub enum Directive {
     GameMode(GameMode),
     /// `/recipe give|take`: `None` means every recipe.

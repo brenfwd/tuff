@@ -548,7 +548,7 @@ fn container_packets_round_trip() {
         &play(&ContainerSetContent {
             window_id: 1,
             state_id: 2,
-            slots: &[Some(stack.dup_unchecked()), None],
+            slots: [Some(stack.view()), None].as_slice().into(),
             carried: None,
         }),
         &["slots: [minecraft:stone x3, empty], carried: empty"],
@@ -608,7 +608,7 @@ fn container_packets_round_trip() {
             components: Default::default(),
         },
         buy_b: None,
-        sell: ItemStack::mint(Item::Bread, 4, MintReason::Test),
+        sell: tuff_item::item::ItemSnapshot::describe(Item::Bread, 4, Default::default()),
         uses: 0,
         max_uses: 12,
         reward_exp: true,

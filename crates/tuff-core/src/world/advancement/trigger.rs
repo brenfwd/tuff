@@ -21,7 +21,7 @@ pub enum Event<'a> {
     /// empty). `inventory` is every inventory slot, equipment included.
     InventoryChanged {
         changed: Option<&'a ItemStack>,
-        inventory: &'a [Option<ItemStack>],
+        inventory: &'a [Option<tuff_item::item::ItemView<'a>>],
     },
     RecipeUnlocked(&'a str),
     RecipeCrafted {

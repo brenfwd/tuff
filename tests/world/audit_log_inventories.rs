@@ -319,7 +319,7 @@ async fn a_login_waits_for_an_offline_edit_and_a_logout_save_comes_first() {
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Take {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 3,
             },
             reply,
@@ -341,7 +341,7 @@ async fn a_login_waits_for_an_offline_edit_and_a_logout_save_comes_first() {
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Take {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 2,
             },
             reply,
@@ -361,7 +361,7 @@ async fn a_login_waits_for_an_offline_edit_and_a_logout_save_comes_first() {
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Give {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 1,
             },
             reply,
@@ -417,7 +417,7 @@ async fn an_edit_queued_behind_a_logout_is_applied_once_after_the_logout_save() 
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Take {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 2,
             },
             reply,

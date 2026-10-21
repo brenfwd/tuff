@@ -34,7 +34,7 @@ use super::Context;
 
 /// What a predicate is tested on: the `this` entity (if any) and the
 /// position and dimension it is tested at.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Subject {
     pub dimension: DimensionId,
     pub origin: [f64; 3],
@@ -44,7 +44,7 @@ pub struct Subject {
     pub at_block: bool,
 }
 
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub enum This {
     /// Facts gathered already (players).
     Facts(Box<EntityFacts>),

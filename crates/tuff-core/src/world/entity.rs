@@ -649,7 +649,7 @@ pub struct BossBarState {
 
 /// Damage an entity (a mob's attack, a projectile) does to a player or
 /// another entity.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct EntityHit {
     pub amount: f32,
     pub kind: &'static DamageType,

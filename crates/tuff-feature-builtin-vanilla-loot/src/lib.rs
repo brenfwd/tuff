@@ -43,7 +43,7 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
         dimension: tuff_core::world::dimension::DimensionId,
         origin: tuff_world_model::BlockPos,
         stack: &tuff_item::item::ItemStack,
-    ) -> Option<tokio::sync::oneshot::Receiver<Option<tuff_item::item::ItemStack>>> {
+    ) -> Option<tuff_core::world::exploration::Answer> {
         exploration::finish(shared, dimension, origin, stack)
     }
 
