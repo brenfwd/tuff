@@ -127,7 +127,7 @@ async fn break_ice(
         .request(RegionRequest::Break {
             player: player.clone(),
             pos,
-            tool,
+            tool: tool.as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode,
             sequence,
         })

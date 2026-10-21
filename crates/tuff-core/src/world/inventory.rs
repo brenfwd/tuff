@@ -558,12 +558,18 @@ mod tests {
         named.components.custom_name = Some(Box::new("Named".into()));
         let mut inv = Inventory::default();
         inv.slots[36] = dirt(10);
-        assert_eq!(inv.add(named.dup_unchecked()), None);
+        assert_eq!(inv.add(named.test_copy()), None);
         assert_eq!(inv.slots[36], dirt(10));
-        assert_eq!(inv.slots[37], Some(named.dup_unchecked()));
-        assert_eq!(inv.add(named.dup_count_unchecked(5)), None);
-        assert_eq!(inv.slots[37], Some(named.dup_count_unchecked(15)));
-        inv.carried = Some(named.dup_count_unchecked(1));
+        assert_eq!(inv.slots[37], Some(named.test_copy()));
+        assert_eq!(
+            inv.add(ItemStack::mint_like(&named, 5, MintReason::Test)),
+            None
+        );
+        assert_eq!(
+            inv.slots[37],
+            Some(ItemStack::mint_like(&named, 15, MintReason::Test))
+        );
+        inv.carried = Some(ItemStack::mint_like(&named, 1, MintReason::Test));
         inv.click(
             36,
             0,
@@ -572,7 +578,10 @@ mod tests {
             &mut NoResult,
             &crate::world::crafting::RecipeSet::default(),
         );
-        assert_eq!(inv.slots[36], Some(named.dup_count_unchecked(1)));
+        assert_eq!(
+            inv.slots[36],
+            Some(ItemStack::mint_like(&named, 1, MintReason::Test))
+        );
         assert_eq!(inv.carried, dirt(10));
         inv.carried = Some(pickaxe(3));
         inv.slots[38] = Some(pickaxe(0));
@@ -635,7 +644,7 @@ mod tests {
         let mut named = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
         named.components.custom_name = Some(Box::new("Named".into()));
         let mut inv = Inventory::default();
-        inv.slots[36] = Some(named.dup_unchecked());
+        inv.slots[36] = Some(named.test_copy());
         inv.slots[40] = dirt(5);
         assert!(inv.pick(ItemStack::mint(Item::Dirt, 1, MintReason::Test), false));
         assert_eq!(inv.selected, 4);

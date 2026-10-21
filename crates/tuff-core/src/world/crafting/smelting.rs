@@ -81,6 +81,10 @@ pub fn place_food(
     let (_, recipe) = recipe_for(recipes, ContainerKind::Campfire, stack.item)?;
     campfire.cooking_time[slot] = recipe.cooking_time as i32;
     campfire.cooking_progress[slot] = 0;
-    items[slot] = Some(stack.dup_count_unchecked(1));
+    items[slot] = Some(ItemStack::mint_like(
+        stack,
+        1,
+        tuff_item::item::MintReason::Transform,
+    ));
     Some(slot)
 }

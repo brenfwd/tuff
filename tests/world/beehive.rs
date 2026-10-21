@@ -251,7 +251,11 @@ async fn a_broken_hive_releases_its_bees_even_at_night() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: HIVE,
-            tool: Some(ItemStack::mint(Item::DiamondAxe, 1, MintReason::Test)),
+            tool: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::DiamondAxe,
+                1,
+                Default::default(),
+            )),
             mode: BreakMode::Finish,
             sequence: 1,
         })

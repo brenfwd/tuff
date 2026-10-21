@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::DupUnchecked;
 
 const SAVE_BARRIER_HOLD: Duration = Duration::from_secs(3);
 
@@ -185,7 +184,7 @@ impl PlayerSession {
         Ok(())
     }
 
-    pub fn state(&self) -> PlayerState {
+    pub fn state(&self) -> PlayerState<&ItemStack> {
         PlayerState {
             dimension: self.dimension().key.clone(),
             position: self.pose.position,
@@ -213,13 +212,13 @@ impl PlayerSession {
                 .slots()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| stack.dup_unchecked().map(|s| (slot, s)))
+                .filter_map(|(slot, stack)| stack.as_ref().map(|s| (slot, s)))
                 .collect(),
             ender_items: self
                 .ender_items()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| stack.dup_unchecked().map(|s| (slot, s)))
+                .filter_map(|(slot, stack)| stack.as_ref().map(|s| (slot, s)))
                 .collect(),
             game_mode: self.mode.game_mode,
             previous_game_mode: self.mode.previous_game_mode,

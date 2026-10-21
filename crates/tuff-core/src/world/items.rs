@@ -1,6 +1,5 @@
 //! Dropped item entities and their vanilla movement rules.
 
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::BlockState;
 use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::registry::EntityType;
@@ -431,7 +430,7 @@ impl RegionEntity for ItemEntity {
             .flatten()
             .collect();
         if let Some(bundle) = self.stack.components.bundle_contents.take() {
-            spilled.extend(bundle.items().iter().map(DupUnchecked::dup_unchecked));
+            spilled.extend(bundle.into_items());
         }
         spilled
     }

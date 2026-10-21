@@ -55,7 +55,7 @@ const EVENT_POTION_PUFF: i8 = 0;
 /// What a bounced arrow keeps of its speed, reversed.
 const REBOUND_SPEED: f64 = -0.1;
 
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Debug)]
 pub struct Arrow {
     pub base: EntityBase,
     pub owner: Owner,
@@ -277,7 +277,30 @@ impl Arrow {
 
     /// This arrow bounced back off a victim it failed to hurt.
     fn rebounded(&self, cx: &mut TickContext) -> Self {
-        let mut arrow = self.clone();
+        let mut arrow = Self {
+            base: self.base.clone(),
+            owner: self.owner.clone(),
+            pickup: self.pickup,
+            damage: self.damage,
+            crit: self.crit,
+            pierce: self.pierce,
+            in_ground: self.in_ground,
+            shake: self.shake,
+            life: self.life,
+            in_block: self.in_block,
+            sound: self.sound,
+            item: ItemStack::mint_like(&self.item, self.item.count(), MintReason::Transform),
+            weapon: self.weapon.clone(),
+            ticks: self.ticks,
+            pierced: self.pierced.clone(),
+            changed: self.changed.clone(),
+            reserved: self.reserved.clone(),
+            refused_by: self.refused_by.clone(),
+            effects: self.effects.clone(),
+            glow_ticks: self.glow_ticks,
+            trident: self.trident.clone(),
+            bounced: self.bounced.clone(),
+        };
         arrow.base.id = cx.shared.next_entity_id();
         arrow.base.uuid = cx.rng.r#gen();
         arrow.base.velocity = self.base.velocity.map(|c| c * REBOUND_SPEED);

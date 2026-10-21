@@ -349,7 +349,7 @@ async fn break_wire(b: &mut Bench, pos: BlockPos, tool: Option<ItemStack>) {
         .request(RegionRequest::Break {
             player: b.player.clone(),
             pos,
-            tool,
+            tool: tool.as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode: BreakMode::Finish,
             sequence: 9,
         })

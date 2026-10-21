@@ -124,7 +124,7 @@ async fn mined_ore_drops_its_experience_unless_silk_touched() {
         .request(RegionRequest::Break {
             player: viewer.clone(),
             pos: lapis,
-            tool: Some(silk),
+            tool: Some(tuff_item::item::ItemSnapshot::of(&silk)),
             mode: BreakMode::Finish,
             sequence: 1,
         })
@@ -146,7 +146,11 @@ async fn mined_ore_drops_its_experience_unless_silk_touched() {
         .request(RegionRequest::Break {
             player: viewer.clone(),
             pos: ore,
-            tool: Some(ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test)),
+            tool: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::IronPickaxe,
+                1,
+                Default::default(),
+            )),
             mode: BreakMode::Finish,
             sequence: 2,
         })

@@ -893,7 +893,7 @@ async fn adventure_breaking_needs_a_matching_can_break_predicate() {
             .request(RegionRequest::BreakRestricted {
                 player: s.player.clone(),
                 pos: target,
-                tool: Some(tool),
+                tool: Some(tuff_item::item::ItemSnapshot::of(&tool)),
                 mode: BreakMode::Verified {
                     ticks: 1000,
                     eye,

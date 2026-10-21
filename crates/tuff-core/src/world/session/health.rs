@@ -15,7 +15,6 @@ use crate::world::region_api::{PlayerEffectEvent, PlayerEffectTrigger, RegionTas
 use crate::world::stats::Stat;
 use crate::world::{EYE_HEIGHT, block_contact, framed, message_plain, packets};
 use rand::Rng;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::{Hurt, ItemSnapshot, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::damage_type::DamageType;
@@ -236,11 +235,11 @@ impl PlayerSession {
         .landed
     }
 
-    pub fn equipment_snapshot(&self) -> [Option<ItemStack>; 6] {
+    pub fn equipment_snapshot(&self) -> [Option<tuff_item::item::ItemSnapshot>; 6] {
         EQUIPMENT_SLOTS.map(|slot| {
             self.inventory
                 .equipped(slot)
-                .map(DupUnchecked::dup_unchecked)
+                .map(tuff_item::item::ItemSnapshot::of)
         })
     }
 
@@ -568,7 +567,8 @@ impl PlayerSession {
             .inventory
             .slots()
             .get(window)
-            .and_then(DupUnchecked::dup_unchecked);
+            .and_then(Option::as_ref)
+            .map(tuff_item::item::ItemSnapshot::of);
         let outcome = self.inventory.hurt_slot(window, amount, &mut self.rng);
         let Some(mut stack) = before else {
             return outcome;
@@ -581,7 +581,8 @@ impl PlayerSession {
                     .inventory
                     .slots()
                     .get(window)
-                    .and_then(DupUnchecked::dup_unchecked)
+                    .and_then(Option::as_ref)
+                    .map(tuff_item::item::ItemSnapshot::of)
                 {
                     let delta = damage_before as i32 - now.damage() as i32;
                     self.fire(
@@ -594,7 +595,7 @@ impl PlayerSession {
             }
             Hurt::Broken => {
                 let max = stack.max_damage().unwrap_or(damage_before);
-                stack.set_damage(max);
+                stack.edit_components(|components| components.damage = Some(max));
                 let delta = damage_before as i32 - max as i32;
                 self.fire(
                     crate::world::advancement::trigger::Event::ItemDurabilityChanged {

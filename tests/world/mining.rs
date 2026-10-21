@@ -480,7 +480,7 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: ground,
-            tool: pickaxe(),
+            tool: pickaxe().as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode: BreakMode::Finish,
             sequence: 1,
         })
@@ -498,7 +498,7 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: ground,
-            tool: pickaxe(),
+            tool: pickaxe().as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode: BreakMode::Start {
                 eye: [3.5, height as f64 + 1.62, 4.5],
                 miner: player::Miner::plain(true),
@@ -512,7 +512,7 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: below,
-            tool: pickaxe(),
+            tool: pickaxe().as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode: BreakMode::Creative,
             sequence: 4,
         })
@@ -522,7 +522,11 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: deeper,
-            tool: Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
+            tool: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Stick,
+                1,
+                Default::default(),
+            )),
             mode: BreakMode::Finish,
             sequence: 5,
         })

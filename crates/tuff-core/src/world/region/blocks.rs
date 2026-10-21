@@ -360,7 +360,7 @@ impl RegionActor {
         let submerged = player::eye_in_water(eye, |pos| self.block(pos));
         let hardness = state.destroy_speed();
         let progress =
-            player::destroy_progress_at(state, hardness, tool.as_ref(), &miner, submerged);
+            player::destroy_progress_at(state, hardness, tool.as_deref(), &miner, submerged);
         let stage = player::crack_stage(progress, ticks);
         if self.ents.crack_stages.get(&player.id) != Some(&(pos, stage)) {
             self.show_crack(player.id, pos, stage);
@@ -543,7 +543,7 @@ impl RegionActor {
         &mut self,
         player: PlayerHandle,
         pos: BlockPos,
-        tool: Option<ItemStack>,
+        tool: Option<tuff_item::item::ItemSnapshot>,
         mode: BreakMode,
         sequence: i32,
     ) {
@@ -564,12 +564,12 @@ impl RegionActor {
         &mut self,
         player: PlayerHandle,
         pos: BlockPos,
-        tool: Option<ItemStack>,
+        tool: Option<tuff_item::item::ItemSnapshot>,
         mode: BreakMode,
         sequence: i32,
     ) {
         let tool_stack = tool;
-        let tool = tool_stack.as_ref();
+        let tool = tool_stack.as_deref();
         let reject = |region: &Self| {
             player.send(PlayerEvent::ActionResult {
                 sequence,
@@ -676,7 +676,7 @@ impl RegionActor {
                 },
             )));
         }
-        self.player_breaking_block(player.id, pos, state, tool_stack.as_ref());
+        self.player_breaking_block(player.id, pos, state, tool_stack.as_deref());
         let creative_drop = self
             .block_entity(pos)
             .filter(|entity| entity.kind == ContainerKind::ShulkerBox && !entity.is_empty())
@@ -724,10 +724,10 @@ impl RegionActor {
                 },
             );
             self.drop_items(pos, stacks);
-            self.release_infestation(pos, state, tool_stack.as_ref());
+            self.release_infestation(pos, state, tool_stack.as_deref());
             if let Some(experience) = state.block().experience() {
                 let amount = experience.sample(|bound| self.rng.gen_range(0..bound.max(1)));
-                let amount = block_experience_effects(tool_stack.as_ref(), amount);
+                let amount = block_experience_effects(tool_stack.as_deref(), amount);
                 if amount > 0 {
                     self.spawn_experience(pos.center(), amount);
                 }
@@ -744,7 +744,7 @@ impl RegionActor {
         let tool_damage = match mode {
             BreakMode::Creative => 0,
             BreakMode::Start { .. } | BreakMode::Finish | BreakMode::Verified { .. } => tool_stack
-                .as_ref()
+                .as_deref()
                 .and_then(ItemStack::tool)
                 .filter(|_| {
                     state

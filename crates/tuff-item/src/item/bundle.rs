@@ -162,6 +162,11 @@ impl BundleContents {
         &self.items
     }
 
+    /// The stacks inside, moved out of the bundle.
+    pub fn into_items(self) -> Vec<ItemStack> {
+        self.items
+    }
+
     pub fn len(&self) -> usize {
         self.items.len()
     }

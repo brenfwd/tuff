@@ -184,7 +184,7 @@ mod tests {
         assert_eq!(view.count, 3);
         assert_eq!(view, stack);
         assert_eq!(
-            ItemView::slots(&[None, Some(stack.dup_unchecked())])
+            ItemView::slots(&[None, Some(stack.test_copy())])
                 .flatten()
                 .count(),
             1

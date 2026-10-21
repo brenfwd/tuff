@@ -80,7 +80,7 @@ impl RegionHooks for RangedRegionHooks {
             f64::from(target.y) + f64::from(place.cursor[1]) + f64::from(dy) * LAUNCH_OFFSET,
             f64::from(target.z) + f64::from(place.cursor[2]) + f64::from(dz) * LAUNCH_OFFSET,
         ];
-        let stack = ItemStack::mint(Item::FireworkRocket, 1, MintReason::CrossActor)
+        let stack = ItemStack::mint(Item::FireworkRocket, 1, MintReason::Transform)
             .with_components(place.components.clone());
         let owner = Owner::of(
             Culprit::player(place.player.id, place.uuid, place.name.clone()),

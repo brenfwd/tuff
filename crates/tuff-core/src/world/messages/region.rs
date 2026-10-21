@@ -84,6 +84,12 @@ impl RegionHandle {
         self.requests.send(request).await.is_ok()
     }
 
+    /// Like [`Self::request`], but hands the request back if the region
+    /// has closed, so nothing it carries is lost.
+    pub async fn try_request(&self, request: RegionRequest) -> Result<(), RegionRequest> {
+        self.requests.send(request).await.map_err(|error| error.0)
+    }
+
     /// Runs `run` on the region and answers what it returned; `None` if
     /// the region has closed.
     pub async fn ask<T: Send + 'static>(
@@ -133,7 +139,7 @@ impl RegionHandle {
 }
 
 /// A player's state as seen by the regions it is in or near.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct PlayerUpdate {
     pub handle: PlayerHandle,
     pub uuid: u128,
@@ -157,7 +163,7 @@ pub struct PlayerUpdate {
     /// Standing on the ground, alive and not riding.
     pub grounded: bool,
     /// What the player wears on its feet.
-    pub feet: Option<ItemStack>,
+    pub feet: Option<tuff_item::item::ItemSnapshot>,
     /// It landed with this update, after falling this far.
     pub landed: Option<f64>,
     /// What mobs see of the player.
@@ -311,7 +317,7 @@ pub enum RegionRequest {
     Break {
         player: PlayerHandle,
         pos: BlockPos,
-        tool: Option<ItemStack>,
+        tool: Option<tuff_item::item::ItemSnapshot>,
         mode: BreakMode,
         sequence: i32,
     },
@@ -320,7 +326,7 @@ pub enum RegionRequest {
     BreakRestricted {
         player: PlayerHandle,
         pos: BlockPos,
-        tool: Option<ItemStack>,
+        tool: Option<tuff_item::item::ItemSnapshot>,
         mode: BreakMode,
         sequence: i32,
     },
