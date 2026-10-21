@@ -1078,12 +1078,27 @@ pub fn place(player: &PlayerHandle, target: BlockPos, item: Item, sequence: i32)
             target.z as f64 + 1.5,
         ],
         off_hand_blocks: false,
-        hotbar: Vec::new(),
-        selected: 0,
         may_build: true,
         game_master: false,
         context: None,
+        offer: Default::default(),
+        hand_slot: tuff_core::world::inventory::Inventory::hotbar_slot(0),
     }
+}
+
+/// `place` with one of its held item moved into the click, as a session
+/// does for blocks that keep one (a campfire, a pot, a composter).
+pub fn offering(mut place: Place) -> Place {
+    if let Some(item) = place.held {
+        place.offer = tuff_core::world::messages::PlaceOffer::new(
+            false,
+            vec![(
+                place.hand_slot,
+                tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::Test),
+            )],
+        );
+    }
+    place
 }
 
 pub fn update(player: &PlayerHandle, seq: u64, position: [f64; 3]) -> RegionRequest {

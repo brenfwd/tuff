@@ -75,16 +75,16 @@ pub fn place_food(
     recipes: &RecipeSet,
     items: &mut [Option<ItemStack>],
     campfire: &mut Campfire,
-    stack: &ItemStack,
-) -> Option<usize> {
-    let slot = items.iter().position(Option::is_none)?;
-    let (_, recipe) = recipe_for(recipes, ContainerKind::Campfire, stack.item)?;
+    stack: ItemStack,
+) -> Result<usize, ItemStack> {
+    let Some(slot) = items.iter().position(Option::is_none) else {
+        return Err(stack);
+    };
+    let Some((_, recipe)) = recipe_for(recipes, ContainerKind::Campfire, stack.item) else {
+        return Err(stack);
+    };
     campfire.cooking_time[slot] = recipe.cooking_time as i32;
     campfire.cooking_progress[slot] = 0;
-    items[slot] = Some(ItemStack::mint_like(
-        stack,
-        1,
-        tuff_item::item::MintReason::Transform,
-    ));
-    Some(slot)
+    items[slot] = Some(stack);
+    Ok(slot)
 }

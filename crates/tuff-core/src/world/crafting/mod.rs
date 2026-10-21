@@ -870,8 +870,8 @@ impl RecipeSet {
         &self,
         items: &mut [Option<ItemStack>],
         campfire: &mut Campfire,
-        stack: &ItemStack,
-    ) -> Option<usize> {
+        stack: ItemStack,
+    ) -> Result<usize, ItemStack> {
         smelting::place_food(self, items, campfire, stack)
     }
 

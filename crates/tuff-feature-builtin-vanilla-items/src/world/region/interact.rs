@@ -189,33 +189,33 @@ pub trait Interact: RegionWorld + Rest {
     /// the pot is empty or holds the same item below a full stack; anything
     /// else wobbles it in refusal.
     fn use_decorated_pot(&mut self, place: &Place) -> Option<ActionOutcome> {
-        use tuff_item::item::{ItemStack, MintReason};
+        use tuff_item::item::ItemStack;
         let pos = place.target;
         let interacted = ActionOutcome::Interacted {
             off_hand: place.off_hand,
         };
         let inserted = place.held.and_then(|item| {
-            let held = ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
                 .and_then(ItemStack::picture_from_nbt);
+            if stored
+                .as_ref()
+                .is_some_and(|stored| stored.count() >= stored.item.max_stack_size())
+            {
+                return None;
+            }
+            let held = place.offer.keep_one(place.hand_slot)?;
             let old = stored.as_ref().map(tuff_item::item::ItemSnapshot::of);
             let next = match stored {
                 None => held,
-                Some(stored) => {
-                    if stored.count() >= stored.item.max_stack_size() {
-                        held.burn(tuff_item::item::BurnReason::Template);
+                Some(stored) => match ItemStack::merge(stored, held) {
+                    Ok(next) => next,
+                    Err((_, held)) => {
+                        place.offer.unkeep(place.hand_slot, held);
                         return None;
                     }
-                    match ItemStack::merge(stored, held) {
-                        Ok(next) => next,
-                        Err((_, held)) => {
-                            held.burn(tuff_item::item::BurnReason::Template);
-                            return None;
-                        }
-                    }
-                }
+                },
             };
             let ratio = f32::from(next.count()) / next.item.max_stack_size() as f32;
             self.raw_block_entity_mut(pos)?
@@ -256,7 +256,7 @@ pub trait Interact: RegionWorld + Rest {
         Some(ActionOutcome::Used {
             off_hand: place.off_hand,
             item,
-            effect: HandEffect::Consume(1),
+            effect: HandEffect::None,
         })
     }
 
@@ -274,34 +274,22 @@ pub trait Interact: RegionWorld + Rest {
             face: None,
             by: Porter::Player(Some(place.player.id)),
         };
-        let held = place
-            .held
-            .map(|item| {
-                tuff_item::item::ItemStack::mint_with(
-                    item,
-                    1,
-                    &place.components,
-                    tuff_item::item::MintReason::Template,
-                )
-            })
-            .and_then(|stack| {
-                if composter::compostable(&stack).is_some() {
-                    Some(stack)
-                } else {
-                    stack.burn(tuff_item::item::BurnReason::Template);
-                    None
-                }
-            });
-        if let Some(stack) = held {
-            let item = stack.item;
-            let accepted = if level < composter::READY {
-                port.offer(self.as_dyn(), &at, stack)
-                    .map_err(|refused| refused.burn(tuff_item::item::BurnReason::Template))
-                    .is_ok()
-            } else {
-                stack.burn(tuff_item::item::BurnReason::Template);
-                false
-            };
+        let compostable = place.held.filter(|item| {
+            let shown = tuff_item::item::ItemSnapshot::describe_with(*item, 1, &place.components);
+            composter::compostable(&shown).is_some()
+        });
+        if let Some(item) = compostable {
+            let accepted = level < composter::READY
+                && place
+                    .offer
+                    .keep_one(place.hand_slot)
+                    .is_some_and(|stack| match port.offer(self.as_dyn(), &at, stack) {
+                        Ok(()) => true,
+                        Err(refused) => {
+                            place.offer.unkeep(place.hand_slot, refused);
+                            false
+                        }
+                    });
             if level >= composter::READY {
                 if level > composter::READY {
                     return None;
@@ -319,7 +307,7 @@ pub trait Interact: RegionWorld + Rest {
             return Some(ActionOutcome::Used {
                 off_hand: place.off_hand,
                 item,
-                effect: HandEffect::Consume(1),
+                effect: HandEffect::None,
             });
         }
         if level == composter::READY {
@@ -614,7 +602,6 @@ pub trait Interact: RegionWorld + Rest {
     /// empty or non-record hand takes the record back out.
     fn use_jukebox(&mut self, place: &Place, state: BlockState) -> Option<ActionOutcome> {
         use tuff_core::world::item_port::{PortAccess, Porter};
-        use tuff_item::item::{ItemStack, MintReason};
         let pos = place.target;
         let port = self.shared().item_ports.get(state.block())?.clone();
         let at = PortAccess {
@@ -646,9 +633,9 @@ pub trait Interact: RegionWorld + Rest {
             });
         }
         let item = place.held?;
-        let held = ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
+        let held = place.offer.keep_one(place.hand_slot)?;
         if let Err(refused) = port.offer(self.as_dyn(), &at, held) {
-            refused.burn(tuff_item::item::BurnReason::Transform);
+            place.offer.unkeep(place.hand_slot, refused);
             return None;
         }
         place.player.send(PlayerEvent::AwardStat(
@@ -658,7 +645,7 @@ pub trait Interact: RegionWorld + Rest {
         Some(ActionOutcome::Used {
             off_hand: place.off_hand,
             item,
-            effect: HandEffect::Consume(1),
+            effect: HandEffect::None,
         })
     }
 

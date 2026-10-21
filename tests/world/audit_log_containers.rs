@@ -417,7 +417,7 @@ async fn a_decorated_pots_item_rolls_back_and_restores() {
     let mut click = place(&alex, pot, Item::Brick, 1);
     click.item = None;
     click.held = Some(Item::Brick);
-    region.request(RegionRequest::Place(click)).await;
+    region.request(RegionRequest::Place(offering(click))).await;
     world.ticks(2).await;
     assert!(pot_has_item(&region, pot).await);
     let rolled = console(&world, "tuff audit rollback t:1h r:#global a:container").await;
