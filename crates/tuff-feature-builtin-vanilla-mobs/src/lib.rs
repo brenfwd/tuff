@@ -5,7 +5,6 @@
 //! and [`Mob`] joins the two into a [`RegionEntity`], so new mob types
 //! (vanilla or feature) are one `Species` impl and a registry entry.
 
-use tuff_item::item::DupUnchecked;
 pub mod allay;
 pub mod animal;
 pub mod armadillo;
@@ -116,7 +115,6 @@ use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 
 use tuff_core::world::entity::EntityHit;
-use tuff_item::item::ItemStack;
 use tuff_vanilla_common::combat;
 
 mod core;
@@ -213,7 +211,7 @@ pub struct Damage {
     pub projectile: Option<EntityType>,
     pub projectile_id: Option<i32>,
     pub position: Option<[f64; 3]>,
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// Where the responsible entity's eyes were and where it looked, when
     /// known (a player's swing).
     pub aim: Option<Aim>,
@@ -285,7 +283,7 @@ impl Damage {
             projectile: hit.projectile,
             projectile_id: hit.projectile_id,
             position: hit.position,
-            weapon: hit.weapon.dup_unchecked(),
+            weapon: hit.weapon.clone(),
             aim: None,
             burning_projectile: hit.projectile.is_some() && hit.ignite > 0.0,
         }

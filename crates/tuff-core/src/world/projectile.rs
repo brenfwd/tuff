@@ -522,7 +522,7 @@ pub struct ArrowShot {
     pub pierce: u8,
     pub fire_ticks: i16,
     /// The bow or crossbow it left; its enchantments act on the hit.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// The sound it lands with; `None` keeps the type's own.
     pub sound: Option<SoundEvent>,
     /// Effects it gives what it hits besides its item's potion.

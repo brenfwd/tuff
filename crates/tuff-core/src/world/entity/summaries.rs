@@ -497,7 +497,7 @@ pub struct EntityAttack {
     pub attacker_pitch: f32,
     pub damage: f32,
     pub knockback: f32,
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     pub critical: bool,
     pub magic: bool,
     pub sweep: bool,

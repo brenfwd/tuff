@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::DupUnchecked;
 
 pub(super) fn condition(condition: &LootCondition, context: &Context, rng: &mut impl Rng) -> bool {
     let mut value = condition
@@ -187,7 +186,7 @@ pub(super) fn delegated_entity(
     let mut core = tuff_core::world::predicate::EntityFacts::default();
     if attacker {
         core.kind = facts.attacker_kind;
-        if let Some(weapon) = facts.attacker_weapon.dup_unchecked() {
+        if let Some(weapon) = facts.attacker_weapon.clone() {
             core.equipment
                 .push((tuff_vanilla_data::item::EquipmentSlot::Mainhand, weapon));
         }
@@ -281,7 +280,7 @@ pub(super) fn random_chance_with_enchanted_bonus(
     context: &Context,
     rng: &mut impl Rng,
 ) -> bool {
-    let weapon = context.entity.and_then(|e| e.attacker_weapon.as_ref());
+    let weapon = context.entity.and_then(|e| e.attacker_weapon.as_deref());
     let level = condition["enchantment"]
         .as_str()
         .map_or(0, |id| weapon.map_or(0, |w| w.enchantment_level(id)));

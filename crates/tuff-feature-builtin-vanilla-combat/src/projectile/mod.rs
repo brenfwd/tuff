@@ -272,7 +272,7 @@ mod launch_tests {
         shot.damage = Some(4.5);
         shot.pierce = 2;
         shot.fire_ticks = 100;
-        shot.weapon = Some(bow.dup_unchecked());
+        shot.weapon = Some(tuff_item::item::ItemSnapshot::of(&bow));
         shot.sound = Some(SoundEvent::ItemCrossbowHit);
         shot.effects
             .push(ActiveEffect::timed(MobEffect::Slowness, 600, 0));

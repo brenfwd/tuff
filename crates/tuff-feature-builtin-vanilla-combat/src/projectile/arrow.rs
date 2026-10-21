@@ -6,7 +6,6 @@
 
 use rand::Rng;
 use tuff_core::world::block_contact;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::{BlockState, Item};
@@ -72,7 +71,7 @@ pub struct Arrow {
     /// What a pickup gives back.
     pub item: ItemStack,
     /// The bow it was shot from; its enchantments act on the hit.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     ticks: u32,
     pierced: Vec<i32>,
     changed: Vec<u8>,
@@ -169,7 +168,7 @@ impl Arrow {
     ) -> Self {
         let mut arrow = Self::of(EntityType::Trident, id, position, velocity, owner);
         arrow.item = item.dup_count_unchecked(1);
-        arrow.weapon = Some(arrow.item.dup_unchecked());
+        arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));
         arrow.trident = Some(Trident {
             loyalty: tuff_vanilla_common::ranged::trident_loyalty(item),
             foil: item
@@ -380,7 +379,7 @@ impl Arrow {
         }
         self.sound = Self::default_sound(self.base.kind);
         self.pierced.clear();
-        if let Some(weapon) = self.weapon.dup_unchecked() {
+        if let Some(weapon) = self.weapon.clone() {
             self.hit_block_effects(&weapon, hit, v, cx);
         }
     }
@@ -615,7 +614,7 @@ impl Arrow {
         hit.projectile = Some(self.base.kind);
         hit.projectile_id = Some(self.base.id);
         hit.projectile_velocity = Some(self.base.velocity);
-        hit.weapon = self.weapon.dup_unchecked();
+        hit.weapon = self.weapon.clone();
         hit.position = Some(hit_source(target.position, self.base.velocity));
         hit.effects = self.hit_effects();
         hit.sticks = self.pierce == 0;
@@ -942,7 +941,10 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         arrow.item = item;
     }
     arrow.weapon = take(nbt, "weapon", |tag| {
-        ItemStack::from_storage(tag.as_compound()?)
+        let weapon = ItemStack::from_storage(tag.as_compound()?)?;
+        let snapshot = tuff_item::item::ItemSnapshot::of(&weapon);
+        weapon.burn(tuff_item::item::BurnReason::Template);
+        Some(snapshot)
     });
     if let Some(ticks) = take_number(nbt, "Duration") {
         arrow.glow_ticks = ticks as i32;
@@ -960,7 +962,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         .unwrap_or_default();
         trident.dealt_damage = dealt_damage;
         arrow.trident = Some(trident);
-        arrow.weapon = Some(arrow.item.dup_unchecked());
+        arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));
     }
     Some(Box::new(arrow))
 }

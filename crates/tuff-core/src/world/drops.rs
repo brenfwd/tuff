@@ -26,7 +26,7 @@ pub struct EntityFacts {
     /// `minecraft:type_specific/raider`'s `has_raid` and `is_captain`.
     pub raider: Option<(bool, bool)>,
     /// The weapon of the attacker that dealt the killing blow.
-    pub attacker_weapon: Option<ItemStack>,
+    pub attacker_weapon: Option<tuff_item::item::ItemSnapshot>,
     /// The type of what dealt the killing blow.
     pub attacker_kind: Option<tuff_vanilla_data::registry::EntityType>,
     pub killed_by_player: bool,

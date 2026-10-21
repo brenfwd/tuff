@@ -730,7 +730,7 @@ mod tests {
             kind: Some(EntityType::Player),
             equipment: vec![(
                 EquipmentSlot::Head,
-                ItemStack::mint(Item::IronHelmet, 1, MintReason::Test),
+                tuff_item::item::ItemSnapshot::describe(Item::IronHelmet, 1, Default::default()),
             )],
             nbt: Some(saved),
             ..EntityFacts::default()

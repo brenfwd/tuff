@@ -1314,7 +1314,7 @@ async fn pack_enchantments_change_melee_damage_and_post_attack_effects() {
                 attacker_pitch: 0.0,
                 damage: 1.0,
                 knockback: 0.0,
-                weapon: Some(zap),
+                weapon: Some(tuff_item::item::ItemSnapshot::of(&zap)),
                 critical: false,
                 magic: true,
                 sweep: false,

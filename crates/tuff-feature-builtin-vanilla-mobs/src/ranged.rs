@@ -105,7 +105,7 @@ impl MobCore {
         if let Some(weapon) = weapon {
             arrow.pierce = ranged::piercing(weapon);
         }
-        arrow.weapon = weapon.map(DupUnchecked::dup_unchecked);
+        arrow.weapon = weapon.map(tuff_item::item::ItemSnapshot::of);
         arrow
     }
 
@@ -113,7 +113,7 @@ impl MobCore {
     fn launch(&self, start: [f64; 3], mut shot: Shot, cx: &mut TickContext) {
         use tuff_vanilla_common::enchant_effects as fx;
         if let Shot::Arrow(arrow) = &mut shot
-            && let Some(weapon) = arrow.weapon.dup_unchecked()
+            && let Some(weapon) = arrow.weapon.clone()
         {
             let look = (self.base.yaw, self.base.pitch);
             let world = fx::arrow_spawned(arrow, &weapon, start, look, &mut *cx.rng);

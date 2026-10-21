@@ -21,6 +21,7 @@ use tuff_core::protocol::play::{self, MetadataValue};
 use tuff_core::world::effects::{self};
 use tuff_core::world::entity::{Effect, EntityBase, LivingSummary, TickContext};
 use tuff_core::world::{framed, packets};
+use tuff_item::item::ItemSnapshot;
 use tuff_item::item::ItemStack;
 use tuff_vanilla_common::combat;
 use tuff_vanilla_common::shadow::{self, SHADOW_RANGE, distance};
@@ -757,7 +758,7 @@ impl MobCore {
             EquipmentSlot::Body,
         ]
         .into_iter()
-        .filter_map(|slot| Some((slot, self.equipment.get(slot)?.dup_unchecked())))
+        .filter_map(|slot| Some((slot, ItemSnapshot::of(self.equipment.get(slot)?))))
         .collect();
         EntityFacts {
             kind: Some(self.base.kind),

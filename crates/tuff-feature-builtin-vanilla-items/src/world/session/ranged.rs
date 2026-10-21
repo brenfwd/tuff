@@ -197,7 +197,7 @@ impl RangedExt for PlayerSession {
                 let mut arrow = ArrowShot::new(item.keep(1, BurnReason::Template), velocity);
                 arrow.crit = true;
                 arrow.sound = Some(SoundEvent::ItemCrossbowHit);
-                arrow.weapon = Some(crossbow.dup_unchecked());
+                arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&crossbow));
                 arrow.pierce = ranged::piercing(&crossbow);
                 if free {
                     arrow.pickup = Some(Pickup::CreativeOnly);

@@ -75,7 +75,7 @@ pub trait CombatExt {
     /// the target.
     async fn attack_landed(
         &mut self,
-        weapon: Option<ItemStack>,
+        weapon: Option<tuff_item::item::ItemSnapshot>,
         target: PlayerId,
         target_position: [f64; 3],
         knockback: bool,
@@ -167,7 +167,7 @@ impl CombatExt for PlayerSession {
         let effects = self.effect_levels();
         let worn: Vec<combat::Equipped> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, stack))
+            .map(|(slot, stack)| (*slot, &**stack))
             .collect();
         let attacker = combat::Attacker {
             modifiers: combat::Modifiers {
@@ -196,7 +196,7 @@ impl CombatExt for PlayerSession {
             self.smash_attack(fall_distance, position, target).await;
             self.wind_burst(victim, fall_distance).await;
         }
-        let weapon = self.inventory.hand(false).map(DupUnchecked::dup_unchecked);
+        let weapon = self.inventory.hand(false).map(tuff_item::item::ItemSnapshot::of);
         match handle {
             Some(handle) => {
                 handle.send(PlayerEvent::Attacked(Attack {
@@ -335,7 +335,7 @@ impl CombatExt for PlayerSession {
                 attacker: self.conn.handle.clone(),
                 attacker_name: self.profile.name.clone(),
                 attacker_uuid: self.profile.id,
-                weapon: weapon.dup_unchecked(),
+                weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
                 attacker_position: self.pose.position,
                 attacker_yaw: self.pose.yaw,
                 damage,
@@ -374,7 +374,7 @@ impl CombatExt for PlayerSession {
                 attacker_pitch: self.pose.pitch,
                 damage,
                 knockback,
-                weapon: weapon.dup_unchecked(),
+                weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
                 critical: false,
                 magic: false,
                 sweep: false,
@@ -594,7 +594,7 @@ impl CombatExt for PlayerSession {
     /// the target.
     async fn attack_landed(
         &mut self,
-        weapon: Option<ItemStack>,
+        weapon: Option<tuff_item::item::ItemSnapshot>,
         target: PlayerId,
         target_position: [f64; 3],
         knockback: bool,
@@ -607,7 +607,7 @@ impl CombatExt for PlayerSession {
         if let Some(sweep) = sweep
             && !self.is_dead()
         {
-            self.sweep(weapon.as_ref(), target, target_position, sweep)
+            self.sweep(weapon.as_deref(), target, target_position, sweep)
                 .await;
         }
         if let Some(weapon) = weapon
@@ -664,7 +664,7 @@ impl CombatExt for PlayerSession {
                 attacker_pitch: self.pose.pitch,
                 damage,
                 knockback: combat::SWEEP_KNOCKBACK,
-                weapon: weapon.map(DupUnchecked::dup_unchecked),
+                weapon: weapon.map(tuff_item::item::ItemSnapshot::of),
                 critical: false,
                 magic: false,
                 sweep: true,
@@ -678,7 +678,7 @@ impl CombatExt for PlayerSession {
                 attacker: self.conn.handle.clone(),
                 attacker_name: self.profile.name.clone(),
                 attacker_uuid: self.profile.id,
-                weapon: weapon.map(DupUnchecked::dup_unchecked),
+                weapon: weapon.map(tuff_item::item::ItemSnapshot::of),
                 attacker_position: self.pose.position,
                 attacker_yaw: self.pose.yaw,
                 damage,
@@ -775,11 +775,11 @@ impl CombatExt for PlayerSession {
                     kind,
                     attacker: Some(
                         Culprit::player(attacker.0, attack.attacker_uuid, attacker.1.clone())
-                            .holding(attack.weapon.as_ref()),
+                            .holding(attack.weapon.as_deref()),
                     ),
                     projectile: None,
                     position: Some(attack.attacker_position),
-                    weapon: attack.weapon.dup_unchecked(),
+                    weapon: attack.weapon.clone(),
                     direct: true,
                 },
                 attack.damage,
@@ -844,7 +844,7 @@ impl CombatExt for PlayerSession {
                 }));
             }
             attack.attacker.send(PlayerEvent::AttackLanded {
-                weapon: attack.weapon.dup_unchecked(),
+                weapon: attack.weapon.clone(),
                 target: self.id,
                 target_position: self.pose.position,
                 knockback: attack.knockback > 0.0,
@@ -892,7 +892,7 @@ impl CombatExt for PlayerSession {
         let equipment = self.equipment();
         let worn: Vec<combat::Equipped> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, stack))
+            .map(|(slot, stack)| (*slot, &**stack))
             .collect();
         let own = combat::post_attack(&worn, combat::Side::Victim, context, &mut self.rng);
         let weapon = match &attack.weapon {
@@ -966,7 +966,7 @@ impl CombatExt for PlayerSession {
         let equipment = self.equipment();
         let worn: Vec<combat::Equipped> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, stack))
+            .map(|(slot, stack)| (*slot, &**stack))
             .collect();
         if combat::immune_to_damage(&worn, &damage_context(&source), &mut self.rng) {
             return HurtResult::default();
@@ -1152,7 +1152,7 @@ impl CombatExt for PlayerSession {
         let equipment = self.equipment();
         let worn: Vec<(EquipmentSlot, &ItemStack)> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, stack))
+            .map(|(slot, stack)| (*slot, &**stack))
             .collect();
         if !damage_type_in_tag(kind, "minecraft:bypasses_armor") {
             self.hurt_equipment(kind, amount, &ARMOR_SLOTS).await;
@@ -1161,7 +1161,7 @@ impl CombatExt for PlayerSession {
                 amount,
                 armor,
                 toughness,
-                source.weapon.as_ref(),
+                source.weapon.as_deref(),
                 &damage_context(source),
                 &mut self.rng,
             );

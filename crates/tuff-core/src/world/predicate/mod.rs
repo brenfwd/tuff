@@ -32,7 +32,7 @@ pub struct EntityFacts {
     pub dimension: String,
     pub biome: Option<String>,
     pub flags: Flags,
-    pub equipment: Vec<(EquipmentSlot, ItemStack)>,
+    pub equipment: Vec<(EquipmentSlot, tuff_item::item::ItemSnapshot)>,
     pub vehicle: Option<Box<EntityFacts>>,
     pub passengers: Vec<EntityFacts>,
     /// Entity data components such as `minecraft:cat/variant`, by id.

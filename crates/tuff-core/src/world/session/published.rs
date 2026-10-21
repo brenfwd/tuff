@@ -576,11 +576,7 @@ impl PlayerSession {
     /// changed (equipment, enchantments or effects), or unconditionally
     /// when `force` (login, respawn).
     pub async fn sync_attributes(&mut self, force: bool) {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         let modifiers = attributes::Modifiers {
             equipment: &worn,

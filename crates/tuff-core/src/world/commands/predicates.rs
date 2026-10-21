@@ -818,13 +818,13 @@ fn crosshair_entity(
         .then(|| Box::new(facts))
 }
 
-fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, ItemStack)> {
+fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, tuff_item::item::ItemSnapshot)> {
     let mut equipment = Vec::new();
     if let Some(held) = saved
         .get_compound("SelectedItem")
         .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
     {
-        equipment.push((EquipmentSlot::Mainhand, held));
+        equipment.push((EquipmentSlot::Mainhand, snapshot_template(held)));
     }
     let slots = [
         ("offhand", EquipmentSlot::Offhand),
@@ -840,11 +840,17 @@ fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, ItemStack)> {
                 .get_compound(name)
                 .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
             {
-                equipment.push((slot, stack));
+                equipment.push((slot, snapshot_template(stack)));
             }
         }
     }
     equipment
+}
+
+fn snapshot_template(stack: ItemStack) -> tuff_item::item::ItemSnapshot {
+    let snapshot = tuff_item::item::ItemSnapshot::of(&stack);
+    stack.burn(tuff_item::item::BurnReason::Template);
+    snapshot
 }
 
 /// A candidate's facts before its region adds what it knows.

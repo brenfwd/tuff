@@ -411,7 +411,7 @@ fn looting_raises_rotten_flesh_by_up_to_its_level() {
     };
     assert_eq!(counts(&plain, &mut rng), [0, 1, 2].into());
     let looting = EntityFacts {
-        attacker_weapon: Some(enchanted(Item::DiamondSword, "looting", 3)),
+        attacker_weapon: Some(tuff_item::item::ItemSnapshot::of(&enchanted(Item::DiamondSword, "looting", 3))),
         ..plain
     };
     assert_eq!(counts(&looting, &mut rng), [0, 1, 2, 3, 4, 5].into());
@@ -490,7 +490,7 @@ fn looting_switches_between_the_unenchanted_and_enchanted_chance() {
     }
     let weapon = enchanted(Item::DiamondSword, "looting", 1);
     let facts_looting = EntityFacts {
-        attacker_weapon: Some(weapon),
+        attacker_weapon: Some(tuff_item::item::ItemSnapshot::of(&weapon)),
         ..Default::default()
     };
     let context_looting = Context {
