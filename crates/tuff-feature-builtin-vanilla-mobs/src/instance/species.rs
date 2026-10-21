@@ -194,14 +194,22 @@ pub trait Species: Sized + Send + Debug + 'static {
         false
     }
 
-    /// The slots of an inventory players open on it (a mount's saddle,
-    /// armor and chest), with the menu they open as.
+    /// The chest of a mount's inventory, behind the saddle and body slots
+    /// its screen shows from the equipment, with the menu it opens as.
     fn inventory(&self) -> Option<(&[Option<ItemStack>], tuff_core::world::menu::MenuKind)> {
         None
     }
 
     fn inventory_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
         None
+    }
+
+    /// Takes what it carries beyond its equipment (a mount's chest, an
+    /// allay's or villager's inventory) before it is removed for good.
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.inventory_mut()
+            .map(|chest| chest.iter_mut().filter_map(Option::take).collect())
+            .unwrap_or_default()
     }
 
     /// See `RegionEntity::container_opens_for`.

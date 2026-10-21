@@ -381,7 +381,9 @@ fn undo_containers(
                         .map(|item| item.map(|item| item.get().dup_unchecked()))
                         .collect()
                 }),
-                Some(uuid) => world.entity_container_items(uuid).map(dup_slice_unchecked),
+                Some(uuid) => world
+                    .entity_container_items(uuid)
+                    .map(|slots| slots.iter().map(DupUnchecked::dup_unchecked).collect()),
                 None if pot => Some(vec![pot_item(world, pos)]),
                 None => world.container_items(pos).map(dup_slice_unchecked),
             };

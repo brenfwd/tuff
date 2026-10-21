@@ -375,6 +375,15 @@ impl ItemEntity {
 }
 
 impl RegionEntity for ItemEntity {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let stack = std::mem::replace(&mut self.stack, ItemStack::empty());
+        if stack.is_empty() {
+            Vec::new()
+        } else {
+            vec![stack]
+        }
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }

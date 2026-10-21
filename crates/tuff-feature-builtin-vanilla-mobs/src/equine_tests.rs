@@ -1,4 +1,5 @@
 use rand::SeedableRng;
+use tuff_item::item::DupUnchecked;
 
 use super::*;
 use tuff_core::world::entity::EntityBase;
@@ -72,7 +73,7 @@ fn a_tamed_saddled_horse_loads_as_drivable() {
     assert_eq!(
         entity
             .container()
-            .map(|slots| slots[mount::SADDLE].dup_unchecked()),
+            .map(|slots| slots[tuff_core::world::menu::mount::SADDLE].dup_unchecked()),
         Some(Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test))),
         "the screen's saddle slot shows the worn saddle"
     );
@@ -271,7 +272,9 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
         assert_eq!(horse.interact(&armor, cx), Some(HandEffect::Consume(1)));
         let slots = horse.container().unwrap();
         assert_eq!(
-            slots[mount::BODY].as_ref().map(|s| s.item),
+            slots[tuff_core::world::menu::mount::BODY]
+                .as_ref()
+                .map(|s| s.item),
             Some(Item::IronHorseArmor)
         );
         assert!(
@@ -284,6 +287,26 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
             "donkeys wear no armor"
         );
         assert_eq!(donkey.interact(&armor, cx), None);
+    });
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn a_removed_donkey_gives_up_its_saddle_and_chest_contents_once() {
+    super::super::tests::with_context(|_, cx| {
+        let mut donkey = tamed(EntityType::Donkey, Compound::new());
+        donkey.interact(&click(Item::Chest), cx);
+        let mut slots = donkey.container_mut().unwrap();
+        slots[tuff_core::world::menu::mount::SADDLE] =
+            Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
+        slots[4] = Some(ItemStack::mint(Item::Diamond, 3, MintReason::Test));
+        let mut taken: Vec<_> = donkey.take_items().iter().map(|s| s.item).collect();
+        taken.sort_by_key(|item| *item as u32);
+        let mut want = vec![Item::Saddle, Item::Diamond];
+        want.sort_by_key(|item| *item as u32);
+        assert_eq!(taken, want);
+        assert!(donkey.container().unwrap().iter().all(Option::is_none));
+        assert!(donkey.take_items().is_empty());
     });
 }
 
@@ -322,22 +345,22 @@ fn a_donkey_chest_opens_a_fifteen_slot_inventory_that_saves() {
 
 #[tuff_core::watchdog]
 #[test]
-fn a_saddle_put_in_the_screen_is_worn_after_the_next_tick() {
+fn a_saddle_put_in_the_screen_is_worn_once_with_its_drop_chance() {
     super::super::tests::with_context(|core, cx| {
         Horse::configure(core);
         core.tame.as_mut().unwrap().owner = Some(77);
         let mut equine = Equine::default();
-        equine.inventory.slots_mut()[mount::SADDLE] =
-            Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
+        equine.inventory.adopt(core);
+        let [saddle, _] = core.equipment.mount_slots_mut();
+        *saddle = Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
+        equine.inventory.chest_from_screen();
         equine.inventory.sync(core, cx);
         assert!(saddled(core));
         assert_eq!(core.equipment.drop_chance(EquipmentSlot::Saddle), 2.0);
-        core.equipment.set(EquipmentSlot::Saddle, None);
+        let saddle = core.equipment.take(EquipmentSlot::Saddle);
         equine.inventory.sync(core, cx);
-        assert!(
-            equine.inventory.slots()[mount::SADDLE].is_none(),
-            "taking the saddle off elsewhere empties the slot"
-        );
+        assert!(saddle.is_some());
+        assert!(core.equipment.mount_slots()[0].is_none());
     });
 }
 

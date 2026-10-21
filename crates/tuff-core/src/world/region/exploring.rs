@@ -82,7 +82,7 @@ impl RegionActor {
                     }
                 }
                 ExploreTarget::Entity(id) => {
-                    let Some(container) = self
+                    let Some(mut container) = self
                         .ents
                         .entities
                         .get_mut(&id)

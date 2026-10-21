@@ -1023,12 +1023,18 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// The slots of an inventory players can open on it (a chest boat),
     /// which the region serves as a menu like a block container.
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
+    fn container(&self) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         None
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
+    fn container_mut(&mut self) -> Option<crate::world::entity_slots::ContainerSlotsMut<'_>> {
         None
+    }
+
+    /// Takes every item the entity holds (its container, equipment and
+    /// anything it carries), before it is removed for good.
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        Vec::new()
     }
 
     /// What the entity holds on display or wears, indexed by the slot
@@ -1062,7 +1068,7 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// The menu its container opens as; a 9-wide grid by default.
     fn container_menu(&self) -> crate::world::menu::MenuKind {
-        let rows = self.container().map_or(0, <[_]>::len) / 9;
+        let rows = self.container().map_or(0, |slots| slots.len()) / 9;
         crate::world::menu::MenuKind::Generic { rows: rows as u8 }
     }
 

@@ -186,7 +186,7 @@ fn container_minecarts_round_trip_their_items_and_enabled_flag() {
 
     let mut nbt = Compound::new().with(LOOT_TABLE, "minecraft:chests/abandoned_mineshaft");
     let chest = load(base(EntityType::ChestMinecart), &mut nbt).unwrap();
-    assert_eq!(chest.container().map(<[_]>::len), Some(27));
+    assert_eq!(chest.container().map(|slots| slots.len()), Some(27));
     assert_eq!(chest.container_menu(), MenuKind::Generic { rows: 3 });
     assert!(chest.loot_pending());
     let mut saved = Compound::new();

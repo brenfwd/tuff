@@ -6,7 +6,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{Attribute, EntityType, SoundEvent};
 use tuff_vanilla_data::{Block, Item, tag};
@@ -22,7 +21,7 @@ use tuff_core::world::entity::{
     Effect, EntityInteraction, InteractOutcome, RegionEntity, RiderInput, TickContext, take_bool,
     take_number,
 };
-use tuff_core::world::menu::{MenuKind, MountArmor, mount};
+use tuff_core::world::menu::{MenuKind, MountArmor};
 use tuff_core::world::messages::HandEffect;
 use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
@@ -283,64 +282,50 @@ impl Profile {
     }
 }
 
-/// A mount's saddle, body armor and chest slots as its screen shows them.
-/// Slots 0 and 1 mirror the mob's saddle and body equipment: whichever
-/// side changed since the last sync wins.
-#[derive(tuff_item::item::DupClone, Debug)]
+/// A mount's chest, behind the saddle and body slots its screen shows,
+/// which are the mob's own equipment (never a second copy of it).
+#[derive(tuff_item::item::DupClone, Debug, Default)]
 pub struct MountInventory {
-    slots: Vec<Option<ItemStack>>,
-    mirror: [Option<ItemStack>; 2],
+    chest: Vec<Option<ItemStack>>,
+    worn: [Option<Item>; 2],
+    screen_touched: bool,
 }
 
-impl Default for MountInventory {
-    fn default() -> Self {
-        Self {
-            slots: (0..mount::CHEST).map(|_| None).collect(),
-            mirror: [None, None],
-        }
-    }
-}
-
-const MIRRORED: [EquipmentSlot; 2] = [EquipmentSlot::Saddle, EquipmentSlot::Body];
+const WORN: [EquipmentSlot; 2] = [EquipmentSlot::Saddle, EquipmentSlot::Body];
 
 impl MountInventory {
-    pub fn slots(&self) -> &[Option<ItemStack>] {
-        &self.slots
-    }
-
-    pub fn slots_mut(&mut self) -> &mut [Option<ItemStack>] {
-        &mut self.slots
-    }
-
     pub fn chest(&self) -> &[Option<ItemStack>] {
-        &self.slots[mount::CHEST..]
+        &self.chest
+    }
+
+    /// The chest to change from the screen, which also may change the
+    /// worn slots: the next [`Self::sync`] reacts to what was put on.
+    pub fn chest_from_screen(&mut self) -> &mut [Option<ItemStack>] {
+        self.screen_touched = true;
+        &mut self.chest
     }
 
     pub fn columns(&self) -> u8 {
-        ((self.slots.len() - mount::CHEST) / 3) as u8
+        (self.chest.len() / 3) as u8
     }
 
     /// Resizes the chest to `columns`, keeping what still fits.
     pub fn resize(&mut self, columns: u8) {
-        self.slots
-            .resize_with(mount::CHEST + columns as usize * 3, || None);
+        self.chest.resize_with(columns as usize * 3, || None);
     }
 
     /// Empties the chest, returning what it held.
     pub fn take_chest(&mut self) -> Vec<ItemStack> {
-        self.slots[mount::CHEST..]
-            .iter_mut()
-            .filter_map(Option::take)
-            .collect()
+        self.chest.iter_mut().filter_map(Option::take).collect()
     }
 
     pub fn load_chest(&mut self, nbt: &mut Compound) {
         let Some(Tag::List(entries)) = nbt.remove("Items") else {
             return;
         };
-        let size = self.slots.len() - mount::CHEST;
+        let size = self.chest.len();
         for (slot, stack) in decode_items(&entries, size).into_iter().enumerate() {
-            self.slots[mount::CHEST + slot] = stack;
+            self.chest[slot] = stack;
         }
     }
 
@@ -348,33 +333,29 @@ impl MountInventory {
         out.insert("Items", encode_items(self.chest()));
     }
 
-    /// Reconciles slots 0 and 1 with the equipment; a screen change is
-    /// equipped (guaranteed to drop, with its equip sound).
+    /// Reacts to what the screen put on since the last sync: it is
+    /// guaranteed to drop and plays its equip sound.
     pub fn sync(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        for (index, slot) in MIRRORED.into_iter().enumerate() {
-            if self.slots[index] != self.mirror[index] {
-                let stack = self.slots[index].dup_unchecked();
-                if let Some(stack) = &stack {
-                    core.equipment
-                        .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
-                    core.persistence_required = true;
-                    if let Some(sound) = equip_sound(slot, stack) {
-                        core.sound(sound, 1.0, 1.0, cx);
-                    }
+        let touched = std::mem::take(&mut self.screen_touched);
+        for (index, slot) in WORN.into_iter().enumerate() {
+            let worn = core.equipment.get(slot).map(|stack| stack.item);
+            if touched && worn.is_some() && worn != self.worn[index] {
+                core.equipment
+                    .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
+                core.persistence_required = true;
+                if let Some(sound) = core.equipment.get(slot).and_then(|s| equip_sound(slot, s)) {
+                    core.sound(sound, 1.0, 1.0, cx);
                 }
-                core.equipment.set(slot, stack);
-            } else if core.equipment.get(slot) != self.slots[index].as_ref() {
-                self.slots[index] = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
             }
-            self.mirror[index] = self.slots[index].dup_unchecked();
+            self.worn[index] = worn;
         }
     }
 
     /// Takes the equipment as it is, without reacting to it.
     pub fn adopt(&mut self, core: &MobCore) {
-        for (index, slot) in MIRRORED.into_iter().enumerate() {
-            self.slots[index] = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
-            self.mirror[index] = self.slots[index].dup_unchecked();
+        self.screen_touched = false;
+        for (index, slot) in WORN.into_iter().enumerate() {
+            self.worn[index] = core.equipment.get(slot).map(|stack| stack.item);
         }
     }
 }
@@ -1075,13 +1056,13 @@ macro_rules! equine_species {
 
         fn inventory(&self) -> Option<(&[Option<ItemStack>], tuff_core::world::menu::MenuKind)> {
             Some((
-                self.equine.inventory.slots(),
+                self.equine.inventory.chest(),
                 self.equine.menu(&Self::PROFILE),
             ))
         }
 
         fn inventory_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-            Some(self.equine.inventory.slots_mut())
+            Some(self.equine.inventory.chest_from_screen())
         }
 
         fn inventory_opens_for(&self, core: &MobCore, player: i32, sneaking: bool) -> bool {

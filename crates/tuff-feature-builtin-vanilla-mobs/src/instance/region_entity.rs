@@ -1,4 +1,5 @@
 use super::*;
+use tuff_core::world::entity_slots::{ContainerSlots, ContainerSlotsMut};
 use tuff_item::item::DupUnchecked;
 
 impl<S: Species> RegionEntity for Mob<S> {
@@ -759,12 +760,27 @@ impl<S: Species> RegionEntity for Mob<S> {
         shears || self.species.mount_refused(&self.core, stack)
     }
 
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
-        self.species.inventory().map(|(slots, _)| slots)
+    fn container(&self) -> Option<ContainerSlots<'_>> {
+        let (chest, _) = self.species.inventory()?;
+        Some(ContainerSlots::with_head(
+            self.core.equipment.mount_slots(),
+            chest,
+        ))
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        self.species.inventory_mut()
+    fn container_mut(&mut self) -> Option<ContainerSlotsMut<'_>> {
+        let chest = self.species.inventory_mut()?;
+        Some(ContainerSlotsMut::with_head(
+            self.core.equipment.mount_slots_mut(),
+            chest,
+        ))
+    }
+
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let mut items = self.species.take_items();
+        items.append(&mut self.core.piglin.inventory);
+        items.extend(self.core.equipment.take_all());
+        items
     }
 
     fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {

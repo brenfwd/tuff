@@ -64,6 +64,9 @@ pub enum BurnReason {
     Destroyed,
     /// An item entity despawned.
     Despawned,
+    /// Still inside an entity removed for good (killed by a command,
+    /// discarded, its chunk deleted).
+    Discarded,
     /// Turned into another item (see [`MintReason::Transform`]).
     Transform,
     /// Deleted in the creative inventory.

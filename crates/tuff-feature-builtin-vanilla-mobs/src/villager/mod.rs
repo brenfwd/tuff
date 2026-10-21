@@ -681,6 +681,10 @@ fn overworld_day(cx: &TickContext) -> i64 {
 }
 
 impl Species for Villager {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.inventory.iter_mut().filter_map(Option::take).collect()
+    }
+
     const RANDOM_BABIES: bool = false;
 
     fn debug_value(

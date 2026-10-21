@@ -488,6 +488,10 @@ impl RegionWorld for RegionActor {
         RegionActor::remove_entity(self, id, &[])
     }
 
+    fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity> {
+        RegionActor::remove_entity_intact(self, id, &[])
+    }
+
     fn remove_entity_kept(&mut self, id: i32) -> Option<TrackedEntity> {
         RegionActor::remove_entity_kept(self, id, &[])
     }
@@ -807,7 +811,10 @@ impl RegionWorld for RegionActor {
         self.set_container_items_for_plugin(pos, slots)
     }
 
-    fn entity_container_items(&self, uuid: u128) -> Option<&[Option<ItemStack>]> {
+    fn entity_container_items(
+        &self,
+        uuid: u128,
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         self.entity_container_items_by_uuid(uuid)
     }
 

@@ -565,8 +565,12 @@ pub trait RegionWorld: GrowthLevel {
             });
         Some(DispenseOutcome::Dispensed)
     }
-    /// Takes an entity out of the region (no death, no drops).
+    /// Takes an entity out of the region (no death, no drops), burning
+    /// the items still in it.
     fn remove_entity(&mut self, id: i32) -> Option<TrackedEntity>;
+    /// Like `remove_entity` for an entity whose items live on: it is
+    /// saved elsewhere (a hive, a pearl list) or moved to another region.
+    fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity>;
     /// Like `remove_entity` for an entity that lives on elsewhere: its
     /// scores and team stay.
     fn remove_entity_kept(&mut self, id: i32) -> Option<TrackedEntity>;
@@ -824,7 +828,10 @@ pub trait RegionWorld: GrowthLevel {
 
     /// The container slots of the entity `uuid` in this region (a chest
     /// boat, a minecart).
-    fn entity_container_items(&self, _uuid: u128) -> Option<&[Option<ItemStack>]> {
+    fn entity_container_items(
+        &self,
+        _uuid: u128,
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         None
     }
 

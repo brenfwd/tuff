@@ -201,7 +201,7 @@ impl RegionActor {
     pub(super) fn entity_container_items_by_uuid(
         &self,
         uuid: u128,
-    ) -> Option<&[Option<ItemStack>]> {
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         let id = self.entity_by_uuid(uuid)?;
         self.ents.entities.get(&id)?.entity.container()
     }
@@ -266,7 +266,7 @@ impl RegionActor {
             return false;
         };
         let holder = self.entity_holder(id);
-        let Some(items) = self
+        let Some(mut items) = self
             .ents
             .entities
             .get_mut(&id)

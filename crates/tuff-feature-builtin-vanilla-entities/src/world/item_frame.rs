@@ -455,6 +455,10 @@ impl RegionEntity for ItemFrame {
         &mut self.base
     }
 
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.item.take().into_iter().collect()
+    }
+
     fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         Some(vec![self.item.as_ref().map(ItemStack::view)])
     }
