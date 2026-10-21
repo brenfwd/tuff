@@ -17,7 +17,7 @@ mod ledger;
 mod view;
 pub use ledger::{BurnReason, DupUnchecked, MintReason, SlotsCow, dup_probe, dup_slice_unchecked};
 pub use tuff_macros::DupClone;
-pub use view::{ItemSnapshot, ItemView};
+pub use view::{ItemSnapshot, ItemView, snapshot_slots};
 
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;

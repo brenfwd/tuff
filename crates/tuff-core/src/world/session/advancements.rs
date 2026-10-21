@@ -2,7 +2,6 @@
 //! player's facts, granting and revoking criteria, rewards, chat
 //! announcements and the Update Advancements packets.
 
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{CustomStat, EntityType};
 
 use super::{PlayerSession, UNLOCK_WATCHED_SLOTS};
@@ -10,7 +9,7 @@ use crate::world::advancement::trigger::Event;
 use crate::world::advancement::{Advancements, View};
 use crate::world::messages::CoordinatorMessage;
 use crate::world::predicate::{EntityFacts, Flags};
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::ItemStack;
 
 /// Window slots in the game's inventory order: hotbar, main inventory,
 /// armor from the feet up, then the off hand. Two always-empty slots
@@ -207,35 +206,31 @@ impl PlayerSession {
     /// it. The crafting result and grid are not inventory slots.
     pub fn scan_inventory(&mut self) {
         let slots = self.inventory.slots();
-        if slots == self.progress.last_inventory.as_slice() {
+        let same = |slot: usize| {
+            slots[slot].as_ref()
+                == self
+                    .progress
+                    .last_inventory
+                    .get(slot)
+                    .and_then(Option::as_deref)
+        };
+        if slots.len() == self.progress.last_inventory.len() && (0..slots.len()).all(same) {
             return;
         }
-        let changed: Vec<Option<ItemStack>> = UNLOCK_WATCHED_SLOTS
-            .filter(|slot| {
-                slots[*slot]
-                    != self
-                        .progress
-                        .last_inventory
-                        .get(*slot)
-                        .and_then(DupUnchecked::dup_unchecked)
-            })
-            .map(|slot| slots[slot].dup_unchecked())
-            .collect();
-        let mut inventory: Vec<Option<ItemStack>> = INVENTORY_ORDER
-            .iter()
-            .map(|&slot| slots[slot].dup_unchecked())
-            .collect();
-        inventory.extend(std::iter::repeat_with(|| None).take(ALWAYS_EMPTY_SLOTS));
-        self.progress.last_inventory = slots
-            .iter()
-            .map(DupUnchecked::dup_unchecked)
-            .collect::<Vec<_>>();
-        for stack in &changed {
+        let changed: Vec<usize> = UNLOCK_WATCHED_SLOTS.filter(|slot| !same(*slot)).collect();
+        let last = tuff_item::item::snapshot_slots(slots);
+        let view = |slot: usize| last[slot].as_ref().map(tuff_item::item::ItemSnapshot::view);
+        let mut inventory: Vec<Option<tuff_item::item::ItemView<'_>>> =
+            INVENTORY_ORDER.iter().map(|&slot| view(slot)).collect();
+        inventory.extend(std::iter::repeat_n(None, ALWAYS_EMPTY_SLOTS));
+        for &slot in &changed {
             self.fire(Event::InventoryChanged {
-                changed: stack.as_ref(),
+                changed: view(slot).map(tuff_item::item::ItemView::get),
                 inventory: &inventory,
             });
         }
+        drop(inventory);
+        self.progress.last_inventory = last;
     }
 
     /// A held item used on a block: placed-block and item-used-on-block
@@ -250,8 +245,8 @@ impl PlayerSession {
             .inventory
             .hand(off_hand)
             .filter(|stack| stack.item == item)
-            .map(DupUnchecked::dup_unchecked)
-            .unwrap_or_else(|| ItemStack::mint(item, 1, MintReason::Template));
+            .map(tuff_item::item::ItemSnapshot::of)
+            .unwrap_or_else(|| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default()));
         if let Some(placed) = &placement.placed {
             self.fire(Event::PlacedBlock {
                 location: placed,
@@ -345,9 +340,7 @@ impl PlayerSession {
                 let rod = [false, true]
                     .into_iter()
                     .filter_map(|off_hand| {
-                        self.inventory
-                            .hand(off_hand)
-                            .map(DupUnchecked::dup_unchecked)
+                        self.inventory.hand(off_hand).map(tuff_item::item::ItemSnapshot::of)
                     })
                     .find(|stack| stack.item == tuff_vanilla_data::Item::FishingRod);
                 if let Some(rod) = rod {
@@ -391,8 +384,8 @@ impl PlayerSession {
                 let item = self
                     .inventory
                     .hand(off_hand)
-                    .map(DupUnchecked::dup_unchecked)
-                    .unwrap_or_else(ItemStack::empty);
+                    .map(tuff_item::item::ItemSnapshot::of)
+                    .unwrap_or_else(|| tuff_item::item::ItemSnapshot::describe(tuff_vanilla_data::Item::Air, 0, Default::default()));
                 self.fire(Event::AnyBlockUse {
                     location: &location,
                     item: &item,
@@ -537,7 +530,7 @@ impl PlayerSession {
                 .killing_blow
                 .direct
                 .as_ref()
-                .and_then(|d| d.equipment.first().map(|(_, stack)| stack.dup_unchecked()));
+                .and_then(|d| d.equipment.first().map(|(_, stack)| stack.clone()));
             let arrow = kill.killing_blow.direct.as_ref().and_then(|d| d.entity_id);
             self.progress.arrow_kills.push((victim, weapon, arrow));
         }
@@ -550,7 +543,7 @@ impl PlayerSession {
         for (victims, weapon) in group_arrow_kills(pending) {
             self.fire(Event::KilledByArrow {
                 victims: &victims,
-                weapon: weapon.as_ref(),
+                weapon: weapon.as_deref(),
             });
         }
     }
@@ -730,7 +723,7 @@ impl PlayerSession {
             let Some(taken) = taken else {
                 continue;
             };
-            let left = after.get(slot).and_then(DupUnchecked::dup_unchecked);
+            let left = after.get(slot).and_then(Option::as_ref);
             if left.as_ref().is_some_and(|stack| stack.item == taken.item) {
                 continue;
             }
@@ -791,7 +784,7 @@ impl PlayerSession {
                 .inventory
                 .hand(using.off_hand)
                 .filter(|stack| stack.item == using.item)
-                .map(DupUnchecked::dup_unchecked)
+                .map(tuff_item::item::ItemSnapshot::of)
         {
             self.fire(Event::UsingItem(&stack));
         }
@@ -843,12 +836,12 @@ impl PlayerSession {
     }
 }
 
-type ArrowKill = (EntityFacts, Option<ItemStack>, Option<i32>);
+type ArrowKill = (EntityFacts, Option<tuff_item::item::ItemSnapshot>, Option<i32>);
 
-fn group_arrow_kills(mut pending: Vec<ArrowKill>) -> Vec<(Vec<EntityFacts>, Option<ItemStack>)> {
+fn group_arrow_kills(mut pending: Vec<ArrowKill>) -> Vec<(Vec<EntityFacts>, Option<tuff_item::item::ItemSnapshot>)> {
     let mut volleys = Vec::new();
     while !pending.is_empty() {
-        let (weapon, arrow) = (pending[0].1.dup_unchecked(), pending[0].2);
+        let (weapon, arrow) = (pending[0].1.clone(), pending[0].2);
         let (volley, rest): (Vec<_>, Vec<_>) = pending
             .into_iter()
             .partition(|(_, w, a)| *w == weapon && *a == arrow);

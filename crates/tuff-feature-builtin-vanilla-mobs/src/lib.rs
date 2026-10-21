@@ -196,7 +196,7 @@ pub struct MobSounds {
 }
 
 /// What hurt a mob.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Damage {
     pub kind: &'static DamageType,
     /// The player responsible, by entity id and UUID.

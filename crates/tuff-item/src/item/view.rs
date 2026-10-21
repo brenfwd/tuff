@@ -126,6 +126,14 @@ impl PartialEq<ItemStack> for ItemSnapshot {
     }
 }
 
+/// Pictures of every slot.
+pub fn snapshot_slots(slots: &[Option<ItemStack>]) -> Vec<Option<ItemSnapshot>> {
+    slots
+        .iter()
+        .map(|slot| slot.as_ref().map(ItemSnapshot::of))
+        .collect()
+}
+
 impl ItemStack {
     pub fn view(&self) -> ItemView<'_> {
         ItemView(self)

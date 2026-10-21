@@ -22,7 +22,7 @@ mod sub;
 pub use sub::slot_range;
 
 /// An entity as a predicate sees it.
-#[derive(tuff_item::item::DupClone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct EntityFacts {
     pub kind: Option<EntityType>,
     /// The entity id, when the source of the facts knows it.
@@ -196,7 +196,7 @@ pub trait PredicateWorld {
 }
 
 /// A damage source.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DamageFacts {
     pub kind: &'static DamageType,
     /// The entity the damage is blamed on.

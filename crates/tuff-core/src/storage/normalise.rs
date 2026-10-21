@@ -24,7 +24,7 @@ use tuff_world_model::pos::ChunkPos;
 /// What is about to be written for one chunk. `blocks` is `Some` when the
 /// chunk record is being written (block entities live in the meta),
 /// `entities` when the entity record is.
-#[derive(tuff_item::item::DupClone)]
+#[derive(Clone)]
 pub struct SaveView {
     pub dimension: String,
     pub pos: ChunkPos,

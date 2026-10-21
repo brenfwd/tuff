@@ -181,12 +181,7 @@ impl PlayerSession {
         self.body.shoulders.entities = state.shoulders;
         self.body.effects = state.effects;
         self.body.attributes = state.attributes;
-        self.progress.last_inventory = self
-            .inventory
-            .slots()
-            .iter()
-            .map(DupUnchecked::dup_unchecked)
-            .collect::<Vec<_>>();
+        self.progress.last_inventory = tuff_item::item::snapshot_slots(self.inventory.slots());
         Ok(())
     }
 
