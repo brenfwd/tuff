@@ -131,6 +131,13 @@ impl Equipment {
         [saddle, body]
     }
 
+    /// Takes every item out.
+    pub fn take_all(&mut self) -> Vec<ItemStack> {
+        let taken: Vec<_> = self.items.iter_mut().filter_map(Option::take).collect();
+        self.changed |= !taken.is_empty();
+        taken
+    }
+
     /// Takes the item out of `slot`.
     pub fn take(&mut self, slot: EquipmentSlot) -> Option<ItemStack> {
         let i = index(slot)?;

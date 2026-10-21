@@ -145,7 +145,7 @@ async fn move_entity(shared: Arc<Shared>, uuid: u128, teleport: Teleport) {
 }
 
 fn transfer(world: &mut dyn RegionWorld, id: i32, teleport: Teleport, target: RegionHandle) {
-    let Some(tracked) = world.remove_entity(id) else {
+    let Some(tracked) = world.remove_entity_intact(id) else {
         return;
     };
     let seq = tracked.seq + 1;

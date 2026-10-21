@@ -292,6 +292,26 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
 
 #[tuff_core::watchdog]
 #[test]
+fn a_removed_donkey_gives_up_its_saddle_and_chest_contents_once() {
+    super::super::tests::with_context(|_, cx| {
+        let mut donkey = tamed(EntityType::Donkey, Compound::new());
+        donkey.interact(&click(Item::Chest), cx);
+        let mut slots = donkey.container_mut().unwrap();
+        slots[tuff_core::world::menu::mount::SADDLE] =
+            Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
+        slots[4] = Some(ItemStack::mint(Item::Diamond, 3, MintReason::Test));
+        let mut taken: Vec<_> = donkey.take_items().iter().map(|s| s.item).collect();
+        taken.sort_by_key(|item| *item as u32);
+        let mut want = vec![Item::Saddle, Item::Diamond];
+        want.sort_by_key(|item| *item as u32);
+        assert_eq!(taken, want);
+        assert!(donkey.container().unwrap().iter().all(Option::is_none));
+        assert!(donkey.take_items().is_empty());
+    });
+}
+
+#[tuff_core::watchdog]
+#[test]
 fn a_donkey_chest_opens_a_fifteen_slot_inventory_that_saves() {
     super::super::tests::with_context(|_, cx| {
         let mut donkey = tamed(EntityType::Donkey, Compound::new());

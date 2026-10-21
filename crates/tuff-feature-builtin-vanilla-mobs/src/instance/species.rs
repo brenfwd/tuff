@@ -204,6 +204,14 @@ pub trait Species: Sized + Send + Debug + 'static {
         None
     }
 
+    /// Takes what it carries beyond its equipment (a mount's chest, an
+    /// allay's or villager's inventory) before it is removed for good.
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.inventory_mut()
+            .map(|chest| chest.iter_mut().filter_map(Option::take).collect())
+            .unwrap_or_default()
+    }
+
     /// See `RegionEntity::container_opens_for`.
     fn inventory_opens_for(&self, _core: &MobCore, _player: i32, _sneaking: bool) -> bool {
         true

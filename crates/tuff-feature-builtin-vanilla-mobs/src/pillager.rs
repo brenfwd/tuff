@@ -75,6 +75,10 @@ impl Pillager {
 }
 
 impl Species for Pillager {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        std::mem::take(&mut self.inventory)
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }

@@ -803,6 +803,10 @@ impl RegionEntity for Boat {
         has_chest(self.base.kind).then(|| self.items.as_slice().into())
     }
 
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.items.iter_mut().filter_map(Option::take).collect()
+    }
+
     fn container_mut(&mut self) -> Option<tuff_core::world::entity_slots::ContainerSlotsMut<'_>> {
         has_chest(self.base.kind).then(|| self.items.as_mut_slice().into())
     }

@@ -776,6 +776,13 @@ impl<S: Species> RegionEntity for Mob<S> {
         ))
     }
 
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let mut items = self.species.take_items();
+        items.append(&mut self.core.piglin.inventory);
+        items.extend(self.core.equipment.take_all());
+        items
+    }
+
     fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         Some(
             self.core

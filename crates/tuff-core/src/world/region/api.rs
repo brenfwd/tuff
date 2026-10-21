@@ -488,6 +488,10 @@ impl RegionWorld for RegionActor {
         RegionActor::remove_entity(self, id, &[])
     }
 
+    fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity> {
+        RegionActor::remove_entity_intact(self, id, &[])
+    }
+
     fn remove_entity_kept(&mut self, id: i32) -> Option<TrackedEntity> {
         RegionActor::remove_entity_kept(self, id, &[])
     }

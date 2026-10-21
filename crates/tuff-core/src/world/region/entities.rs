@@ -281,8 +281,22 @@ impl RegionActor {
     }
 
     /// Removes an entity for good, telling the viewers of `chunks` (its
-    /// chunk when empty).
+    /// chunk when empty); the items still in it are burned.
     pub(super) fn remove_entity(&mut self, id: i32, chunks: &[ChunkPos]) -> Option<TrackedEntity> {
+        let mut tracked = self.remove_entity_intact(id, chunks)?;
+        for stack in tracked.entity.take_items() {
+            stack.burn(tuff_item::item::BurnReason::Discarded);
+        }
+        Some(tracked)
+    }
+
+    /// Like `remove_entity` for an entity whose items live on (saved into
+    /// a block or sent elsewhere).
+    pub(super) fn remove_entity_intact(
+        &mut self,
+        id: i32,
+        chunks: &[ChunkPos],
+    ) -> Option<TrackedEntity> {
         let parts = self.custom_entity_parts(id);
         let tracked = self.remove_entity_kept(id, chunks)?;
         self.ents.destroyed.push(tracked.entity.base().uuid);

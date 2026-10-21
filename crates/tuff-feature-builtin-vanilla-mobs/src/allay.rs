@@ -542,6 +542,10 @@ fn memory_value<'a>(memories: &'a Compound, key: &str) -> Option<&'a Tag> {
 }
 
 impl Species for Allay {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.inventory.take().into_iter().collect()
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }

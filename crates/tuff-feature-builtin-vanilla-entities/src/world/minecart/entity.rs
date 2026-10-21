@@ -54,6 +54,10 @@ impl RegionEntity for Minecart {
         self.has_container().then(|| self.items.as_slice().into())
     }
 
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.items.iter_mut().filter_map(Option::take).collect()
+    }
+
     fn container_mut(&mut self) -> Option<tuff_core::world::entity_slots::ContainerSlotsMut<'_>> {
         self.has_container()
             .then(|| self.items.as_mut_slice().into())

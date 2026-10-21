@@ -1031,6 +1031,12 @@ pub trait RegionEntity: Any + Send + Debug {
         None
     }
 
+    /// Takes every item the entity holds (its container, equipment and
+    /// anything it carries), before it is removed for good.
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        Vec::new()
+    }
+
     /// What the entity holds on display or wears, indexed by the slot
     /// numbers its held-item edits report (an item frame, an armor stand).
     fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {

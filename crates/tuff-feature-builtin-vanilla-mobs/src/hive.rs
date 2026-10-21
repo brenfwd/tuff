@@ -586,7 +586,7 @@ fn enter(world: &mut dyn RegionWorld, id: i32, pos: BlockPos) {
     data.insert("TicksSincePollination", 0);
     let nectar = data.get_bool("HasNectar").unwrap_or(false);
     let flower = data.get("flower_pos").cloned();
-    world.remove_entity(id);
+    world.remove_entity_intact(id);
     let occupant = Compound::new()
         .with("entity_data", data)
         .with("ticks_in_hive", 0)
