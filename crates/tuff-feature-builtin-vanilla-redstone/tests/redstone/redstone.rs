@@ -1098,6 +1098,7 @@ async fn a_dispenser_puts_a_helmet_on_the_player_in_front() {
     b.region.request(RegionRequest::Player(standing)).await;
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
+    assert_eq!(dispenser_slot(&mut b, dispenser).await, None);
     let (slot, stack) = expect(&mut b.events, |event| match event {
         PlayerEvent::DispenserEquip { slot, stack } => Some((slot, stack)),
         _ => None,
@@ -1105,7 +1106,6 @@ async fn a_dispenser_puts_a_helmet_on_the_player_in_front() {
     .await;
     assert_eq!(slot, tuff_vanilla_data::item::EquipmentSlot::Head);
     assert_eq!((stack.item, stack.count()), (Item::IronHelmet, 1));
-    assert_eq!(dispenser_slot(&mut b, dispenser).await, None);
     let entities = entity_kinds(&b.region).await;
     assert!(
         !entities
@@ -2170,12 +2170,12 @@ async fn a_jukebox_takes_a_record_in_hand_and_gives_it_back() {
     set(&b.region, &[(input, "minecraft:jukebox")]).await;
     b.world.ticks(2).await;
     b.region
-        .request(RegionRequest::Place(place(
+        .request(RegionRequest::Place(offering(place(
             &b.player,
             input,
             Item::MusicDisc11,
             1,
-        )))
+        ))))
         .await;
     expect(&mut b.events, |event| match event {
         PlayerEvent::ActionResult {
@@ -2212,7 +2212,7 @@ async fn a_lectern_takes_a_book_turns_pages_pulses_and_gives_it_back() {
     b.world.ticks(2).await;
     let mut put = place(&b.player, input, Item::WritableBook, 1);
     put.components.writable_book = Some(vec![Filterable::plain("p".to_string()); 5]);
-    b.region.request(RegionRequest::Place(put)).await;
+    b.region.request(RegionRequest::Place(offering(put))).await;
     expect(&mut b.events, |event| match event {
         PlayerEvent::ActionResult {
             sequence: 1,

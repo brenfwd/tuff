@@ -43,6 +43,7 @@ mod net;
 pub use net::TickThrottler;
 mod packets;
 mod persist;
+mod place_offer;
 mod pose;
 mod progress;
 mod published;

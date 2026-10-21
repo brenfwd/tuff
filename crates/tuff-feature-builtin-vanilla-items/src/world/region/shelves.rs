@@ -4,9 +4,9 @@
 
 use tuff_core::world::block_entity::{read_items, write_items};
 use tuff_core::world::game_event::{Context, GameEvent, Source};
+use tuff_core::world::inventory::Inventory;
 use tuff_core::world::messages::{ActionOutcome, HandEffect, Place, PlayerEvent};
 use tuff_core::world::region_api::RegionWorld;
-use tuff_core::world::inventory::Inventory;
 use tuff_item::item::ItemStack;
 use tuff_vanilla_common::placement;
 use tuff_vanilla_common::side_chain;

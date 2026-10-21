@@ -892,14 +892,7 @@ impl Species for SulfurCube {
             self.prime(core, false, cx);
             return Some(DispenseOutcome::Worn(1));
         }
-        if !swallowable(stack.item)
-            || !self.equip(
-                core,
-                stack.item,
-                || stack.take(),
-                cx,
-            )
-        {
+        if !swallowable(stack.item) || !self.equip(core, stack.item, || stack.take(), cx) {
             return None;
         }
         Some(DispenseOutcome::Dispensed)

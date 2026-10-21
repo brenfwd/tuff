@@ -280,16 +280,15 @@ pub trait Interact: RegionWorld + Rest {
         });
         if let Some(item) = compostable {
             let accepted = level < composter::READY
-                && place
-                    .offer
-                    .keep_one(place.hand_slot)
-                    .is_some_and(|stack| match port.offer(self.as_dyn(), &at, stack) {
+                && place.offer.keep_one(place.hand_slot).is_some_and(|stack| {
+                    match port.offer(self.as_dyn(), &at, stack) {
                         Ok(()) => true,
                         Err(refused) => {
                             place.offer.unkeep(place.hand_slot, refused);
                             false
                         }
-                    });
+                    }
+                });
             if level >= composter::READY {
                 if level > composter::READY {
                     return None;

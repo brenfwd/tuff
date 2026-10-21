@@ -1127,7 +1127,12 @@ async fn campfires_cook_food_placed_on_them() {
     })
     .await;
     region
-        .request(RegionRequest::Place(offering(place(&alice, block, Item::Beef, 2))))
+        .request(RegionRequest::Place(offering(place(
+            &alice,
+            block,
+            Item::Beef,
+            2,
+        ))))
         .await;
     let data_id = tuff_vanilla_data::packet::play::Clientbound::BlockEntityData.id();
     expect(&mut alice_events, |event| match event {
