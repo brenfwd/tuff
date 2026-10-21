@@ -1,0 +1,40 @@
+use super::*;
+
+/// The kind of `event`, as the flag a plugin subscribes with.
+pub fn kind_of(event: &Event) -> EventKinds {
+    match event {
+        Event::Join(_) => EventKinds::JOIN,
+        Event::Leave(_) => EventKinds::LEAVE,
+        Event::Chat(_) => EventKinds::CHAT,
+        Event::BlockBreak(_) => EventKinds::BLOCK_BREAK,
+        Event::BlockPlace(_) => EventKinds::BLOCK_PLACE,
+        Event::LeftClick(_) => EventKinds::LEFT_CLICK,
+        Event::RightClick(_) => EventKinds::RIGHT_CLICK,
+        Event::EntitySpawn(_) => EventKinds::ENTITY_SPAWN,
+        Event::EntityDeath(_) => EventKinds::ENTITY_DEATH,
+        Event::EntityDamage(_) => EventKinds::ENTITY_DAMAGE,
+        Event::PlayerHurt(_) => EventKinds::PLAYER_HURT,
+        Event::PlayerDeath(_) => EventKinds::PLAYER_DEATH,
+        Event::InsideBlock(_) => EventKinds::INSIDE_BLOCK,
+        Event::ConfigChange(_) => EventKinds::CONFIG_CHANGE,
+        Event::Login(_) => EventKinds::LOGIN,
+        Event::MenuClick(_) => EventKinds::MENU_CLICK,
+        Event::MenuClose(_) => EventKinds::MENU_CLOSE,
+        Event::EntityInteract(_) => EventKinds::ENTITY_INTERACT,
+        Event::UseItem(_) => EventKinds::USE_ITEM,
+        Event::ProjectileHit(_) => EventKinds::PROJECTILE_HIT,
+        Event::PlayerAttack(_) => EventKinds::PLAYER_ATTACK,
+        Event::DamageFiltered(_) => EventKinds::DAMAGE_FILTERED,
+        Event::ItemDrop(_) => EventKinds::ITEM_DROP,
+        Event::ItemPickup(_) => EventKinds::ITEM_PICKUP,
+        Event::ItemSwap(_) => EventKinds::ITEM_SWAP,
+        Event::ItemCraft(_) => EventKinds::ITEM_CRAFT,
+        Event::ItemsTaken(_) => EventKinds::ITEMS_TAKEN,
+        Event::Explosion(_) => EventKinds::EXPLOSION,
+        Event::InventoryClick(_) => EventKinds::INVENTORY_CLICK,
+        Event::InventoryOpen(_) => EventKinds::INVENTORY_OPEN,
+        Event::InventoryClose(_) => EventKinds::INVENTORY_CLOSE,
+        Event::PlayerState(_) => EventKinds::PLAYER_STATE,
+        Event::Payload(_) => EventKinds::PAYLOAD,
+    }
+}
