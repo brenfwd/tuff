@@ -79,6 +79,222 @@ pub enum BurnReason {
     Test,
 }
 
+/// Whether a stack counts as real items. Pictures (templates, snapshots,
+/// test fixtures) come and go freely; counted stacks must be stored, moved
+/// or burned, never dropped.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) enum Tally {
+    #[default]
+    Counted,
+    Picture,
+}
+
+impl PartialEq for Tally {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Tally {
+    fn of(reason: MintReason) -> Self {
+        match reason {
+            MintReason::Template | MintReason::Test | MintReason::Network => Self::Picture,
+            _ => Self::Counted,
+        }
+    }
+}
+
+/// Process-wide item accounting: what came in through the doors, what left
+/// through them, and what was lost without a door. Counted stacks only.
+pub mod conservation {
+    use std::cell::Cell;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+    use super::LedgerTotals;
+
+    static CHECKS: AtomicBool = AtomicBool::new(true);
+    static MINTED: AtomicU64 = AtomicU64::new(0);
+    static BURNED: AtomicU64 = AtomicU64::new(0);
+    static LOADED: AtomicU64 = AtomicU64::new(0);
+    static LOST: AtomicU64 = AtomicU64::new(0);
+    static VIOLATIONS: AtomicU64 = AtomicU64::new(0);
+
+    thread_local! {
+        static RELEASING: Cell<u32> = const { Cell::new(0) };
+    }
+
+    /// Turns the release-build checks on or off (`tuff.items.conservationChecks`).
+    /// Debug and test builds always check.
+    pub fn set_checks(on: bool) {
+        CHECKS.store(on, Ordering::Relaxed);
+    }
+
+    /// Whether operations are checked and rejected on a violation.
+    pub fn checks() -> bool {
+        cfg!(debug_assertions) || CHECKS.load(Ordering::Relaxed)
+    }
+
+    pub fn totals() -> LedgerTotals {
+        LedgerTotals {
+            minted: MINTED.load(Ordering::Relaxed),
+            burned: BURNED.load(Ordering::Relaxed),
+            loaded: LOADED.load(Ordering::Relaxed),
+            lost: LOST.load(Ordering::Relaxed),
+            violations: VIOLATIONS.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Runs `f`, in which dropped stacks are leaving memory after being
+    /// stored (unloads, shutdown) or nested in a stack that left: not lost.
+    pub fn releasing<R>(f: impl FnOnce() -> R) -> R {
+        struct Guard;
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                RELEASING.with(|depth| depth.set(depth.get() - 1));
+            }
+        }
+        RELEASING.with(|depth| depth.set(depth.get() + 1));
+        let _guard = Guard;
+        f()
+    }
+
+    /// Marks the current thread as a test's own while the guard lives:
+    /// stacks a test drops there are fixtures. Actors on other threads stay
+    /// checked.
+    pub fn fixture_thread() -> FixtureThread {
+        RELEASING.with(|depth| depth.set(depth.get() + 1));
+        FixtureThread(std::marker::PhantomData)
+    }
+
+    pub struct FixtureThread(std::marker::PhantomData<*const ()>);
+
+    impl Drop for FixtureThread {
+        fn drop(&mut self) {
+            RELEASING.with(|depth| depth.set(depth.get() - 1));
+        }
+    }
+
+    /// Drops `value` as stored state leaving memory.
+    pub fn release<T>(value: T) {
+        releasing(|| drop(value));
+    }
+
+    /// An actor's future whose state leaves memory with it: the actor saved
+    /// what it owned, or the world is stopping and storage keeps the last
+    /// saved items.
+    pub fn actor<F: std::future::Future>(future: F) -> Actor<F> {
+        Actor(Some(Box::pin(future)))
+    }
+
+    pub struct Actor<F>(Option<std::pin::Pin<Box<F>>>);
+
+    impl<F: std::future::Future> std::future::Future for Actor<F> {
+        type Output = F::Output;
+
+        fn poll(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<F::Output> {
+            self.0
+                .as_mut()
+                .expect("an actor future polled after it was dropped")
+                .as_mut()
+                .poll(cx)
+        }
+    }
+
+    impl<F> Drop for Actor<F> {
+        fn drop(&mut self) {
+            release(self.0.take());
+        }
+    }
+
+    pub(super) fn is_releasing() -> bool {
+        RELEASING.with(|depth| depth.get() > 0)
+    }
+
+    pub(super) fn minted(n: u8) {
+        MINTED.fetch_add(u64::from(n), Ordering::Relaxed);
+    }
+
+    pub(super) fn burned(n: u8) {
+        BURNED.fetch_add(u64::from(n), Ordering::Relaxed);
+    }
+
+    pub(super) fn loaded(n: u8) {
+        LOADED.fetch_add(u64::from(n), Ordering::Relaxed);
+    }
+
+    pub(super) fn lost(stack: &super::ItemStack) {
+        LOST.fetch_add(u64::from(stack.count), Ordering::Relaxed);
+        VIOLATIONS.fetch_add(1, Ordering::Relaxed);
+        if cfg!(debug_assertions) && !std::thread::panicking() {
+            panic!(
+                "item stack dropped without being stored or burned: {stack:?} at {}",
+                dropped_at()
+            );
+        }
+        log::error!("item conservation: {stack:?} dropped without being stored or burned");
+    }
+
+    fn dropped_at() -> String {
+        let trace = std::backtrace::Backtrace::force_capture().to_string();
+        trace
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("at "))
+            .filter(|at| !at.starts_with("/rustc/") && !at.contains("/item/ledger.rs"))
+            .filter(|at| !at.contains("/cargo/registry/") && !at.contains("/library/"))
+            .take(4)
+            .collect::<Vec<_>>()
+            .join(" <- ")
+    }
+
+    /// Records a failed check of an item operation. The caller rejects the
+    /// operation and keeps both sides' state.
+    pub fn violation(operation: &str, detail: std::fmt::Arguments<'_>) {
+        VIOLATIONS.fetch_add(1, Ordering::Relaxed);
+        log::error!("item conservation: {operation} rejected: {detail}");
+    }
+}
+
+/// A reading of the [`conservation`] counters, in items.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LedgerTotals {
+    pub minted: u64,
+    pub burned: u64,
+    pub loaded: u64,
+    /// Items in counted stacks dropped without a store or burn.
+    pub lost: u64,
+    /// Lost stacks plus rejected operations.
+    pub violations: u64,
+}
+
+impl LedgerTotals {
+    /// The change from `earlier` to this reading.
+    pub fn since(self, earlier: Self) -> Self {
+        Self {
+            minted: self.minted - earlier.minted,
+            burned: self.burned - earlier.burned,
+            loaded: self.loaded - earlier.loaded,
+            lost: self.lost - earlier.lost,
+            violations: self.violations - earlier.violations,
+        }
+    }
+}
+
+impl Drop for ItemStack {
+    fn drop(&mut self) {
+        let counted = matches!(self.tally, Tally::Counted);
+        if counted && !self.is_empty() && !conservation::is_releasing() {
+            conservation::lost(self);
+        }
+        if self.components.0.is_some() {
+            let nested = std::mem::take(&mut self.components);
+            conservation::release(nested);
+        }
+    }
+}
+
 impl ItemStack {
     /// No item: air with a count of zero.
     pub fn empty() -> Self {
@@ -86,15 +302,21 @@ impl ItemStack {
             item: Item::Air,
             count: 0,
             components: Components::default(),
+            tally: Tally::Picture,
         }
     }
 
     /// The door for new items.
-    pub fn mint(item: Item, count: u8, _reason: MintReason) -> Self {
+    pub fn mint(item: Item, count: u8, reason: MintReason) -> Self {
+        let tally = Tally::of(reason);
+        if matches!(tally, Tally::Counted) && item != Item::Air {
+            conservation::minted(count);
+        }
         Self {
             item,
             count,
             components: Components::default(),
+            tally,
         }
     }
 
@@ -118,18 +340,51 @@ impl ItemStack {
 
     /// New items read from their `{id, count, components}` form.
     /// `None` for unknown items and air.
-    pub fn mint_from_nbt(nbt: &Compound, _reason: MintReason) -> Option<Self> {
-        Self::decode_nbt(nbt)
+    pub fn mint_from_nbt(nbt: &Compound, reason: MintReason) -> Option<Self> {
+        let mut stack = Self::decode_nbt(nbt)?;
+        stack.tally = Tally::of(reason);
+        if matches!(stack.tally, Tally::Counted) {
+            conservation::minted(stack.count);
+        }
+        Some(stack)
     }
 
     /// Stacks loaded from storage: they existed before the save.
     /// Only loaders call this.
     pub fn from_storage(nbt: &Compound) -> Option<Self> {
+        let mut stack = Self::decode_nbt(nbt)?;
+        stack.tally = Tally::Counted;
+        conservation::loaded(stack.count);
+        Some(stack)
+    }
+
+    /// A look at items kept in stored NBT, which stays their owner: a
+    /// picture, never real items.
+    pub fn picture_from_nbt(nbt: &Compound) -> Option<Self> {
         Self::decode_nbt(nbt)
     }
 
     /// The door for items leaving existence.
-    pub fn burn(self, _reason: BurnReason) {}
+    pub fn burn(mut self, _reason: BurnReason) {
+        if matches!(self.tally, Tally::Counted) && !self.is_empty() {
+            conservation::burned(self.count);
+        }
+        self.count = 0;
+    }
+
+    /// Turns this stack into `count` of `item` keeping its components:
+    /// burns it and mints the result.
+    pub fn into_item(mut self, item: Item, count: u8, mint: MintReason, burn: BurnReason) -> Self {
+        let components = std::mem::take(&mut self.components);
+        self.burn(burn);
+        Self::mint(item, count, mint).with_components(components)
+    }
+
+    /// Whether this stack is a picture (template, snapshot or test
+    /// fixture) rather than counted items.
+    pub fn is_picture(&self) -> bool {
+        matches!(self.tally, Tally::Picture)
+    }
 
     /// A copy for a picture or a template. Only the snapshot and mint
     /// doors call it.
@@ -138,6 +393,7 @@ impl ItemStack {
             item: self.item,
             count: self.count,
             components: self.components.picture_copy(),
+            tally: Tally::Picture,
         }
     }
 
@@ -157,6 +413,7 @@ impl ItemStack {
             item: rest.item,
             count: n,
             components: rest.components.picture_copy(),
+            tally: rest.tally,
         };
         rest.count -= n;
         (taken, Some(rest))
@@ -169,14 +426,23 @@ impl ItemStack {
             Some(total) if a.stacks_with(&b) => {
                 let mut merged = a;
                 merged.count = total;
-                b.burn_merged();
+                merged.absorb_tally(b);
                 Ok(merged)
             }
             _ => Err((a, b)),
         }
     }
 
-    fn burn_merged(self) {}
+    /// Ends `other` after its items were added to this stack. A picture
+    /// joined into a counted stack becomes counted items: minted.
+    fn absorb_tally(&mut self, mut other: Self) {
+        match (self.tally, other.tally) {
+            (Tally::Counted, Tally::Picture) => conservation::minted(other.count),
+            (Tally::Picture, Tally::Counted) => conservation::burned(other.count),
+            _ => {}
+        }
+        other.count = 0;
+    }
 
     /// Takes up to `n` items off this stack. Taking all leaves an empty
     /// husk (count zero) for the caller to clear.
@@ -187,6 +453,7 @@ impl ItemStack {
             item: self.item,
             count: n,
             components: self.components.picture_copy(),
+            tally: self.tally,
         }
     }
 
@@ -201,7 +468,7 @@ impl ItemStack {
         match self.count.checked_add(other.count) {
             Some(total) if self.stacks_with(&other) || other.count == 0 => {
                 self.count = total;
-                other.burn_merged();
+                self.absorb_tally(other);
                 Ok(())
             }
             _ => Err(other),
@@ -218,6 +485,11 @@ impl ItemStack {
         let n = n.min(from.count).min(u8::MAX - self.count);
         from.count -= n;
         self.count += n;
+        match (self.tally, from.tally) {
+            (Tally::Counted, Tally::Picture) => conservation::minted(n),
+            (Tally::Picture, Tally::Counted) => conservation::burned(n),
+            _ => {}
+        }
         n
     }
 
@@ -241,7 +513,7 @@ impl ItemStack {
         }
         let (moved, rest) = other.split(room);
         self.count += moved.count;
-        moved.burn_merged();
+        self.absorb_tally(moved);
         rest
     }
 
@@ -259,21 +531,29 @@ impl ItemStack {
         *from = match (back, rest) {
             (Some(mut back), Some(rest)) => {
                 back.count += rest.count;
-                rest.burn_merged();
+                back.absorb_tally(rest);
                 Some(back)
             }
             (back, rest) => back.or(rest),
         };
-        debug_assert_eq!(
-            before,
-            from.as_ref().map_or(0, |stack| stack.count) + part_count - returned
-        );
+        let after = from.as_ref().map_or(0, |stack| stack.count);
+        if before != after + part_count - returned {
+            conservation::violation(
+                "absorb",
+                format_args!("{before} items became {after} + {}", part_count - returned),
+            );
+            debug_assert!(false, "absorb_from lost or made items");
+        }
         part_count - returned
     }
 
     /// Adds `n` new items to this stack.
     pub fn grow(&mut self, n: u8, _reason: MintReason) {
+        let before = self.count;
         self.count = self.count.saturating_add(n);
+        if matches!(self.tally, Tally::Counted) && self.item != Item::Air {
+            conservation::minted(self.count - before);
+        }
     }
 
     /// Destroys up to `n` items of this stack, possibly leaving an empty
@@ -313,6 +593,10 @@ impl ItemStack {
         match slot {
             Some(held) => {
                 if let Err(stack) = held.join(stack) {
+                    conservation::violation(
+                        "put back",
+                        format_args!("{stack:?} does not fit back into {held:?}"),
+                    );
                     debug_assert!(false, "put back a stack that does not fit: {stack:?}");
                     stack.burn(BurnReason::Destroyed);
                 }
@@ -339,6 +623,7 @@ impl ItemStack {
                     item: self.item,
                     count: n,
                     components: Components::default(),
+                    tally: self.tally,
                 }
                 .burn(burn);
             }

@@ -43,16 +43,19 @@ pub fn equip(world: &mut dyn RegionWorld, table: &Compound, saved: &mut Compound
             .item
             .equippable()
             .map_or(EquipmentSlot::Mainhand, |e| e.slot);
-        if used.contains(&slot) {
-            continue;
-        }
-        let Some((_, key)) = SLOT_NAMES.iter().find(|(s, _)| *s == slot) else {
+        let Some((_, key)) = SLOT_NAMES
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .filter(|_| !used.contains(&slot))
+        else {
+            stack.burn(BurnReason::Loot);
             continue;
         };
         if !matches!(slot, EquipmentSlot::Mainhand | EquipmentSlot::Offhand) {
             stack.resize(1, MintReason::Loot, BurnReason::Loot);
         }
         equipment.insert(*key, stack.to_nbt());
+        tuff_item::item::conservation::release(stack);
         let chance = match chances {
             Some(Tag::Compound(per_slot)) => per_slot.get(key).and_then(float_of),
             Some(single) => float_of(single),

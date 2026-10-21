@@ -4,7 +4,7 @@ use super::*;
 use crate::protocol::play::{self, GameMode, PlayerActionStatus};
 use rand::Rng;
 use tokio::sync::oneshot;
-use tuff_item::item::{ItemStack, LodestoneTracker, MintReason, StackCooldown};
+use tuff_item::item::{BurnReason, ItemStack, LodestoneTracker, MintReason, StackCooldown};
 use tuff_storage::admin::PermissionLevel;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -895,7 +895,7 @@ impl PlayerSession {
             HandEffect::None => {}
             HandEffect::Consume(count) => {
                 if !creative {
-                    self.inventory.take_from_hand(off_hand, count);
+                    self.inventory.consume_from_hand(off_hand, count);
                 }
             }
             HandEffect::Damage(amount) => self.hurt_hand(off_hand, amount).await,
@@ -938,7 +938,7 @@ impl PlayerSession {
                     self.inventory.set_slot(slot, Some(*result));
                 } else {
                     if !creative {
-                        self.inventory.take_from_hand(off_hand, 1);
+                        self.inventory.consume_from_hand(off_hand, 1);
                     }
                     if let Some(extra) = self.inventory.add(*result) {
                         self.throw_item(extra).await;
@@ -959,12 +959,16 @@ impl PlayerSession {
     /// Shared body of [`HandEffect::Exchange`] and [`HandEffect::ExchangeStack`].
     pub async fn apply_exchange(&mut self, off_hand: bool, creative: bool, result: ItemStack) {
         if creative {
-            if self.inventory.find_item(result.item).is_none() {
-                let _ = self.inventory.add(result);
+            let spare = match self.inventory.find_item(result.item) {
+                None => self.inventory.add(result),
+                Some(_) => Some(result),
+            };
+            if let Some(spare) = spare {
+                spare.burn(BurnReason::Creative);
             }
             return;
         }
-        self.inventory.take_from_hand(off_hand, 1);
+        self.inventory.consume_from_hand(off_hand, 1);
         if self.inventory.hand(off_hand).is_none() {
             let slot = if off_hand {
                 Inventory::OFFHAND_SLOT

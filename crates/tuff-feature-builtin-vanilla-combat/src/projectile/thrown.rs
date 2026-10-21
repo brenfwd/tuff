@@ -275,6 +275,15 @@ impl Thrown {
 }
 
 impl RegionEntity for Thrown {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let item = std::mem::replace(&mut self.item, ItemStack::empty());
+        if item.is_empty() {
+            Vec::new()
+        } else {
+            vec![item]
+        }
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }

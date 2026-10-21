@@ -111,6 +111,15 @@ fn steer(velocity: [f64; 3], position: [f64; 3], target: [f64; 3]) -> [f64; 3] {
 }
 
 impl RegionEntity for EyeOfEnder {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let item = std::mem::replace(&mut self.item, ItemStack::empty());
+        if item.is_empty() {
+            Vec::new()
+        } else {
+            vec![item]
+        }
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }

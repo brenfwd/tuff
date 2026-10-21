@@ -394,16 +394,18 @@ impl RegionActor {
         let tags = actor.current_tags();
         let enchantments = actor.current_enchantments();
         let registries = actor.shared.datapacks.contents().registries.clone();
-        tokio::spawn(tuff_datapack::tags::scope(
-            tags,
-            tuff_item::registries::scope(
-                registries,
-                tuff_item::enchantment::scope(enchantments, async move {
-                    if let Some(mut previous) = previous {
-                        let _ = previous.wait_for(|done| *done).await;
-                    }
-                    actor.supervise().await;
-                }),
+        tokio::spawn(tuff_item::item::conservation::actor(
+            tuff_datapack::tags::scope(
+                tags,
+                tuff_item::registries::scope(
+                    registries,
+                    tuff_item::enchantment::scope(enchantments, async move {
+                        if let Some(mut previous) = previous {
+                            let _ = previous.wait_for(|done| *done).await;
+                        }
+                        actor.supervise().await;
+                    }),
+                ),
             ),
         ));
         handle

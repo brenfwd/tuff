@@ -64,6 +64,11 @@ pub trait Shelves: RegionWorld {
         place: &Place,
         state: BlockState,
     ) -> Option<ActionOutcome> {
+        tuff_item::item::conservation::releasing(|| self.use_bookshelf_slots(place, state))
+    }
+
+    /// The shelf's slots are a working copy of its saved NBT.
+    fn use_bookshelf_slots(&mut self, place: &Place, state: BlockState) -> Option<ActionOutcome> {
         let pos = place.target;
         let facing = state.facing()?;
         let interacted = ActionOutcome::Interacted {
@@ -161,10 +166,12 @@ pub trait Shelves: RegionWorld {
         let facing = state.facing()?;
         let slot = hit_slot(place.face, place.cursor, facing, 1, SHELF_SLOTS)?;
         self.raw_block_entity(pos)?;
-        if state.get("powered") != Some("true") {
-            return self.swap_single_item(place, state, slot);
-        }
-        self.swap_hotbar(place, pos)
+        tuff_item::item::conservation::releasing(|| {
+            if state.get("powered") != Some("true") {
+                return self.swap_single_item(place, state, slot);
+            }
+            self.swap_hotbar(place, pos)
+        })
     }
 
     fn swap_single_item(
@@ -191,7 +198,7 @@ pub trait Shelves: RegionWorld {
             (None, true) => SoundEvent::BlockShelfPlaceItem,
             (None, false) => return None,
         };
-        self.store_shelf(pos, &items);
+        self.store_shelf(pos, items);
         self.play_sound(sound, pos, 1.0, 1.0, None);
         let vibrates = removed.as_ref().is_none_or(interact_vibrations);
         if vibrates {
@@ -238,7 +245,7 @@ pub trait Shelves: RegionWorld {
                 *entry = placed;
                 hotbar[inventory as usize] = removed;
             }
-            self.store_shelf(*part, &items);
+            self.store_shelf(*part, items);
             let affected = self.block(*part);
             self.game_event(
                 GameEvent::EntityInteract,
@@ -269,10 +276,11 @@ pub trait Shelves: RegionWorld {
         })
     }
 
-    fn store_shelf(&mut self, pos: BlockPos, items: &[Option<ItemStack>]) {
+    fn store_shelf(&mut self, pos: BlockPos, items: Vec<Option<ItemStack>>) {
         if let Some(nbt) = self.raw_block_entity_mut(pos) {
-            write_items(nbt, items);
+            write_items(nbt, &items);
         }
+        tuff_item::item::conservation::release(items);
         self.block_entity_changed(pos);
         self.update_output_signal(pos, self.block(pos).map_or(Block::Air, |s| s.block()));
     }

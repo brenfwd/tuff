@@ -609,7 +609,7 @@ impl TestWorld {
                             let _ = done.send(if asked { Ok(()) } else { Err("stopped".into()) });
                         });
                     }
-                    _ => {}
+                    other => tuff_item::item::conservation::release(other),
                 }
             }
         });

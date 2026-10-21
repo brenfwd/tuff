@@ -221,7 +221,9 @@ impl Recipe for Shaped {
                 .iter()
                 .map(|cell| cell.clone().map_or(SlotDisplay::Empty, slot))
                 .collect(),
-            result: SlotDisplay::template(result_stack(&self.recipe.result)),
+            result: SlotDisplay::template(tuff_core::world::crafting::result_template(
+                &self.recipe.result,
+            )),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -331,7 +333,9 @@ impl Recipe for Shapeless {
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: self.recipe.ingredients.iter().cloned().map(slot).collect(),
-            result: SlotDisplay::template(result_stack(&self.recipe.result)),
+            result: SlotDisplay::template(tuff_core::world::crafting::result_template(
+                &self.recipe.result,
+            )),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }

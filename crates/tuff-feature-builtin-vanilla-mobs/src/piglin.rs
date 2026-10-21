@@ -829,6 +829,7 @@ impl Piglin {
             && cx.tick >= core.piglin.ate_until
         {
             core.piglin.ate_until = cx.tick + EAT_COOLDOWN;
+            stack.burn(tuff_item::item::BurnReason::Consumed);
         } else {
             self.equip_or_store(core, stack, cx);
         }

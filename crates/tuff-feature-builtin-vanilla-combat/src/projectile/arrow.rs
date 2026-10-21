@@ -106,6 +106,11 @@ pub struct Trident {
 }
 
 impl Arrow {
+    /// Replaces the default item [`of`](Self::of) made.
+    fn set_item(&mut self, item: ItemStack) {
+        std::mem::replace(&mut self.item, item).burn(tuff_item::item::BurnReason::Template);
+    }
+
     /// An arrow leaving `shooter`'s eyes (0.1 below them), owned by it.
     pub fn new(id: i32, position: [f64; 3], velocity: [f64; 3], owner: Owner) -> Self {
         Self::of(EntityType::Arrow, id, position, velocity, owner)
@@ -126,7 +131,7 @@ impl Arrow {
             EntityType::Arrow
         };
         let mut arrow = Self::of(kind, id, position, velocity, owner);
-        arrow.item = item.keep(1, tuff_item::item::BurnReason::Template);
+        arrow.set_item(item.keep(1, tuff_item::item::BurnReason::Template));
         arrow
     }
 
@@ -168,7 +173,7 @@ impl Arrow {
     ) -> Self {
         let mut arrow = Self::of(EntityType::Trident, id, position, velocity, owner);
         arrow.trident = Some(trident_state(&item));
-        arrow.item = item.keep(1, tuff_item::item::BurnReason::Template);
+        arrow.set_item(item.keep(1, tuff_item::item::BurnReason::Template));
         arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));
         arrow
     }
@@ -740,6 +745,15 @@ impl Arrow {
 }
 
 impl RegionEntity for Arrow {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let item = std::mem::replace(&mut self.item, ItemStack::empty());
+        if item.is_empty() {
+            Vec::new()
+        } else {
+            vec![item]
+        }
+    }
+
     fn ground_pickup(&mut self) -> Option<tuff_core::world::entity::GroundPickup<'_>> {
         let creative_only = self.creative_pickup();
         let allowed = self.pickup_stack().is_some();
@@ -968,7 +982,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     if let Some(item) = take(nbt, "item", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     }) {
-        arrow.item = item;
+        arrow.set_item(item);
     }
     arrow.weapon = take(nbt, "weapon", |tag| {
         let weapon = ItemStack::from_storage(tag.as_compound()?)?;

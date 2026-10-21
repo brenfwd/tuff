@@ -786,8 +786,10 @@ impl Species for Villager {
             take(nbt, "RestocksToday", tuff_core::world::entity::number).map_or(0, |v| v as i32);
         if let Some(items) = take(nbt, "Inventory", |t| t.as_list().map(<[Tag]>::to_vec)) {
             for item in items {
-                if let Some(stack) = item.as_compound().and_then(ItemStack::from_storage) {
-                    let _ = self.add_item(stack);
+                if let Some(stack) = item.as_compound().and_then(ItemStack::from_storage)
+                    && let Some(rest) = self.add_item(stack)
+                {
+                    rest.burn(tuff_item::item::BurnReason::Discarded);
                 }
             }
         }

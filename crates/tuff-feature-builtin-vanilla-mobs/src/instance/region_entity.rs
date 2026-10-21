@@ -434,6 +434,7 @@ impl<S: Species> RegionEntity for Mob<S> {
 
     fn took_item(&mut self, stack: ItemStack) {
         if crate::raider::took_banner(&mut self.core, &stack) {
+            stack.burn(tuff_item::item::BurnReason::Transform);
             return;
         }
         self.species.took_item(&mut self.core, stack);

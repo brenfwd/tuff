@@ -680,6 +680,13 @@ pub fn edit_inventory(
     raw: &mut Compound,
     edit: impl FnOnce(&mut crate::world::inventory::Inventory) -> bool,
 ) -> bool {
+    tuff_item::item::conservation::releasing(|| edit_stored_inventory(raw, edit))
+}
+
+fn edit_stored_inventory(
+    raw: &mut Compound,
+    edit: impl FnOnce(&mut crate::world::inventory::Inventory) -> bool,
+) -> bool {
     let mut inventory = crate::world::inventory::Inventory::default();
     for (slot, stack) in stored_slots(raw) {
         inventory.set_slot(slot, Some(stack));

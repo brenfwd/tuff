@@ -465,6 +465,10 @@ impl<S: Species> Mob<S> {
                     for stack in drops {
                         self.core.drop_item(stack, 0.0, cx);
                     }
+                } else {
+                    for stack in drops {
+                        stack.burn(tuff_item::item::BurnReason::Loot);
+                    }
                 }
             }
             let context = damage.context(self.core.base.kind);

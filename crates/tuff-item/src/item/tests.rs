@@ -733,7 +733,9 @@ fn a_stacks_own_use_components_override_the_items_defaults() {
     assert_eq!((left.item, left.count), (Item::Bowl, 2));
 
     let mut milk = ItemStack::mint(Item::MilkBucket, 1, MintReason::Test);
-    assert_eq!(milk.use_remainder().unwrap().item, Item::Bucket);
+    let bucket = milk.use_remainder().unwrap();
+    assert_eq!(bucket.item, Item::Bucket);
+    bucket.burn(crate::item::BurnReason::Test);
     milk.components
         .removed
         .push("minecraft:use_remainder".to_owned());

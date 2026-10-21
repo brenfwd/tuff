@@ -281,7 +281,7 @@ async fn use_empty_map(session: &mut PlayerSession, off_hand: bool) {
         return;
     };
     if !session.mode.abilities.instabuild {
-        session.inventory.take_from_hand(off_hand, 1);
+        session.inventory.consume_from_hand(off_hand, 1);
     }
     session
         .progress

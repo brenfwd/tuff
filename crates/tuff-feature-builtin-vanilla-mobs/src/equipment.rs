@@ -153,12 +153,18 @@ impl Equipment {
         taken
     }
 
+    /// Puts `stack` in `slot`, burning what it replaces (or `stack` when
+    /// the slot already holds the same).
     pub fn set(&mut self, slot: EquipmentSlot, stack: Option<ItemStack>) {
-        if let Some(i) = index(slot)
-            && self.items[i] != stack
-        {
-            self.items[i] = stack;
-            self.changed = true;
+        let discarded = match index(slot) {
+            Some(i) if self.items[i] != stack => {
+                self.changed = true;
+                std::mem::replace(&mut self.items[i], stack)
+            }
+            _ => stack,
+        };
+        if let Some(discarded) = discarded {
+            discarded.burn(tuff_item::item::BurnReason::Discarded);
         }
     }
 

@@ -417,12 +417,15 @@ impl RegionActor {
         let mut gone: HashSet<i32> = self.stacks_on(&roots).into_iter().collect();
         gone.extend(roots);
         let shared = &self.shared;
-        self.ents.entities.retain(|id, tracked| {
-            let keep = !gone.contains(id);
-            if !keep {
-                shared.release_entity_uuid(tracked.entity.base().uuid);
-            }
-            keep
+        let entities = &mut self.ents.entities;
+        tuff_item::item::conservation::releasing(|| {
+            entities.retain(|id, tracked| {
+                let keep = !gone.contains(id);
+                if !keep {
+                    shared.release_entity_uuid(tracked.entity.base().uuid);
+                }
+                keep
+            })
         });
     }
 

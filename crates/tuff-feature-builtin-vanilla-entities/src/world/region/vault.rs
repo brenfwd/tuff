@@ -95,6 +95,17 @@ struct Vault {
     server_dirty: bool,
 }
 
+/// A vault is read from and written back to its block entity's NBT, which
+/// keeps its items between ticks.
+impl Drop for Vault {
+    fn drop(&mut self) {
+        tuff_item::item::conservation::release((
+            self.config.key_item.take(),
+            std::mem::take(&mut self.items_to_eject),
+        ));
+    }
+}
+
 fn is_vault(nbt: &Compound) -> bool {
     nbt.get_str("id") == Some(VAULT_ID)
 }

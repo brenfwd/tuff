@@ -140,12 +140,16 @@ pub fn save(state: &RaiderState, out: &mut Compound) {
 
 /// The banner raid and patrol leaders wear.
 pub fn ominous_banner() -> ItemStack {
+    ominous_banner_as(MintReason::Spawn)
+}
+
+fn ominous_banner_as(reason: MintReason) -> ItemStack {
     let layer = |pattern: &str, color: &str| BannerLayer {
         pattern: format!("minecraft:{pattern}"),
         inline: None,
         color: DyeColor::from_name(color).expect("a dye color"),
     };
-    let mut stack = ItemStack::mint(Item::WhiteBanner, 1, MintReason::Spawn);
+    let mut stack = ItemStack::mint(Item::WhiteBanner, 1, reason);
     stack.components.banner_patterns = Some(vec![
         layer("rhombus", "cyan"),
         layer("stripe_bottom", "light_gray"),
@@ -173,7 +177,7 @@ pub fn ominous_banner() -> ItemStack {
 }
 
 pub fn is_ominous_banner(stack: &ItemStack) -> bool {
-    let banner = ominous_banner();
+    let banner = ominous_banner_as(MintReason::Template);
     stack.item == banner.item && stack.components == banner.components
 }
 

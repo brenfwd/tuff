@@ -66,7 +66,9 @@ impl RegionActor {
                 let entity = column.meta.block_entities.remove(&from)?;
                 self.menus.ticking.remove(&from);
                 self.menus.hopper_ticks.remove(&from);
-                entity.encode(from)
+                let nbt = entity.encode(from);
+                tuff_item::item::conservation::release(entity);
+                nbt
             }
         };
         column.blocks_dirty = true;

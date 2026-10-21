@@ -118,7 +118,9 @@ pub trait Species: Sized + Send + Debug + 'static {
     fn finalize_spawn(&mut self, _core: &mut MobCore, _cx: &mut TickContext) {}
 
     /// The stack an `Effect::TakeItem` it asked for took.
-    fn took_item(&mut self, _core: &mut MobCore, _stack: ItemStack) {}
+    fn took_item(&mut self, _core: &mut MobCore, stack: ItemStack) {
+        stack.burn(tuff_item::item::BurnReason::Consumed);
+    }
 
     /// Facts entity loot tables check.
     fn loot_facts(&self, _facts: &mut EntityFacts) {}

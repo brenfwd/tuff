@@ -105,7 +105,12 @@ impl RegionActor {
             Ok(entity) => {
                 column.meta.raw_block_entities.remove(&pos);
                 let ticks = entity.kind.ticks();
-                column.meta.block_entities.insert(pos, entity);
+                if let Some(mut replaced) = column.meta.block_entities.insert(pos, entity) {
+                    for stack in replaced.items.iter_mut().filter_map(Option::take) {
+                        stack.burn(tuff_item::item::BurnReason::Command);
+                    }
+                    tuff_item::item::conservation::release(replaced);
+                }
                 if ticks {
                     self.menus.ticking.insert(pos);
                 }
@@ -259,7 +264,9 @@ impl RegionActor {
                 self.spawn_item_at(stack, position, velocity, items::BLOCK_DROP_PICKUP_DELAY);
             }
         }
-        Some(entity.encode(pos))
+        let nbt = entity.encode(pos);
+        tuff_item::item::conservation::release(entity);
+        Some(nbt)
     }
 
     pub(super) fn spawn_item_at(

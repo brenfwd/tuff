@@ -725,7 +725,7 @@ impl PlayerSession {
                 match held {
                     Some(true) => self.hurt_hand(off_hand, 1).await,
                     Some(false) if !self.mode.abilities.instabuild => {
-                        self.inventory.take_from_hand(off_hand, 1);
+                        self.inventory.consume_from_hand(off_hand, 1);
                     }
                     _ => {}
                 }

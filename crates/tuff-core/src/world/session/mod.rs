@@ -773,6 +773,7 @@ impl PlayerSession {
             .coordinator
             .send(CoordinatorMessage::Left { player: self.id })
             .await;
+        tuff_item::item::conservation::release(self);
         let _ = done.send(true);
     }
 

@@ -75,6 +75,7 @@ pub fn spring(horse: &mut MobCore, cx: &mut TickContext) {
         let base = other.base_mut();
         base.passengers
             .push(tuff_core::world::entity::save(&*rider));
+        tuff_item::item::conservation::release(rider);
         for axis in 0..3 {
             base.velocity[axis] += push[axis];
         }

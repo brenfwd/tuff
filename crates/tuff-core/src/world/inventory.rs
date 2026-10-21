@@ -6,7 +6,7 @@ use std::ops::RangeInclusive;
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-use tuff_item::item::{Hurt, ItemStack};
+use tuff_item::item::{BurnReason, Hurt, ItemStack};
 
 fn prevents_equipment_drop(stack: &ItemStack) -> bool {
     let registry = tuff_item::enchantment::current();
@@ -302,6 +302,14 @@ impl Inventory {
     }
 
     /// Removes up to `count` items from a hand, returning what was removed.
+    /// Uses up `count` items from a hand.
+    pub fn consume_from_hand(&mut self, off_hand: bool, count: u8) {
+        if let Some(used) = self.take_from_hand(off_hand, count) {
+            used.burn(BurnReason::Consumed);
+        }
+    }
+
+    #[must_use = "items must be stored, moved or burned"]
     pub fn take_from_hand(&mut self, off_hand: bool, count: u8) -> Option<ItemStack> {
         let slot = self.hand_slot(off_hand);
         self.take(slot, count)

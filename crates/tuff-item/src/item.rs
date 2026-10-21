@@ -15,7 +15,7 @@ pub mod hash;
 pub mod identity;
 mod ledger;
 mod view;
-pub use ledger::{BurnReason, MintReason, SlotsCow};
+pub use ledger::{BurnReason, LedgerTotals, MintReason, SlotsCow, conservation};
 pub use view::{ComponentsSnapshot, ItemSnapshot, ItemView, snapshot_slots};
 
 use std::ops::{Deref, DerefMut};
@@ -78,10 +78,12 @@ const TYPED_NBT_ON_WIRE: [DataComponentType; 2] = [
 ];
 
 #[derive(Debug, PartialEq)]
+#[must_use = "items must be stored, moved or burned"]
 pub struct ItemStack {
     pub item: Item,
     count: u8,
     pub components: Components,
+    tally: ledger::Tally,
 }
 
 /// A stack's component patch, stored sparsely: a stack without components
@@ -1029,6 +1031,7 @@ impl ItemStack {
             item,
             count: count as u8,
             components,
+            tally: ledger::Tally::Picture,
         })
     }
 }

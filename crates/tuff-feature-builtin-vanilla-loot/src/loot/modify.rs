@@ -54,8 +54,8 @@ pub fn modify_item(functions: &[LootFunction], stack: ItemStack, rng: &mut impl 
             }
             "minecraft:set_item" => {
                 if let Some(item) = params["item"].as_str().and_then(Item::from_name) {
-                    stack = ItemStack::mint(item, stack.count(), MintReason::Loot)
-                        .with_components(stack.components);
+                    let count = stack.count();
+                    stack = stack.into_item(item, count, MintReason::Loot, BurnReason::Loot);
                 }
             }
             "minecraft:furnace_smelt" => {
@@ -66,8 +66,12 @@ pub fn modify_item(functions: &[LootFunction], stack: ItemStack, rng: &mut impl 
                         u64::from(stack.count())
                     };
                     let count = (input * recipe.result.count).min(255) as u8;
-                    stack = ItemStack::mint(recipe.result.item, count, MintReason::Loot)
-                        .with_components(stack.components);
+                    stack = stack.into_item(
+                        recipe.result.item,
+                        count,
+                        MintReason::Loot,
+                        BurnReason::Loot,
+                    );
                 }
             }
             "minecraft:set_name" => {
