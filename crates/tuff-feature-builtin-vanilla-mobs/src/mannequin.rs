@@ -265,7 +265,10 @@ impl Species for Mannequin {
         let mut hit = EntityHit::new(melee.damage, &damage_type::PLAYER_ATTACK);
         hit.attacker = Some(Culprit::entity(&core.base));
         hit.position = Some(core.base.position);
-        hit.weapon = core.equipment.main_hand().map(tuff_item::item::ItemSnapshot::of);
+        hit.weapon = core
+            .equipment
+            .main_hand()
+            .map(tuff_item::item::ItemSnapshot::of);
         let (dx, dz) = (
             (bounds[0] + bounds[3]) / 2.0 - core.base.position[0],
             (bounds[2] + bounds[5]) / 2.0 - core.base.position[2],

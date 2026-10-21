@@ -276,7 +276,9 @@ fn recipe_unlocks_come_from_the_recipe_advancements() {
     assert!(rewarded(&tree, &Event::EnterBlock(water)).contains(&"minecraft:oak_boat"));
 
     let dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
-    let mut inventory = (0..43).map(|_| None).collect::<Vec<Option<tuff_item::item::ItemView<'_>>>>();
+    let mut inventory = (0..43)
+        .map(|_| None)
+        .collect::<Vec<Option<tuff_item::item::ItemView<'_>>>>();
     for slot in inventory.iter_mut().take(9) {
         *slot = Some(dirt.view());
     }

@@ -3,7 +3,6 @@ use super::registered::vanilla_set;
 use super::*;
 use tuff_core::world::crafting::place::{Grid, PostPlace, layout, place_recipe};
 use tuff_core::world::inventory::Inventory;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::decor::{BannerLayer, Filterable, WrittenBook};
 use tuff_nbt::Tag;
 
@@ -60,10 +59,10 @@ fn pickaxe(damage: u32) -> ItemStack {
 fn shaped_recipes_match_anywhere_in_the_grid_and_mirrored() {
     let (stick, coal) = (stack(Item::Stick, 1), stack(Item::Coal, 1));
     let top_left = grid3([
-        coal.dup_unchecked(),
+        coal.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
         None,
-        stick.dup_unchecked(),
+        stick.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
         None,
         None,
@@ -76,10 +75,10 @@ fn shaped_recipes_match_anywhere_in_the_grid_and_mirrored() {
         None,
         None,
         None,
-        coal.dup_unchecked(),
+        coal.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
         None,
-        stick.dup_unchecked(),
+        stick.as_ref().map(tuff_item::item::ItemStack::test_copy),
     ]);
     assert_eq!(
         found(&top_left),
@@ -95,22 +94,22 @@ fn shaped_recipes_match_anywhere_in_the_grid_and_mirrored() {
     let (s, x) = (stack(Item::Stick, 1), stack(Item::String, 1));
     let bow = grid3([
         None,
-        s.dup_unchecked(),
-        x.dup_unchecked(),
-        s.dup_unchecked(),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        x.dup_unchecked(),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        s.dup_unchecked(),
-        x.dup_unchecked(),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
     ]);
     let mirrored = grid3([
-        x.dup_unchecked(),
-        s.dup_unchecked(),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        x.dup_unchecked(),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        s.dup_unchecked(),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
         x,
         s,
         None,
@@ -165,7 +164,7 @@ fn transmute_keeps_components_and_counts_materials() {
     let mut map = ItemStack::mint(Item::FilledMap, 1, MintReason::Test);
     map.components.map_id = Some(7);
     let cloning = grid3([
-        Some(map.dup_unchecked()),
+        Some(map.test_copy()),
         stack(Item::Map, 1),
         stack(Item::Map, 1),
         None,
@@ -184,7 +183,7 @@ fn transmute_keeps_components_and_counts_materials() {
     let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
     shulker.components.container = Some(vec![stack(Item::Apple, 3)]);
     let dyed = grid2([
-        Some(shulker.dup_unchecked()),
+        Some(shulker.test_copy()),
         stack(Item::BlueDye, 1),
         None,
         None,
@@ -244,12 +243,7 @@ fn repair_combines_durability_and_keeps_only_curses() {
 #[test]
 fn dye_recipes_mix_colors_into_the_target() {
     let helmet = ItemStack::mint(Item::LeatherHelmet, 1, MintReason::Test);
-    let red = grid2([
-        Some(helmet.dup_unchecked()),
-        stack(Item::RedDye, 1),
-        None,
-        None,
-    ]);
+    let red = grid2([Some(helmet.test_copy()), stack(Item::RedDye, 1), None, None]);
     let (name, result) = found(&red);
     assert_eq!(name, "minecraft:leather_helmet_dyed");
     assert_eq!(result.components.dyed_color, Some(0xB02E26));
@@ -337,8 +331,8 @@ fn remainders_that_cannot_stay_go_to_the_player() {
     let mut milk = ItemStack::mint(Item::MilkBucket, 1, MintReason::Test);
     milk.components.custom_name = Some(Box::new(tuff_item::text::TextComponent::new("Moo")));
     let mut grid = [
-        Some(milk.dup_unchecked()),
-        Some(milk.dup_unchecked()),
+        Some(milk.test_copy()),
+        Some(milk.test_copy()),
         Some(milk),
         stack(Item::Sugar, 1),
         stack(Item::Egg, 1),
@@ -382,7 +376,7 @@ fn book_cloning_and_banners_copy_their_source() {
         resolved: false,
     }));
     let input = grid3([
-        Some(book.dup_unchecked()),
+        Some(book.test_copy()),
         stack(Item::WritableBook, 1),
         stack(Item::WritableBook, 1),
         None,
@@ -400,9 +394,9 @@ fn book_cloning_and_banners_copy_their_source() {
         1
     );
     let remaining = recipe("minecraft:book_cloning").remainders(&input);
-    assert_eq!(remaining[0], Some(book.dup_unchecked()));
+    assert_eq!(remaining[0], Some(book.test_copy()));
     assert_eq!(remaining[1], None);
-    let mut old = book.dup_unchecked();
+    let mut old = book.test_copy();
     old.components.written_book.as_mut().unwrap().generation = 2;
     assert!(
         find_recipe(&grid2([
@@ -421,7 +415,7 @@ fn book_cloning_and_banners_copy_their_source() {
         color: DyeColor::Lime,
     }]);
     let duplicate = grid2([
-        Some(patterned.dup_unchecked()),
+        Some(patterned.test_copy()),
         None,
         stack(Item::WhiteBanner, 1),
         None,
@@ -433,9 +427,9 @@ fn book_cloning_and_banners_copy_their_source() {
         patterned.components.banner_patterns
     );
     let remaining = recipe("minecraft:white_banner_duplicate").remainders(&duplicate);
-    assert_eq!(remaining[0], Some(patterned.dup_unchecked()));
+    assert_eq!(remaining[0], Some(patterned.test_copy()));
     let other_color = grid2([
-        Some(patterned.dup_unchecked()),
+        Some(patterned.test_copy()),
         stack(Item::RedBanner, 1),
         None,
         None,
@@ -443,7 +437,7 @@ fn book_cloning_and_banners_copy_their_source() {
     assert!(find_recipe(&other_color).is_none());
 
     let shield = grid2([
-        Some(patterned.dup_unchecked()),
+        Some(patterned.test_copy()),
         stack(Item::Shield, 1),
         None,
         None,
@@ -472,7 +466,7 @@ fn fireworks_take_fuel_stars_and_dyes() {
         stack(Item::Paper, 1),
         stack(Item::Gunpowder, 1),
         stack(Item::Gunpowder, 1),
-        Some(star.dup_unchecked()),
+        Some(star.test_copy()),
         None,
         None,
         None,
@@ -519,12 +513,7 @@ fn fireworks_take_fuel_stars_and_dyes() {
     assert_eq!(explosion.colors, vec![DyeColor::Red.firework_color()]);
     assert!(explosion.has_trail && !explosion.has_twinkle);
 
-    let fade = grid2([
-        Some(star.dup_unchecked()),
-        stack(Item::BlueDye, 1),
-        None,
-        None,
-    ]);
+    let fade = grid2([Some(star.test_copy()), stack(Item::BlueDye, 1), None, None]);
     let (name, result) = found(&fade);
     assert_eq!(name, "minecraft:firework_star_fade");
     let explosion = result.components.firework_explosion.clone().unwrap();
@@ -546,7 +535,7 @@ fn imbue_copies_the_potion() {
         arrow(),
         arrow(),
         arrow(),
-        Some(potion.dup_unchecked()),
+        Some(potion.test_copy()),
         arrow(),
         arrow(),
         arrow(),
@@ -1029,7 +1018,7 @@ fn extending_a_map_surrounds_it_with_paper() {
     let mut map = ItemStack::mint(Item::FilledMap, 1, MintReason::Test);
     map.components.other.insert("minecraft:map_id", 7);
     let mut cells: [Option<ItemStack>; 9] = std::array::from_fn(|_| stack(Item::Paper, 1));
-    cells[4] = Some(map.dup_unchecked());
+    cells[4] = Some(map.test_copy());
     let (name, result) = found(&grid3(cells));
     assert_eq!(name, "minecraft:map_extending");
     assert_eq!(result.item, Item::FilledMap);

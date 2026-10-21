@@ -113,7 +113,7 @@ async fn container_minecarts_place_on_rails_open_as_menus_and_spill_when_broken(
     summon(
         &region,
         EntityType::HopperMinecart,
-        items_nbt(&[(2, gold.dup_unchecked())]).with("Enabled", false),
+        items_nbt(&[(2, gold.test_copy())]).with("Enabled", false),
         [9.5, SKY as f64 + 1.0, 9.5],
     )
     .await;
@@ -122,7 +122,7 @@ async fn container_minecarts_place_on_rails_open_as_menus_and_spill_when_broken(
     assert_eq!(kind, MenuKind::Hopper);
     assert_eq!(
         contents,
-        vec![None, None, Some(gold.dup_unchecked()), None, None]
+        vec![None, None, Some(gold.test_copy()), None, None]
     );
     let data = entity_data(&region, hopper).await;
     assert_eq!(data.get_byte("Enabled"), Some(0));

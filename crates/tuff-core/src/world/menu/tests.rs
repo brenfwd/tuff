@@ -511,7 +511,7 @@ fn binding_curse_blocks_taking_armor_unless_creative() {
     )]));
     for (creative, expect_taken) in [(false, false), (true, true)] {
         let mut inventory = Inventory::default();
-        inventory.set_slot(5, Some(cursed.dup_unchecked()));
+        inventory.set_slot(5, Some(cursed.test_copy()));
         let mut drag = None;
         click(
             kind,

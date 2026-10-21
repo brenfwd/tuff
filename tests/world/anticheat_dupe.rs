@@ -297,7 +297,7 @@ async fn tampered_creative_stacks_never_reach_the_inventory() {
         .other
         .insert("minecraft:custom_data", deep(8));
     session
-        .handle_packet(set(CreativeSlot::Stack(named.dup_unchecked())))
+        .handle_packet(set(CreativeSlot::Stack(named.test_copy())))
         .await;
     assert_eq!(session.inventory().slots()[hotbar], Some(named));
     assert!(!session.disconnected);

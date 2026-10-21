@@ -1,6 +1,5 @@
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Frozen;
 
 use super::*;
@@ -411,7 +410,11 @@ fn looting_raises_rotten_flesh_by_up_to_its_level() {
     };
     assert_eq!(counts(&plain, &mut rng), [0, 1, 2].into());
     let looting = EntityFacts {
-        attacker_weapon: Some(tuff_item::item::ItemSnapshot::of(&enchanted(Item::DiamondSword, "looting", 3))),
+        attacker_weapon: Some(tuff_item::item::ItemSnapshot::of(&enchanted(
+            Item::DiamondSword,
+            "looting",
+            3,
+        ))),
         ..plain
     };
     assert_eq!(counts(&looting, &mut rng), [0, 1, 2, 3, 4, 5].into());
@@ -750,7 +753,14 @@ fn fill_container_slots_never_splits_stacks_already_at_one() {
         ItemStack::mint(Item::Bread, 1, MintReason::Test),
         ItemStack::mint(Item::IronIngot, 1, MintReason::Test),
     ];
-    let result = fill_container_slots(drops.dup_unchecked(), 27, &mut rng);
+    let result = fill_container_slots(
+        drops
+            .iter()
+            .map(tuff_item::item::ItemStack::test_copy)
+            .collect::<Vec<_>>(),
+        27,
+        &mut rng,
+    );
     let mut filled: Vec<ItemStack> = result.into_iter().flatten().collect();
     filled.sort_by_key(|s| s.item.name());
     let mut expected = drops;
@@ -1602,10 +1612,7 @@ fn contents_dynamic_drops_the_block_entity_items() {
 #[test]
 fn furnace_smelt_scales_by_result_count_and_use_input_count() {
     let beef = ItemStack::mint(Item::Beef, 3, MintReason::Test);
-    let kept = modified(
-        r#"[{"type":"minecraft:furnace_smelt"}]"#,
-        beef.dup_unchecked(),
-    );
+    let kept = modified(r#"[{"type":"minecraft:furnace_smelt"}]"#, beef.test_copy());
     assert_eq!((kept.item, kept.count()), (Item::CookedBeef, 3));
     let single = modified(
         r#"[{"type":"minecraft:furnace_smelt","use_input_count":false}]"#,

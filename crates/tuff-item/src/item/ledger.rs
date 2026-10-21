@@ -109,6 +109,12 @@ impl ItemStack {
             .with_components(template.components.dup_unchecked())
     }
 
+    /// Tests and fixtures only: new items like this stack, minted for
+    /// [`MintReason::Test`].
+    pub fn test_copy(&self) -> Self {
+        Self::mint_like(self, self.count, MintReason::Test)
+    }
+
     /// New items read from their `{id, count, components}` form.
     /// `None` for unknown items and air.
     pub fn mint_from_nbt(nbt: &Compound, _reason: MintReason) -> Option<Self> {

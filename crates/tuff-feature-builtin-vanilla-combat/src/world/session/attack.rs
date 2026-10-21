@@ -196,7 +196,10 @@ impl CombatExt for PlayerSession {
             self.smash_attack(fall_distance, position, target).await;
             self.wind_burst(victim, fall_distance).await;
         }
-        let weapon = self.inventory.hand(false).map(tuff_item::item::ItemSnapshot::of);
+        let weapon = self
+            .inventory
+            .hand(false)
+            .map(tuff_item::item::ItemSnapshot::of);
         match handle {
             Some(handle) => {
                 handle.send(PlayerEvent::Attacked(Attack {

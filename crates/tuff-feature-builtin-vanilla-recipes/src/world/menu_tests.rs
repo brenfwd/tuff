@@ -294,7 +294,7 @@ fn smithing_uses_one_of_each_input_and_gates_its_slots() {
     );
     assert_eq!(container[smithing::TEMPLATE], None);
     inventory.set_carried(None);
-    inventory.set_slot(36, Some(sword.dup_unchecked()));
+    inventory.set_slot(36, Some(sword.test_copy()));
     click(
         MenuKind::Smithing,
         &mut container,

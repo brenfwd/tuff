@@ -28,7 +28,8 @@ async fn editing_and_signing_a_book_rewrites_the_held_stack() {
         .handle_packet(edit(2, &["hello", "world"], None))
         .await;
     let book = player.inventory_mut().slots()[slot]
-        .dup_unchecked()
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
     assert_eq!(book.item, Item::WritableBook);
     assert_eq!(book.components.writable_book.as_ref().unwrap().len(), 2);
@@ -37,7 +38,8 @@ async fn editing_and_signing_a_book_rewrites_the_held_stack() {
         .handle_packet(edit(2, &["hello"], Some("Title")))
         .await;
     let book = player.inventory_mut().slots()[slot]
-        .dup_unchecked()
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
     assert_eq!(book.item, Item::WrittenBook);
     let written = book.components.written_book.as_ref().unwrap();
@@ -46,7 +48,8 @@ async fn editing_and_signing_a_book_rewrites_the_held_stack() {
 
     player.handle_packet(edit(2, &["again"], None)).await;
     let book = player.inventory_mut().slots()[slot]
-        .dup_unchecked()
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
     assert_eq!(book.item, Item::WrittenBook, "a signed book stays signed");
     world.shutdown().await;
@@ -68,7 +71,8 @@ async fn an_edit_for_a_slot_without_a_book_or_with_oversize_pages_is_ignored() {
     let long = "a".repeat(1025);
     player.handle_packet(edit(0, &[&long], None)).await;
     let book = player.inventory_mut().slots()[slot]
-        .dup_unchecked()
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
     assert!(book.components.writable_book.is_none());
     world.shutdown().await;
@@ -139,7 +143,8 @@ async fn opening_a_signed_book_resolves_its_score_pages_once() {
         })
         .await;
     let book = player.inventory_mut().slots()[slot]
-        .dup_unchecked()
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
     let written = book.components.written_book.as_ref().unwrap();
     assert!(written.resolved);

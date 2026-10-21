@@ -100,7 +100,7 @@ async fn creative_pick_block_creates_the_item_and_copies_block_entity_data() {
         1,
         "data makes it a different stack"
     );
-    let picked = player.inventory().hand(false).unwrap().dup_unchecked();
+    let picked = player.inventory().hand(false).unwrap().test_copy();
     assert_eq!(picked.item, Item::Spawner);
     let stored = picked.components.to_nbt();
     let data = stored
@@ -227,7 +227,7 @@ async fn special_blocks_pick_their_seeds_level_and_honey() {
     };
 
     player.handle_packet(pick_block(5, 151, 5, false)).await;
-    let light = player.inventory().hand(false).unwrap().dup_unchecked();
+    let light = player.inventory().hand(false).unwrap().test_copy();
     assert_eq!(light.item, Item::Light);
     assert_eq!(block_state(&light).unwrap().get_str("level"), Some("7"));
 
@@ -238,12 +238,12 @@ async fn special_blocks_pick_their_seeds_level_and_honey() {
     );
 
     player.handle_packet(pick_block(7, 151, 5, false)).await;
-    let hive = player.inventory().hand(false).unwrap().dup_unchecked();
+    let hive = player.inventory().hand(false).unwrap().test_copy();
     assert_eq!(hive.item, Item::Beehive);
     assert_eq!(block_state(&hive), None);
 
     player.handle_packet(pick_block(7, 151, 5, true)).await;
-    let hive = player.inventory().hand(false).unwrap().dup_unchecked();
+    let hive = player.inventory().hand(false).unwrap().test_copy();
     assert_eq!(
         block_state(&hive).unwrap().get_str("honey_level"),
         Some("5")

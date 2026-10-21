@@ -34,7 +34,7 @@ async fn expect_slots(
         PlayerEvent::ContainerSlots { pos, slots, .. } if pos == container => Some(
             slots
                 .into_iter()
-                .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
                 .collect::<Vec<_>>(),
         ),
         _ => None,
@@ -114,7 +114,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
             window_id: 1,
-            changes: set_slot(chest, 0, None, Some(stone.dup_unchecked())),
+            changes: set_slot(chest, 0, None, Some(stone.test_copy())),
             took_result: false,
         })
         .await;
@@ -124,7 +124,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     for events in [&mut alice_events, &mut bob_events] {
         assert_eq!(
             expect_slots(events, chest).await,
-            vec![(0, Some(stone.dup_unchecked()))]
+            vec![(0, Some(stone.test_copy()))]
         );
     }
 
@@ -133,7 +133,7 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
         .request(RegionRequest::ContainerTransaction {
             player: bob.clone(),
             window_id: 1,
-            changes: set_slot(chest, 0, None, Some(dirt.dup_unchecked())),
+            changes: set_slot(chest, 0, None, Some(dirt.test_copy())),
             took_result: false,
         })
         .await;
@@ -141,14 +141,14 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     assert!(!accepted, "a stale expectation is rejected");
     assert_eq!(contents.len(), 1);
     assert_eq!(contents[0].0, chest);
-    assert_eq!(contents[0].1[0], Some(stone.dup_unchecked()));
+    assert_eq!(contents[0].1[0], Some(stone.test_copy()));
 
     let (carol, mut carol_events) = PlayerHandle::new(102);
     region
         .request(RegionRequest::ContainerTransaction {
             player: carol.clone(),
             window_id: 1,
-            changes: set_slot(chest, 1, None, Some(dirt.dup_unchecked())),
+            changes: set_slot(chest, 1, None, Some(dirt.test_copy())),
             took_result: false,
         })
         .await;
@@ -454,14 +454,14 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
             window_id: 1,
-            changes: set_slot(right, 0, None, Some(apple.dup_unchecked())),
+            changes: set_slot(right, 0, None, Some(apple.test_copy())),
             took_result: false,
         })
         .await;
     assert!(expect(&mut alice_events, transaction_answer).await.0);
     assert_eq!(
         expect_slots(&mut alice_events, right).await,
-        vec![(0, Some(apple.dup_unchecked()))]
+        vec![(0, Some(apple.test_copy()))]
     );
 
     region
@@ -475,7 +475,7 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
         panic!("a chest is a block container");
     };
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
-    assert_eq!(contents[0], Some(apple.dup_unchecked()));
+    assert_eq!(contents[0], Some(apple.test_copy()));
     world.shutdown().await;
 
     let world = TestWorld::start(dir.path());
@@ -674,7 +674,7 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
     let shulker = BlockPos::new(5, floor.y + 1, 5);
     let apple = ItemStack::mint(Item::Apple, 4, MintReason::Test);
     let mut placing = place(&alice, floor, Item::ShulkerBox, 3);
-    placing.components.container = Some(vec![Some(apple.dup_unchecked())]);
+    placing.components.container = Some(vec![Some(apple.test_copy())]);
     region.request(RegionRequest::Place(placing)).await;
     expect(&mut alice_events, |event| match event {
         PlayerEvent::ActionResult {
@@ -700,7 +700,7 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
         panic!("a shulker box is a block container");
     };
     assert_eq!(parts, vec![(shulker, 27)]);
-    assert_eq!(contents[0], Some(apple.dup_unchecked()));
+    assert_eq!(contents[0], Some(apple.test_copy()));
     expect_chunk_packet(
         &mut bob_events,
         pos,
@@ -868,7 +868,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
                     pos: block,
                     slot: furnace::FUEL,
                     expected: None,
-                    new: coal.dup_unchecked(),
+                    new: coal.as_ref().map(tuff_item::item::ItemStack::test_copy),
                 },
                 ContainerChange {
                     pos: block,
@@ -882,7 +882,10 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
         .await;
     assert!(expect(&mut alice_events, transaction_answer).await.0);
     let placed = expect_slots(&mut alice_events, block).await;
-    assert!(placed.contains(&(furnace::FUEL, coal.dup_unchecked())));
+    assert!(placed.contains(&(
+        furnace::FUEL,
+        coal.as_ref().map(tuff_item::item::ItemStack::test_copy)
+    )));
     assert!(placed.contains(&(furnace::INPUT, ore(2))));
     world.ticks(2).await;
     assert_eq!(
@@ -912,7 +915,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
             Some(
                 slots
                     .into_iter()
-                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
                     .collect::<Vec<_>>(),
             )
         }
@@ -929,7 +932,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
             Some(
                 slots
                     .into_iter()
-                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::dup_unchecked)))
+                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
                     .collect::<Vec<_>>(),
             )
         }
@@ -1170,7 +1173,9 @@ async fn a_shift_click_craft_stops_at_a_recipe_limited_crafting_hides() {
         inventory.set_slot(1, Some(ItemStack::mint(Item::OakLog, 2, MintReason::Test)));
         let mut hook = GridHook::new(MenuKind::Player, world.shared.recipes()).limited_to(gate);
         hook.taken(&mut [], inventory, &mut Vec::new());
-        inventory.slots()[0].dup_unchecked()
+        inventory.slots()[0]
+            .as_ref()
+            .map(tuff_item::item::ItemStack::test_copy)
     };
     assert!(
         craft(&mut player, None).is_some(),

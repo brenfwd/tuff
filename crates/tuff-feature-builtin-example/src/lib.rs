@@ -562,7 +562,8 @@ impl Recipe for DiamondRepair {
     }
 
     fn assemble(&self, input: &CraftingInput) -> Option<ItemStack> {
-        let mut repaired = ItemStack::mint_like(Self::damaged_tool(input)?, 1, MintReason::Crafting);
+        let mut repaired =
+            ItemStack::mint_like(Self::damaged_tool(input)?, 1, MintReason::Crafting);
         repaired.set_damage(0);
         Some(repaired)
     }

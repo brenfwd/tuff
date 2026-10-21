@@ -1,5 +1,4 @@
 use rand::SeedableRng;
-use tuff_item::item::DupUnchecked;
 
 use super::*;
 use tuff_core::world::entity::EntityBase;
@@ -73,7 +72,9 @@ fn a_tamed_saddled_horse_loads_as_drivable() {
     assert_eq!(
         entity
             .container()
-            .map(|slots| slots[tuff_core::world::menu::mount::SADDLE].dup_unchecked()),
+            .map(|slots| slots[tuff_core::world::menu::mount::SADDLE]
+                .as_ref()
+                .map(tuff_item::item::ItemStack::test_copy)),
         Some(Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test))),
         "the screen's saddle slot shows the worn saddle"
     );

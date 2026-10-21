@@ -9,7 +9,6 @@ use tuff_core::world::menu::{MenuKind, anvil};
 use tuff_core::world::messages::{MenuOpen, MenuSource};
 use tuff_core::world::player::Experience;
 use tuff_core::world::session::{PlayerSession, Station};
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::packet::play::Clientbound as Id;
 
@@ -101,7 +100,7 @@ async fn taking_a_repair_charges_levels_and_uses_up_the_inputs() {
 
     session.handle_packet(take(window)).await;
     assert_eq!(session.body.experience.level, 5);
-    let carried = session.inventory().carried().unwrap().dup_unchecked();
+    let carried = session.inventory().carried().unwrap().test_copy();
     assert_eq!((carried.item, carried.damage()), (Item::IronSword, 0));
     let container = session.menu_container().unwrap();
     assert!(container[anvil::INPUT].is_none());
@@ -129,7 +128,7 @@ async fn taking_a_rename_keeps_the_addition_and_charges_one_level() {
 
     session.handle_packet(take(window)).await;
     assert_eq!(session.body.experience.level, 2);
-    let carried = session.inventory().carried().unwrap().dup_unchecked();
+    let carried = session.inventory().carried().unwrap().test_copy();
     assert_eq!(
         carried.components.custom_name.as_ref().unwrap().plain(),
         "Wand"
@@ -158,7 +157,7 @@ async fn a_player_with_too_few_levels_cannot_take_the_result() {
         .menu_container()
         .unwrap()
         .iter()
-        .map(DupUnchecked::dup_unchecked)
+        .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
         .collect::<Vec<_>>();
 
     session.handle_packet(take(window)).await;
@@ -224,7 +223,9 @@ async fn the_anvil_wears_down_stage_by_stage_and_then_breaks_when_the_roll_hits(
 }
 
 fn result(session: &PlayerSession) -> Option<ItemStack> {
-    session.menu_container().unwrap()[anvil::RESULT].dup_unchecked()
+    session.menu_container().unwrap()[anvil::RESULT]
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
 }
 
 #[tuff_core::watchdog]
@@ -259,7 +260,7 @@ async fn the_rename_packet_names_the_result_and_adds_a_level_to_a_repair() {
 
     session.handle_packet(take(window)).await;
     assert_eq!(session.body.experience.level, 10 - repair_only - 1);
-    let carried = session.inventory().carried().unwrap().dup_unchecked();
+    let carried = session.inventory().carried().unwrap().test_copy();
     assert_eq!(
         carried.components.custom_name.as_ref().unwrap().plain(),
         "Blade"
@@ -292,7 +293,7 @@ async fn a_blank_rename_packet_clears_an_existing_name_for_one_level() {
 
     session.handle_packet(take(window)).await;
     assert_eq!(session.body.experience.level, 2);
-    let carried = session.inventory().carried().unwrap().dup_unchecked();
+    let carried = session.inventory().carried().unwrap().test_copy();
     assert_eq!(carried.item, Item::Stick);
     assert!(carried.components.custom_name.is_none());
     world.shutdown().await;

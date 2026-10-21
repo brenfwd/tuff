@@ -160,7 +160,11 @@ impl<'a> CraftingInput<'a> {
         items: Vec::new(),
     };
 
-    pub fn positioned(width: usize, height: usize, slots: &'a [Option<ItemStack>]) -> Positioned<'a> {
+    pub fn positioned(
+        width: usize,
+        height: usize,
+        slots: &'a [Option<ItemStack>],
+    ) -> Positioned<'a> {
         let empty = Positioned {
             input: Self::EMPTY,
             left: 0,

@@ -55,7 +55,8 @@ fn hit(damage: f32, from: [f64; 3], weapon: Option<Item>) -> PlayerEvent {
         attacker,
         attacker_name: "Attacker".to_owned(),
         attacker_uuid: 0,
-        weapon: weapon.map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
+        weapon: weapon
+            .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
         attacker_position: from,
         attacker_yaw: 180.0,
         damage,
@@ -83,7 +84,7 @@ async fn raised_shields_block_hits_from_the_front_and_wear() {
     let mut lowered = session(&world, 1);
     lowered
         .inventory_mut()
-        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.dup_unchecked()));
+        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.test_copy()));
     lowered.hold_up(true, 2);
     lowered.handle_event(hit(5.0, FRONT, None)).await;
     assert_eq!(lowered.health(), 15.0, "not raised long enough");
@@ -91,7 +92,7 @@ async fn raised_shields_block_hits_from_the_front_and_wear() {
     let mut raised = session(&world, 2);
     raised
         .inventory_mut()
-        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.dup_unchecked()));
+        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.test_copy()));
     raised.hold_up(true, 10);
     raised.handle_event(hit(5.0, FRONT, None)).await;
     assert_eq!(raised.health(), 20.0);
@@ -101,7 +102,7 @@ async fn raised_shields_block_hits_from_the_front_and_wear() {
     let mut turned = session(&world, 3);
     turned
         .inventory_mut()
-        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.dup_unchecked()));
+        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.test_copy()));
     turned.hold_up(true, 10);
     turned.handle_event(hit(5.0, BEHIND, None)).await;
     assert_eq!(turned.health(), 15.0, "shields only cover the front");
@@ -439,7 +440,7 @@ async fn landed_sweeps_hit_players_beside_the_target_and_wear_the_sword() {
     let sword = enchanted(Item::IronSword, &[("sweeping_edge", 3)]);
     attacker
         .inventory_mut()
-        .set_slot(Inventory::hotbar_slot(0), Some(sword.dup_unchecked()));
+        .set_slot(Inventory::hotbar_slot(0), Some(sword.test_copy()));
     attacker.stand_at([0.5, 64.0, 0.5], true);
     attacker.set_sprinting(true);
     let target = [0.5, 64.0, 2.5];
@@ -527,7 +528,7 @@ async fn a_stacks_own_weapon_component_disables_shields_and_sets_its_wear() {
     );
     blocker.hold_up(true, 10);
     blocker
-        .handle_event(direct(&attacker, 5.0, Some(club.dup_unchecked())))
+        .handle_event(direct(&attacker, 5.0, Some(club.test_copy())))
         .await;
     assert!(!blocker.is_using(), "the club knocks the shield down");
     assert!(blocker.item_on_cooldown(Item::Shield));
@@ -537,7 +538,7 @@ async fn a_stacks_own_weapon_component_disables_shields_and_sets_its_wear() {
     let mut wielder = session(&world, 2);
     wielder
         .inventory_mut()
-        .set_slot(Inventory::hotbar_slot(0), Some(hammer.dup_unchecked()));
+        .set_slot(Inventory::hotbar_slot(0), Some(hammer.test_copy()));
     wielder
         .handle_event(PlayerEvent::AttackLanded {
             weapon: Some(tuff_item::item::ItemSnapshot::of(&hammer)),
@@ -614,7 +615,7 @@ async fn fire_aspect_burns_the_victim_until_water_puts_it_out() {
     let mut victim = session(&world, 1);
     victim.make_hungry();
     victim
-        .handle_event(direct(&attacker, 1.0, Some(fiery.dup_unchecked())))
+        .handle_event(direct(&attacker, 1.0, Some(fiery.test_copy())))
         .await;
     assert_eq!(victim.fire_ticks(), 160);
     assert_eq!(victim.health(), 19.0);

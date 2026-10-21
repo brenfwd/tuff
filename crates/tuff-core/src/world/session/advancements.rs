@@ -246,7 +246,9 @@ impl PlayerSession {
             .hand(off_hand)
             .filter(|stack| stack.item == item)
             .map(tuff_item::item::ItemSnapshot::of)
-            .unwrap_or_else(|| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default()));
+            .unwrap_or_else(|| {
+                tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())
+            });
         if let Some(placed) = &placement.placed {
             self.fire(Event::PlacedBlock {
                 location: placed,
@@ -340,7 +342,9 @@ impl PlayerSession {
                 let rod = [false, true]
                     .into_iter()
                     .filter_map(|off_hand| {
-                        self.inventory.hand(off_hand).map(tuff_item::item::ItemSnapshot::of)
+                        self.inventory
+                            .hand(off_hand)
+                            .map(tuff_item::item::ItemSnapshot::of)
                     })
                     .find(|stack| stack.item == tuff_vanilla_data::Item::FishingRod);
                 if let Some(rod) = rod {
@@ -385,7 +389,13 @@ impl PlayerSession {
                     .inventory
                     .hand(off_hand)
                     .map(tuff_item::item::ItemSnapshot::of)
-                    .unwrap_or_else(|| tuff_item::item::ItemSnapshot::describe(tuff_vanilla_data::Item::Air, 0, Default::default()));
+                    .unwrap_or_else(|| {
+                        tuff_item::item::ItemSnapshot::describe(
+                            tuff_vanilla_data::Item::Air,
+                            0,
+                            Default::default(),
+                        )
+                    });
                 self.fire(Event::AnyBlockUse {
                     location: &location,
                     item: &item,
@@ -836,9 +846,15 @@ impl PlayerSession {
     }
 }
 
-type ArrowKill = (EntityFacts, Option<tuff_item::item::ItemSnapshot>, Option<i32>);
+type ArrowKill = (
+    EntityFacts,
+    Option<tuff_item::item::ItemSnapshot>,
+    Option<i32>,
+);
 
-fn group_arrow_kills(mut pending: Vec<ArrowKill>) -> Vec<(Vec<EntityFacts>, Option<tuff_item::item::ItemSnapshot>)> {
+fn group_arrow_kills(
+    mut pending: Vec<ArrowKill>,
+) -> Vec<(Vec<EntityFacts>, Option<tuff_item::item::ItemSnapshot>)> {
     let mut volleys = Vec::new();
     while !pending.is_empty() {
         let (weapon, arrow) = (pending[0].1.clone(), pending[0].2);
