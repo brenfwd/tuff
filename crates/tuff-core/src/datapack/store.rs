@@ -761,6 +761,7 @@ impl OfflineWorld {
             }
             let backend: Arc<dyn WorldBackend> = Arc::new(VanillaBackend::new(path));
             let lock = backend.lock().map_err(locked_or)?;
+            crate::storage::recover_journal(&*backend, path).map_err(StoreError::Io)?;
             return Ok(Self {
                 lock: Some(lock),
                 guard: None,
@@ -777,6 +778,7 @@ impl OfflineWorld {
         let backend: Arc<dyn WorldBackend> =
             Arc::new(SqliteBackend::open_with(path, Locking::Exclusive).map_err(locked_or)?);
         let lock = backend.lock().map_err(locked_or)?;
+        crate::storage::recover_journal(&*backend, path).map_err(StoreError::Io)?;
         Ok(Self {
             lock: Some(lock),
             guard,

@@ -316,6 +316,9 @@ fn run_conversion(
     let _source_lock = source_backend
         .lock()
         .map_err(|err| io::Error::new(err.kind(), format!("source world is in use: {err}")))?;
+    super::recover_journal(&*source_backend, &source.world_path()).map_err(|err| {
+        io::Error::new(err.kind(), format!("recovering source world save: {err}"))
+    })?;
     source_backend
         .upgrade()
         .map_err(|err| io::Error::new(err.kind(), format!("upgrading source world: {err}")))?;

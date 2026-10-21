@@ -164,6 +164,20 @@ pub fn journaled(
     )?))
 }
 
+/// Restores the last complete save of `backend` (locked, at `world_path`)
+/// if a save did not finish, without journaling later writes. Offline
+/// tools call this before reading or writing a world.
+pub fn recover_journal(backend: &dyn WorldBackend, world_path: &Path) -> io::Result<usize> {
+    let store: Box<dyn tuff_storage::journal::JournalStore> = match backend.journal_store() {
+        Some(store) => store,
+        None if backend.name() == vanilla::NAME => Box::new(tuff_storage::journal::DirStore::new(
+            world_path.join(vanilla::JOURNAL_DIR),
+        )),
+        None => return Ok(0),
+    };
+    tuff_storage::journal::recover(backend, &*store)
+}
+
 type Open = fn(&Path, BackendOptions) -> io::Result<Arc<dyn WorldBackend>>;
 
 /// The backends this crate ships, by name.
