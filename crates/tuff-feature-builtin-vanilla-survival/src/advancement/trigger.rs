@@ -254,7 +254,7 @@ fn recipe_crafted(conditions: &Value, event: &Event<'_>, _: &EntityFacts) -> boo
     if !id_field(conditions, "recipes", recipe) {
         return false;
     }
-    let mut remaining: Vec<&ItemStack> = ingredients.iter().collect();
+    let mut remaining: Vec<&ItemStack> = ingredients.iter().map(|s| &**s).collect();
     conditions
         .get("ingredients")
         .and_then(Value::as_array)

@@ -44,7 +44,7 @@ fn bobber(world: &TestWorld, player: &PlayerHandle) -> Bobber {
         [7.5, f64::from(SKY) + 1.2, 7.5],
         (0.0, 90.0),
         owner(player),
-        ItemStack::mint(Item::FishingRod, 1, MintReason::Test),
+        tuff_item::item::ItemSnapshot::describe(Item::FishingRod, 1, Default::default()),
         0.0,
         &mut rand::thread_rng(),
     )

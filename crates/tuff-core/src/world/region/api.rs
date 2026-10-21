@@ -811,6 +811,23 @@ impl RegionWorld for RegionActor {
         self.set_container_items_for_plugin(pos, slots)
     }
 
+    fn edit_container(
+        &mut self,
+        pos: BlockPos,
+        edit: &mut dyn FnMut(&mut [Option<ItemStack>]),
+    ) -> bool {
+        self.edit_container_for_feature(pos, edit)
+    }
+
+    fn edit_container_slot(
+        &mut self,
+        pos: BlockPos,
+        slot: usize,
+        edit: &mut dyn FnMut(&mut Option<ItemStack>),
+    ) -> bool {
+        self.edit_container_slot_for_feature(pos, slot, edit)
+    }
+
     fn entity_container_items(
         &self,
         uuid: u128,

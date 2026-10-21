@@ -15,7 +15,6 @@ use tuff_core::world::projectile::{
     Owner, block_hit, border_stop, bounce_off_border, lerp_rotation, rotation_of,
 };
 use tuff_core::world::{distance_sq, framed, packets, physics};
-use tuff_item::item::ItemStack;
 use tuff_nbt::Compound;
 use tuff_world_model::BlockPos;
 
@@ -49,7 +48,7 @@ pub struct Bobber {
     pub base: EntityBase,
     pub owner: Owner,
     state: State,
-    rod: ItemStack,
+    rod: tuff_item::item::ItemSnapshot,
     luck: f32,
     lure: i32,
     landed: bool,
@@ -70,7 +69,7 @@ impl Bobber {
         eye: [f64; 3],
         (yaw, pitch): (f32, f32),
         owner: Owner,
-        rod: ItemStack,
+        rod: tuff_item::item::ItemSnapshot,
         owner_luck: f32,
         rng: &mut impl Rng,
     ) -> Self {

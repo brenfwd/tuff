@@ -195,22 +195,27 @@ pub trait Interact: RegionWorld + Rest {
             off_hand: place.off_hand,
         };
         let inserted = place.held.and_then(|item| {
-            let held = ItemStack::mint(item, 1, MintReason::CrossActor)
+            let held = ItemStack::mint(item, 1, MintReason::Transform)
                 .with_components(place.components.clone());
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
                 .and_then(ItemStack::from_storage);
-            let next = match &stored {
+            let old = stored.as_ref().map(tuff_item::item::ItemSnapshot::of);
+            let next = match stored {
                 None => held,
                 Some(stored) => {
-                    if stored.item != held.item
-                        || stored.components != held.components
-                        || stored.count() >= stored.item.max_stack_size()
-                    {
+                    if stored.count() >= stored.item.max_stack_size() {
+                        held.burn(tuff_item::item::BurnReason::Template);
                         return None;
                     }
-                    stored.dup_count_unchecked(stored.count() + 1)
+                    match ItemStack::merge(stored, held) {
+                        Ok(next) => next,
+                        Err((_, held)) => {
+                            held.burn(tuff_item::item::BurnReason::Template);
+                            return None;
+                        }
+                    }
                 }
             };
             let ratio = f32::from(next.count()) / next.item.max_stack_size() as f32;
@@ -218,7 +223,7 @@ pub trait Interact: RegionWorld + Rest {
                 .insert("item", next.to_nbt());
             self.report_container_edit(
                 tuff_core::world::region_api::ContainerHolder::Block(pos),
-                &[(0, stored.as_ref(), Some(&next))],
+                &[(0, old.as_deref(), Some(&next))],
             );
             Some((item, ratio))
         });
@@ -272,19 +277,38 @@ pub trait Interact: RegionWorld + Rest {
         let held = place
             .held
             .map(|item| {
-                tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::CrossActor)
+                tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::Template)
                     .with_components(place.components.clone())
             })
-            .filter(|stack| composter::compostable(stack).is_some());
-        if let Some(stack) = held.filter(|_| level < composter::READY) {
-            if !port.offer(self.as_dyn(), &at, &stack) {
+            .and_then(|stack| {
+                if composter::compostable(&stack).is_some() {
+                    Some(stack)
+                } else {
+                    stack.burn(tuff_item::item::BurnReason::Template);
+                    None
+                }
+            });
+        if let Some(stack) = held {
+            let accepted = level < composter::READY && port.offer(self.as_dyn(), &at, &stack);
+            let item = stack.item;
+            stack.burn(tuff_item::item::BurnReason::Template);
+            if level >= composter::READY {
+                if level > composter::READY {
+                    return None;
+                }
+                port.take(self.as_dyn(), &at);
+                return Some(ActionOutcome::Interacted {
+                    off_hand: place.off_hand,
+                });
+            }
+            if !accepted {
                 return Some(ActionOutcome::Interacted {
                     off_hand: place.off_hand,
                 });
             }
             return Some(ActionOutcome::Used {
                 off_hand: place.off_hand,
-                item: stack.item,
+                item,
                 effect: HandEffect::Consume(1),
             });
         }
@@ -521,7 +545,7 @@ pub trait Interact: RegionWorld + Rest {
                 place
                     .player
                     .send(PlayerEvent::AwardStat(CustomStat::UseCauldron, 1));
-                let mut water = ItemStack::mint(Item::Potion, 1, MintReason::CrossActor);
+                let mut water = ItemStack::mint(Item::Potion, 1, MintReason::Transform);
                 water.components.potion_contents =
                     Some(Box::new(tuff_item::item::PotionContents {
                         potion: Some(tuff_vanilla_data::registry::Potion::Water),
@@ -533,7 +557,7 @@ pub trait Interact: RegionWorld + Rest {
             _ if tuff_datapack::tags::is(item_tags::key::BANNERS, item) => {
                 let mut layers = place.components.banner_patterns.clone()?;
                 layers.pop()?;
-                let mut cleaned = ItemStack::mint(item, 1, MintReason::CrossActor)
+                let mut cleaned = ItemStack::mint(item, 1, MintReason::Transform)
                     .with_components(place.components.clone());
                 cleaned.components.banner_patterns = Some(layers);
                 self.lower_cauldron(pos, state);
@@ -545,7 +569,7 @@ pub trait Interact: RegionWorld + Rest {
             _ if item != Item::ShulkerBox
                 && tuff_datapack::tags::is(item_tags::key::SHULKER_BOXES, item) =>
             {
-                let cleaned = ItemStack::mint(Item::ShulkerBox, 1, MintReason::CrossActor)
+                let cleaned = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Transform)
                     .with_components(place.components.clone());
                 self.lower_cauldron(pos, state);
                 place
@@ -555,7 +579,7 @@ pub trait Interact: RegionWorld + Rest {
             }
             _ if tuff_datapack::tags::is(item_tags::key::CAULDRON_CAN_REMOVE_DYE, item) => {
                 place.components.dyed_color?;
-                let mut cleaned = ItemStack::mint(item, place.held_count, MintReason::CrossActor)
+                let mut cleaned = ItemStack::mint(item, place.held_count, MintReason::Transform)
                     .with_components(place.components.clone());
                 cleaned.components.dyed_color = None;
                 self.lower_cauldron(pos, state);
@@ -604,9 +628,11 @@ pub trait Interact: RegionWorld + Rest {
             });
         }
         let item = place.held?;
-        let held = ItemStack::mint(item, 1, MintReason::CrossActor)
+        let held = ItemStack::mint(item, 1, MintReason::Template)
             .with_components(place.components.clone());
-        if !port.offer(self.as_dyn(), &at, &held) {
+        let accepted = port.offer(self.as_dyn(), &at, &held);
+        held.burn(tuff_item::item::BurnReason::Template);
+        if !accepted {
             return None;
         }
         place.player.send(PlayerEvent::AwardStat(
@@ -653,7 +679,7 @@ pub trait Interact: RegionWorld + Rest {
             (Some(content), None) => {
                 if let Some(item) = content.item() {
                     place.player.send(PlayerEvent::ItemGranted {
-                        stack: ItemStack::mint(item, 1, MintReason::CrossActor),
+                        stack: ItemStack::mint(item, 1, MintReason::BlockDrop),
                         picked_up: false,
                     });
                 }
@@ -841,7 +867,7 @@ pub trait Interact: RegionWorld + Rest {
             self.play_sound(SoundEvent::ItemLodestoneCompassLock, pos, 1.0, 1.0, None);
             let tracker =
                 LodestoneTracker::locked(&self.dimension_info().key, [pos.x, pos.y, pos.z]);
-            let mut locked = ItemStack::mint(Item::Compass, 1, MintReason::CrossActor)
+            let mut locked = ItemStack::mint(Item::Compass, 1, MintReason::Transform)
                 .with_components(place.components.clone());
             locked
                 .components

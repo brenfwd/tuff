@@ -2,7 +2,6 @@
 
 use rand::Rng;
 use tuff_item::item::BurnReason;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::redstone::Dispense;
 use tuff_vanilla_data::{Block, BlockState};
@@ -40,12 +39,16 @@ fn facing_of(state: BlockState) -> Facing {
     state.facing().unwrap_or(Facing::North)
 }
 
-fn slot_stack(world: &dyn RegionWorld, pos: BlockPos, slot: usize) -> Option<ItemStack> {
-    world.container_items(pos)?.get(slot)?.dup_unchecked()
-}
-
-fn set_slot(world: &mut dyn RegionWorld, pos: BlockPos, slot: usize, value: Option<ItemStack>) {
-    world.set_container_items(pos, vec![(slot, value)]);
+fn slot_stack(
+    world: &dyn RegionWorld,
+    pos: BlockPos,
+    slot: usize,
+) -> Option<tuff_item::item::ItemSnapshot> {
+    world
+        .container_items(pos)?
+        .get(slot)?
+        .as_ref()
+        .map(tuff_item::item::ItemSnapshot::of)
 }
 
 impl Dispensers for DispenserRuntime {
@@ -136,19 +139,36 @@ fn drop_into_target(
     state: BlockState,
     stack: &ItemStack,
 ) -> bool {
-    let one = stack.dup_count_unchecked(1);
+    let mut one = None;
+    world.edit_container_slot(pos, slot, &mut |held| {
+        if held.as_ref().is_some_and(|held| held.stacks_with(stack)) {
+            one = ItemStack::take_from(held, 1);
+        }
+    });
+    let Some(one) = one else {
+        return false;
+    };
     let block = state.block();
     let inserted = world.caused(BlockCause::Block(block), |world| {
         world.insert_item(target, Some(facing.opposite()), one, Porter::Dropper(pos))
     });
-    match inserted {
-        Insert::Nothing(_) => false,
-        Insert::Stored => {
-            take(world, pos, slot);
-            true
+    let (back, stored) = match inserted {
+        Insert::Nothing(back) => (Some(back), false),
+        Insert::Stored => (None, true),
+        Insert::Refused(back) => (Some(back), true),
+    };
+    if let Some(back) = back {
+        let mut back = Some(back);
+        world.edit_container_slot(pos, slot, &mut |held| {
+            if let Some(back) = back.take() {
+                ItemStack::put_back(held, back);
+            }
+        });
+        if let Some(back) = back {
+            drop_out(world, pos, facing, back);
         }
-        Insert::Refused(_) => true,
     }
+    stored
 }
 
 fn forward(
@@ -156,7 +176,7 @@ fn forward(
     pos: BlockPos,
     facing: Facing,
     slot: usize,
-    stack: ItemStack,
+    stack: tuff_item::item::ItemSnapshot,
 ) {
     let target = step(pos, facing);
     let Some(neighbour) = world.neighbor(ChunkPos::of_block(target).region()) else {
@@ -190,8 +210,9 @@ fn complete(
     }
     let sound = match outcome {
         DispenseOutcome::Dropped | DispenseOutcome::DroppedFailing => {
-            drop_out(world, pos, facing, stack.dup_count_unchecked(1));
-            take(world, pos, slot);
+            if let Some(one) = take_one(world, pos, slot) {
+                drop_out(world, pos, facing, one);
+            }
             if outcome == DispenseOutcome::Dropped {
                 LEVEL_EVENT_DISPENSE
             } else {
@@ -214,7 +235,12 @@ fn complete(
         }
         DispenseOutcome::Exchanged(remainder) => {
             if stack.count() == 1 {
-                set_slot(world, pos, slot, Some(remainder));
+                let mut remainder = Some(remainder);
+                world.edit_container_slot(pos, slot, &mut |held| {
+                    if let Some(old) = std::mem::replace(held, remainder.take()) {
+                        old.burn(BurnReason::Consumed);
+                    }
+                });
             } else {
                 take(world, pos, slot);
                 give_back(world, pos, facing, state, remainder);
@@ -227,21 +253,29 @@ fn complete(
 }
 
 fn wear(world: &mut dyn RegionWorld, pos: BlockPos, slot: usize, amount: u32) {
-    let Some(mut stack) = slot_stack(world, pos, slot) else {
-        return;
-    };
-    stack.hurt(amount, world.rng());
-    let value = (stack.count() > 0).then_some(stack);
-    set_slot(world, pos, slot, value);
+    let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(world.rng().r#gen());
+    world.edit_container_slot(pos, slot, &mut |held| {
+        if let Some(stack) = held {
+            stack.hurt(amount, &mut rng);
+        }
+        if held.as_ref().is_some_and(|stack| stack.count() == 0)
+            && let Some(broken) = held.take()
+        {
+            broken.burn(BurnReason::Broken);
+        }
+    });
 }
 
 fn take(world: &mut dyn RegionWorld, pos: BlockPos, slot: usize) {
-    let Some(mut stack) = slot_stack(world, pos, slot) else {
-        return;
-    };
-    stack.shrink(1, BurnReason::Consumed);
-    let value = (stack.count() > 0).then_some(stack);
-    set_slot(world, pos, slot, value);
+    if let Some(one) = take_one(world, pos, slot) {
+        one.burn(BurnReason::Consumed);
+    }
+}
+
+fn take_one(world: &mut dyn RegionWorld, pos: BlockPos, slot: usize) -> Option<ItemStack> {
+    let mut one = None;
+    world.edit_container_slot(pos, slot, &mut |held| one = ItemStack::take_from(held, 1));
+    one
 }
 
 fn give_back(

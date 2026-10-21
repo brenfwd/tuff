@@ -165,6 +165,77 @@ impl RegionActor {
         Some(ContainerHolder::entity(tracked.entity.as_ref()))
     }
 
+    /// Changes the slots of a block container in place for a feature; see
+    /// `RegionWorld::edit_container`.
+    pub(super) fn edit_container_for_feature(
+        &mut self,
+        pos: BlockPos,
+        edit: &mut dyn FnMut(&mut [Option<ItemStack>]),
+    ) -> bool {
+        if self.menus.container_locks.contains_key(&pos) || !self.owns(pos) {
+            return false;
+        }
+        let observed = self.observes_containers();
+        let Some(entity) = self.block_entity_mut(pos) else {
+            return false;
+        };
+        let before: Vec<Option<ItemSnapshot>> = tuff_item::item::snapshot_slots(&entity.items);
+        edit(&mut entity.items);
+        let changed: Vec<usize> = entity
+            .items
+            .iter()
+            .zip(&before)
+            .enumerate()
+            .filter(|(_, (now, was))| now.as_ref() != was.as_deref())
+            .map(|(slot, _)| slot)
+            .collect();
+        if changed.is_empty() {
+            return true;
+        }
+        if observed {
+            for &slot in &changed {
+                self.report_slot(pos, slot, before[slot].clone());
+            }
+        }
+        self.broadcast_slots(pos, &changed);
+        true
+    }
+
+    /// Changes one slot of a block container in place for a feature; see
+    /// `RegionWorld::edit_container_slot`.
+    pub(super) fn edit_container_slot_for_feature(
+        &mut self,
+        pos: BlockPos,
+        slot: usize,
+        edit: &mut dyn FnMut(&mut Option<ItemStack>),
+    ) -> bool {
+        if self.menus.container_locks.contains_key(&pos) || !self.owns(pos) {
+            return false;
+        }
+        let observed = self.observes_containers();
+        let Some(entity) = self.block_entity_mut(pos) else {
+            return false;
+        };
+        let kind = entity.kind;
+        let Some(held) = entity.items.get_mut(slot) else {
+            return false;
+        };
+        let old = held.as_ref().map(ItemSnapshot::of);
+        edit(held);
+        let same = match (&old, held.as_ref()) {
+            (Some(old), Some(new)) => old.stacks_with(new),
+            _ => false,
+        };
+        if observed {
+            self.report_slot(pos, slot, old);
+        }
+        if kind.is_furnace() && slot == crate::world::block_entity::furnace::INPUT && !same {
+            self.furnace_input_changed(pos);
+        }
+        self.broadcast_slots(pos, &[slot]);
+        true
+    }
+
     /// Sets slots of a block container for a feature; see
     /// `RegionWorld::set_container_items`.
     pub(super) fn set_container_items_for_plugin(
@@ -184,7 +255,9 @@ impl RegionActor {
         }
         let changed: Vec<usize> = slots.iter().map(|(slot, _)| *slot).collect();
         for (slot, stack) in slots {
-            self.set_container_slot(pos, slot, stack);
+            if let Some(displaced) = self.set_container_slot(pos, slot, stack) {
+                displaced.burn(tuff_item::item::BurnReason::Plugin);
+            }
         }
         self.broadcast_slots(pos, &changed);
         true

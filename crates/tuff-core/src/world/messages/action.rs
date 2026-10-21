@@ -230,7 +230,7 @@ pub struct Place {
     /// blocks (the player means to block).
     pub off_hand_blocks: bool,
     /// The nine hotbar stacks, for blocks that swap them.
-    pub hotbar: Vec<Option<ItemStack>>,
+    pub hotbar: Vec<Option<tuff_item::item::ItemSnapshot>>,
     /// Which hotbar slot the main hand holds.
     pub selected: usize,
     /// Whether the player may change blocks (not in adventure or

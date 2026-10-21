@@ -26,7 +26,7 @@ pub enum Event<'a> {
     RecipeUnlocked(&'a str),
     RecipeCrafted {
         recipe: &'a str,
-        ingredients: &'a [ItemStack],
+        ingredients: &'a [tuff_item::item::ItemSnapshot],
     },
     ConsumeItem(&'a ItemStack),
     /// A block placed by the player, the item it came from.
@@ -181,7 +181,7 @@ pub enum Event<'a> {
     /// A crafter near the player crafted `recipe`.
     CrafterRecipeCrafted {
         recipe: &'a str,
-        ingredients: &'a [ItemStack],
+        ingredients: &'a [tuff_item::item::ItemSnapshot],
     },
     /// The player broke a bee nest or hive holding `bees` bees.
     BeeNestDestroyed {

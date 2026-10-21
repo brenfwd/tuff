@@ -80,7 +80,7 @@ pub enum AdvancementEvent {
     /// A crafter near the player crafted `recipe` from `ingredients`.
     CrafterRecipeCrafted {
         recipe: tuff_vanilla_data::Frozen<str>,
-        ingredients: Vec<tuff_item::item::ItemStack>,
+        ingredients: Vec<tuff_item::item::ItemSnapshot>,
     },
     /// The player broke a bee nest or hive holding `bees` bees with `item`.
     BeeNestDestroyed {

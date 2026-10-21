@@ -257,15 +257,15 @@ async fn a_powered_shelf_chain_swaps_the_hotbar_row() {
         1,
     );
     swap.hotbar = (0..9).map(|_| None).collect();
-    swap.hotbar[3] = Some(tuff_item::item::ItemStack::mint(
+    swap.hotbar[3] = Some(tuff_item::item::ItemSnapshot::describe(
         Item::Apple,
         1,
-        tuff_item::item::MintReason::Test,
+        Default::default(),
     ));
-    swap.hotbar[8] = Some(tuff_item::item::ItemStack::mint(
+    swap.hotbar[8] = Some(tuff_item::item::ItemSnapshot::describe(
         Item::Stick,
         1,
-        tuff_item::item::MintReason::Test,
+        Default::default(),
     ));
     region.request(RegionRequest::Place(swap)).await;
     let ActionOutcome::HotbarSwapped {

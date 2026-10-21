@@ -81,7 +81,10 @@ pub struct GridHook {
     recipes: Arc<RecipeSet>,
     pub took: bool,
     /// Each recipe crafted, with the stacks its grid held.
-    pub crafted: Vec<(tuff_vanilla_data::Frozen<str>, Vec<ItemStack>)>,
+    pub crafted: Vec<(
+        tuff_vanilla_data::Frozen<str>,
+        Vec<tuff_item::item::ItemSnapshot>,
+    )>,
     /// With limited crafting on, the recipe book that gates the result.
     limited: Option<crate::world::recipe_book::RecipeBook>,
 }
@@ -135,7 +138,7 @@ impl ResultHook for GridHook {
                 recipe,
                 grid.iter()
                     .flatten()
-                    .map(DupUnchecked::dup_unchecked)
+                    .map(tuff_item::item::ItemSnapshot::of)
                     .collect(),
             ));
         }
@@ -158,7 +161,10 @@ pub struct StonecutterHook {
     recipes: Arc<RecipeSet>,
     pub took: bool,
     /// Each recipe crafted, with its input.
-    pub crafted: Vec<(tuff_vanilla_data::Frozen<str>, Vec<ItemStack>)>,
+    pub crafted: Vec<(
+        tuff_vanilla_data::Frozen<str>,
+        Vec<tuff_item::item::ItemSnapshot>,
+    )>,
 }
 
 impl StonecutterHook {
@@ -186,7 +192,8 @@ impl ResultHook for StonecutterHook {
             container[stonecutter::INPUT].as_ref(),
         ) {
             let name = self.recipes.resolve(name).expect("a recipe of this set");
-            self.crafted.push((name, vec![input.dup_unchecked()]));
+            self.crafted
+                .push((name, vec![tuff_item::item::ItemSnapshot::of(input)]));
         }
         let remaining = match container[stonecutter::INPUT].as_mut() {
             Some(input) => {
@@ -389,7 +396,10 @@ pub struct SmithingHook {
     recipes: Arc<RecipeSet>,
     pub took: bool,
     /// Each recipe crafted, with its inputs.
-    pub crafted: Vec<(tuff_vanilla_data::Frozen<str>, Vec<ItemStack>)>,
+    pub crafted: Vec<(
+        tuff_vanilla_data::Frozen<str>,
+        Vec<tuff_item::item::ItemSnapshot>,
+    )>,
 }
 
 impl SmithingHook {
@@ -419,7 +429,7 @@ impl ResultHook for SmithingHook {
                 inputs
                     .into_iter()
                     .flatten()
-                    .map(DupUnchecked::dup_unchecked)
+                    .map(tuff_item::item::ItemSnapshot::of)
                     .collect(),
             ));
         }

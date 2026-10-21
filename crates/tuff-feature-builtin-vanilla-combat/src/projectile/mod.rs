@@ -247,7 +247,11 @@ mod launch_tests {
             },
             Shot::Bobber {
                 rotation: (0.0, 0.0),
-                rod: ItemStack::mint(Item::FishingRod, 1, MintReason::Test),
+                rod: tuff_item::item::ItemSnapshot::describe(
+                    Item::FishingRod,
+                    1,
+                    Default::default(),
+                ),
                 luck: 0.0,
             },
         ];
