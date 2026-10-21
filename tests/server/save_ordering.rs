@@ -6,13 +6,13 @@ use std::time::{Duration, SystemTime};
 use common::TempDir;
 use tuff_core::Server;
 
-struct Running {
-    handle: tuff_core::ServerHandle,
-    task: tokio::task::JoinHandle<anyhow::Result<()>>,
+pub(crate) struct Running {
+    pub(crate) handle: tuff_core::ServerHandle,
+    pub(crate) task: tokio::task::JoinHandle<anyhow::Result<()>>,
     addr: std::net::SocketAddr,
 }
 
-fn start(dir: &Path) -> Running {
+pub(crate) fn start(dir: &Path) -> Running {
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(dir.to_path_buf())
@@ -31,13 +31,13 @@ fn start(dir: &Path) -> Running {
     }
 }
 
-async fn started(dir: &Path) -> Running {
+pub(crate) async fn started(dir: &Path) -> Running {
     let mut running = start(dir);
     running.addr = running.handle.local_addrs().await.unwrap()[0];
     running
 }
 
-async fn join(server: &Running, name: &str) -> tuff_bot::Bot {
+pub(crate) async fn join(server: &Running, name: &str) -> tuff_bot::Bot {
     let bot = tuff_bot::Bot::connect(
         server.addr,
         tuff_bot::BotConfig {
@@ -51,7 +51,7 @@ async fn join(server: &Running, name: &str) -> tuff_bot::Bot {
     bot
 }
 
-async fn said(handle: &tuff_core::ServerHandle, line: &str) -> String {
+pub(crate) async fn said(handle: &tuff_core::ServerHandle, line: &str) -> String {
     handle
         .run_command(line)
         .await
@@ -62,7 +62,7 @@ async fn said(handle: &tuff_core::ServerHandle, line: &str) -> String {
         .join(" ")
 }
 
-fn newest(dir: &Path, ext: &str) -> Option<SystemTime> {
+pub(crate) fn newest(dir: &Path, ext: &str) -> Option<SystemTime> {
     let mut best = None;
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         let path = entry.path();
@@ -78,7 +78,23 @@ fn newest(dir: &Path, ext: &str) -> Option<SystemTime> {
     best
 }
 
-fn copy_dir(from: &Path, to: &Path) {
+/// Places a chest at 0 100 0 once its forceloaded chunk is in.
+pub(crate) async fn place_chest(handle: &tuff_core::ServerHandle) {
+    handle.run_command("forceload add 0 0").await.unwrap();
+    for _ in 0..600 {
+        handle.run_command("setblock 0 100 0 chest").await.unwrap();
+        if said(handle, "data get block 0 100 0")
+            .await
+            .contains("commands.data.block.query")
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("the chest never appeared");
+}
+
+pub(crate) fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for entry in std::fs::read_dir(from).unwrap().flatten() {
         let target: PathBuf = to.join(entry.file_name());
@@ -115,6 +131,15 @@ async fn sprint_to(handle: &tuff_core::ServerHandle, target: u64) {
     panic!("the sprint never reached {target}");
 }
 
+/// The newest world save whose writes all landed, as its save journal
+/// records it.
+fn committed_save(world: &Path) -> u64 {
+    std::fs::read_to_string(world.join("tuff-journal").join("committed"))
+        .ok()
+        .and_then(|text| text.trim().parse().ok())
+        .unwrap_or(0)
+}
+
 fn next_autosave(now: u64) -> u64 {
     (now / 6000 + 1) * 6000
 }
@@ -127,8 +152,7 @@ async fn moved_into_chest(dir: &Path) -> (Running, tuff_bot::Bot) {
     sprint_to(&server.handle, 3000).await;
     let bot = join(&server, "Steve").await;
     let handle = &server.handle;
-    handle.run_command("forceload add 0 0").await.unwrap();
-    handle.run_command("setblock 0 100 0 chest").await.unwrap();
+    place_chest(handle).await;
     handle.run_command("give Steve diamond 5").await.unwrap();
     handle.run_command("save-all flush").await.unwrap();
     handle
@@ -148,15 +172,17 @@ async fn a_crash_after_the_autosave_never_leaves_an_item_in_both_chest_and_playe
     let (server, bot) = moved_into_chest(dir.path()).await;
     let handle = &server.handle;
     let world = dir.path().join("world");
-    let players = world.join("players/data");
-    let (player_before, chunks_before) = (newest(&players, "dat"), newest(&world, "mca"));
+    let before = committed_save(&world);
     let target = next_autosave(gametime(handle).await) + 5;
     sprint_to(handle, target).await;
     let mut written = false;
-    for _ in 0..600 {
-        if newest(&players, "dat") > player_before && newest(&world, "mca") > chunks_before {
+    for attempt in 0..600 {
+        if committed_save(&world) > before {
             written = true;
             break;
+        }
+        if attempt == 100 {
+            handle.run_command("save-all").await.unwrap();
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }

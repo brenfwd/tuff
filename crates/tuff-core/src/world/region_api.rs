@@ -1183,6 +1183,15 @@ pub trait RegionHooks: Send + Sync {
     /// A region entity died (it is still in the region). Observe only.
     fn entity_died(&self, _world: &mut dyn RegionWorld, _death: &EntityDeath) {}
 
+    /// An item operation was refused because it would make or lose items.
+    /// Observe only (the audit log records it).
+    fn item_violation(
+        &self,
+        _world: &mut dyn RegionWorld,
+        _violation: &crate::world::conservation::ItemViolation,
+    ) {
+    }
+
     /// A player opened or broke a chest boat or cart.
     fn guarded_container_disturbed(&self, _world: &mut dyn RegionWorld, _player: PlayerId) {}
 

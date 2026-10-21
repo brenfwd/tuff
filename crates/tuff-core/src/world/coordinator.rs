@@ -196,6 +196,8 @@ pub struct Coordinator {
     /// The tick the clock is held at until every barrier member finishes
     /// it, and when it started.
     awaiting_barrier: Option<(u64, tokio::time::Instant)>,
+    /// The item ledger at the last save.
+    ledger: std::cell::Cell<tuff_item::item::LedgerTotals>,
     spawn: watch::Sender<Spawn>,
     difficulty: watch::Sender<Difficulty>,
     game_rules: watch::Sender<GameRules>,
@@ -262,6 +264,7 @@ impl Coordinator {
             sprint: None,
             sprint_report: None,
             awaiting_barrier: None,
+            ledger: std::cell::Cell::new(tuff_item::item::conservation::totals()),
             spawn: config.spawn,
             difficulty: config.difficulty,
             game_rules: config.game_rules,
@@ -430,8 +433,15 @@ impl Coordinator {
         if let Some(task) = self.config_task.take() {
             let _ = task.await;
         }
+        let journal = self.shared.backend.save_journal();
         let lock = std::mem::replace(&mut self.lock, Box::new(Released));
-        let _ = tokio::task::spawn_blocking(move || drop(lock)).await;
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Some(journal) = journal {
+                journal.finish();
+            }
+            drop(lock)
+        })
+        .await;
         log::info!("world saved");
         if let Some(done) = self.shutdown.take() {
             let _ = done.send(());
@@ -448,6 +458,13 @@ impl Coordinator {
         let mut snapshots = Vec::new();
         let mut releases = Vec::new();
         let mut written = Vec::new();
+        tuff_item::item::conservation::set_checks(self.conservation_checks());
+        self.check_item_ledger();
+        let barrier = self
+            .shared
+            .backend
+            .save_journal()
+            .map(|journal| journal.barrier());
         for player in self.players.values() {
             let (snapshotted, snapshot) = oneshot::channel();
             let (release_tx, release) = oneshot::channel();
@@ -458,17 +475,20 @@ impl Coordinator {
                     snapshotted,
                     release,
                     written: flush.then_some(done),
+                    ticket: barrier.as_ref().map(|barrier| barrier.ticket()),
                 }));
             snapshots.push(snapshot);
             releases.push(release_tx);
             written.push(wrote);
         }
         let shared = self.shared.clone();
+        let epoch = barrier.as_ref().map(|barrier| barrier.handle());
         let (finished, all) = oneshot::channel();
         tokio::spawn(async move {
             let deadline = tokio::time::Instant::now() + SAVE_BARRIER_WAIT;
+            let mut complete = true;
             for snapshot in snapshots {
-                let _ = tokio::time::timeout_at(deadline, snapshot).await;
+                complete &= tokio::time::timeout_at(deadline, snapshot).await.is_ok();
             }
             let (saved, regions) = oneshot::channel();
             let (snapshotted, taken) = oneshot::channel();
@@ -477,11 +497,22 @@ impl Coordinator {
                 .send(ManagerMessage::SaveAll {
                     done: flush.then_some(saved),
                     snapshotted: Some(snapshotted),
+                    epoch,
                 })
                 .await
                 .is_ok();
-            if asked {
-                let _ = tokio::time::timeout_at(deadline, taken).await;
+            complete &=
+                asked && matches!(tokio::time::timeout_at(deadline, taken).await, Ok(Ok(())));
+            match barrier {
+                Some(barrier) if complete => barrier.seal(),
+                Some(barrier) => {
+                    log::warn!(
+                        "the world save did not snapshot within {SAVE_BARRIER_WAIT:?}; \
+                         the next save completes it"
+                    );
+                    barrier.defer();
+                }
+                None => {}
             }
             drop(releases);
             if flush {
@@ -1439,6 +1470,7 @@ mod access;
 mod config;
 mod idle;
 mod inventory_edits;
+mod ledger;
 mod tick;
 use idle::IdleClock;
 

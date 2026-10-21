@@ -344,6 +344,7 @@ impl ProtoStorage {
                 blocks: Some(blob),
                 entities: EntityWrite::Keep,
                 pois: EntityWrite::Keep,
+                ticket: None,
             })
             .collect();
         self.io.submit(&self.dimension, ops)

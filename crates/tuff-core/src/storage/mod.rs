@@ -145,6 +145,25 @@ pub fn open_no_save(
     Ok((backend, lock))
 }
 
+/// Opens `backend` (locked, at `world_path`) through its save journal,
+/// first restoring the last complete save if a save did not finish. A
+/// backend without files of its own is returned as it is.
+pub fn journaled(
+    backend: Arc<dyn WorldBackend>,
+    world_path: &Path,
+) -> io::Result<Arc<dyn WorldBackend>> {
+    let store: Box<dyn tuff_storage::journal::JournalStore> = match backend.journal_store() {
+        Some(store) => store,
+        None if backend.name() == vanilla::NAME => Box::new(tuff_storage::journal::DirStore::new(
+            world_path.join(vanilla::JOURNAL_DIR),
+        )),
+        None => return Ok(backend),
+    };
+    Ok(Arc::new(tuff_storage::journal::JournaledBackend::open(
+        backend, store,
+    )?))
+}
+
 type Open = fn(&Path, BackendOptions) -> io::Result<Arc<dyn WorldBackend>>;
 
 /// The backends this crate ships, by name.

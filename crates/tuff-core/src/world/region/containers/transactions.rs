@@ -19,8 +19,8 @@ impl RegionActor {
         mut pool: Vec<ItemStack>,
         took_result: bool,
     ) {
-        let moved = if self.transaction_valid(player.id, &changes) {
-            self.move_container_changes(&changes, &mut pool)
+        let moved = if self.transaction_valid(player.id, &changes) && !self.quarantined() {
+            self.move_container_changes(&player, &changes, &mut pool)
         } else {
             None
         };
@@ -162,6 +162,7 @@ impl RegionActor {
     /// their viewers with [`Self::tell_moved_slots`].
     fn move_container_changes(
         &mut self,
+        player: &PlayerHandle,
         changes: &[ContainerChange],
         pool: &mut Vec<ItemStack>,
     ) -> Option<MovedSlots> {
@@ -174,7 +175,28 @@ impl RegionActor {
             })
             .collect();
         let new: Vec<Option<ItemSnapshot>> = changes.iter().map(|c| c.new.clone()).collect();
-        let applied = settle::apply(&mut slots, &new, pool);
+        let refuse = self.shared.conservation.take_injected_failure();
+        let applied = match settle::apply(&mut slots, &new, pool, refuse) {
+            settle::Settled::Applied => true,
+            settle::Settled::Refused => false,
+            settle::Settled::Violated { applied, detail } => {
+                let pos = changes.first().map_or(BlockPos::new(0, 0, 0), |c| c.pos);
+                let item = changes
+                    .iter()
+                    .find_map(|c| c.new.clone().or(c.expected.clone()));
+                self.item_violation(
+                    Some(player),
+                    crate::world::conservation::ItemViolation {
+                        operation: "container transaction",
+                        player: Some(player.id),
+                        pos,
+                        item,
+                        detail,
+                    },
+                );
+                applied
+            }
+        };
         if !applied {
             for (change, stack) in changes.iter().zip(slots) {
                 if let Some(slot) = self

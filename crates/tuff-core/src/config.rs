@@ -529,8 +529,20 @@ pub const STORAGE_SQLITE_ENTITY_INDEX: &str = "tuff.storage.sqlite.entityIndex";
 pub const OFFLINE_OPS: &str = "tuff.offlineOps";
 pub const ALLOW_PUBLIC_OFFLINE: &str = "tuff.allowPublicOffline";
 pub const REFUSE_DUPLICATE_LOGIN: &str = "tuff.refuseDuplicateLogin";
+pub const ITEMS_CONSERVATION_CHECKS: &str = "tuff.items.conservationChecks";
+pub const ITEMS_CONSERVATION_KICK: &str = "tuff.items.conservationKick";
 fn core_keys() -> Vec<Key> {
     vec![
+        Key::new(
+            ITEMS_CONSERVATION_CHECKS,
+            Value::Bool(true),
+            "Check item moves between players, containers and regions in release builds: an operation that would make or lose items is refused, logged and audited, and the actors involved are not saved until they reload from their last consistent save",
+        ),
+        Key::new(
+            ITEMS_CONSERVATION_KICK,
+            Value::Bool(true),
+            "Disconnect a player involved in a refused item operation so the client reloads from the server's last consistent save",
+        ),
         Key::new(
             OFFLINE_OPS,
             Value::Bool(false),

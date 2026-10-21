@@ -157,6 +157,8 @@ pub enum RegionInternal {
         done: Option<oneshot::Sender<()>>,
         /// Told once the dirty chunks were snapshotted for writing.
         snapshotted: Option<oneshot::Sender<()>>,
+        /// The world save these chunk writes belong to.
+        epoch: Option<tuff_storage::journal::BarrierHandle>,
     },
     /// A chunk the generation pipeline finished for this region.
     Generated {

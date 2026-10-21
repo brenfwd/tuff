@@ -15,6 +15,7 @@ pub use tuff_vanilla_data::{Block, Item};
 
 pub mod admin_client;
 pub mod placeholder;
+mod saves;
 pub mod scenario;
 pub use scenario::*;
 
@@ -156,6 +157,7 @@ pub fn bare_shared() -> Shared {
     let registries = vanilla_registries();
     let resolved = Resolved::from_registries(&registries);
     Shared {
+        conservation: Default::default(),
         stopwatches: Default::default(),
         random_sequences: Default::default(),
         server_list: std::sync::OnceLock::new(),
@@ -532,6 +534,7 @@ impl TestWorld {
         let stops = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let stopped = stops.clone();
         let regions = manager.clone();
+        let journal = backend.save_journal();
         let provider_context = tuff_core::world::custom_dimension::ProviderContext {
             config_store: backend.config().unwrap_or_else(detached_config_store),
             settings: config.clone(),
@@ -593,21 +596,7 @@ impl TestWorld {
                         stopped.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     }
                     CoordinatorMessage::SaveAll { flush, done } => {
-                        let regions = regions.clone();
-                        tokio::spawn(async move {
-                            let (saved, flushed) = oneshot::channel();
-                            let asked = regions
-                                .send(ManagerMessage::SaveAll {
-                                    done: flush.then_some(saved),
-                                    snapshotted: None,
-                                })
-                                .await
-                                .is_ok();
-                            if flush {
-                                let _ = flushed.await;
-                            }
-                            let _ = done.send(if asked { Ok(()) } else { Err("stopped".into()) });
-                        });
+                        saves::save_all(regions.clone(), journal.as_ref(), flush, done)
                     }
                     other => tuff_item::item::conservation::release(other),
                 }
@@ -711,6 +700,7 @@ impl TestWorld {
         );
         let dimension_names = dimensions.iter().map(|d| d.key.clone()).collect();
         let shared = Arc::new(Shared {
+            conservation: Default::default(),
             stopwatches: Default::default(),
             random_sequences: Default::default(),
             server_list: std::sync::OnceLock::new(),
@@ -918,6 +908,7 @@ impl TestWorld {
                 let _ = self.manager.try_send(ManagerMessage::SaveAll {
                     done: None,
                     snapshotted: None,
+                    epoch: None,
                 });
             }
             self.settle(tick).await;
@@ -970,6 +961,9 @@ impl TestWorld {
             .await
             .expect("every region closes")
             .unwrap();
+        if let Some(journal) = self.shared.backend.save_journal() {
+            journal.finish();
+        }
     }
 }
 

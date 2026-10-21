@@ -168,6 +168,7 @@ enum JobResult {
         blocks: Option<Blob>,
         entities: EntityWrite,
         pois: EntityWrite,
+        ticket: Option<tuff_storage::journal::EpochTicket>,
     },
 }
 
@@ -327,6 +328,7 @@ mod beacon;
 mod blocks;
 mod boss_bar;
 mod command_block;
+mod conservation;
 mod container_edits;
 mod containers;
 mod crafter;

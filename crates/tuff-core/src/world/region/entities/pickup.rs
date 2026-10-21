@@ -136,6 +136,9 @@ impl RegionActor {
     /// enough, holding it for that player until they answer.
     pub(in crate::world::region) fn offer_items(&mut self) {
         let _span = tuff_timings::span!("region.offer_items");
+        if self.quarantined() {
+            return;
+        }
         self.offer_ground_pickups();
         for (id, tracked) in &mut self.ents.entities {
             let Some(item) = tracked.entity.downcast_mut::<ItemEntity>() else {

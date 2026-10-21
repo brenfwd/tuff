@@ -60,6 +60,7 @@ impl RegionActor {
         loop {
             let started = self.sched.server_tick;
             let Err(panic) = CatchUnwind::new(Box::pin(self.run())).await else {
+                self.end_quarantine();
                 return tuff_item::item::conservation::release(self);
             };
             if self.sched.server_tick.saturating_sub(started) >= STABLE_TICKS {

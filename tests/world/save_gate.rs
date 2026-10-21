@@ -262,6 +262,7 @@ async fn save_all_saves_even_with_saving_off_and_flush_waits_for_the_writes() {
         .send(ManagerMessage::SaveAll {
             done: Some(done),
             snapshotted: None,
+            epoch: None,
         })
         .await
         .unwrap();
@@ -306,6 +307,7 @@ async fn a_hold_keeps_storage_untouched_until_released() {
         .send(ManagerMessage::SaveAll {
             done: Some(done),
             snapshotted: None,
+            epoch: None,
         })
         .await
         .unwrap();

@@ -460,6 +460,39 @@ instead of every 2. Tempting, breeding, wandering and targeting still
 work, with a few ticks more latency. The server logs once when a region
 enters or leaves crowd mode. Off, behaviour is vanilla.
 
+### Item conservation and save safety
+
+Items are never copied: a stack moves between players, containers,
+entities and regions, and only appears (loot, crafting, `/give`) or
+disappears (eating, burning, `/clear`) through a few audited doors. Moves
+between actors are checked; in release builds the checks are on unless
+`tuff.items.conservationChecks` is `false`. An operation that would make
+or lose items is refused instead of applied: the server logs it, writes a
+`tuff:item_conservation` row to the audit log, and quarantines the region
+and player involved. A quarantined region trades no items with players and
+is not saved until it unloads; a quarantined player is not saved and,
+while `tuff.items.conservationKick` is `true` (the default), is
+disconnected so its client reloads the last consistent save. Debug builds
+and tests always check, and a stack dropped without being stored or burned
+panics there (release builds log it); every world save reports items lost
+that way.
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `tuff.items.conservationChecks` | `true` | Check item moves in release builds and refuse, audit and quarantine on a violation |
+| `tuff.items.conservationKick` | `true` | Disconnect a player involved in a refused item operation |
+
+A world save lands whole or not at all. Before a save's first write to a
+chunk or player file, the previous contents go to a journal (a
+`tuff-journal` directory in a world folder, two tables in a server file),
+and the save commits once every player and chunk it covers is written. If
+the server stops before that (a crash, an I/O error, a save that failed),
+the next start restores the last complete save, so a player is never
+loaded newer than the chests it traded with. A failed write stops commits
+until the next start, which then restores the last complete save; the log
+says so. A save whose snapshot takes longer than a second is completed by
+the next save.
+
 ## Built-in features
 
 The vanilla game is 16 built-in features loaded on an inert core: `worldgen`,

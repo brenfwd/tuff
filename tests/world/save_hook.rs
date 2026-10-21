@@ -118,6 +118,7 @@ async fn shutdown_save_carries_hook_changes_and_live_world_is_untouched() {
         .send(ManagerMessage::SaveAll {
             done: None,
             snapshotted: None,
+            epoch: None,
         })
         .await
         .unwrap();

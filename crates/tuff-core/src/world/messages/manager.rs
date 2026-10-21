@@ -74,6 +74,8 @@ pub enum ManagerMessage {
         done: Option<oneshot::Sender<()>>,
         /// Told once every region has taken its snapshot.
         snapshotted: Option<oneshot::Sender<()>>,
+        /// The world save these chunk writes belong to.
+        epoch: Option<tuff_storage::journal::BarrierHandle>,
     },
     /// Keeps `chunks` loaded (`on`) under `ticket` or lets that ticket
     /// go, and answers which of them changed state for that ticket.
