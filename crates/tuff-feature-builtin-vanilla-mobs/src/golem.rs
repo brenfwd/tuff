@@ -6,7 +6,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::tag::block as tags;
@@ -1099,12 +1098,7 @@ impl CopperGolem {
         if !in_air || cx.rng.r#gen::<f32>() > STATUE_CHANCE {
             return;
         }
-        if let Some(stack) = core
-            .equipment
-            .get(EquipmentSlot::Mainhand)
-            .map(DupUnchecked::dup_unchecked)
-        {
-            core.equipment.set(EquipmentSlot::Mainhand, None);
+        if let Some(stack) = core.equipment.take(EquipmentSlot::Mainhand) {
             core.drop_item(stack, 0.5, cx);
         }
         let facing = placement::from_yaw(core.base.yaw);
@@ -1160,14 +1154,16 @@ impl Species for CopperGolem {
         use tuff_core::protocol::play::level_event;
         let stack = interaction.stack.as_ref()?;
         if stack.item == Item::Shears
-            && let Some(antenna) = core
+            && core
                 .equipment
                 .get(EquipmentSlot::Saddle)
-                .map(DupUnchecked::dup_unchecked)
-            && tuff_datapack::tags::is(
-                tuff_vanilla_data::tag::item::key::SHEARABLE_FROM_COPPER_GOLEM,
-                antenna.item,
-            )
+                .is_some_and(|antenna| {
+                    tuff_datapack::tags::is(
+                        tuff_vanilla_data::tag::item::key::SHEARABLE_FROM_COPPER_GOLEM,
+                        antenna.item,
+                    )
+                })
+            && let Some(antenna) = core.equipment.take(EquipmentSlot::Saddle)
         {
             core.sound_as(
                 SoundEvent::EntityCopperGolemShear,
@@ -1176,7 +1172,6 @@ impl Species for CopperGolem {
                 1.0,
                 cx,
             );
-            core.equipment.set(EquipmentSlot::Saddle, None);
             core.drop_item(antenna, 1.5, cx);
             cx.effects.push(Effect::GameEvent {
                 event: tuff_core::world::game_event::GameEvent::Shear,
@@ -1237,12 +1232,13 @@ impl Species for CopperGolem {
     }
 
     fn took_item(&mut self, core: &mut MobCore, stack: ItemStack) {
-        match core.equipment.get(EquipmentSlot::Mainhand) {
-            None => core.equipment.set(EquipmentSlot::Mainhand, Some(stack)),
+        match core.equipment.get_mut(EquipmentSlot::Mainhand) {
+            None => {
+                let none = core.equipment.replace(EquipmentSlot::Mainhand, Some(stack));
+                debug_assert!(none.is_none());
+            }
             Some(held) if held.stacks_with(&stack) => {
-                let mut held = held.dup_unchecked();
-                held.join_or_drop(stack, &mut Vec::new());
-                core.equipment.set(EquipmentSlot::Mainhand, Some(held));
+                held.join_or_drop(stack, &mut self.overflow);
             }
             Some(_) => self.overflow.push(stack),
         }

@@ -840,10 +840,9 @@ impl Piglin {
     /// fit is thrown.
     fn equip_or_store(&mut self, core: &mut MobCore, stack: ItemStack, cx: &mut TickContext) {
         if let Some(slot) = replaces_current(core, stack.item) {
-            if let Some(old) = core.equipment.get(slot).map(DupUnchecked::dup_unchecked) {
+            if let Some(old) = core.equipment.replace(slot, Some(stack)) {
                 core.drop_item(old, 0.0, cx);
             }
-            core.equipment.set(slot, Some(stack));
             core.equipment
                 .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
             return;

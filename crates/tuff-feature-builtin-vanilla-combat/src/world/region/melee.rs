@@ -207,7 +207,7 @@ fn armor_post_attack(
                 5 => EquipmentSlot::Head,
                 _ => return None,
             };
-            Some((slot, stack.as_ref()?))
+            Some((slot, stack.as_ref()?.get()))
         })
         .collect();
     if worn.is_empty() {

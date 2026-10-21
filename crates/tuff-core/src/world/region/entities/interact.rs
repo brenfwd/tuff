@@ -118,7 +118,10 @@ impl RegionActor {
                         source: None,
                         direct: None,
                     },
-                    weapon: attack.weapon.dup_unchecked(),
+                    weapon: attack
+                        .weapon
+                        .as_ref()
+                        .map(tuff_item::item::ItemSnapshot::of),
                     dealt: attack.damage,
                     taken: outcome.health_lost,
                 },
@@ -233,7 +236,10 @@ impl RegionActor {
             if let Some(facts) = self.ents.entities.get(&target).map(|t| t.entity.facts()) {
                 player.send(PlayerEvent::Advancement(Box::new(
                     crate::world::messages::AdvancementEvent::InteractedWithEntity {
-                        item: interaction.stack.dup_unchecked(),
+                        item: interaction
+                            .stack
+                            .as_ref()
+                            .map(tuff_item::item::ItemSnapshot::of),
                         entity: facts,
                     },
                 )));
@@ -278,7 +284,10 @@ impl RegionActor {
         if outcome.is_some() {
             player.send(PlayerEvent::Advancement(Box::new(
                 crate::world::messages::AdvancementEvent::InteractedWithEntity {
-                    item: interaction.stack.dup_unchecked(),
+                    item: interaction
+                        .stack
+                        .as_ref()
+                        .map(tuff_item::item::ItemSnapshot::of),
                     entity: facts,
                 },
             )));

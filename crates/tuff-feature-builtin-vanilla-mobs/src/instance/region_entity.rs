@@ -367,23 +367,18 @@ impl<S: Species> RegionEntity for Mob<S> {
         })
     }
 
-    fn equipment(&self) -> Vec<(u8, Option<ItemStack>)> {
+    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> {
         self.core.equipment.visible()
     }
 
-    fn main_hand_item(&self) -> Option<Option<ItemStack>> {
-        Some(
-            self.core
-                .equipment
-                .main_hand()
-                .map(DupUnchecked::dup_unchecked),
-        )
+    fn main_hand_item(&self) -> Option<Option<tuff_item::item::ItemView<'_>>> {
+        Some(self.core.equipment.main_hand().map(ItemStack::view))
     }
 
-    fn set_main_hand_item(&mut self, stack: Option<ItemStack>) {
+    fn replace_main_hand_item(&mut self, stack: Option<ItemStack>) -> Option<ItemStack> {
         self.core
             .equipment
-            .set(tuff_vanilla_data::item::EquipmentSlot::Mainhand, stack);
+            .replace(tuff_vanilla_data::item::EquipmentSlot::Mainhand, stack)
     }
 
     fn take_equipment_changed(&mut self) -> bool {
@@ -772,14 +767,32 @@ impl<S: Species> RegionEntity for Mob<S> {
         self.species.inventory_mut()
     }
 
-    fn held_items(&self) -> Option<Vec<Option<ItemStack>>> {
-        Some(self.core.equipment.by_number())
+    fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
+        Some(
+            self.core
+                .equipment
+                .by_number()
+                .into_iter()
+                .map(|stack| stack.map(ItemStack::view))
+                .collect(),
+        )
     }
 
     fn set_held_items(&mut self, slots: Vec<(usize, Option<ItemStack>)>) -> bool {
-        slots.into_iter().fold(false, |any, (slot, stack)| {
-            self.core.equipment.set_number(slot, stack) || any
-        })
+        let mut any = false;
+        for (slot, stack) in slots {
+            let replaced = match self.core.equipment.replace_number(slot, stack) {
+                Ok(old) => {
+                    any = true;
+                    old
+                }
+                Err(unused) => unused,
+            };
+            if let Some(gone) = replaced {
+                gone.burn(tuff_item::item::BurnReason::Plugin);
+            }
+        }
+        any
     }
 
     fn container_menu(&self) -> tuff_core::world::menu::MenuKind {

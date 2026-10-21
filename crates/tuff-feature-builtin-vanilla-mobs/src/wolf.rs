@@ -3,7 +3,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::DyeColor;
 use tuff_vanilla_data::registry::{Attribute, EntityType};
 use tuff_vanilla_data::tag;
@@ -127,27 +126,26 @@ impl Species for Wolf {
         cx: &mut TickContext,
     ) -> bool {
         use tuff_vanilla_data::item::EquipmentSlot;
-        let Some(armor) = core
-            .equipment
-            .get(EquipmentSlot::Body)
-            .filter(|stack| stack.item == tuff_vanilla_data::Item::WolfArmor)
-            .map(DupUnchecked::dup_unchecked)
-        else {
-            return false;
-        };
         if damage.is("bypasses_wolf_armor") {
             return false;
         }
-        let before = armor_tier(Some(&armor));
-        let mut armor = armor;
+        let Some(armor) = core
+            .equipment
+            .get_mut(EquipmentSlot::Body)
+            .filter(|stack| stack.item == tuff_vanilla_data::Item::WolfArmor)
+        else {
+            return false;
+        };
+        let before = armor_tier(Some(armor));
         let worn = armor.damage() + amount.ceil() as u32;
         let broke = armor.max_damage().is_some_and(|max| worn >= max);
         if broke {
-            core.equipment.set(EquipmentSlot::Body, None);
+            if let Some(armor) = core.equipment.take(EquipmentSlot::Body) {
+                armor.burn(tuff_item::item::BurnReason::Broken);
+            }
             core.entity_event(BODY_BREAK_EVENT, cx);
         } else {
             armor.set_damage(worn);
-            core.equipment.set(EquipmentSlot::Body, Some(armor));
         }
         let after = armor_tier(core.equipment.get(EquipmentSlot::Body));
         if before != after {
@@ -365,14 +363,8 @@ impl Species for Wolf {
             if owned && let Some(stack) = stack {
                 use tuff_vanilla_data::item::EquipmentSlot;
                 let sitting = core.tame.as_ref().is_some_and(|t| t.sitting);
-                let worn = core
-                    .equipment
-                    .get(EquipmentSlot::Body)
-                    .map(DupUnchecked::dup_unchecked);
-                if stack.item == tuff_vanilla_data::Item::WolfArmor
-                    && worn.is_none()
-                    && !core.is_baby()
-                {
+                let worn = core.equipment.get(EquipmentSlot::Body).is_some();
+                if stack.item == tuff_vanilla_data::Item::WolfArmor && !worn && !core.is_baby() {
                     core.equipment.set(
                         EquipmentSlot::Body,
                         Some(ItemStack::mint(stack.item, 1, MintReason::Spawn)),
@@ -380,14 +372,13 @@ impl Species for Wolf {
                     return Some(HandEffect::Consume(1));
                 }
                 if sitting
-                    && let Some(mut armor) = worn
+                    && let Some(armor) = core.equipment.get_mut(EquipmentSlot::Body)
                     && armor.item == tuff_vanilla_data::Item::WolfArmor
                     && armor.damage() > 0
                     && armor.item.repairable_with().contains(&stack.item)
                 {
                     let unit = (armor.max_damage().unwrap_or(0) as f32 * ARMOR_REPAIR_UNIT) as u32;
                     armor.set_damage(armor.damage().saturating_sub(unit));
-                    core.equipment.set(EquipmentSlot::Body, Some(armor));
                     core.sound(
                         tuff_vanilla_data::registry::SoundEvent::ItemWolfArmorRepair,
                         1.0,

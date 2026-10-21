@@ -370,12 +370,12 @@ impl PlayerSession {
                 taken,
             } => {
                 let victim = here(victim);
-                self.hurt_entity_facts(&weapon, &victim, &damage, dealt, taken);
+                self.hurt_entity_facts(weapon.as_deref(), &victim, &damage, dealt, taken);
             }
             AdvancementEvent::InteractedWithEntity { item, entity } => {
                 let entity = here(entity);
                 self.fire(Event::PlayerInteractedWithEntity {
-                    item: item.as_ref(),
+                    item: item.as_deref(),
                     entity: &entity,
                 });
             }
@@ -429,7 +429,7 @@ impl PlayerSession {
             AdvancementEvent::BeeNestDestroyed { block, item, bees } => {
                 self.fire(Event::BeeNestDestroyed {
                     block,
-                    item: item.as_ref(),
+                    item: item.as_deref(),
                     bees,
                 });
             }
@@ -589,7 +589,7 @@ impl PlayerSession {
 
     fn hurt_entity_facts(
         &mut self,
-        weapon: &Option<tuff_item::item::ItemStack>,
+        weapon: Option<&tuff_item::item::ItemStack>,
         victim: &EntityFacts,
         damage: &crate::world::predicate::DamageFacts,
         dealt: f32,
@@ -622,7 +622,7 @@ impl PlayerSession {
     /// This player's melee hit landed on an entity of type `kind`.
     pub fn hurt_entity(
         &mut self,
-        weapon: &Option<tuff_item::item::ItemStack>,
+        weapon: Option<&tuff_item::item::ItemStack>,
         kind: EntityType,
         position: [f64; 3],
         dealt: f32,

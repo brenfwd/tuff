@@ -7,6 +7,7 @@ use crate::world::messages::{AdvancementEvent, PlayerLooks};
 use crate::world::nearby::{IndexedPlayer, PlayerIndex};
 use crate::world::predicate::EntityFacts;
 use tuff_core::world::advancement::SessionAdvancements;
+use tuff_item::item::ItemSnapshot;
 use tuff_vanilla_data::registry::EntityType;
 
 async fn loaded(
@@ -308,20 +309,28 @@ async fn reported_triggers_meet_their_advancements() {
 
     player
         .handle_event(report(AdvancementEvent::InteractedWithEntity {
-            item: Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
+            item: Some(ItemSnapshot::of(&ItemStack::mint(
+                Item::Stick,
+                1,
+                MintReason::Test,
+            ))),
             entity: facts(EntityType::Armadillo),
         }))
         .await;
     assert!(!player.advancement_done("minecraft:adventure/brush_armadillo"));
     player
         .handle_event(report(AdvancementEvent::InteractedWithEntity {
-            item: Some(ItemStack::mint(Item::Brush, 1, MintReason::Test)),
+            item: Some(ItemSnapshot::of(&ItemStack::mint(
+                Item::Brush,
+                1,
+                MintReason::Test,
+            ))),
             entity: facts(EntityType::Armadillo),
         }))
         .await;
     assert!(player.advancement_done("minecraft:adventure/brush_armadillo"));
 
-    player.hurt_entity(&None, EntityType::Zombie, [2.0, 100.0, 0.5], 4.0, 4.0);
+    player.hurt_entity(None, EntityType::Zombie, [2.0, 100.0, 0.5], 4.0, 4.0);
     assert!(
         !player.advancement_done("minecraft:adventure/shoot_arrow"),
         "a melee hit is no arrow"
@@ -419,7 +428,7 @@ async fn reported_block_and_pickup_triggers_meet_their_advancements() {
     player
         .handle_event(report(AdvancementEvent::BeeNestDestroyed {
             block: Block::BeeNest.default_state(),
-            item: Some(silk),
+            item: Some(ItemSnapshot::of(&silk)),
             bees: 3,
         }))
         .await;
@@ -427,7 +436,7 @@ async fn reported_block_and_pickup_triggers_meet_their_advancements() {
 
     player
         .handle_event(report(AdvancementEvent::ThrownItemPickedUpByEntity {
-            item: ItemStack::mint(Item::GoldIngot, 1, MintReason::Test),
+            item: ItemSnapshot::of(&ItemStack::mint(Item::GoldIngot, 1, MintReason::Test)),
             entity: facts(EntityType::Piglin),
         }))
         .await;

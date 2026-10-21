@@ -165,7 +165,7 @@ impl SessionHooks for CombatHooks {
                 }) => {
                     if target_kind == tuff_vanilla_data::registry::EntityType::Player {
                         session.hurt_entity(
-                            &weapon,
+                            weapon.as_ref(),
                             target_kind,
                             target_position,
                             dealt,

@@ -1,4 +1,4 @@
-use tuff_item::item::ItemStack;
+use tuff_item::item::ItemSnapshot;
 
 /// What a region or another player saw happen that a player's advancement
 /// triggers count, with the facts their conditions test.
@@ -32,13 +32,13 @@ pub enum AdvancementEvent {
     /// The player's right click on this entity did something, holding
     /// `item` as it was before the use.
     InteractedWithEntity {
-        item: Option<ItemStack>,
+        item: Option<ItemSnapshot>,
         entity: crate::world::predicate::EntityFacts,
     },
     /// The player reeled in a catch (or a hooked entity, with no items).
     FishingRodHooked {
         entity: crate::world::predicate::EntityFacts,
-        items: Vec<ItemStack>,
+        items: Vec<tuff_item::item::ItemStack>,
     },
     /// The player opened a container whose loot table `0` just rolled.
     GeneratedLoot(String),
@@ -54,7 +54,7 @@ pub enum AdvancementEvent {
     HurtEntity {
         victim: crate::world::predicate::EntityFacts,
         damage: crate::world::predicate::DamageFacts,
-        weapon: Option<ItemStack>,
+        weapon: Option<ItemSnapshot>,
         dealt: f32,
         taken: f32,
     },
@@ -80,33 +80,33 @@ pub enum AdvancementEvent {
     /// A crafter near the player crafted `recipe` from `ingredients`.
     CrafterRecipeCrafted {
         recipe: tuff_vanilla_data::Frozen<str>,
-        ingredients: Vec<ItemStack>,
+        ingredients: Vec<tuff_item::item::ItemStack>,
     },
     /// The player broke a bee nest or hive holding `bees` bees with `item`.
     BeeNestDestroyed {
         block: tuff_vanilla_data::BlockState,
-        item: Option<ItemStack>,
+        item: Option<ItemSnapshot>,
         bees: i32,
     },
     /// An allay the player likes dropped `item` onto the block at `location`;
     /// the region fills the location in from its position.
     AllayDropItemOnBlock {
-        item: ItemStack,
+        item: ItemSnapshot,
         location: crate::world::predicate::LocationFacts,
     },
     /// `entity` picked up `item`, which the player threw.
     ThrownItemPickedUpByEntity {
-        item: ItemStack,
+        item: ItemSnapshot,
         entity: crate::world::predicate::EntityFacts,
     },
     /// The player picked up `item`, which `thrower` threw.
     ThrownItemPickedUpByPlayer {
-        item: ItemStack,
+        item: ItemSnapshot,
         thrower: crate::world::predicate::EntityFacts,
     },
     /// The player sheared `item` off `entity`.
     ShearedEquipment {
-        item: ItemStack,
+        item: ItemSnapshot,
         entity: crate::world::predicate::EntityFacts,
     },
 }

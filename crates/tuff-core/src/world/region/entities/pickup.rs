@@ -332,7 +332,7 @@ impl RegionActor {
         if let Some((handle, _)) = player {
             handle.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::ThrownItemPickedUpByEntity {
-                    item: stack.dup_unchecked(),
+                    item: tuff_item::item::ItemSnapshot::of(stack),
                     entity: picker,
                 },
             )));
@@ -340,7 +340,7 @@ impl RegionActor {
         if let Some(picked_by) = picked_by {
             picked_by.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::ThrownItemPickedUpByPlayer {
-                    item: stack.dup_unchecked(),
+                    item: tuff_item::item::ItemSnapshot::of(stack),
                     thrower: facts,
                 },
             )));

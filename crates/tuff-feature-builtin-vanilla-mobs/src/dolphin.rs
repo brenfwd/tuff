@@ -7,7 +7,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, MapDecorationType, MobEffect, SoundEvent};
@@ -634,10 +633,9 @@ fn holding(mob: &MobCore) -> bool {
 
 /// Throws what it carries out of its mouth.
 fn spit_out(mob: &mut MobCore, cx: &mut TickContext) -> bool {
-    let Some(stack) = mob.equipment.main_hand().map(DupUnchecked::dup_unchecked) else {
+    let Some(stack) = mob.equipment.take(EquipmentSlot::Mainhand) else {
         return false;
     };
-    mob.equipment.set(EquipmentSlot::Mainhand, None);
     let [x, y, z] = mob.base.position;
     let (yaw, pitch) = (mob.base.yaw.to_radians(), mob.base.pitch.to_radians());
     let direction = cx.rng.r#gen::<f32>() * std::f32::consts::TAU;

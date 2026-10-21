@@ -745,14 +745,16 @@ impl RegionActor {
             }
             None => loot.container_loot(&table, slots, &mut self.rng),
         };
+        if let Some(items) = &items {
+            self.explore_loot(super::exploring::ExploreTarget::Block(pos), pos, items);
+        }
         let Some(entity) = self.block_entity_mut(pos) else {
             return;
         };
         entity.extra.remove(block_entity::raw::LOOT_TABLE);
         entity.extra.remove(block_entity::raw::LOOT_TABLE_SEED);
         if let Some(items) = items {
-            entity.items = items.dup_unchecked();
-            self.explore_loot(super::exploring::ExploreTarget::Block(pos), pos, &items);
+            entity.items = items;
         }
         player.send(PlayerEvent::Advancement(Box::new(
             AdvancementEvent::GeneratedLoot(table),

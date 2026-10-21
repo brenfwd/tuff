@@ -19,7 +19,7 @@ use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::{DispenseOutcome, SlotEdit};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -210,16 +210,16 @@ impl ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let current = core.equipment.get(slot).map(DupUnchecked::dup_unchecked);
-        if current.is_some() && self.bit(slot, REMOVE_ITEM_BIT) {
+        let current = core.equipment.get(slot).is_some();
+        if current && self.bit(slot, REMOVE_ITEM_BIT) {
             return None;
         }
-        if current.is_none() && self.bit(slot, PUT_ITEM_BIT) {
+        if !current && self.bit(slot, PUT_ITEM_BIT) {
             return None;
         }
         let held = interaction.stack.as_ref();
         if interaction.creative
-            && current.is_none()
+            && !current
             && let Some(held) = held
         {
             let one = held.dup_count_unchecked(1);
@@ -230,7 +230,7 @@ impl ArmorStand {
         if let Some(held) = held
             && held.count() > 1
         {
-            if current.is_some() {
+            if current {
                 return None;
             }
             let one = held.dup_count_unchecked(1);
@@ -241,14 +241,16 @@ impl ArmorStand {
         if let Some(held) = held {
             self.equip_sound(core, held, cx);
         }
-        core.equipment
-            .set(slot, held.map(DupUnchecked::dup_unchecked));
+        let current = core
+            .equipment
+            .replace(slot, held.map(DupUnchecked::dup_unchecked));
         Some(HandEffect::Replace(current.map(Box::new)))
     }
 
     fn pop(&self, core: &MobCore, at: BlockPos, stack: ItemStack, cx: &mut TickContext) {
         let _ = core;
         if !cx.shared.rule_bool("block_drops") {
+            stack.burn(BurnReason::Destroyed);
             return;
         }
         let spread = |rng: &mut StdRng| rng.gen_range(-0.25..0.25);
@@ -291,9 +293,10 @@ impl ArmorStand {
             EquipmentSlot::Chest,
             EquipmentSlot::Head,
         ] {
-            if let Some(stack) = core.equipment.get(slot).map(DupUnchecked::dup_unchecked) {
-                core.equipment.set(slot, None);
-                if !prevents_drop(&stack) {
+            if let Some(stack) = core.equipment.take(slot) {
+                if prevents_drop(&stack) {
+                    stack.burn(BurnReason::Destroyed);
+                } else {
                     self.pop(core, above, stack, cx);
                 }
             }

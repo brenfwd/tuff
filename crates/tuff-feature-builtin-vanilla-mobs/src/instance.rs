@@ -1394,9 +1394,8 @@ impl<S: Species> Mob<S> {
         let slot = SHEARABLE_SLOTS
             .into_iter()
             .find(|slot| shearable(self.core.equipment.get(*slot), interaction.creative))?;
-        let worn = self.core.equipment.get(slot)?.dup_unchecked();
-        let sound = worn.equippable()?.shearing_sound;
-        self.core.equipment.set(slot, None);
+        let sound = self.core.equipment.get(slot)?.equippable()?.shearing_sound;
+        let worn = self.core.equipment.take(slot)?;
         cx.effects.push(Effect::GameEvent {
             event: tuff_core::world::game_event::GameEvent::Shear,
             position: self.core.base.position,
@@ -1404,14 +1403,15 @@ impl<S: Species> Mob<S> {
         });
         let seats = self.core.kind().passenger_attachments();
         let height = seats.iter().map(|seat| seat[1]).sum::<f64>() / seats.len().max(1) as f64;
+        let shown = tuff_item::item::ItemSnapshot::of(&worn);
         self.core
-            .drop_item(worn.dup_unchecked(), height * self.core.size_ratio(), cx);
+            .drop_item(worn, height * self.core.size_ratio(), cx);
         self.core.sound(sound, 1.0, 1.0, cx);
         cx.effects.push(Effect::Advancement {
             player: interaction.player_uuid,
             event: Box::new(
                 tuff_core::world::messages::AdvancementEvent::ShearedEquipment {
-                    item: worn,
+                    item: shown,
                     entity: self.core.facts(),
                 },
             ),
