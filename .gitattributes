@@ -1,0 +1,5 @@
+crates/tuff-plugin-sdk/src/generated.rs linguist-generated merge=ours
+crates/tuff-plugin-sdk/c/bindings/plugin.h linguist-generated merge=ours
+crates/tuff-plugin-sdk/c/bindings/plugin.c linguist-generated merge=ours
+crates/tuff-plugin-sdk/c/tuff_gen.hpp linguist-generated merge=ours
+crates/tuff-plugin-sdk/c/tuff/unraw.hpp linguist-generated merge=ours

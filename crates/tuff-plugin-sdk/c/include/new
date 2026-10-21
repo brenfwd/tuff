@@ -1,0 +1,10 @@
+// Placement new, for the freestanding build (no C++ standard library).
+#ifndef TUFF_SDK_NEW
+#define TUFF_SDK_NEW
+
+#include <stddef.h>
+
+inline void *operator new(size_t, void *where) noexcept { return where; }
+inline void operator delete(void *, void *) noexcept {}
+
+#endif

@@ -1,0 +1,19 @@
+[package]
+name = "tuff-plugin-sdk"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Write tuff runtime plugins in Rust, compiled to wasm32-unknown-unknown"
+
+[dependencies]
+wit-bindgen = { workspace = true }
+
+[features]
+raw-abi = []
+
+[lib]
+test = true
+doctest = true
+
+[dev-dependencies]
+tuff-core = { workspace = true }

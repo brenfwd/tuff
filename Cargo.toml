@@ -1,0 +1,283 @@
+[package]
+name = "tuff"
+version = "0.1.0"
+edition = "2024"
+autotests = false
+license.workspace = true
+
+[features]
+default = ["runtime-wasmi"]
+runtime-wasmi = ["tuff-plugin-wasm/runtime-wasmi"]
+runtime-wasmtime = ["tuff-plugin-wasm/runtime-wasmtime"]
+
+[dev-dependencies]
+tuff-datapack = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-trace = { workspace = true }
+tuff-wire = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-http = { workspace = true }
+tuff-zip = { workspace = true }
+tuff-timings = { workspace = true }
+tuff-core = { workspace = true, features = ["test-hooks"] }
+bytes = { workspace = true }
+rand = { workspace = true }
+rsa = { workspace = true }
+sha2 = { workspace = true }
+serde_json = { workspace = true }
+tuff-test-support = { workspace = true }
+tuff-bot = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+wat = { workspace = true }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
+# Integration tests that need their own process with static linking: each
+# installs its own `#[global_allocator]`, which a dynamically linked std
+# cannot honour. The other root tests are built by crates/tuff-tests.
+[[test]]
+name = "allocator"
+
+[[test]]
+name = "bench_memory"
+
+[[test]]
+name = "timings_overhead"
+
+[[bench]]
+name = "village"
+harness = false
+test = false
+bench = true
+
+[[bench]]
+name = "stress"
+path = "benches/stress/main.rs"
+harness = false
+test = false
+bench = true
+
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+
+# The root package is CLI glue plus the integration test binaries, thin drivers
+# over the workspace crates (still opt-level 1). At 0 they compile ~9x cheaper
+# with no measurable change in test run time.
+[profile.dev.package.tuff]
+opt-level = 0
+
+[profile.bench]
+debug = true
+
+[profile.release-with-debug]
+inherits = "release"
+debug = "full"
+
+[profile.release-opt]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[profile.release-opt-with-debug]
+inherits = "release-opt"
+debug = "full"
+
+[workspace]
+# `cargo test --test world` and friends from the root find the tests package.
+default-members = [".", "crates/tuff-tests"]
+exclude = ["crates/tuff-sqlite-ext"]
+members = [
+    "crates/tuff-macros",
+    "crates/tuff-vanilla-data",
+    "crates/tuff-vanilla-common",
+    "crates/tuff-core",
+    "crates/tuff-http",
+    "crates/tuff-datapack",
+    "crates/tuff-nbt",
+    "crates/tuff-wire",
+    "crates/tuff-item",
+    "crates/tuff-world-model",
+    "crates/tuff-storage",
+    "crates/tuff-sqlite-nbt",
+    "crates/tuff-zip",
+    "crates/tuff-timings",
+    "crates/tuff-trace",
+    "crates/tuff-supervise",
+    "crates/tuff-feature-builtin-core-commands",
+    "crates/tuff-test-support",
+    "crates/tuff-dylib",
+    "crates/tuff-tests",
+    "crates/tuff-feature-builtin-vanilla-worldgen",
+    "crates/tuff-feature-builtin-vanilla-blocks",
+    "crates/tuff-feature-builtin-vanilla-redstone",
+    "crates/tuff-feature-builtin-vanilla-items",
+    "crates/tuff-feature-builtin-vanilla-maps",
+    "crates/tuff-feature-builtin-vanilla-recipes",
+    "crates/tuff-feature-builtin-vanilla-loot",
+    "crates/tuff-feature-builtin-vanilla-combat",
+    "crates/tuff-feature-builtin-vanilla-players",
+    "crates/tuff-feature-builtin-vanilla-entities",
+    "crates/tuff-feature-builtin-vanilla-mobs",
+    "crates/tuff-feature-builtin-vanilla-survival",
+    "crates/tuff-feature-builtin-vanilla-dimensions",
+    "crates/tuff-feature-builtin-vanilla-commands",
+    "crates/tuff-feature-builtin-vanilla-anticheat",
+    "crates/tuff-feature-builtin-example",
+    "crates/tuff-feature-builtin-moving-block-entities",
+    "crates/tuff-bot",
+    "crates/tuff-replay",
+    "crates/tuff-feature-builtin-example-chunk-progress",
+    "crates/tuff-web-ui",
+    "crates/tuff-feature-builtin-world-map",
+    "crates/tuff-feature-builtin-audit-log",
+    "crates/tuff-plugin-wasm",
+    "crates/tuff-plugin-sdk",
+    "crates/tuff-plugin-sdk-gen",
+    "crates/tuff-client-harness",
+]
+
+[workspace.package]
+license = "AGPL-3.0-only"
+
+# Centralized so all 16 workspace crates stay on one version of each
+# dependency; a crate's own [dependencies] references these with
+# `{ workspace = true }` rather than repeating a version string.
+[workspace.dependencies]
+aes = "0.8"
+http-body-util = "0.1"
+hyper = { version = "1", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+anyhow = "1.0.104"
+regex = { version = "1.13", default-features = false, features = ["std", "unicode"] }
+base64 = "0.22"
+bon = "3.10.1"
+bytes = "1.12.1"
+cfb8 = "0.8"
+flate2 = { version = "1.1.10", default-features = false, features = [
+    "zlib-rs",
+] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+indexmap = "2"
+libc = "0.2.189"
+log = "0.4"
+rand = "0.8"
+rayon = "1"
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls-no-provider",
+    "json",
+    "query",
+] }
+rsa = "0.9"
+p12-keystore = "0.4"
+rusqlite = { version = "0.40", features = ["bundled"] }
+rustls = { version = "0.23", default-features = false, features = [
+    "std",
+    "tls12",
+] }
+rustls-rustcrypto = "0.0.2-alpha"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = [
+    "preserve_order",
+    "float_roundtrip",
+] }
+sha1 = { version = "0.10", features = ["oid"] }
+sha2 = { version = "0.10", features = ["oid"] }
+hmac = "0.12"
+md-5 = "0.10"
+mimalloc = { version = "0.1.52", default-features = false }
+socket2 = "0.6"
+thiserror = "2.0.21"
+tokio = { version = "1.53.1", features = ["full"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["tls12"] }
+webpki-roots = "1.0.9"
+
+tuff-macros = { path = "crates/tuff-macros" }
+tuff-vanilla-data = { path = "crates/tuff-vanilla-data" }
+tuff-vanilla-common = { path = "crates/tuff-vanilla-common" }
+tuff-core = { path = "crates/tuff-core" }
+tuff-datapack = { path = "crates/tuff-datapack" }
+tuff-nbt = { path = "crates/tuff-nbt" }
+tuff-wire = { path = "crates/tuff-wire" }
+tuff-item = { path = "crates/tuff-item" }
+tuff-world-model = { path = "crates/tuff-world-model" }
+tuff-storage = { path = "crates/tuff-storage" }
+tuff-sqlite-nbt = { path = "crates/tuff-sqlite-nbt" }
+tuff-http = { path = "crates/tuff-http" }
+tuff-zip = { path = "crates/tuff-zip" }
+tuff-timings = { path = "crates/tuff-timings" }
+tuff-trace = { path = "crates/tuff-trace" }
+tuff-supervise = { path = "crates/tuff-supervise" }
+tuff-replay = { path = "crates/tuff-replay" }
+tuff-feature-builtin-core-commands = { path = "crates/tuff-feature-builtin-core-commands" }
+tuff-test-support = { path = "crates/tuff-test-support" }
+tuff-dylib = { path = "crates/tuff-dylib" }
+tuff-bot = { path = "crates/tuff-bot" }
+tuff-feature-builtin-vanilla-worldgen = { path = "crates/tuff-feature-builtin-vanilla-worldgen" }
+tuff-feature-builtin-vanilla-blocks = { path = "crates/tuff-feature-builtin-vanilla-blocks" }
+tuff-feature-builtin-vanilla-redstone = { path = "crates/tuff-feature-builtin-vanilla-redstone" }
+tuff-feature-builtin-vanilla-items = { path = "crates/tuff-feature-builtin-vanilla-items" }
+tuff-feature-builtin-vanilla-maps = { path = "crates/tuff-feature-builtin-vanilla-maps" }
+tuff-feature-builtin-vanilla-recipes = { path = "crates/tuff-feature-builtin-vanilla-recipes" }
+tuff-feature-builtin-vanilla-loot = { path = "crates/tuff-feature-builtin-vanilla-loot" }
+tuff-feature-builtin-vanilla-combat = { path = "crates/tuff-feature-builtin-vanilla-combat" }
+tuff-feature-builtin-vanilla-players = { path = "crates/tuff-feature-builtin-vanilla-players" }
+tuff-feature-builtin-vanilla-entities = { path = "crates/tuff-feature-builtin-vanilla-entities" }
+tuff-feature-builtin-vanilla-mobs = { path = "crates/tuff-feature-builtin-vanilla-mobs" }
+tuff-feature-builtin-vanilla-survival = { path = "crates/tuff-feature-builtin-vanilla-survival" }
+tuff-feature-builtin-vanilla-dimensions = { path = "crates/tuff-feature-builtin-vanilla-dimensions" }
+tuff-feature-builtin-vanilla-commands = { path = "crates/tuff-feature-builtin-vanilla-commands" }
+tuff-feature-builtin-vanilla-anticheat = { path = "crates/tuff-feature-builtin-vanilla-anticheat" }
+tuff-feature-builtin-example = { path = "crates/tuff-feature-builtin-example" }
+tuff-feature-builtin-moving-block-entities = { path = "crates/tuff-feature-builtin-moving-block-entities" }
+tuff-feature-builtin-example-chunk-progress = { path = "crates/tuff-feature-builtin-example-chunk-progress" }
+tuff-web-ui = { path = "crates/tuff-web-ui" }
+tuff-feature-builtin-world-map = { path = "crates/tuff-feature-builtin-world-map" }
+tuff-feature-builtin-audit-log = { path = "crates/tuff-feature-builtin-audit-log" }
+tuff-plugin-wasm = { path = "crates/tuff-plugin-wasm", default-features = false }
+wasmi = { version = "2.0.0", default-features = false, features = ["std", "validate", "portable-dispatch"] }
+wasmtime = { version = "49", default-features = false, features = ["runtime", "cranelift", "std"] }
+wat = { version = "1.228", default-features = false }
+wit-parser = { version = "0.259", default-features = false, features = ["std"] }
+wit-bindgen = { version = "0.62", default-features = false, features = ["macros", "realloc", "std", "bitflags"] }
+
+# The tuff binary itself: CLI parsing and assembling core + the
+# vanilla plugin set. It has no lib.rs and no gameplay code of its own;
+# main.rs's direct dependencies are just what the CLI needs.
+[dependencies]
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true, features = ["web-panel"] }
+tuff-item = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-feature-builtin-core-commands = { workspace = true }
+tuff-feature-builtin-vanilla-worldgen = { workspace = true }
+tuff-feature-builtin-vanilla-blocks = { workspace = true }
+tuff-feature-builtin-vanilla-redstone = { workspace = true }
+tuff-feature-builtin-vanilla-items = { workspace = true }
+tuff-feature-builtin-vanilla-maps = { workspace = true }
+tuff-feature-builtin-vanilla-recipes = { workspace = true }
+tuff-feature-builtin-vanilla-loot = { workspace = true }
+tuff-feature-builtin-vanilla-combat = { workspace = true }
+tuff-feature-builtin-vanilla-players = { workspace = true }
+tuff-feature-builtin-vanilla-entities = { workspace = true }
+tuff-feature-builtin-vanilla-mobs = { workspace = true }
+tuff-feature-builtin-vanilla-survival = { workspace = true }
+tuff-feature-builtin-vanilla-dimensions = { workspace = true }
+tuff-feature-builtin-vanilla-commands = { workspace = true }
+tuff-feature-builtin-vanilla-anticheat = { workspace = true }
+tuff-feature-builtin-example = { workspace = true }
+tuff-feature-builtin-example-chunk-progress = { workspace = true }
+tuff-feature-builtin-moving-block-entities = { workspace = true }
+tuff-replay = { workspace = true }
+tuff-feature-builtin-world-map = { workspace = true }
+tuff-feature-builtin-audit-log = { workspace = true }
+tuff-plugin-wasm = { workspace = true }
+mimalloc = { workspace = true }
+rustyline = { version = "18", default-features = false }
+rayon = { workspace = true }

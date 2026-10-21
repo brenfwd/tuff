@@ -1,0 +1,18 @@
+[package]
+name = "tuff-trace"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+flate2 = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tuff-timings = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-supervise = { workspace = true }
+tuff-core = { workspace = true }

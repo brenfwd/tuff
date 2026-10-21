@@ -1,0 +1,27 @@
+[package]
+name = "tuff-feature-builtin-world-map"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+tuff-web-ui = { workspace = true }
+tuff-item = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-http = { workspace = true }
+bytes = { workspace = true }
+flate2 = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true }
+tuff-supervise = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-nbt = { workspace = true }
+tuff-test-support = { workspace = true }
+tuff-zip = { workspace = true }

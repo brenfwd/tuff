@@ -1,0 +1,31 @@
+[package]
+name = "tuff-web-ui"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+build = "build.rs"
+
+[features]
+panel = []
+
+[dependencies]
+bytes = { workspace = true }
+hyper = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+tuff-http = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-supervise = { workspace = true }
+tuff-timings = { workspace = true }
+
+[dev-dependencies]
+base64 = { workspace = true }
+tuff-core = { workspace = true }
+
+[build-dependencies]
+base64 = { workspace = true }
+sha2 = { workspace = true }

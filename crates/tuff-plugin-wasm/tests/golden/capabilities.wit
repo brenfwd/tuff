@@ -1,0 +1,347 @@
+package tuff:plugin@0.1.0;
+
+// SPDX-License-Identifier: MIT
+
+/// Network and file capabilities: the guest surface of the capability
+/// sandbox, included in `world plugin`.
+///
+/// Every operation is checked against the plugin's manifest requests and
+/// the owner's grants before it starts; an obvious refusal comes back as
+/// the call's error, anything that needs I/O (DNS, connecting, disk)
+/// answers later as an `io-event` carrying the handle the call returned.
+/// No call blocks on the network or the disk. Handles are per plugin,
+/// never reused while the plugin is loaded, and die with it.
+interface capability-types {
+    type handle = u32;
+
+    enum capability-kind {
+        files,
+        http,
+        websocket,
+        tcp,
+        udp,
+        route,
+        listen-tcp,
+        listen-udp,
+    }
+
+    /// Why an operation was refused or failed.
+    variant denied {
+        /// The URL, host, path or arguments are not acceptable.
+        malformed(string),
+        /// The plugin's manifest does not request this.
+        not-requested(string),
+        /// The server owner has not granted this.
+        not-granted(string),
+        /// The name resolved only to addresses the owner has not granted.
+        address(string),
+        unresolved(string),
+        /// The port belongs to the server.
+        reserved-port(u16),
+        /// A connection, rate, size or disk limit was reached.
+        quota(string),
+        timed-out,
+        /// The handle is unknown or already closed.
+        closed,
+        /// The file or directory does not exist.
+        not-found,
+        /// Any other I/O or protocol failure.
+        failed(string),
+    }
+
+    record header {
+        name: string,
+        value: list<u8>,
+    }
+
+    record http-request {
+        /// An HTTP method token, like GET or POST.
+        method: string,
+        url: string,
+        headers: list<header>,
+        body: list<u8>,
+        /// Shorter than the owner's limit only.
+        timeout-ms: option<u32>,
+        /// Ask for gzip and inflate it, bounded by the response limit.
+        decompress: bool,
+        /// Follow up to this many redirects, each checked like the first.
+        max-redirects: u8,
+    }
+
+    record http-response {
+        status: u16,
+        headers: list<header>,
+        body: list<u8>,
+        /// The URL that answered, after redirects.
+        url: string,
+    }
+
+    variant ws-message {
+        text(string),
+        binary(list<u8>),
+    }
+
+    record ws-frame {
+        socket: handle,
+        message: ws-message,
+    }
+
+    record socket-data {
+        socket: handle,
+        data: list<u8>,
+    }
+
+    record socket-closed {
+        socket: handle,
+        /// None for an orderly close.
+        error: option<denied>,
+        /// WebSocket close code and reason, when the peer sent one.
+        code: option<u16>,
+        reason: string,
+    }
+
+    record datagram {
+        socket: handle,
+        /// Where it came from, as `ip:port`; a listener may reply to it.
+        peer: string,
+        data: list<u8>,
+    }
+
+    record accepted {
+        listener: handle,
+        /// The new connection, a socket like a connected `tcp` one.
+        socket: handle,
+        peer: string,
+    }
+
+    record listening {
+        listener: handle,
+        /// The bound port (the one asked for, or the one picked for 0).
+        port: u16,
+    }
+
+    /// A request to one of the plugin's routes, below `/plugins/<id>`.
+    record route-request {
+        request: handle,
+        method: string,
+        /// The path below the plugin's prefix, with any query.
+        path: string,
+        headers: list<header>,
+        body: list<u8>,
+        peer: string,
+    }
+
+    variant route-body {
+        bytes(list<u8>),
+        /// A file from the plugin's own store, streamed by the host.
+        file(string),
+    }
+
+    record route-response {
+        status: u16,
+        headers: list<header>,
+        body: route-body,
+    }
+
+    record file-entry {
+        name: string,
+        is-dir: bool,
+        size: u64,
+        modified-ms: u64,
+    }
+
+    variant file-result {
+        data(list<u8>),
+        entries(list<file-entry>),
+        entry(file-entry),
+        done,
+    }
+
+    variant write-mode {
+        /// Create or truncate, then write.
+        replace,
+        append,
+        /// Write at this offset of an existing file.
+        at(u64),
+    }
+
+    record http-done {
+        request: handle,
+        outcome: result<http-response, denied>,
+    }
+
+    record connected {
+        socket: handle,
+        outcome: result<_, denied>,
+    }
+
+    record file-done {
+        operation: handle,
+        outcome: result<file-result, denied>,
+    }
+
+    /// Why a plugin request or notify failed or was refused.
+    variant call-error {
+        /// No loaded plugin provides the interface (or the named target does not).
+        no-provider,
+        /// Several plugins provide the interface and no target was named.
+        ambiguous,
+        /// The provider did not declare the method.
+        no-method,
+        /// The provider unloaded or reloaded before responding.
+        target-gone,
+        /// The provider trapped while handling the request.
+        faulted,
+        /// No response arrived within the timeout.
+        timed-out,
+        /// The provider's inbox is full.
+        busy,
+        /// The payload is over the message size limit.
+        too-large,
+        /// Refused: a limit, an invalid call, or the provider's own error text.
+        refused(string),
+    }
+
+    /// A message delivered to a provider.
+    record incoming {
+        sender: string,
+        %interface: string,
+        method: u64,
+        payload: list<u8>,
+        /// The handle to `respond` with when the sender awaits a reply.
+        request: option<u64>,
+    }
+
+    /// The outcome of a request.
+    record reply-done {
+        handle: handle,
+        outcome: result<list<u8>, call-error>,
+    }
+
+    /// Why a background task produced no output.
+    variant background-error {
+        /// The task returned an error.
+        failed(string),
+        /// The instance trapped, ran out of fuel or memory, or could not
+        /// start.
+        faulted(string),
+        /// The task returned more bytes than the plugin's message limit.
+        too-large,
+    }
+
+    /// The outcome of a background task.
+    record background-done {
+        handle: handle,
+        outcome: result<list<u8>, background-error>,
+    }
+
+    /// A plugin this one declares in depends or soft-depends loaded or unloaded.
+    record plugin-change {
+        id: string,
+        version: string,
+        loaded: bool,
+    }
+
+    /// One asynchronous result. While the owner's `pending-events` limit
+    /// of these waits for the plugin, its sockets stop reading.
+    variant io-event {
+        http(http-done),
+        /// A WebSocket, TCP or UDP connect finished.
+        connected(connected),
+        ws-message(ws-frame),
+        data(socket-data),
+        datagram(datagram),
+        closed(socket-closed),
+        listening(listening),
+        accepted(accepted),
+        route(route-request),
+        file(file-done),
+        reply(reply-done),
+        plugin-change(plugin-change),
+        background(background-done),
+    }
+}
+
+/// Outbound and inbound networking.
+@since(version = 0.1.0)
+interface net {
+    use capability-types.{handle, capability-kind, denied, header, http-request, ws-message, route-response};
+
+    /// Whether `target` (a URL, `host:port`, a route path or a port)
+    /// would pass the name-level checks for `kind`; DNS is not consulted.
+    granted: func(kind: capability-kind, target: string) -> bool;
+
+    fetch: func(request: http-request) -> result<handle, denied>;
+    ws-connect: func(url: string, headers: list<header>, protocols: list<string>) -> result<handle, denied>;
+    ws-send: func(socket: handle, message: ws-message) -> result<_, denied>;
+    tcp-connect: func(host: string, port: u16, tls: bool) -> result<handle, denied>;
+    /// A UDP socket bound to one granted destination.
+    udp-connect: func(host: string, port: u16) -> result<handle, denied>;
+    /// Sends on a TCP or connected UDP socket; refused while the socket's
+    /// send queue is full (wait for more `data` or retry on a timer).
+    send: func(socket: handle, data: list<u8>) -> result<_, denied>;
+    /// Opens a granted listener. `bind` is an address, none for every
+    /// local address (IPv4 and IPv6).
+    listen: func(kind: capability-kind, bind: option<string>, port: u16) -> result<handle, denied>;
+    /// Replies from a UDP listener to a peer it has heard from.
+    reply-to: func(listener: handle, peer: string, data: list<u8>) -> result<_, denied>;
+    respond: func(request: handle, response: route-response) -> result<_, denied>;
+    /// Closes a socket or listener, or cancels a request in flight.
+    close: func(target: handle);
+}
+
+/// The plugin's own file store, `<plugin dir>/<id>/files/`. Paths are
+/// relative, `/`-separated, with no `.` or `..` segments.
+@since(version = 0.1.0)
+interface files {
+    use capability-types.{handle, denied, write-mode};
+
+    read: func(path: string, offset: u64, len: u32) -> result<handle, denied>;
+    write: func(path: string, mode: write-mode, data: list<u8>) -> result<handle, denied>;
+    list-dir: func(path: string) -> result<handle, denied>;
+    stat: func(path: string) -> result<handle, denied>;
+    remove: func(path: string) -> result<handle, denied>;
+    rename: func(src: string, dst: string) -> result<handle, denied>;
+    create-dir: func(path: string) -> result<handle, denied>;
+    /// Bytes used and the quota, from the host's running count.
+    usage: func() -> tuple<u64, u64>;
+}
+
+/// Pure computation off the tick thread. `run` starts the plugin's
+/// `background-tasks.run-task` export on a separate instance of the module
+/// whose imports all trap, so the task sees only its arguments. The result
+/// arrives as an `io-event` background carrying the returned handle.
+///
+/// Limits (all per plugin unless noted): 4 tasks queued or running at
+/// once (more answer `quota`), input and output at most the message limit
+/// (256 KiB by default), the same fuel and memory a single call gets, and
+/// the server runs at most half its CPU cores of tasks at a time. A task
+/// that traps is discarded and answers `faulted`. The host may reuse an
+/// instance for a later task or start a fresh one, so a task must not
+/// depend on earlier runs. Tasks still queued or running when the plugin
+/// unloads or reloads are dropped without an event.
+@since(version = 0.1.0)
+interface background {
+    use capability-types.{handle, denied};
+
+    /// Starts `task` with `input`. No grant is needed.
+    run: func(task: string, input: list<u8>) -> result<handle, denied>;
+    /// Cancels a task in flight; no event follows. Unknown handles are
+    /// ignored.
+    cancel: func(task: handle);
+}
+
+/// What a plugin using capabilities implements.
+@since(version = 0.1.0)
+interface capability-events {
+    use capability-types.{io-event};
+
+    on-io: func(event: io-event);
+}
+
+world capabilities {
+    import net;
+    import files;
+    import background;
+    export capability-events;
+}

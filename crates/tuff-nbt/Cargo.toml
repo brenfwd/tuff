@@ -1,0 +1,14 @@
+[package]
+name = "tuff-nbt"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+flate2 = { workspace = true }
+indexmap = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tuff-core = { workspace = true }

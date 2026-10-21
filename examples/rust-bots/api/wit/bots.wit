@@ -1,0 +1,262 @@
+package tuff-bots:api;
+
+// SPDX-License-Identifier: MIT
+
+interface control {
+    type bot-id = u32;
+
+    record vec3 {
+        x: f64,
+        y: f64,
+        z: f64,
+    }
+
+    record block-pos {
+        x: s32,
+        y: s32,
+        z: s32,
+    }
+
+    record aabb {
+        min: vec3,
+        max: vec3,
+    }
+
+    enum model {
+        classic,
+        slim,
+    }
+
+    record location {
+        dimension: option<string>,
+        pos: vec3,
+        yaw: option<f32>,
+        pitch: option<f32>,
+    }
+
+    record skill {
+        reaction-ticks: u32,
+        aim-error-degrees: f32,
+        turn-rate: f32,
+        click-cps-cap: f32,
+        /// The attack charge (0 to 1) the bot waits for before a swing.
+        attack-charge: f32,
+    }
+
+    record policy {
+        allow-break: bool,
+        allow-place: bool,
+        allow-sprint: bool,
+        allow-parkour: bool,
+        max-fall: u32,
+        break-allow: list<string>,
+        break-deny: list<string>,
+        throwaway-items: list<string>,
+        avoid: list<aabb>,
+        auto-eat: bool,
+    }
+
+    variant respawn-policy {
+        owner,
+        auto(u32),
+    }
+
+    record near-goal {
+        pos: block-pos,
+        radius: f64,
+    }
+
+    record xz-goal {
+        x: s32,
+        z: s32,
+    }
+
+    record run-away-goal {
+        origin: block-pos,
+        distance: f64,
+    }
+
+    variant leaf-goal {
+        block(block-pos),
+        near(near-goal),
+        xz(xz-goal),
+        y-level(s32),
+        get-to-block(block-pos),
+        run-away(run-away-goal),
+    }
+
+    variant goal {
+        leaf(leaf-goal),
+        any-of(list<leaf-goal>),
+    }
+
+    record follow-spec {
+        target: string,
+        range: f64,
+    }
+
+    record explore-spec {
+        origin: block-pos,
+        radius: u32,
+    }
+
+    record mine-spec {
+        blocks: list<string>,
+        count: u32,
+        radius: u32,
+    }
+
+    record get-to-block-spec {
+        blocks: list<string>,
+        radius: u32,
+    }
+
+    /// When an attack process is done.
+    variant attack-until {
+        /// The target died or despawned.
+        death,
+        /// The target got farther away than this.
+        distance(f64),
+        /// After this many ticks.
+        ticks(u32),
+    }
+
+    record attack-spec {
+        /// The target's uuid as 32 hex digits: a player or an entity.
+        target: string,
+        until: attack-until,
+        /// Run away while the bot's health is below this; 0 never retreats.
+        retreat-health: f32,
+    }
+
+    /// Shoots a bow at a target with lead and drop, switching to melee
+    /// inside `melee-range`.
+    record shoot-spec {
+        target: string,
+        until: attack-until,
+        melee-range: f64,
+    }
+
+    variant look-target {
+        position(vec3),
+        /// A player or entity uuid as 32 hex digits.
+        entity(string),
+    }
+
+    /// Selects the item from the hotbar, looks, uses it and holds the use
+    /// for `hold-ticks` (0 for an instant use) before releasing.
+    record use-item-spec {
+        item: string,
+        look-at: option<look-target>,
+        hold-ticks: u32,
+    }
+
+    record place-spec {
+        pos: block-pos,
+        item: string,
+    }
+
+    record build-block {
+        offset: block-pos,
+        /// A block state such as `minecraft:oak_stairs[facing=north]`;
+        /// `minecraft:air` clears the cell.
+        state: string,
+    }
+
+    /// Places every block bottom-up, clearing wrong blocks when the
+    /// policy allows breaking and scaffolding what has no support.
+    record build-spec {
+        origin: block-pos,
+        blocks: list<build-block>,
+    }
+
+    record farm-spec {
+        /// Inclusive corners of the area to work.
+        min: block-pos,
+        max: block-pos,
+        /// Plant seeds from the hotbar where a crop was harvested.
+        replant: bool,
+    }
+
+    record fly-spec {
+        /// Where to land, then walk the rest with goto.
+        x: s32,
+        z: s32,
+        /// The most firework rockets to spend, never more than the hotbar holds.
+        fireworks: u32,
+    }
+
+    variant process {
+        idle,
+        goto(goal),
+        follow(follow-spec),
+        explore(explore-spec),
+        mine(mine-spec),
+        get-to-block(get-to-block-spec),
+        /// Breaks each block in turn, walking into reach of it first.
+        break(list<block-pos>),
+        /// Places the item (from the hotbar) at the position.
+        place(place-spec),
+        attack(attack-spec),
+        /// Harvests mature crops in the box, picks the drops up and replants.
+        farm(farm-spec),
+        shoot(shoot-spec),
+        use-item(use-item-spec),
+        build(build-spec),
+        /// Glides in an elytra toward the position, boosting with fireworks.
+        fly(fly-spec),
+    }
+
+    record spawn-spec {
+        name: string,
+        model: model,
+        location: location,
+        skill: skill,
+        policy: policy,
+        respawn: respawn-policy,
+    }
+
+    record stack {
+        item: string,
+        count: u32,
+    }
+
+    record bot-state {
+        position: vec3,
+        health: f32,
+        alive: bool,
+        process: process,
+        inventory: list<stack>,
+    }
+
+    variant control-error {
+        unknown-bot,
+        not-owner,
+        limit-reached,
+        name-taken,
+        unknown-dimension,
+        invalid(string),
+        unavailable,
+    }
+
+    spawn: func(spec: spawn-spec) -> result<bot-id, control-error>;
+    remove: func(bot: bot-id) -> result<_, control-error>;
+    owned: func() -> list<bot-id>;
+    state: func(bot: bot-id) -> result<bot-state, control-error>;
+    set-skill: func(bot: bot-id, skill: skill) -> result<_, control-error>;
+    set-policy: func(bot: bot-id, policy: policy) -> result<_, control-error>;
+    set-process: func(bot: bot-id, process: process) -> result<_, control-error>;
+    stop: func(bot: bot-id) -> result<_, control-error>;
+    respawn: func(bot: bot-id) -> result<_, control-error>;
+}
+
+interface events {
+    use control.{bot-id};
+
+    spawned: func(bot: bot-id);
+    died: func(bot: bot-id, cause: string);
+    respawned: func(bot: bot-id);
+    process-done: func(bot: bot-id);
+    process-failed: func(bot: bot-id, reason: string);
+    removed: func(bot: bot-id);
+}

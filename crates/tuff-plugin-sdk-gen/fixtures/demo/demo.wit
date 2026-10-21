@@ -1,0 +1,33 @@
+package tuff-demo:api;
+
+// SPDX-License-Identifier: MIT
+
+interface control {
+    record point { x: s32, y: s32 }
+    record named { name: string, tags: list<string>, at: option<point> }
+    variant shape { dot, circle(f64), poly(list<point>), pair(tuple<u8, string>) }
+    enum color { red, green, blue }
+    flags perms { read, write, admin }
+    type ids = list<u64>
+;    type outcome = result<u32, string>
+;    record every {
+        a: u8, b: u16, c: u32, d: u64,
+        e: s8, f: s16, g: s32, h: s64,
+        i: f32, j: f64, k: bool, l: char, m: string,
+    }
+
+    add: func(a: s32, b: s32) -> s32;
+    find: func(name: string) -> result<point, string>;
+    paint: func(c: color, p: perms, s: shape);
+    ping: func();
+    shapes: func(n: u32) -> list<shape>;
+    echo: func(v: every) -> every;
+    look: func(i: ids) -> outcome;
+    pick: func(n: named) -> option<tuple<u8, string>>;
+}
+
+interface events {
+    record joined { player: string }
+    player-joined: func(who: joined);
+    left: func(name: string);
+}

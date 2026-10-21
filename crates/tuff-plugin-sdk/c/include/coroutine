@@ -1,0 +1,78 @@
+// The part of <coroutine> C++20 coroutines need, for the freestanding
+// build (no C++ standard library). Clang lowers co_await and co_return
+// onto these names and its coroutine builtins.
+#ifndef TUFF_SDK_COROUTINE
+#define TUFF_SDK_COROUTINE
+
+namespace std {
+
+template <class R, class... Args> struct coroutine_traits {
+    using promise_type = typename R::promise_type;
+};
+
+template <class Promise = void> struct coroutine_handle;
+
+template <> struct coroutine_handle<void> {
+    constexpr coroutine_handle() noexcept = default;
+    constexpr coroutine_handle(decltype(nullptr)) noexcept {}
+    static coroutine_handle from_address(void *address) noexcept {
+        coroutine_handle h;
+        h.frame_ = address;
+        return h;
+    }
+    void *address() const noexcept { return frame_; }
+    explicit operator bool() const noexcept { return frame_ != nullptr; }
+    bool done() const noexcept { return __builtin_coro_done(frame_); }
+    void resume() const { __builtin_coro_resume(frame_); }
+    void operator()() const { resume(); }
+    void destroy() const { __builtin_coro_destroy(frame_); }
+
+  protected:
+    void *frame_ = nullptr;
+};
+
+template <class Promise> struct coroutine_handle : coroutine_handle<void> {
+    constexpr coroutine_handle() noexcept = default;
+    constexpr coroutine_handle(decltype(nullptr)) noexcept {}
+    static coroutine_handle from_promise(Promise &promise) noexcept {
+        coroutine_handle h;
+        h.frame_ = __builtin_coro_promise(&promise, alignof(Promise), true);
+        return h;
+    }
+    static coroutine_handle from_address(void *address) noexcept {
+        coroutine_handle h;
+        h.frame_ = address;
+        return h;
+    }
+    Promise &promise() const {
+        return *static_cast<Promise *>(__builtin_coro_promise(frame_, alignof(Promise), false));
+    }
+};
+
+inline bool operator==(coroutine_handle<> a, coroutine_handle<> b) noexcept {
+    return a.address() == b.address();
+}
+
+struct noop_coroutine_promise {};
+
+using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
+
+inline coroutine_handle<> noop_coroutine() noexcept {
+    return coroutine_handle<>::from_address(__builtin_coro_noop());
+}
+
+struct suspend_always {
+    constexpr bool await_ready() const noexcept { return false; }
+    constexpr void await_suspend(coroutine_handle<>) const noexcept {}
+    constexpr void await_resume() const noexcept {}
+};
+
+struct suspend_never {
+    constexpr bool await_ready() const noexcept { return true; }
+    constexpr void await_suspend(coroutine_handle<>) const noexcept {}
+    constexpr void await_resume() const noexcept {}
+};
+
+} // namespace std
+
+#endif

@@ -1,0 +1,14 @@
+[package]
+name = "tuff-sqlite-nbt"
+version = "0.1.0"
+edition = "2024"
+description = "SQL functions and views for querying NBT blobs in tuff server files"
+
+[dependencies]
+flate2 = { workspace = true }
+rusqlite = { version = "0.40", default-features = false, features = ["cache", "functions"] }
+tuff-nbt = { workspace = true }
+
+[dev-dependencies]
+rusqlite = { workspace = true }
+tuff-core = { workspace = true }

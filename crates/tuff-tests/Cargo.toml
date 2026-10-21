@@ -1,0 +1,84 @@
+[package]
+name = "tuff-tests"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+publish = false
+autotests = false
+autobins = false
+autoexamples = false
+autobenches = false
+
+# The root integration tests. Their binaries link core, the feature crates and
+# the server through the `tuff-dylib` shared library instead of each carrying a
+# static copy; the files stay under the repository's tests/ directory.
+
+[[test]]
+name = "server"
+path = "../../tests/server/main.rs"
+
+[[test]]
+name = "world"
+path = "../../tests/world/main.rs"
+
+[[test]]
+name = "thread_names"
+path = "../../tests/thread_names.rs"
+
+[[test]]
+name = "live_properties"
+path = "../../tests/live_properties.rs"
+
+[dev-dependencies]
+tuff-item = { workspace = true }
+tuff = { path = "../.." }
+tuff-dylib = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+rayon = { workspace = true }
+tuff-datapack = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-trace = { workspace = true }
+tuff-wire = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-http = { workspace = true }
+tuff-zip = { workspace = true }
+tuff-timings = { workspace = true }
+tuff-core = { workspace = true, features = ["test-hooks"] }
+tuff-web-ui = { workspace = true }
+bytes = { workspace = true }
+rand = { workspace = true }
+rsa = { workspace = true }
+sha2 = { workspace = true }
+serde_json = { workspace = true }
+tuff-test-support = { workspace = true }
+tuff-bot = { workspace = true }
+tuff-vanilla-common = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+wat = { workspace = true }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+tuff-storage = { workspace = true }
+tuff-feature-builtin-core-commands = { workspace = true }
+tuff-feature-builtin-vanilla-worldgen = { workspace = true }
+tuff-feature-builtin-vanilla-blocks = { workspace = true }
+tuff-feature-builtin-vanilla-redstone = { workspace = true }
+tuff-feature-builtin-vanilla-items = { workspace = true }
+tuff-feature-builtin-vanilla-maps = { workspace = true }
+tuff-feature-builtin-vanilla-recipes = { workspace = true }
+tuff-feature-builtin-vanilla-loot = { workspace = true }
+tuff-feature-builtin-vanilla-combat = { workspace = true }
+tuff-feature-builtin-vanilla-players = { workspace = true }
+tuff-feature-builtin-vanilla-entities = { workspace = true }
+tuff-feature-builtin-vanilla-mobs = { workspace = true }
+tuff-feature-builtin-vanilla-survival = { workspace = true }
+tuff-feature-builtin-vanilla-dimensions = { workspace = true }
+tuff-feature-builtin-vanilla-commands = { workspace = true }
+tuff-feature-builtin-vanilla-anticheat = { workspace = true }
+tuff-feature-builtin-example = { workspace = true }
+tuff-feature-builtin-example-chunk-progress = { workspace = true }
+tuff-feature-builtin-moving-block-entities = { workspace = true }
+tuff-replay = { workspace = true }
+tuff-feature-builtin-world-map = { workspace = true }
+tuff-feature-builtin-audit-log = { workspace = true }
+tuff-plugin-wasm = { workspace = true }

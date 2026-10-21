@@ -1,0 +1,18 @@
+[package]
+name = "tuff-replay"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-item = { workspace = true }
+tuff-trace = { workspace = true }
+tuff-wire = { workspace = true }
+anyhow = { workspace = true }
+bytes = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-vanilla-data = { workspace = true }

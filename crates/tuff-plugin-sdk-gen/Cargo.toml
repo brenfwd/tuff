@@ -1,0 +1,16 @@
+[package]
+name = "tuff-plugin-sdk-gen"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Generates the C plugin SDK bindings and typed surface from the plugin WIT"
+
+[dependencies]
+wit-bindgen-c = "0.62"
+wit-bindgen-core = "0.62"
+wit-parser = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tuff-core = { workspace = true }

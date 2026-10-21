@@ -1,0 +1,17 @@
+[package]
+name = "tuff-timings"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-supervise = { workspace = true }
+tuff-core = { workspace = true }

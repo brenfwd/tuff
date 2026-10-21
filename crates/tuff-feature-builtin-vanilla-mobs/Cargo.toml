@@ -1,0 +1,38 @@
+[package]
+name = "tuff-feature-builtin-vanilla-mobs"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-item = { workspace = true }
+tuff-datapack = { workspace = true }
+tuff-wire = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-world-model = { workspace = true }
+rand = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true }
+tuff-supervise = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-vanilla-common = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-feature-builtin-vanilla-combat = { workspace = true }
+tuff-feature-builtin-vanilla-recipes = { workspace = true }
+tuff-feature-builtin-vanilla-worldgen = { workspace = true }
+tuff-test-support = { workspace = true }
+tuff-core = { workspace = true, features = ["test-hooks"] }
+bytes = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[[bench]]
+name = "crowd"
+harness = false
+test = false
+bench = true

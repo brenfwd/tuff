@@ -1,0 +1,23 @@
+[package]
+name = "tuff-vanilla-data"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+build = "build/main.rs"
+
+[dependencies]
+# Parses the raw-JSON escape hatches (biome attributes, loot table condition
+# and function parameters, command argument-parser properties, ...) that this
+# crate keeps as text instead of exhaustively modeling.
+serde_json = { workspace = true }
+
+[build-dependencies]
+anyhow = "1.0.104"
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "blocking"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+rustls-rustcrypto = "0.0.2-alpha"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha1 = "0.10"
+webpki-roots = "1.0.9"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }

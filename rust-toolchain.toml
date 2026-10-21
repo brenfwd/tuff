@@ -1,0 +1,6 @@
+[toolchain]
+channel = "nightly-2026-09-11"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+# Runtime plugins are built for wasm32 (examples/rust-hello).
+targets = ["wasm32-unknown-unknown"]

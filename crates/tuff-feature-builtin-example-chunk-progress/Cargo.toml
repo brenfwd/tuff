@@ -1,0 +1,17 @@
+[package]
+name = "tuff-feature-builtin-example-chunk-progress"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-item = { workspace = true }
+tuff-core = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+bytes = { workspace = true }
+tuff = { path = "../..", default-features = false }
+tuff-test-support = { workspace = true }
+tokio = { workspace = true }

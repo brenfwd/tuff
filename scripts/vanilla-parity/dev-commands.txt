@@ -1,0 +1,7 @@
+# Example trigger script for scripts/vanilla-parity-run.sh.
+forceload add -32 -32 32 32
+sleep 5
+setblock 0 100 0 minecraft:stone
+setblock 0 100 0 minecraft:air destroy
+debugmobspawning minecraft:zombie
+sleep 5

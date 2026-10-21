@@ -1,0 +1,13 @@
+[package]
+name = "tuff-supervise"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+log = { workspace = true }
+tokio = { workspace = true }
+tuff-storage = { workspace = true }
+
+[dev-dependencies]
+tuff-core = { workspace = true }

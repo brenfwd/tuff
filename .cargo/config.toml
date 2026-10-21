@@ -1,0 +1,26 @@
+[target.'cfg(target_arch = "aarch64")']
+rustflags = ["--cfg", "aes_armv8"]
+
+[alias]
+t = "test --workspace --lib --bins --tests --no-fail-fast"
+
+[resolver]
+feature-unification = "workspace"
+
+[unstable]
+feature-unification = true
+profile-rustflags = true
+
+# Dev and test builds reuse generic instantiations from upstream crates instead
+# of re-instantiating them per crate (on by default only at opt-level 0/1; the
+# deps here build at 3). Profile rustflags compose with target rustflags.
+[profile.dev]
+rustflags = ["-Zshare-generics=y"]
+
+# The dylib facade (crates/tuff-dylib) and the tests linking it share one
+# dynamically linked std; release builds never build either.
+[profile.dev.package.tuff-dylib]
+rustflags = ["-C", "prefer-dynamic"]
+
+[profile.dev.package.tuff-tests]
+rustflags = ["-C", "prefer-dynamic"]

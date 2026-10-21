@@ -1,0 +1,19 @@
+[package]
+name = "tuff-feature-builtin-vanilla-loot"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-item = { workspace = true }
+tuff-datapack = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-world-model = { workspace = true }
+rand = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-feature-builtin-vanilla-recipes = { workspace = true }

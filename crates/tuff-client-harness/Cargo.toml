@@ -1,0 +1,40 @@
+[package]
+name = "tuff-client-harness"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-nbt = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
+rustls = { workspace = true }
+rustls-rustcrypto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+webpki-roots = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+tuff-item = { workspace = true }
+tuff-trace = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-core = { workspace = true, features = ["test-hooks"] }
+tuff = { path = "../..", default-features = false }
+bytes = { workspace = true }
+tuff-replay = { workspace = true }
+
+[[test]]
+name = "client"
+path = "tests/client.rs"
+
+[[test]]
+name = "parity"
+path = "tests/parity.rs"

@@ -1,0 +1,60 @@
+[package]
+name = "tuff-core"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-http = { workspace = true }
+aes = { workspace = true }
+anyhow = { workspace = true }
+base64 = { workspace = true }
+bon = { workspace = true }
+bytes = { workspace = true }
+cfb8 = { workspace = true }
+flate2 = { workspace = true }
+image = { workspace = true }
+indexmap = { workspace = true }
+log = { workspace = true }
+md-5 = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+rsa = { workspace = true }
+p12-keystore = { workspace = true }
+rusqlite = { workspace = true }
+rustls = { workspace = true }
+rustls-rustcrypto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+hmac = { workspace = true }
+socket2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tuff-datapack = { workspace = true }
+tuff-macros = { workspace = true }
+tuff-web-ui = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-wire = { workspace = true }
+tuff-item = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-zip = { workspace = true }
+tuff-timings = { workspace = true }
+tuff-trace = { workspace = true }
+tuff-supervise = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+webpki-roots = { workspace = true }
+
+[features]
+web-panel = ["tuff-web-ui/panel"]
+test-hooks = []
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }

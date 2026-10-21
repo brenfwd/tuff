@@ -1,0 +1,227 @@
+# tuff plugin SDK for C++ (and C)
+
+Write tuff runtime plugins in C++20 with `tuff.hpp`, compiled freestanding to
+a plain core WebAssembly module. Start from `examples/cpp-hello/hello.cpp`;
+it covers everything below in about 90 lines and behaves byte-for-byte like
+`examples/rust-hello`. `examples/cpp-io/io.cpp` shows HTTP and files.
+
+## Toolchain
+
+- clang and clang++ with the `wasm32` target and C++20 coroutines (clang 15
+  or newer; CI uses the Ubuntu default from `apt-get install clang lld`).
+- `wasm-ld` (package `lld`); without it on PATH, build.sh falls back to the one in the rustup toolchain.
+- macOS: Apple clang cannot target wasm. Use Homebrew
+  (`brew install llvm lld`) and point at it:
+  `CC=/opt/homebrew/opt/llvm/bin/clang CXX=/opt/homebrew/opt/llvm/bin/clang++ WASM_LD=wasm-ld`.
+- No libc, wasi-sdk or container is needed: `include/` and `libc.c` supply
+  the allocator, `mem*`, `strlen`, `<coroutine>` and `<new>`.
+
+Build with `crates/tuff-plugin-sdk/c/build.sh out.wasm plugin.cpp [more ...]` (see
+`examples/cpp-hello/build.sh`), copy the `.wasm` into the server's `plugins/`
+directory and run `/tuff plugin load <file>`. `tuff plugin new` scaffolds a
+project.
+
+## Freestanding constraints
+
+The build uses `-ffreestanding -fno-exceptions -fno-rtti -Wall -Wextra
+-Werror`. So: no exceptions, no RTTI, no STL or `<string>`/`<vector>`, no
+threads (the host is single-threaded; use coroutines), avoid virtual
+functions, and keep globals `constinit` and destructor-free. Use the SDK's
+`Str`, `String`, `Option`, `Outcome` and `Text` instead.
+
+## Guide, in the order of the Rust examples
+
+1. Hello: `#include "tuff.hpp"`, `using namespace tuff;`, a struct with
+   `static Status on_register()`, and `TUFF_PLUGIN(Struct, "id", "version",
+   "description")`, which writes the manifest and the exports.
+2. Commands: `Tree tree("name"); Node root = tree.root();` then
+   `root.literal("x").about("...").require("perm", level).executes(handler)`,
+   `tree.help().register_command()`. A handler is `Result f(Call &)`; return
+   a number or `Result::fail("message")`. `call.sender()` is null for the
+   console; `call.reply(...)` answers the sender. For typed arguments,
+   `executes_with<Args>(handler)` first runs `static const char *Args::bind(const
+   Call &, Args &)` (null on success, else the message the sender sees) and
+   then `Result handler(Call &, Args &)`; `executes_async_with<Args>` hands a
+   coroutine `Task(Ctx, Args)`.
+3. Settings and storage: `static constinit Setting<String> s("key", "default",
+   "description")` with `declare()` and `on_change(...)`; `StoredMap<T>` /
+   `Stored<T>` persist across restarts (`update`, `remove`, `get`).
+4. Events: `on<ev::Join>(handler)` for plain handlers and
+   `listen<ev::BlockBreak>().in_dimension(...).block(...).by_players().run(...)`
+   for filtered ones. `every(ticks, fn)` and `after(ticks, fn)` are timers
+   (they start on enable).
+5. Async and HTTP: a handler returning `Task` registers with
+   `executes_async`; `co_await sleep(ticks)` waits ticks, and
+   `co_await http::get(url).timeout(ms)` (also `.header`, `.json`,
+   `.decompress()`, `.redirects(n)`), `http::post`, `files::read`,
+   `files::write`, `files::list("")` return an `Outcome<T, Denied>` (the
+   owner must grant `cap.http` / `cap.files`). Sockets and routes are not
+   awaitable yet. `files::usage()` gives the bytes used and the quota at once.
+6. World access: the `World` and `EntityRef` handles in `tuff/world.hpp`
+   (blocks, entities, teleport) return `WorldOutcome<T>` with a `WorldError`.
+
+### Errors
+
+`Result::fail("message")` fails a command and the sender sees the message.
+`on_register` returns `Status`; wrap each fallible call in
+`TUFF_CHECK(expr)`, which returns the failure from `on_register` and so
+refuses to enable the plugin with that message.
+
+### Text limit
+
+`Text` is a fixed buffer of `TUFF_TEXT_MAX` (1024) bytes. Output past it is
+dropped and `truncated()` turns true (`truncated` in C's `tuff_text_t`), so
+check it or build long messages in pieces and send several. Escape nothing: colors are `gold(...)`, `aqua(...)`,
+`.bold()` and so on, encoded as legacy section-sign codes.
+
+## Layout
+
+| file | what |
+|---|---|
+| `tuff.hpp`, `tuff/*.hpp`, `tuff_gen.hpp` | the C++20 SDK. The C layer lives in `tuff::raw` and the binding constants are undefined (`tuff/unraw.hpp`, generated), so plugins see only `tuff::` names |
+| `TUFF_DEPENDS`, `TUFF_CAP_HTTP(entry, reason)` ... | typed manifest macros (see `tuff/plugin.hpp`); `TUFF_MANIFEST` is C and `tuff/raw.h` only |
+| `tuff/raw.h` | the raw layer for conformance fixtures: include it instead of `tuff.hpp`; guest exports defined in C++ need `extern "C"`. Including `tuff.h` from C++ is an error |
+| `include/`, `libc.c` | the few libc and C++ runtime pieces the SDK needs |
+| `build.sh` | `build.sh out.wasm sources...` builds everything with clang and wasm-ld |
+| `bindings/plugin.{h,c}` | generated by `wit-bindgen-c` from `crates/tuff-plugin-wasm/wit`; regenerate with `cargo run -p tuff-plugin-sdk-gen` (`cargo t` fails while stale) |
+
+## Raw tier (low level)
+
+Everything under `tuff::` above is the supported surface. Below it sit the
+generated bindings: the `tuff_*` C functions of `tuff.h`, the
+`tuff_plugin_types_*` and `tuff_plugin_*` aliases and imports, event
+subscription by kind (`subscribe(kinds)`), and the `exports_tuff_plugin_guest_*`
+hooks that `TUFF_PLUGIN` defines for you. They are reachable only through
+`tuff/raw.h` (conformance fixtures, C plugins), follow the WIT ABI directly
+and change whenever it does; reach for them only when the SDK lacks a call.
+
+## Messaging between plugins
+
+Plugins call each other through typed interfaces declared in WIT. The
+provider owns a small WIT package; generate the C++ header from it:
+
+    cargo run -p tuff-plugin-sdk-gen -- interface path/to/wit --cpp api.hpp
+
+The header holds the interface's types (structs; variants as tagged structs
+with `Tag`, `of_<case>()` constructors and one `Option` member per case;
+enums; flags with `NAME` bit constants; options, lists, results and tuples of
+up to 4 elements as `tuff::Option`, `tuff::List`, `tuff::WireResult` and
+`tuff::Tuple`), a wire codec, a client class per interface and a
+`serve<S>()` helper. The wire format and the method keys are the Rust
+generator's, so a C++ plugin and a Rust plugin interoperate. Resources and
+streams are refused. See `examples/cpp-messaging/` (it calls the Rust
+greeter and serves `counted`).
+
+```cpp
+#include "tuff.hpp"
+#include "api.hpp"   // generated
+
+// Calling: co_await a client method. It sends when awaited.
+auto reply = co_await greet::Greet::any().greet(String::copy("Alex"));
+if (reply) { use(reply->view()); }
+else if (reply.error().is_app) { /* the provider's own error, reply.error().app */ }
+else if (reply.error().call.no_provider()) { /* the plugin is not installed */ }
+// Methods without a result also have notify_<name>(...), a one-way send.
+
+// Serving: static methods of a struct, one per WIT function, in on_register.
+struct Counts {
+    static void counted(Str from, String name, uint32_t total);   // answers at once
+    // or answers later: add `counted::...`'s TypedReply<R> as the last parameter and
+    // move it into a coroutine; dropping it refuses the request.
+};
+static Status on_register() { TUFF_CHECK(counted::serve<Counts>()); return {}; }
+```
+
+`Target::any()` addresses the sole provider and `Client::at("plugin-id")` one
+named provider. Failures are `CallError` tags (`NO_PROVIDER`, `AMBIGUOUS`,
+`NO_METHOD`, `TARGET_GONE`, `FAULTED`, `TIMED_OUT`, `BUSY`, `TOO_LARGE`,
+`REFUSED`). A plugin that calls another declares `TUFF_CAP_CROSS_PLUGIN("all",
+"why")` and the owner grants `cross-plugin`; list the provider with
+`TUFF_SOFT_DEPENDS` and learn of its loads and unloads in the optional
+`static void plugin_change(Str id, Str version, bool loaded)` hook. Messages
+no route took (notifies for a method you did not serve) reach the optional
+`on_message(const messaging::Incoming &)`. The raw layer is `tuff/messaging.hpp`
+(`request`, `notify`, `messaging::provide`/`route`/`Reply`) and `tuff/wire.hpp`.
+
+## Low-level C (`tuff.h`)
+
+C plugins use `tuff.h`/`tuff.c` directly: the manifest macro
+(`TUFF_MANIFEST("key = value")` per line), a command-tree builder with
+function handlers, argument getters, text buffers and weak default exports.
+Prefer C++ unless you must write C. A plugin defines only the exports it
+needs; handler ids are given in node order. Exports receive owned values and
+free them with the bindings' `*_free` functions. C has no futures: to answer
+a sender from a later callback, keep their uuid and use `tuff_tell`.
+
+```c
+#include "tuff.h"
+
+TUFF_MANIFEST("id = hello");
+TUFF_MANIFEST("version = 1.0.0");
+/* optional: depends, soft-depends, conflicts, load-before (see GUIDE.md) */
+
+static bool hello(const tuff_call_t *call, int32_t *result, plugin_string_t *err) {
+    const tuff_player_t *sender = tuff_sender(call);
+    if (!sender) {
+        return tuff_fail(err, "players only");
+    }
+    tuff_text_t t = {.len = 0};
+    tuff_put(&t, "Hello, ");
+    tuff_put_str(&t, sender->name);
+    *result = 1;
+    return tuff_reply_text(&t) || tuff_fail(err, "reply refused");
+}
+
+bool exports_tuff_plugin_guest_register(plugin_string_t *err) {
+    tuff_tree_t *tree = tuff_tree_new("hello");
+    tuff_executes(tree, 0, hello);
+    return tuff_register_command(tree, err);
+}
+```
+
+Conformance guests: `crates/tuff-plugin-wasm/tests/guests/c-wit-greeter` (C) and
+`cpp-greeter` (C++).
+
+Messaging in C has no generator output: use the raw imports from the
+bindings. `tuff_plugin_host_provide(interface, methods, &err)` (register
+phase) declares an interface and its u64 method keys;
+`tuff_plugin_host_request(target, interface, method, payload, timeout_ticks,
+&handle, &err)` starts a request whose reply arrives later as an `io-event`
+reply for `handle` in `exports_tuff_plugin_capability_events_on_io`;
+`tuff_plugin_host_notify` is the one-way send, and a delivery arrives in
+`exports_tuff_plugin_guest_on_message` with a `request` handle that
+`tuff_plugin_host_respond(request, &outcome, &err)` answers (now or from a later
+call). The method key is FNV-1a 64 of `<iface>#<name>(<canonical signature>)` and
+payloads use the wire format described in `tuff/wire.hpp`; compute both with
+the C++ SDK or the Rust generator and pass the numbers in.
+
+C++ change rules (call after `register`, for example from a command):
+
+```cpp
+auto id = tuff::ChangeRule(tuff::OVERWORLD, tuff::BlockPos{-8, -64, -8}, tuff::BlockPos{8, 320, 8})
+              .fire_burn(true) // fire may still burn blocks away; spread, liquids, mobs stop
+              .add();
+if (id) { tuff::rules::remove(*id); }
+```
+
+## Dimensions and chunk generation
+
+`tuff/worldgen.hpp` types the worldgen exports. Add two optional static hooks
+to the plugin struct: `declare_dimensions(tuff::Dimensions &)` adds
+`tuff::Dimension("example:sky", "minecraft:overworld")` values (`sea_level`,
+`natural_spawning`, `spawn`, `biome(key, json)`), and
+`generate_chunk(const tuff::ChunkRequest &, tuff::ChunkBuilder &)` fills one
+column with `set`, `fill` and `biome` and returns a `Status`. The host runs
+both on separate instances with every import trapping, so they may depend on
+their arguments alone. Plugins without the hooks export empty defaults.
+See `crates/tuff-plugin-wasm/tests/guests/cpp-worldgen/worldgen.cpp`.
+
+## Custom content
+
+`tuff/content.hpp` types the startup content export. The optional static hook
+`declare_content(tuff::Content &)` adds `item(tuff::ItemDecl(id, base).model(key).components(snbt))`,
+`entity(id, stand_in)`, `asset(tuff::AssetDecl(name, ns).file(path, text))`,
+`recipe(id, json)` and `advancement(id, json)`. Ids must be in a namespace
+granted by `cap.content` (`TUFF_CAP_CONTENT("ns", "why")`); custom blocks are not supported; content is read at
+startup only. Plugins without the hook declare nothing, which the host ignores.
+See `crates/tuff-plugin-wasm/tests/guests/cpp-content/content.cpp`.

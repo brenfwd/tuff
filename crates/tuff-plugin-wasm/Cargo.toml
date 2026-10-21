@@ -1,0 +1,45 @@
+[package]
+name = "tuff-plugin-wasm"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[features]
+default = ["runtime-wasmi"]
+runtime-wasmi = ["dep:wasmi"]
+runtime-wasmtime = ["dep:wasmtime"]
+
+[dependencies]
+tuff-web-ui = { workspace = true }
+tuff-item = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-http = { workspace = true }
+bytes = { workspace = true }
+flate2 = { workspace = true }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+log = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+rustls = { workspace = true }
+socket2 = { workspace = true, features = ["all"] }
+rustls-rustcrypto = { workspace = true }
+tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+tuff-core = { workspace = true }
+tuff-datapack = { workspace = true }
+rayon = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+wasmi = { workspace = true, optional = true }
+wasmtime = { workspace = true, optional = true }
+webpki-roots = { workspace = true }
+wit-parser = { workspace = true }
+
+[build-dependencies]
+wit-parser = { workspace = true }
+
+[dev-dependencies]
+wat = { workspace = true }
+tuff-zip = { workspace = true }

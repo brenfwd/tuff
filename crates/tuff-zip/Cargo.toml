@@ -1,0 +1,12 @@
+[package]
+name = "tuff-zip"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+flate2 = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]
+tuff-core = { workspace = true }

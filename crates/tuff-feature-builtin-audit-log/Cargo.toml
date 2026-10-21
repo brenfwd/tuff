@@ -1,0 +1,19 @@
+[package]
+name = "tuff-feature-builtin-audit-log"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-web-ui = { workspace = true }
+tuff-item = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-world-model = { workspace = true }
+log = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true }
+tuff-http = { workspace = true }
+serde_json = { workspace = true }
+tuff-vanilla-data = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "rust-worldedit"
+version = "1.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+name = "worldedit"
+crate-type = ["cdylib"]
+
+[dependencies]
+tuff-plugin-sdk = { path = "../../crates/tuff-plugin-sdk", default-features = false }
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true
+
+[workspace]

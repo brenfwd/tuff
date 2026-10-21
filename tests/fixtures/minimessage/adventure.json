@@ -1,0 +1,5306 @@
+{
+ "_attribution": "Inputs are taken from the test suite of Kyori Adventure MiniMessage (https://github.com/KyoriPowered/adventure, text-minimessage/src/test) plus hand-written extra.* cases; expected outputs were produced by adventure-text-minimessage 5.2.0 with GsonComponentSerializer.gson(). Adventure is distributed under the following license:\n\nMIT License\n\nCopyright (c) 2017-2025 KyoriPowered\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+ "cases": [
+  {
+   "source": "ClickTagTest.testClick",
+   "input": "<click:run_command:test>TEST",
+   "expected": {
+    "click_event": {
+     "action": "run_command",
+     "command": "test"
+    },
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ClickTagTest.testClickExtendedCommand",
+   "input": "<click:run_command:/test command>TEST",
+   "expected": {
+    "click_event": {
+     "action": "run_command",
+     "command": "/test command"
+    },
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ClickTagTest.testInvalidClick",
+   "input": "<click:pet_a_kitty:'a very cute one'>best click event",
+   "expected": "<click:pet_a_kitty:'a very cute one'>best click event"
+  },
+  {
+   "source": "ColorTagTest.test",
+   "input": "<yellow>TEST<green> nested</green>Test",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "color": "green",
+      "text": " nested"
+     },
+     "Test"
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.test",
+   "input": "<yellow>TEST<green> nested<yellow>Test",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "color": "green",
+      "extra": [
+       {
+        "color": "yellow",
+        "text": "Test"
+       }
+      ],
+      "text": " nested"
+     }
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testBritish",
+   "input": "<grey>This is english",
+   "expected": {
+    "color": "gray",
+    "text": "This is english"
+   }
+  },
+  {
+   "source": "ColorTagTest.testBritish",
+   "input": "<gray>This is english",
+   "expected": {
+    "color": "gray",
+    "text": "This is english"
+   }
+  },
+  {
+   "source": "ColorTagTest.testBritish",
+   "input": "<dark_grey>This is still english",
+   "expected": {
+    "color": "dark_gray",
+    "text": "This is still english"
+   }
+  },
+  {
+   "source": "ColorTagTest.testBritish",
+   "input": "<dark_gray>This is still english",
+   "expected": {
+    "color": "dark_gray",
+    "text": "This is still english"
+   }
+  },
+  {
+   "source": "ColorTagTest.testBritishColour",
+   "input": "<colour:grey>This is english",
+   "expected": {
+    "color": "gray",
+    "text": "This is english"
+   }
+  },
+  {
+   "source": "ColorTagTest.testBritishColour",
+   "input": "<color:gray>This is english",
+   "expected": {
+    "color": "gray",
+    "text": "This is english"
+   }
+  },
+  {
+   "source": "ColorTagTest.testNewColor",
+   "input": "<color:yellow>TEST<color:green> nested</color:green>Test",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "color": "green",
+      "text": " nested"
+     },
+     "Test"
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testNewColor",
+   "input": "<color:yellow>TEST<color:green> nested<color:yellow>Test",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "color": "green",
+      "extra": [
+       {
+        "color": "yellow",
+        "text": "Test"
+       }
+      ],
+      "text": " nested"
+     }
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testHexColor",
+   "input": "<color:#ff00ff>TEST<color:#00ff00> nested</color:#00ff00>Test",
+   "expected": {
+    "color": "#FF00FF",
+    "extra": [
+     {
+      "color": "#00FF00",
+      "text": " nested"
+     },
+     "Test"
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testHexColor",
+   "input": "<color:#ff00ff>TEST<color:#00ff00> nested<color:#ff00ff>Test",
+   "expected": {
+    "color": "#FF00FF",
+    "extra": [
+     {
+      "color": "#00FF00",
+      "extra": [
+       {
+        "color": "#FF00FF",
+        "text": "Test"
+       }
+      ],
+      "text": " nested"
+     }
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testHexColorShort",
+   "input": "<#ff00ff>TEST<#00ff00> nested</#00ff00>Test",
+   "expected": {
+    "color": "#FF00FF",
+    "extra": [
+     {
+      "color": "#00FF00",
+      "text": " nested"
+     },
+     "Test"
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testHexColorShort",
+   "input": "<#ff00ff>TEST<#00ff00> nested<#ff00ff>Test",
+   "expected": {
+    "color": "#FF00FF",
+    "extra": [
+     {
+      "color": "#00FF00",
+      "extra": [
+       {
+        "color": "#FF00FF",
+        "text": "Test"
+       }
+      ],
+      "text": " nested"
+     }
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testHexColorC",
+   "input": "<c:#ff00ff>TEST<c:#00ff00> nested</c>Test",
+   "expected": {
+    "color": "#FF00FF",
+    "extra": [
+     {
+      "color": "#00FF00",
+      "text": " nested"
+     },
+     "Test"
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testHexColorC",
+   "input": "<c:#ff00ff>TEST<c:#00ff00> nested<c:#ff00ff>Test",
+   "expected": {
+    "color": "#FF00FF",
+    "extra": [
+     {
+      "color": "#00FF00",
+      "extra": [
+       {
+        "color": "#FF00FF",
+        "text": "Test"
+       }
+      ],
+      "text": " nested"
+     }
+    ],
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testAllColorAliases",
+   "input": "<color:#ff00ff>AGGRESSIVE TEST</color>",
+   "expected": {
+    "color": "#FF00FF",
+    "text": "AGGRESSIVE TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testAllColorAliases",
+   "input": "<colour:#00ffff>less aggressive test</colour>",
+   "expected": {
+    "color": "#00FFFF",
+    "text": "less aggressive test"
+   }
+  },
+  {
+   "source": "ColorTagTest.testAllColorAliases",
+   "input": "<c:#1234de>Mildly Aggressive Test</c>",
+   "expected": {
+    "color": "#1234DE",
+    "text": "Mildly Aggressive Test"
+   }
+  },
+  {
+   "source": "ColorTagTest.testAllColorAliases",
+   "input": "<color:red>AGGRESSIVE TEST</color>",
+   "expected": {
+    "color": "red",
+    "text": "AGGRESSIVE TEST"
+   }
+  },
+  {
+   "source": "ColorTagTest.testAllColorAliases",
+   "input": "<colour:green>less aggressive test</colour>",
+   "expected": {
+    "color": "green",
+    "text": "less aggressive test"
+   }
+  },
+  {
+   "source": "ColorTagTest.testAllColorAliases",
+   "input": "<c:blue>Mildly Aggressive Test</c>",
+   "expected": {
+    "color": "blue",
+    "text": "Mildly Aggressive Test"
+   }
+  },
+  {
+   "source": "ColorTagTest.testColorSimple",
+   "input": "<yellow>TEST",
+   "expected": {
+    "color": "yellow",
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "DecorationTagTest.testDisabledDecoration",
+   "input": "<italic:false>Test<bold:false>Test2<bold>Test3",
+   "expected": {
+    "italic": false,
+    "extra": [
+     {
+      "bold": false,
+      "extra": [
+       {
+        "bold": true,
+        "text": "Test3"
+       }
+      ],
+      "text": "Test2"
+     }
+    ],
+    "text": "Test"
+   }
+  },
+  {
+   "source": "DecorationTagTest.testDisabledDecorationShorthand",
+   "input": "<!italic>Test<!bold>Test2<bold>Test3",
+   "expected": {
+    "italic": false,
+    "extra": [
+     {
+      "bold": false,
+      "extra": [
+       {
+        "bold": true,
+        "text": "Test3"
+       }
+      ],
+      "text": "Test2"
+     }
+    ],
+    "text": "Test"
+   }
+  },
+  {
+   "source": "DecorationTagTest.testErrorOnShorthandAndLongHand",
+   "input": "<!italic:true>Go decide on something, god dammit!",
+   "expected": "<!italic:true>Go decide on something, god dammit!"
+  },
+  {
+   "source": "DecorationTagTest.testDecorationShorthandClosing",
+   "input": "<italic:false>Hello! <italic>spooky</italic> not spooky</italic:false>",
+   "expected": {
+    "italic": false,
+    "extra": [
+     {
+      "italic": true,
+      "text": "spooky"
+     },
+     " not spooky"
+    ],
+    "text": "Hello! "
+   }
+  },
+  {
+   "source": "FontTagTest.testFont",
+   "input": "Nothing <font:minecraft:uniform>Uniform <font:minecraft:alt>Alt  </font> Uniform",
+   "expected": {
+    "extra": [
+     {
+      "font": "minecraft:uniform",
+      "extra": [
+       {
+        "font": "minecraft:alt",
+        "text": "Alt  "
+       },
+       " Uniform"
+      ],
+      "text": "Uniform "
+     }
+    ],
+    "text": "Nothing "
+   }
+  },
+  {
+   "source": "FontTagTest.testCustomFont",
+   "input": "Default <font:myfont:best_font>Custom font <font:custom:worst_font>Another custom font </font>Back to previous font",
+   "expected": {
+    "extra": [
+     {
+      "font": "myfont:best_font",
+      "extra": [
+       {
+        "font": "custom:worst_font",
+        "text": "Another custom font "
+       },
+       "Back to previous font"
+      ],
+      "text": "Custom font "
+     }
+    ],
+    "text": "Default "
+   }
+  },
+  {
+   "source": "FontTagTest.testFontNoNamespace",
+   "input": "Nothing <font:uniform>Uniform <font:alt>Alt  </font> Uniform",
+   "expected": {
+    "extra": [
+     {
+      "font": "minecraft:uniform",
+      "extra": [
+       {
+        "font": "minecraft:alt",
+        "text": "Alt  "
+       },
+       " Uniform"
+      ],
+      "text": "Uniform "
+     }
+    ],
+    "text": "Nothing "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradient",
+   "input": "<yellow>Woo: <gradient>||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "white",
+          "text": "|"
+         },
+         {
+          "color": "#F4F4F4",
+          "text": "|"
+         },
+         {
+          "color": "#E9E9E9",
+          "text": "|"
+         },
+         {
+          "color": "#DEDEDE",
+          "text": "|"
+         },
+         {
+          "color": "#D3D3D3",
+          "text": "|"
+         },
+         {
+          "color": "#C8C8C8",
+          "text": "|"
+         },
+         {
+          "color": "#BCBCBC",
+          "text": "|"
+         },
+         {
+          "color": "#B1B1B1",
+          "text": "|"
+         },
+         {
+          "color": "#A6A6A6",
+          "text": "|"
+         },
+         {
+          "color": "#9B9B9B",
+          "text": "|"
+         },
+         {
+          "color": "#909090",
+          "text": "|"
+         },
+         {
+          "color": "#858585",
+          "text": "|"
+         },
+         {
+          "color": "#7A7A7A",
+          "text": "|"
+         },
+         {
+          "color": "#6F6F6F",
+          "text": "|"
+         },
+         {
+          "color": "#646464",
+          "text": "|"
+         },
+         {
+          "color": "#595959",
+          "text": "|"
+         },
+         {
+          "color": "#4E4E4E",
+          "text": "|"
+         },
+         {
+          "color": "#434343",
+          "text": "|"
+         },
+         {
+          "color": "#373737",
+          "text": "|"
+         },
+         {
+          "color": "#2C2C2C",
+          "text": "|"
+         },
+         {
+          "color": "#212121",
+          "text": "|"
+         },
+         {
+          "color": "#161616",
+          "text": "|"
+         },
+         {
+          "color": "#0B0B0B",
+          "text": "|"
+         },
+         {
+          "color": "black",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradientWithHover",
+   "input": "<yellow>Woo: <hover:show_text:'This is a test'><gradient>||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "hover_event": {
+       "action": "show_text",
+       "value": "This is a test"
+      },
+      "extra": [
+       {
+        "extra": [
+         {
+          "extra": [
+           {
+            "color": "white",
+            "text": "|"
+           },
+           {
+            "color": "#F4F4F4",
+            "text": "|"
+           },
+           {
+            "color": "#E9E9E9",
+            "text": "|"
+           },
+           {
+            "color": "#DEDEDE",
+            "text": "|"
+           },
+           {
+            "color": "#D3D3D3",
+            "text": "|"
+           },
+           {
+            "color": "#C8C8C8",
+            "text": "|"
+           },
+           {
+            "color": "#BCBCBC",
+            "text": "|"
+           },
+           {
+            "color": "#B1B1B1",
+            "text": "|"
+           },
+           {
+            "color": "#A6A6A6",
+            "text": "|"
+           },
+           {
+            "color": "#9B9B9B",
+            "text": "|"
+           },
+           {
+            "color": "#909090",
+            "text": "|"
+           },
+           {
+            "color": "#858585",
+            "text": "|"
+           },
+           {
+            "color": "#7A7A7A",
+            "text": "|"
+           },
+           {
+            "color": "#6F6F6F",
+            "text": "|"
+           },
+           {
+            "color": "#646464",
+            "text": "|"
+           },
+           {
+            "color": "#595959",
+            "text": "|"
+           },
+           {
+            "color": "#4E4E4E",
+            "text": "|"
+           },
+           {
+            "color": "#434343",
+            "text": "|"
+           },
+           {
+            "color": "#373737",
+            "text": "|"
+           },
+           {
+            "color": "#2C2C2C",
+            "text": "|"
+           },
+           {
+            "color": "#212121",
+            "text": "|"
+           },
+           {
+            "color": "#161616",
+            "text": "|"
+           },
+           {
+            "color": "#0B0B0B",
+            "text": "|"
+           },
+           {
+            "color": "black",
+            "text": "|"
+           }
+          ],
+          "text": ""
+         }
+        ],
+        "text": ""
+       },
+       "!"
+      ],
+      "text": ""
+     }
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradient2",
+   "input": "<yellow>Woo: <gradient:#5e4fa2:#f79459>||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "#5E4FA2",
+          "text": "|"
+         },
+         {
+          "color": "#65529F",
+          "text": "|"
+         },
+         {
+          "color": "#6B559C",
+          "text": "|"
+         },
+         {
+          "color": "#725898",
+          "text": "|"
+         },
+         {
+          "color": "#795B95",
+          "text": "|"
+         },
+         {
+          "color": "#7F5E92",
+          "text": "|"
+         },
+         {
+          "color": "#86618F",
+          "text": "|"
+         },
+         {
+          "color": "#8D648C",
+          "text": "|"
+         },
+         {
+          "color": "#936789",
+          "text": "|"
+         },
+         {
+          "color": "#9A6A85",
+          "text": "|"
+         },
+         {
+          "color": "#A16D82",
+          "text": "|"
+         },
+         {
+          "color": "#A7707F",
+          "text": "|"
+         },
+         {
+          "color": "#AE737C",
+          "text": "|"
+         },
+         {
+          "color": "#B47679",
+          "text": "|"
+         },
+         {
+          "color": "#BB7976",
+          "text": "|"
+         },
+         {
+          "color": "#C27C72",
+          "text": "|"
+         },
+         {
+          "color": "#C87F6F",
+          "text": "|"
+         },
+         {
+          "color": "#CF826C",
+          "text": "|"
+         },
+         {
+          "color": "#D68569",
+          "text": "|"
+         },
+         {
+          "color": "#DC8866",
+          "text": "|"
+         },
+         {
+          "color": "#E38B63",
+          "text": "|"
+         },
+         {
+          "color": "#EA8E5F",
+          "text": "|"
+         },
+         {
+          "color": "#F0915C",
+          "text": "|"
+         },
+         {
+          "color": "#F79459",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradient3",
+   "input": "<yellow>Woo: <gradient:green:blue>||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "green",
+          "text": "|"
+         },
+         {
+          "color": "#55F85C",
+          "text": "|"
+         },
+         {
+          "color": "#55F064",
+          "text": "|"
+         },
+         {
+          "color": "#55E96B",
+          "text": "|"
+         },
+         {
+          "color": "#55E173",
+          "text": "|"
+         },
+         {
+          "color": "#55DA7A",
+          "text": "|"
+         },
+         {
+          "color": "#55D381",
+          "text": "|"
+         },
+         {
+          "color": "#55CB89",
+          "text": "|"
+         },
+         {
+          "color": "#55C490",
+          "text": "|"
+         },
+         {
+          "color": "#55BC98",
+          "text": "|"
+         },
+         {
+          "color": "#55B59F",
+          "text": "|"
+         },
+         {
+          "color": "#55AEA6",
+          "text": "|"
+         },
+         {
+          "color": "#55A6AE",
+          "text": "|"
+         },
+         {
+          "color": "#559FB5",
+          "text": "|"
+         },
+         {
+          "color": "#5598BC",
+          "text": "|"
+         },
+         {
+          "color": "#5590C4",
+          "text": "|"
+         },
+         {
+          "color": "#5589CB",
+          "text": "|"
+         },
+         {
+          "color": "#5581D3",
+          "text": "|"
+         },
+         {
+          "color": "#557ADA",
+          "text": "|"
+         },
+         {
+          "color": "#5573E1",
+          "text": "|"
+         },
+         {
+          "color": "#556BE9",
+          "text": "|"
+         },
+         {
+          "color": "#5564F0",
+          "text": "|"
+         },
+         {
+          "color": "#555CF8",
+          "text": "|"
+         },
+         {
+          "color": "blue",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradientMultiColor",
+   "input": "<yellow>Woo: <gradient:red:blue:green:yellow:red>||||||||||||||||||||||||||||||||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "red",
+          "text": "|"
+         },
+         {
+          "color": "#F25562",
+          "text": "|"
+         },
+         {
+          "color": "#E5556F",
+          "text": "|"
+         },
+         {
+          "color": "#D9557B",
+          "text": "|"
+         },
+         {
+          "color": "#CC5588",
+          "text": "|"
+         },
+         {
+          "color": "#BF5595",
+          "text": "|"
+         },
+         {
+          "color": "#B255A2",
+          "text": "|"
+         },
+         {
+          "color": "#A555AF",
+          "text": "|"
+         },
+         {
+          "color": "#9855BC",
+          "text": "|"
+         },
+         {
+          "color": "#8C55C8",
+          "text": "|"
+         },
+         {
+          "color": "#7F55D5",
+          "text": "|"
+         },
+         {
+          "color": "#7255E2",
+          "text": "|"
+         },
+         {
+          "color": "#6555EF",
+          "text": "|"
+         },
+         {
+          "color": "#5855FC",
+          "text": "|"
+         },
+         {
+          "color": "#555FF5",
+          "text": "|"
+         },
+         {
+          "color": "#556BE9",
+          "text": "|"
+         },
+         {
+          "color": "#5578DC",
+          "text": "|"
+         },
+         {
+          "color": "#5585CF",
+          "text": "|"
+         },
+         {
+          "color": "#5592C2",
+          "text": "|"
+         },
+         {
+          "color": "#559FB5",
+          "text": "|"
+         },
+         {
+          "color": "#55ACA8",
+          "text": "|"
+         },
+         {
+          "color": "#55B89C",
+          "text": "|"
+         },
+         {
+          "color": "#55C58F",
+          "text": "|"
+         },
+         {
+          "color": "#55D282",
+          "text": "|"
+         },
+         {
+          "color": "#55DF75",
+          "text": "|"
+         },
+         {
+          "color": "#55EC68",
+          "text": "|"
+         },
+         {
+          "color": "#55F95B",
+          "text": "|"
+         },
+         {
+          "color": "#5BFF55",
+          "text": "|"
+         },
+         {
+          "color": "#68FF55",
+          "text": "|"
+         },
+         {
+          "color": "#75FF55",
+          "text": "|"
+         },
+         {
+          "color": "#82FF55",
+          "text": "|"
+         },
+         {
+          "color": "#8FFF55",
+          "text": "|"
+         },
+         {
+          "color": "#9CFF55",
+          "text": "|"
+         },
+         {
+          "color": "#A8FF55",
+          "text": "|"
+         },
+         {
+          "color": "#B5FF55",
+          "text": "|"
+         },
+         {
+          "color": "#C2FF55",
+          "text": "|"
+         },
+         {
+          "color": "#CFFF55",
+          "text": "|"
+         },
+         {
+          "color": "#DCFF55",
+          "text": "|"
+         },
+         {
+          "color": "#E9FF55",
+          "text": "|"
+         },
+         {
+          "color": "#F5FF55",
+          "text": "|"
+         },
+         {
+          "color": "#FFFC55",
+          "text": "|"
+         },
+         {
+          "color": "#FFEF55",
+          "text": "|"
+         },
+         {
+          "color": "#FFE255",
+          "text": "|"
+         },
+         {
+          "color": "#FFD555",
+          "text": "|"
+         },
+         {
+          "color": "#FFC855",
+          "text": "|"
+         },
+         {
+          "color": "#FFBC55",
+          "text": "|"
+         },
+         {
+          "color": "#FFAF55",
+          "text": "|"
+         },
+         {
+          "color": "#FFA255",
+          "text": "|"
+         },
+         {
+          "color": "#FF9555",
+          "text": "|"
+         },
+         {
+          "color": "#FF8855",
+          "text": "|"
+         },
+         {
+          "color": "#FF7B55",
+          "text": "|"
+         },
+         {
+          "color": "#FF6F55",
+          "text": "|"
+         },
+         {
+          "color": "#FF6255",
+          "text": "|"
+         },
+         {
+          "color": "red",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradientMultiColor2",
+   "input": "<yellow>Woo: <gradient:black:white:black>||||||||||||||||||||||||||||||||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "black",
+          "text": "|"
+         },
+         {
+          "color": "#0A0A0A",
+          "text": "|"
+         },
+         {
+          "color": "#131313",
+          "text": "|"
+         },
+         {
+          "color": "#1D1D1D",
+          "text": "|"
+         },
+         {
+          "color": "#262626",
+          "text": "|"
+         },
+         {
+          "color": "#303030",
+          "text": "|"
+         },
+         {
+          "color": "#3A3A3A",
+          "text": "|"
+         },
+         {
+          "color": "#434343",
+          "text": "|"
+         },
+         {
+          "color": "#4D4D4D",
+          "text": "|"
+         },
+         {
+          "color": "#575757",
+          "text": "|"
+         },
+         {
+          "color": "#606060",
+          "text": "|"
+         },
+         {
+          "color": "#6A6A6A",
+          "text": "|"
+         },
+         {
+          "color": "#737373",
+          "text": "|"
+         },
+         {
+          "color": "#7D7D7D",
+          "text": "|"
+         },
+         {
+          "color": "#878787",
+          "text": "|"
+         },
+         {
+          "color": "#909090",
+          "text": "|"
+         },
+         {
+          "color": "#9A9A9A",
+          "text": "|"
+         },
+         {
+          "color": "#A4A4A4",
+          "text": "|"
+         },
+         {
+          "color": "#ADADAD",
+          "text": "|"
+         },
+         {
+          "color": "#B7B7B7",
+          "text": "|"
+         },
+         {
+          "color": "#C0C0C0",
+          "text": "|"
+         },
+         {
+          "color": "#CACACA",
+          "text": "|"
+         },
+         {
+          "color": "#D4D4D4",
+          "text": "|"
+         },
+         {
+          "color": "#DDDDDD",
+          "text": "|"
+         },
+         {
+          "color": "#E7E7E7",
+          "text": "|"
+         },
+         {
+          "color": "#F1F1F1",
+          "text": "|"
+         },
+         {
+          "color": "#FAFAFA",
+          "text": "||"
+         },
+         {
+          "color": "#F1F1F1",
+          "text": "|"
+         },
+         {
+          "color": "#E7E7E7",
+          "text": "|"
+         },
+         {
+          "color": "#DDDDDD",
+          "text": "|"
+         },
+         {
+          "color": "#D4D4D4",
+          "text": "|"
+         },
+         {
+          "color": "#CACACA",
+          "text": "|"
+         },
+         {
+          "color": "#C0C0C0",
+          "text": "|"
+         },
+         {
+          "color": "#B7B7B7",
+          "text": "|"
+         },
+         {
+          "color": "#ADADAD",
+          "text": "|"
+         },
+         {
+          "color": "#A4A4A4",
+          "text": "|"
+         },
+         {
+          "color": "#9A9A9A",
+          "text": "|"
+         },
+         {
+          "color": "#909090",
+          "text": "|"
+         },
+         {
+          "color": "#878787",
+          "text": "|"
+         },
+         {
+          "color": "#7D7D7D",
+          "text": "|"
+         },
+         {
+          "color": "#737373",
+          "text": "|"
+         },
+         {
+          "color": "#6A6A6A",
+          "text": "|"
+         },
+         {
+          "color": "#606060",
+          "text": "|"
+         },
+         {
+          "color": "#575757",
+          "text": "|"
+         },
+         {
+          "color": "#4D4D4D",
+          "text": "|"
+         },
+         {
+          "color": "#434343",
+          "text": "|"
+         },
+         {
+          "color": "#3A3A3A",
+          "text": "|"
+         },
+         {
+          "color": "#303030",
+          "text": "|"
+         },
+         {
+          "color": "#262626",
+          "text": "|"
+         },
+         {
+          "color": "#1D1D1D",
+          "text": "|"
+         },
+         {
+          "color": "#131313",
+          "text": "|"
+         },
+         {
+          "color": "#0A0A0A",
+          "text": "|"
+         },
+         {
+          "color": "black",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradientMultiColor2Phase",
+   "input": "<yellow>Woo: <gradient:black:white:black:-0.65>||||||||||||||||||||||||||||||||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "#B3B3B3",
+          "text": "|"
+         },
+         {
+          "color": "#BCBCBC",
+          "text": "|"
+         },
+         {
+          "color": "#C6C6C6",
+          "text": "|"
+         },
+         {
+          "color": "#CFCFCF",
+          "text": "|"
+         },
+         {
+          "color": "#D9D9D9",
+          "text": "|"
+         },
+         {
+          "color": "#E3E3E3",
+          "text": "|"
+         },
+         {
+          "color": "#ECECEC",
+          "text": "|"
+         },
+         {
+          "color": "#F6F6F6",
+          "text": "|"
+         },
+         {
+          "color": "white",
+          "text": "|"
+         },
+         {
+          "color": "#F5F5F5",
+          "text": "|"
+         },
+         {
+          "color": "#EBEBEB",
+          "text": "|"
+         },
+         {
+          "color": "#E2E2E2",
+          "text": "|"
+         },
+         {
+          "color": "#D8D8D8",
+          "text": "|"
+         },
+         {
+          "color": "#CECECE",
+          "text": "|"
+         },
+         {
+          "color": "#C5C5C5",
+          "text": "|"
+         },
+         {
+          "color": "#BBBBBB",
+          "text": "|"
+         },
+         {
+          "color": "#B2B2B2",
+          "text": "|"
+         },
+         {
+          "color": "#A8A8A8",
+          "text": "|"
+         },
+         {
+          "color": "#9E9E9E",
+          "text": "|"
+         },
+         {
+          "color": "#959595",
+          "text": "|"
+         },
+         {
+          "color": "#8B8B8B",
+          "text": "|"
+         },
+         {
+          "color": "#818181",
+          "text": "|"
+         },
+         {
+          "color": "#787878",
+          "text": "|"
+         },
+         {
+          "color": "#6E6E6E",
+          "text": "|"
+         },
+         {
+          "color": "#656565",
+          "text": "|"
+         },
+         {
+          "color": "#5B5B5B",
+          "text": "|"
+         },
+         {
+          "color": "#515151",
+          "text": "|"
+         },
+         {
+          "color": "#484848",
+          "text": "|"
+         },
+         {
+          "color": "#3E3E3E",
+          "text": "|"
+         },
+         {
+          "color": "#343434",
+          "text": "|"
+         },
+         {
+          "color": "#2B2B2B",
+          "text": "|"
+         },
+         {
+          "color": "#212121",
+          "text": "|"
+         },
+         {
+          "color": "#181818",
+          "text": "|"
+         },
+         {
+          "color": "#0E0E0E",
+          "text": "|"
+         },
+         {
+          "color": "#040404",
+          "text": "|"
+         },
+         {
+          "color": "black",
+          "text": "|||||||||||||||||||"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradientPhase",
+   "input": "<yellow>Woo: <gradient:green:blue:0.7>||||||||||||||||||||||||</gradient>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "#5588CC",
+          "text": "|"
+         },
+         {
+          "color": "#5581D3",
+          "text": "|"
+         },
+         {
+          "color": "#5579DB",
+          "text": "|"
+         },
+         {
+          "color": "#5572E2",
+          "text": "|"
+         },
+         {
+          "color": "#556AEA",
+          "text": "|"
+         },
+         {
+          "color": "#5563F1",
+          "text": "|"
+         },
+         {
+          "color": "#555CF8",
+          "text": "|"
+         },
+         {
+          "color": "#5556FE",
+          "text": "|"
+         },
+         {
+          "color": "#555DF7",
+          "text": "|"
+         },
+         {
+          "color": "#5565EF",
+          "text": "|"
+         },
+         {
+          "color": "#556CE8",
+          "text": "|"
+         },
+         {
+          "color": "#5573E1",
+          "text": "|"
+         },
+         {
+          "color": "#557BD9",
+          "text": "|"
+         },
+         {
+          "color": "#5582D2",
+          "text": "|"
+         },
+         {
+          "color": "#5589CB",
+          "text": "|"
+         },
+         {
+          "color": "#5591C3",
+          "text": "|"
+         },
+         {
+          "color": "#5598BC",
+          "text": "|"
+         },
+         {
+          "color": "#55A0B4",
+          "text": "|"
+         },
+         {
+          "color": "#55A7AD",
+          "text": "|"
+         },
+         {
+          "color": "#55AEA6",
+          "text": "|"
+         },
+         {
+          "color": "#55B69E",
+          "text": "|"
+         },
+         {
+          "color": "#55BD97",
+          "text": "|"
+         },
+         {
+          "color": "#55C58F",
+          "text": "|"
+         },
+         {
+          "color": "#55CC88",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradientWithInnerTokens",
+   "input": "<gradient:green:blue>123<bold>456</gradient>!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "green",
+          "text": "1"
+         },
+         {
+          "color": "#55DD77",
+          "text": "2"
+         },
+         {
+          "color": "#55BB99",
+          "text": "3"
+         }
+        ],
+        "text": ""
+       },
+       {
+        "bold": true,
+        "extra": [
+         {
+          "color": "#5599BB",
+          "text": "4"
+         },
+         {
+          "color": "#5577DD",
+          "text": "5"
+         },
+         {
+          "color": "blue",
+          "text": "6"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testGradientWithInnerGradientWithInnerToken",
+   "input": "<gradient:green:blue>123<gradient:red:yellow>456<bold>789</gradient>abc</gradient>!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "green",
+          "text": "1"
+         },
+         {
+          "color": "#55F064",
+          "text": "2"
+         },
+         {
+          "color": "#55E074",
+          "text": "3"
+         }
+        ],
+        "text": ""
+       },
+       {
+        "extra": [
+         {
+          "extra": [
+           {
+            "color": "red",
+            "text": "4"
+           },
+           {
+            "color": "#FF7755",
+            "text": "5"
+           },
+           {
+            "color": "#FF9955",
+            "text": "6"
+           }
+          ],
+          "text": ""
+         },
+         {
+          "bold": true,
+          "extra": [
+           {
+            "color": "#FFBB55",
+            "text": "7"
+           },
+           {
+            "color": "#FFDD55",
+            "text": "8"
+           },
+           {
+            "color": "yellow",
+            "text": "9"
+           }
+          ],
+          "text": ""
+         }
+        ],
+        "text": ""
+       },
+       {
+        "extra": [
+         {
+          "color": "#5574E0",
+          "text": "a"
+         },
+         {
+          "color": "#5564F0",
+          "text": "b"
+         },
+         {
+          "color": "blue",
+          "text": "c"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testNonBmpCharactersInGradient",
+   "input": "Something <gradient:green:blue:1.0>\ud800\udf30\ud800\udf31\ud800\udf32</gradient>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "blue",
+          "text": "\ud800\udf30"
+         },
+         {
+          "color": "#55AAAA",
+          "text": "\ud800\udf31"
+         },
+         {
+          "color": "green",
+          "text": "\ud800\udf32"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": "Something "
+   }
+  },
+  {
+   "source": "GradientTagTest.testSingleCharGradient",
+   "input": "<gradient:red:blue:green>A",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "A"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testSingleCharGradient",
+   "input": "<gradient:red:blue:green:red>AB",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "red",
+        "text": "AB"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testNestedGradientsDontOverrideColors",
+   "input": "<gradient:#1985ff:#2bc7ff>a<gradient:#00fffb:#00ffc3>b</gradient> <gray>gray</gray></gradient>",
+   "expected": {
+    "extra": [
+     {
+      "color": "#1985FF",
+      "text": "a"
+     },
+     {
+      "extra": [
+       {
+        "color": "#00FFFB",
+        "text": "b"
+       }
+      ],
+      "text": ""
+     },
+     {
+      "color": "#1F9BFF",
+      "text": " "
+     },
+     {
+      "color": "gray",
+      "text": "gray"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testNestedGradientsReallyDontOverrideColors",
+   "input": "<gradient:white:blue>A <gradient:yellow:black>B <white>C",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "white",
+        "text": "A"
+       },
+       {
+        "color": "#D5D5FF",
+        "text": " "
+       }
+      ],
+      "text": ""
+     },
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "yellow",
+          "text": "B"
+         },
+         {
+          "color": "#80802B",
+          "text": " "
+         }
+        ],
+        "text": ""
+       },
+       {
+        "color": "white",
+        "text": "C"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testDecorationsPreserved",
+   "input": "<gradient>a<placeholder/>c<bold>d</bold>!</gradient>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "white",
+        "text": "a"
+       },
+       {
+        "color": "#F0F0F0",
+        "text": "<"
+       },
+       {
+        "color": "#E1E1E1",
+        "text": "p"
+       },
+       {
+        "color": "#D2D2D2",
+        "text": "l"
+       },
+       {
+        "color": "#C3C3C3",
+        "text": "a"
+       },
+       {
+        "color": "#B4B4B4",
+        "text": "c"
+       },
+       {
+        "color": "#A5A5A5",
+        "text": "e"
+       },
+       {
+        "color": "#969696",
+        "text": "h"
+       },
+       {
+        "color": "#878787",
+        "text": "o"
+       },
+       {
+        "color": "#787878",
+        "text": "l"
+       },
+       {
+        "color": "#696969",
+        "text": "d"
+       },
+       {
+        "color": "#5A5A5A",
+        "text": "e"
+       },
+       {
+        "color": "#4B4B4B",
+        "text": "r"
+       },
+       {
+        "color": "#3C3C3C",
+        "text": "/"
+       },
+       {
+        "color": "#2D2D2D",
+        "text": ">"
+       },
+       {
+        "color": "#1E1E1E",
+        "text": "c"
+       }
+      ],
+      "text": ""
+     },
+     {
+      "bold": true,
+      "color": "#0F0F0F",
+      "text": "d"
+     },
+     {
+      "color": "black",
+      "text": "!"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testLangTagInGradient",
+   "input": "<gradient:red:blue>ab<lang:block.minecraft.diamond_block>!</gradient>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "red",
+        "text": "a"
+       },
+       {
+        "color": "#C6558E",
+        "text": "b"
+       }
+      ],
+      "text": ""
+     },
+     {
+      "color": "#8E55C6",
+      "extra": [
+       {
+        "color": "blue",
+        "text": "!"
+       }
+      ],
+      "translate": "block.minecraft.diamond_block"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testMultiColorPhased",
+   "input": "<gradient:#aa0000:#ff5555:#aaaaaa:1>-------",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "gray",
+        "text": "-"
+       },
+       {
+        "color": "#AA7171",
+        "text": "-"
+       },
+       {
+        "color": "#AA3939",
+        "text": "-"
+       },
+       {
+        "color": "dark_red",
+        "text": "-"
+       },
+       {
+        "color": "#C61C1C",
+        "text": "-"
+       },
+       {
+        "color": "#E33939",
+        "text": "-"
+       },
+       {
+        "color": "red",
+        "text": "-"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.gh137",
+   "input": "<gradient:gold:yellow:red><dum>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "gold",
+        "text": "<"
+       },
+       {
+        "color": "#FFD52B",
+        "text": "d"
+       },
+       {
+        "color": "yellow",
+        "text": "u"
+       },
+       {
+        "color": "#FFAA55",
+        "text": "m"
+       },
+       {
+        "color": "red",
+        "text": ">"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.gh137",
+   "input": "<gradient:gold:yellow:red><dum>a",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "gold",
+        "text": "<"
+       },
+       {
+        "color": "#FFCC22",
+        "text": "d"
+       },
+       {
+        "color": "#FFEE44",
+        "text": "u"
+       },
+       {
+        "color": "#FFDD55",
+        "text": "m"
+       },
+       {
+        "color": "#FF9955",
+        "text": ">"
+       },
+       {
+        "color": "red",
+        "text": "a"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testRoundTripGradient",
+   "input": "<gradient>hello <bold>world</bold>!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "white",
+        "text": "h"
+       },
+       {
+        "color": "#E8E8E8",
+        "text": "e"
+       },
+       {
+        "color": "#D1D1D1",
+        "text": "l"
+       },
+       {
+        "color": "#B9B9B9",
+        "text": "l"
+       },
+       {
+        "color": "#A2A2A2",
+        "text": "o"
+       },
+       {
+        "color": "#8B8B8B",
+        "text": " "
+       }
+      ],
+      "text": ""
+     },
+     {
+      "bold": true,
+      "extra": [
+       {
+        "color": "#747474",
+        "text": "w"
+       },
+       {
+        "color": "#5D5D5D",
+        "text": "o"
+       },
+       {
+        "color": "#464646",
+        "text": "r"
+       },
+       {
+        "color": "#2E2E2E",
+        "text": "l"
+       },
+       {
+        "color": "#171717",
+        "text": "d"
+       }
+      ],
+      "text": ""
+     },
+     {
+      "color": "black",
+      "text": "!"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "GradientTagTest.testDisabledVirtualComponentEmission",
+   "input": "<b><gradient:white:blue>A",
+   "expected": {
+    "bold": true,
+    "extra": [
+     {
+      "color": "white",
+      "text": "A"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "HeadTagsTest.testEmptyDeserialization",
+   "input": "<head>",
+   "expected": {
+    "hat": true,
+    "player": {}
+   }
+  },
+  {
+   "source": "HeadTagsTest.testHatDeserialization",
+   "input": "<head:false>",
+   "expected": {
+    "hat": false,
+    "player": {}
+   }
+  },
+  {
+   "source": "HeadTagsTest.testWithTexturesDeserialization",
+   "input": "<head:entity/player/wide/steve>",
+   "expected": {
+    "hat": true,
+    "player": {
+     "texture": "minecraft:entity/player/wide/steve"
+    }
+   }
+  },
+  {
+   "source": "HeadTagsTest.testWithNameDeserialization",
+   "input": "<head:electronicboy>",
+   "expected": {
+    "hat": true,
+    "player": "electronicboy"
+   }
+  },
+  {
+   "source": "HeadTagsTest.testWithUuidDeserialization",
+   "input": "<head:ef82a52d-c5a4-4b64-a811-2c28828cc120>",
+   "expected": {
+    "hat": true,
+    "player": {
+     "id": [
+      -276650707,
+      -979088540,
+      -1475269592,
+      -2104704736
+     ]
+    }
+   }
+  },
+  {
+   "source": "HeadTagsTest.testWithNameAndUuidDeserialization",
+   "input": "<head name=Strokkur24 uuid=ef82a52d-c5a4-4b64-a811-2c28828cc120>",
+   "expected": "<head name=Strokkur24 uuid=ef82a52d-c5a4-4b64-a811-2c28828cc120>"
+  },
+  {
+   "source": "HeadTagsTest.testWithNameAndUuidReversedDeserialization",
+   "input": "<head uuid=ef82a52d-c5a4-4b64-a811-2c28828cc120 name=Strokkur24>",
+   "expected": "<head uuid=ef82a52d-c5a4-4b64-a811-2c28828cc120 name=Strokkur24>"
+  },
+  {
+   "source": "HeadTagsTest.testWithNameAndTexturesAndHatDeserialization",
+   "input": "<head name=Strokkur24 uuid=ef82a52d-c5a4-4b64-a811-2c28828cc120 !hat>",
+   "expected": "<head name=Strokkur24 uuid=ef82a52d-c5a4-4b64-a811-2c28828cc120 !hat>"
+  },
+  {
+   "source": "HoverTagTest.testHover",
+   "input": "<hover:show_text:\"<red>test\">TEST",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": {
+      "color": "red",
+      "text": "test"
+     }
+    },
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "HoverTagTest.testHover2",
+   "input": "<hover:show_text:'<red>test'>TEST",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": {
+      "color": "red",
+      "text": "test"
+     }
+    },
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "HoverTagTest.testHoverWithColon",
+   "input": "<hover:show_text:\"<red>test:TEST\">TEST",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": {
+      "color": "red",
+      "text": "test:TEST"
+     }
+    },
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "HoverTagTest.testHoverMultiline",
+   "input": "<hover:show_text:'<red>test\ntest2'>TEST",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": {
+      "color": "red",
+      "text": "test\ntest2"
+     }
+    },
+    "text": "TEST"
+   }
+  },
+  {
+   "source": "HoverTagTest.testHoverWithInsertingComponent",
+   "input": "<red><hover:show_text:\"Test\"><lang:item.minecraft.stick>",
+   "expected": {
+    "color": "red",
+    "hover_event": {
+     "action": "show_text",
+     "value": "Test"
+    },
+    "translate": "item.minecraft.stick"
+   }
+  },
+  {
+   "source": "HoverTagTest.testShowItemHover",
+   "input": "<hover:show_item:'minecraft:stone':5>test",
+   "expected": {
+    "hover_event": {
+     "action": "show_item",
+     "id": "minecraft:stone",
+     "count": 5
+    },
+    "text": "test"
+   }
+  },
+  {
+   "source": "HoverTagTest.testShowItemHover",
+   "input": "<hover:show_item:'minecraft:stone':'5'>test",
+   "expected": {
+    "hover_event": {
+     "action": "show_item",
+     "id": "minecraft:stone",
+     "count": 5
+    },
+    "text": "test"
+   }
+  },
+  {
+   "source": "HoverTagTest.testStringPlaceholderInHover",
+   "input": "<hover:show_text:'Word: <word>'><gold>Hover to see the word!",
+   "expected": {
+    "color": "gold",
+    "hover_event": {
+     "action": "show_text",
+     "value": "Word: <word>"
+    },
+    "text": "Hover to see the word!"
+   }
+  },
+  {
+   "source": "HoverTagTest.testPhil",
+   "input": "<red><hover:show_text:'Message 1\nMessage 2'>My Message",
+   "expected": {
+    "color": "red",
+    "hover_event": {
+     "action": "show_text",
+     "value": "Message 1\nMessage 2"
+    },
+    "text": "My Message"
+   }
+  },
+  {
+   "source": "InsertionTagTest.testInsertion",
+   "input": "Click <insert:test>this</insert> to insert!",
+   "expected": {
+    "extra": [
+     {
+      "insertion": "test",
+      "text": "this"
+     },
+     " to insert!"
+    ],
+    "text": "Click "
+   }
+  },
+  {
+   "source": "KeybindTagTest.testKeyBind",
+   "input": "Press <key:key.jump> to jump!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       " to jump!"
+      ],
+      "keybind": "key.jump"
+     }
+    ],
+    "text": "Press "
+   }
+  },
+  {
+   "source": "KeybindTagTest.testKeyBindWithColor",
+   "input": "Press <red><key:key.jump> to jump!",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "extra": [
+       " to jump!"
+      ],
+      "keybind": "key.jump"
+     }
+    ],
+    "text": "Press "
+   }
+  },
+  {
+   "source": "NbtTagTest.testParseBlockNbt",
+   "input": "That block has <nbt:block:^0 ^0 ^0:Items[0].display.Name/> in its first slot",
+   "expected": {
+    "extra": [
+     {
+      "nbt": "Items[0].display.Name",
+      "interpret": false,
+      "plain": false,
+      "block": "^0.0 ^0.0 ^0.0"
+     },
+     " in its first slot"
+    ],
+    "text": "That block has "
+   }
+  },
+  {
+   "source": "NbtTagTest.testParseInvalidPos",
+   "input": "<nbt:block:abc:Data.Value/>",
+   "expected": "<nbt:block:abc:Data.Value/>"
+  },
+  {
+   "source": "NbtTagTest.testParseEntityNbt",
+   "input": "<nbt:entity:@s:Health/>",
+   "expected": {
+    "nbt": "Health",
+    "interpret": false,
+    "plain": false,
+    "entity": "@s"
+   }
+  },
+  {
+   "source": "NbtTagTest.testParseStorageNbt",
+   "input": "<nbt:storage:'adventure:persist':'Users{cat: true}'/>",
+   "expected": {
+    "nbt": "Users{cat: true}",
+    "interpret": false,
+    "plain": false,
+    "storage": "adventure:persist"
+   }
+  },
+  {
+   "source": "NbtTagTest.testParseInvalidKey",
+   "input": "<nbt:storage:'adventure:pe rsist':'Users{cat: true}'/>",
+   "expected": "<nbt:storage:'adventure:pe rsist':'Users{cat: true}'/>"
+  },
+  {
+   "source": "NbtTagTest.testParseInterpret",
+   "input": "<nbt:entity:@s:sth:interpret/>",
+   "expected": {
+    "nbt": "sth",
+    "interpret": true,
+    "plain": false,
+    "entity": "@s"
+   }
+  },
+  {
+   "source": "NbtTagTest.testParseSeparator",
+   "input": "<nbt:entity:@s:sth:'<blue>! '/>",
+   "expected": {
+    "nbt": "sth",
+    "interpret": false,
+    "plain": false,
+    "separator": {
+     "color": "blue",
+     "text": "! "
+    },
+    "entity": "@s"
+   }
+  },
+  {
+   "source": "NewlineTagTest.testRoundtripNewline",
+   "input": "<red>Line</red><br><gray>break!",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "Line"
+     },
+     "\n",
+     {
+      "color": "gray",
+      "text": "break!"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "NewlineTagTest.testNewLine",
+   "input": "<red>Line<br><gray>break!",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "gray",
+      "text": "break!"
+     }
+    ],
+    "text": "Line\n"
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbow",
+   "input": "<yellow>Woo: <rainbow>||||||||||||||||||||||||</rainbow>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "#FF0000",
+          "text": "|"
+         },
+         {
+          "color": "#FF3F00",
+          "text": "|"
+         },
+         {
+          "color": "#FF7F00",
+          "text": "|"
+         },
+         {
+          "color": "#FFBF00",
+          "text": "|"
+         },
+         {
+          "color": "#FFFF00",
+          "text": "|"
+         },
+         {
+          "color": "#BFFF00",
+          "text": "|"
+         },
+         {
+          "color": "#7FFF00",
+          "text": "|"
+         },
+         {
+          "color": "#3FFF00",
+          "text": "|"
+         },
+         {
+          "color": "#00FF00",
+          "text": "|"
+         },
+         {
+          "color": "#00FF3F",
+          "text": "|"
+         },
+         {
+          "color": "#00FF7F",
+          "text": "|"
+         },
+         {
+          "color": "#00FFBF",
+          "text": "|"
+         },
+         {
+          "color": "#00FFFF",
+          "text": "|"
+         },
+         {
+          "color": "#00BFFF",
+          "text": "|"
+         },
+         {
+          "color": "#007FFF",
+          "text": "|"
+         },
+         {
+          "color": "#003FFF",
+          "text": "|"
+         },
+         {
+          "color": "#0000FF",
+          "text": "|"
+         },
+         {
+          "color": "#3F00FF",
+          "text": "|"
+         },
+         {
+          "color": "#7F00FF",
+          "text": "|"
+         },
+         {
+          "color": "#BF00FF",
+          "text": "|"
+         },
+         {
+          "color": "#FF00FF",
+          "text": "|"
+         },
+         {
+          "color": "#FF00BF",
+          "text": "|"
+         },
+         {
+          "color": "#FF007F",
+          "text": "|"
+         },
+         {
+          "color": "#FF003F",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbowBackwards",
+   "input": "<yellow>Woo: <rainbow:!>||||||||||||||||||||||||</rainbow>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "#FF003F",
+          "text": "|"
+         },
+         {
+          "color": "#FF007F",
+          "text": "|"
+         },
+         {
+          "color": "#FF00BF",
+          "text": "|"
+         },
+         {
+          "color": "#FF00FF",
+          "text": "|"
+         },
+         {
+          "color": "#BF00FF",
+          "text": "|"
+         },
+         {
+          "color": "#7F00FF",
+          "text": "|"
+         },
+         {
+          "color": "#3F00FF",
+          "text": "|"
+         },
+         {
+          "color": "#0000FF",
+          "text": "|"
+         },
+         {
+          "color": "#003FFF",
+          "text": "|"
+         },
+         {
+          "color": "#007FFF",
+          "text": "|"
+         },
+         {
+          "color": "#00BFFF",
+          "text": "|"
+         },
+         {
+          "color": "#00FFFF",
+          "text": "|"
+         },
+         {
+          "color": "#00FFBF",
+          "text": "|"
+         },
+         {
+          "color": "#00FF7F",
+          "text": "|"
+         },
+         {
+          "color": "#00FF3F",
+          "text": "|"
+         },
+         {
+          "color": "#00FF00",
+          "text": "|"
+         },
+         {
+          "color": "#3FFF00",
+          "text": "|"
+         },
+         {
+          "color": "#7FFF00",
+          "text": "|"
+         },
+         {
+          "color": "#BFFF00",
+          "text": "|"
+         },
+         {
+          "color": "#FFFF00",
+          "text": "|"
+         },
+         {
+          "color": "#FFBF00",
+          "text": "|"
+         },
+         {
+          "color": "#FF7F00",
+          "text": "|"
+         },
+         {
+          "color": "#FF3F00",
+          "text": "|"
+         },
+         {
+          "color": "#FF0000",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbowPhase",
+   "input": "<yellow>Woo: <rainbow:2>||||||||||||||||||||||||</rainbow>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "#CBFF00",
+          "text": "|"
+         },
+         {
+          "color": "#8CFF00",
+          "text": "|"
+         },
+         {
+          "color": "#4CFF00",
+          "text": "|"
+         },
+         {
+          "color": "#0CFF00",
+          "text": "|"
+         },
+         {
+          "color": "#00FF33",
+          "text": "|"
+         },
+         {
+          "color": "#00FF72",
+          "text": "|"
+         },
+         {
+          "color": "#00FFB2",
+          "text": "|"
+         },
+         {
+          "color": "#00FFF2",
+          "text": "|"
+         },
+         {
+          "color": "#00CBFF",
+          "text": "|"
+         },
+         {
+          "color": "#008CFF",
+          "text": "|"
+         },
+         {
+          "color": "#004CFF",
+          "text": "|"
+         },
+         {
+          "color": "#000CFF",
+          "text": "|"
+         },
+         {
+          "color": "#3200FF",
+          "text": "|"
+         },
+         {
+          "color": "#7200FF",
+          "text": "|"
+         },
+         {
+          "color": "#B200FF",
+          "text": "|"
+         },
+         {
+          "color": "#F200FF",
+          "text": "|"
+         },
+         {
+          "color": "#FF00CC",
+          "text": "|"
+         },
+         {
+          "color": "#FF008C",
+          "text": "|"
+         },
+         {
+          "color": "#FF004C",
+          "text": "|"
+         },
+         {
+          "color": "#FF000C",
+          "text": "|"
+         },
+         {
+          "color": "#FF3200",
+          "text": "|"
+         },
+         {
+          "color": "#FF7200",
+          "text": "|"
+         },
+         {
+          "color": "#FFB200",
+          "text": "|"
+         },
+         {
+          "color": "#FFF200",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbowPhaseBackwards",
+   "input": "<yellow>Woo: <rainbow:!2>||||||||||||||||||||||||</rainbow>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "extra": [
+       {
+        "extra": [
+         {
+          "color": "#FFF200",
+          "text": "|"
+         },
+         {
+          "color": "#FFB200",
+          "text": "|"
+         },
+         {
+          "color": "#FF7200",
+          "text": "|"
+         },
+         {
+          "color": "#FF3200",
+          "text": "|"
+         },
+         {
+          "color": "#FF000C",
+          "text": "|"
+         },
+         {
+          "color": "#FF004C",
+          "text": "|"
+         },
+         {
+          "color": "#FF008C",
+          "text": "|"
+         },
+         {
+          "color": "#FF00CC",
+          "text": "|"
+         },
+         {
+          "color": "#F200FF",
+          "text": "|"
+         },
+         {
+          "color": "#B200FF",
+          "text": "|"
+         },
+         {
+          "color": "#7200FF",
+          "text": "|"
+         },
+         {
+          "color": "#3200FF",
+          "text": "|"
+         },
+         {
+          "color": "#000CFF",
+          "text": "|"
+         },
+         {
+          "color": "#004CFF",
+          "text": "|"
+         },
+         {
+          "color": "#008CFF",
+          "text": "|"
+         },
+         {
+          "color": "#00CBFF",
+          "text": "|"
+         },
+         {
+          "color": "#00FFF2",
+          "text": "|"
+         },
+         {
+          "color": "#00FFB2",
+          "text": "|"
+         },
+         {
+          "color": "#00FF72",
+          "text": "|"
+         },
+         {
+          "color": "#00FF33",
+          "text": "|"
+         },
+         {
+          "color": "#0CFF00",
+          "text": "|"
+         },
+         {
+          "color": "#4CFF00",
+          "text": "|"
+         },
+         {
+          "color": "#8CFF00",
+          "text": "|"
+         },
+         {
+          "color": "#CBFF00",
+          "text": "|"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     },
+     "!"
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbowWithInsertion",
+   "input": "<yellow>Woo: <insert:test><rainbow>||||||||||||||||||||||||</rainbow>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "insertion": "test",
+      "extra": [
+       {
+        "extra": [
+         {
+          "extra": [
+           {
+            "color": "#FF0000",
+            "text": "|"
+           },
+           {
+            "color": "#FF3F00",
+            "text": "|"
+           },
+           {
+            "color": "#FF7F00",
+            "text": "|"
+           },
+           {
+            "color": "#FFBF00",
+            "text": "|"
+           },
+           {
+            "color": "#FFFF00",
+            "text": "|"
+           },
+           {
+            "color": "#BFFF00",
+            "text": "|"
+           },
+           {
+            "color": "#7FFF00",
+            "text": "|"
+           },
+           {
+            "color": "#3FFF00",
+            "text": "|"
+           },
+           {
+            "color": "#00FF00",
+            "text": "|"
+           },
+           {
+            "color": "#00FF3F",
+            "text": "|"
+           },
+           {
+            "color": "#00FF7F",
+            "text": "|"
+           },
+           {
+            "color": "#00FFBF",
+            "text": "|"
+           },
+           {
+            "color": "#00FFFF",
+            "text": "|"
+           },
+           {
+            "color": "#00BFFF",
+            "text": "|"
+           },
+           {
+            "color": "#007FFF",
+            "text": "|"
+           },
+           {
+            "color": "#003FFF",
+            "text": "|"
+           },
+           {
+            "color": "#0000FF",
+            "text": "|"
+           },
+           {
+            "color": "#3F00FF",
+            "text": "|"
+           },
+           {
+            "color": "#7F00FF",
+            "text": "|"
+           },
+           {
+            "color": "#BF00FF",
+            "text": "|"
+           },
+           {
+            "color": "#FF00FF",
+            "text": "|"
+           },
+           {
+            "color": "#FF00BF",
+            "text": "|"
+           },
+           {
+            "color": "#FF007F",
+            "text": "|"
+           },
+           {
+            "color": "#FF003F",
+            "text": "|"
+           }
+          ],
+          "text": ""
+         }
+        ],
+        "text": ""
+       },
+       "!"
+      ],
+      "text": ""
+     }
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbowBackwardsWithInsertion",
+   "input": "<yellow>Woo: <insert:test><rainbow:!>||||||||||||||||||||||||</rainbow>!",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "insertion": "test",
+      "extra": [
+       {
+        "extra": [
+         {
+          "extra": [
+           {
+            "color": "#FF003F",
+            "text": "|"
+           },
+           {
+            "color": "#FF007F",
+            "text": "|"
+           },
+           {
+            "color": "#FF00BF",
+            "text": "|"
+           },
+           {
+            "color": "#FF00FF",
+            "text": "|"
+           },
+           {
+            "color": "#BF00FF",
+            "text": "|"
+           },
+           {
+            "color": "#7F00FF",
+            "text": "|"
+           },
+           {
+            "color": "#3F00FF",
+            "text": "|"
+           },
+           {
+            "color": "#0000FF",
+            "text": "|"
+           },
+           {
+            "color": "#003FFF",
+            "text": "|"
+           },
+           {
+            "color": "#007FFF",
+            "text": "|"
+           },
+           {
+            "color": "#00BFFF",
+            "text": "|"
+           },
+           {
+            "color": "#00FFFF",
+            "text": "|"
+           },
+           {
+            "color": "#00FFBF",
+            "text": "|"
+           },
+           {
+            "color": "#00FF7F",
+            "text": "|"
+           },
+           {
+            "color": "#00FF3F",
+            "text": "|"
+           },
+           {
+            "color": "#00FF00",
+            "text": "|"
+           },
+           {
+            "color": "#3FFF00",
+            "text": "|"
+           },
+           {
+            "color": "#7FFF00",
+            "text": "|"
+           },
+           {
+            "color": "#BFFF00",
+            "text": "|"
+           },
+           {
+            "color": "#FFFF00",
+            "text": "|"
+           },
+           {
+            "color": "#FFBF00",
+            "text": "|"
+           },
+           {
+            "color": "#FF7F00",
+            "text": "|"
+           },
+           {
+            "color": "#FF3F00",
+            "text": "|"
+           },
+           {
+            "color": "#FF0000",
+            "text": "|"
+           }
+          ],
+          "text": ""
+         }
+        ],
+        "text": ""
+       },
+       "!"
+      ],
+      "text": ""
+     }
+    ],
+    "text": "Woo: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbowWithInnerClick",
+   "input": "Rainbow: <rainbow><click:open_url:'https://github.com'>GH</click></rainbow>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "click_event": {
+         "action": "open_url",
+         "url": "https://github.com"
+        },
+        "extra": [
+         {
+          "color": "#FF0000",
+          "text": "G"
+         },
+         {
+          "color": "#00FFFF",
+          "text": "H"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": "Rainbow: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testRainbowBackwardsWithInnerClick",
+   "input": "Rainbow: <rainbow:!0><click:open_url:'https://github.com'>GH</click></rainbow>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "click_event": {
+         "action": "open_url",
+         "url": "https://github.com"
+        },
+        "extra": [
+         {
+          "color": "#00FFFF",
+          "text": "G"
+         },
+         {
+          "color": "#FF0000",
+          "text": "H"
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": "Rainbow: "
+   }
+  },
+  {
+   "source": "RainbowTagTest.testNoRepeatedTextAfterUnclosedRainbow",
+   "input": "<rainbow>rainbow<yellow>yellow",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "#FF0000",
+        "text": "r"
+       },
+       {
+        "color": "#FF7500",
+        "text": "a"
+       },
+       {
+        "color": "#FFEB00",
+        "text": "i"
+       },
+       {
+        "color": "#9CFF00",
+        "text": "n"
+       },
+       {
+        "color": "#27FF00",
+        "text": "b"
+       },
+       {
+        "color": "#00FF4E",
+        "text": "o"
+       },
+       {
+        "color": "#00FFC4",
+        "text": "w"
+       }
+      ],
+      "text": ""
+     },
+     {
+      "color": "yellow",
+      "text": "yellow"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "RainbowTagTest.gh147",
+   "input": "<rainbow><msg>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "#FF0000",
+        "text": "<"
+       },
+       {
+        "color": "#CBFF00",
+        "text": "m"
+       },
+       {
+        "color": "#00FF66",
+        "text": "s"
+       },
+       {
+        "color": "#0065FF",
+        "text": "g"
+       },
+       {
+        "color": "#CC00FF",
+        "text": ">"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "RainbowTagTest.gh1040",
+   "input": "<rainbow:16777215>||||||||||",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "#00FFFF",
+        "text": "|"
+       },
+       {
+        "color": "#0065FF",
+        "text": "|"
+       },
+       {
+        "color": "#3200FF",
+        "text": "|"
+       },
+       {
+        "color": "#CC00FF",
+        "text": "|"
+       },
+       {
+        "color": "#FF0099",
+        "text": "|"
+       },
+       {
+        "color": "#FF0000",
+        "text": "|"
+       },
+       {
+        "color": "#FF9900",
+        "text": "|"
+       },
+       {
+        "color": "#CCFF00",
+        "text": "|"
+       },
+       {
+        "color": "#32FF00",
+        "text": "|"
+       },
+       {
+        "color": "#00FF65",
+        "text": "|"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "RainbowTagTest.testDisabledVirtualComponentEmission",
+   "input": "<b><rainbow>A",
+   "expected": {
+    "bold": true,
+    "extra": [
+     {
+      "color": "#FF0000",
+      "text": "A"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "ResetTagTest.testReset",
+   "input": "Click <yellow><insert:test>this<rainbow> wooo<reset> to insert!",
+   "expected": {
+    "extra": [
+     {
+      "color": "yellow",
+      "insertion": "test",
+      "extra": [
+       {
+        "extra": [
+         {
+          "extra": [
+           {
+            "color": "#FF0000",
+            "text": " "
+           },
+           {
+            "color": "#CBFF00",
+            "text": "w"
+           },
+           {
+            "color": "#00FF66",
+            "text": "o"
+           },
+           {
+            "color": "#0065FF",
+            "text": "o"
+           },
+           {
+            "color": "#CC00FF",
+            "text": "o"
+           }
+          ],
+          "text": ""
+         }
+        ],
+        "text": ""
+       }
+      ],
+      "text": "this"
+     },
+     " to insert!"
+    ],
+    "text": "Click "
+   }
+  },
+  {
+   "source": "ScoreTagTest.testParseScore",
+   "input": "You have won <score:rymiel:gamesWon/> games!",
+   "expected": {
+    "extra": [
+     {
+      "score": {
+       "name": "rymiel",
+       "objective": "gamesWon"
+      }
+     },
+     " games!"
+    ],
+    "text": "You have won "
+   }
+  },
+  {
+   "source": "SelectorTagTest.testSelector",
+   "input": "Hello there, <sel:@s/>!",
+   "expected": {
+    "extra": [
+     {
+      "selector": "@s"
+     },
+     "!"
+    ],
+    "text": "Hello there, "
+   }
+  },
+  {
+   "source": "SelectorTagTest.testSeparator",
+   "input": "Hello there, <sel:@s:separator/>!",
+   "expected": {
+    "extra": [
+     {
+      "selector": "@s",
+      "separator": "separator"
+     },
+     "!"
+    ],
+    "text": "Hello there, "
+   }
+  },
+  {
+   "source": "ShadowColorTagTest.testNoShadow",
+   "input": "now i'm here <!shadow>and now i'm not!",
+   "expected": {
+    "extra": [
+     {
+      "shadow_color": 0,
+      "text": "and now i'm not!"
+     }
+    ],
+    "text": "now i'm here "
+   }
+  },
+  {
+   "source": "ShadowColorTagTest.testRoundtripNamedShadow",
+   "input": "<shadow:red:0.8>i have a red shadow",
+   "expected": {
+    "shadow_color": -855681707,
+    "text": "i have a red shadow"
+   }
+  },
+  {
+   "source": "ShadowColorTagTest.testParseHexComponentShadow",
+   "input": "<shadow:#FF0000:0.8>i have a redder shadow",
+   "expected": {
+    "shadow_color": -855703552,
+    "text": "i have a redder shadow"
+   }
+  },
+  {
+   "source": "SpriteTagTest.testSprite",
+   "input": "<sprite:block/stone> is hard.",
+   "expected": {
+    "extra": [
+     {
+      "sprite": "minecraft:block/stone"
+     },
+     " is hard."
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "SpriteTagTest.testAtlasSprite",
+   "input": "A <sprite:items:item/diamond_sword> is strong.",
+   "expected": {
+    "extra": [
+     {
+      "atlas": "minecraft:items",
+      "sprite": "minecraft:item/diamond_sword"
+     },
+     " is strong."
+    ],
+    "text": "A "
+   }
+  },
+  {
+   "source": "TranslatableFallbackTagTest.testTranslatable",
+   "input": "You should get a <lang_or:block.minecraft.diamond_block:'Diamond Block'>!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       "!"
+      ],
+      "translate": "block.minecraft.diamond_block",
+      "fallback": "Diamond Block"
+     }
+    ],
+    "text": "You should get a "
+   }
+  },
+  {
+   "source": "TranslatableTagTest.testTranslatable",
+   "input": "You should get a <lang:block.minecraft.diamond_block>!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       "!"
+      ],
+      "translate": "block.minecraft.diamond_block"
+     }
+    ],
+    "text": "You should get a "
+   }
+  },
+  {
+   "source": "TranslatableTagTest.testTranslatableWith",
+   "input": "Test: <lang:commands.drop.success.single:'<red>1':'<blue>Stone'>!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       "!"
+      ],
+      "translate": "commands.drop.success.single",
+      "with": [
+       {
+        "color": "red",
+        "text": "1"
+       },
+       {
+        "color": "blue",
+        "text": "Stone"
+       }
+      ]
+     }
+    ],
+    "text": "Test: "
+   }
+  },
+  {
+   "source": "TranslatableTagTest.testTranslatableWithHover",
+   "input": "Test: <lang:commands.drop.success.single:'<hover:show_text:\\'<red>dum\\'><red>1':'<blue>Stone'>!",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       "!"
+      ],
+      "translate": "commands.drop.success.single",
+      "with": [
+       {
+        "color": "red",
+        "hover_event": {
+         "action": "show_text",
+         "value": {
+          "color": "red",
+          "text": "dum"
+         }
+        },
+        "text": "1"
+       },
+       {
+        "color": "blue",
+        "text": "Stone"
+       }
+      ]
+     }
+    ],
+    "text": "Test: "
+   }
+  },
+  {
+   "source": "TranslatableTagTest.testKingAlter",
+   "input": "Ahoy <lang:offset.-40:'<red>mates!'>",
+   "expected": {
+    "extra": [
+     {
+      "translate": "offset.-40",
+      "with": [
+       {
+        "color": "red",
+        "text": "mates!"
+       }
+      ]
+     }
+    ],
+    "text": "Ahoy "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testStripComplex",
+   "input": "<yellow><test> random <bold>stranger</bold><click:run_command:test command><underlined><red>click here</click><blue> to <bold>FEEL</underlined> it",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "bold": true,
+      "text": "stranger"
+     },
+     {
+      "underlined": true,
+      "color": "red",
+      "click_event": {
+       "action": "run_command",
+       "command": "test command"
+      },
+      "text": "click here"
+     },
+     {
+      "color": "blue",
+      "extra": [
+       {
+        "bold": true,
+        "text": "FEEL</underlined> it"
+       }
+      ],
+      "text": " to "
+     }
+    ],
+    "text": "<test> random "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testStripComplexInner",
+   "input": "<yellow><test> random <bold>stranger</bold><click:run_command:test command><underlined><red>click here <please></click><blue> to <bold>FEEL</underlined> it",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "bold": true,
+      "text": "stranger"
+     },
+     {
+      "underlined": true,
+      "color": "red",
+      "click_event": {
+       "action": "run_command",
+       "command": "test command"
+      },
+      "text": "click here <please>"
+     },
+     {
+      "color": "blue",
+      "extra": [
+       {
+        "bold": true,
+        "text": "FEEL</underlined> it"
+       }
+      ],
+      "text": " to "
+     }
+    ],
+    "text": "<test> random "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testStripTags",
+   "input": "Hello, <red><name>!",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "<name>!"
+     }
+    ],
+    "text": "Hello, "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testEscapeComplexInner",
+   "input": "<yellow><test> random <bold>stranger</bold><click:run_command:test command><underlined><red>click here <notToken></click><blue> to <bold>FEEL</underlined> it",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "bold": true,
+      "text": "stranger"
+     },
+     {
+      "underlined": true,
+      "color": "red",
+      "click_event": {
+       "action": "run_command",
+       "command": "test command"
+      },
+      "text": "click here <notToken>"
+     },
+     {
+      "color": "blue",
+      "extra": [
+       {
+        "bold": true,
+        "text": "FEEL</underlined> it"
+       }
+      ],
+      "text": " to "
+     }
+    ],
+    "text": "<test> random "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testUnescape",
+   "input": "<yellow>TEST\\<green> nested\\</green>Test",
+   "expected": {
+    "color": "yellow",
+    "text": "TEST<green> nested</green>Test"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testNoUnescape",
+   "input": "<yellow>TEST\\<green> \\\\< nested\\</green>Test",
+   "expected": {
+    "color": "yellow",
+    "text": "TEST<green> \\< nested</green>Test"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testEscapeIgnoresSectionSigns",
+   "input": "Hello, read \u00a764 for <red> information",
+   "error": "ParsingExceptionImpl"
+  },
+  {
+   "source": "MiniMessageParserTest.testNiceMix",
+   "input": "<yellow><test> random <bold>stranger</bold><click:run_command:test command><underlined><red>click here</click><blue> to <b>FEEL</underlined> it",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "bold": true,
+      "text": "stranger"
+     },
+     {
+      "underlined": true,
+      "color": "red",
+      "click_event": {
+       "action": "run_command",
+       "command": "test command"
+      },
+      "text": "click here"
+     },
+     {
+      "color": "blue",
+      "extra": [
+       {
+        "bold": true,
+        "text": "FEEL</underlined> it"
+       }
+      ],
+      "text": " to "
+     }
+    ],
+    "text": "<test> random "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTag",
+   "input": "<red><test>",
+   "expected": {
+    "color": "red",
+    "text": "<test>"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTagComplex",
+   "input": "<yellow><test> random <bold>stranger</bold><click:run_command:test command><oof></oof><underlined><red>click here</click><blue> to <bold>FEEL</underlined> it",
+   "expected": {
+    "color": "yellow",
+    "extra": [
+     {
+      "bold": true,
+      "text": "stranger"
+     },
+     {
+      "click_event": {
+       "action": "run_command",
+       "command": "test command"
+      },
+      "extra": [
+       {
+        "underlined": true,
+        "color": "red",
+        "text": "click here"
+       }
+      ],
+      "text": "<oof></oof>"
+     },
+     {
+      "color": "blue",
+      "extra": [
+       {
+        "bold": true,
+        "text": "FEEL</underlined> it"
+       }
+      ],
+      "text": " to "
+     }
+    ],
+    "text": "<test> random "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testBackSpace",
+   "input": "\\!/ IMPORTANT \\!/",
+   "expected": "\\!/ IMPORTANT \\!/"
+  },
+  {
+   "source": "MiniMessageParserTest.testGH5",
+   "input": "<dark_gray>\u00bb<gray> To download it from the internet, <click:open_url:'<pack_url>'><hover:show_text:\"<green>/!\\ install it from Options/ResourcePacks in your game\"><green><bold>CLICK HERE</bold></hover></click>",
+   "expected": {
+    "color": "dark_gray",
+    "extra": [
+     {
+      "color": "gray",
+      "extra": [
+       {
+        "bold": true,
+        "color": "green",
+        "hover_event": {
+         "action": "show_text",
+         "value": {
+          "color": "green",
+          "text": "/!\\ install it from Options/ResourcePacks in your game"
+         }
+        },
+        "text": "CLICK HERE"
+       },
+       "</click>"
+      ],
+      "text": " To download it from the internet, <click:open_url:'<pack_url>'>"
+     }
+    ],
+    "text": "\u00bb"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testGH5Modified",
+   "input": "<dark_gray>\u00bb<gray> To download it from the internet, <click:open_url:'<pack_url>'><hover:show_text:'<green>/!\\ install it from \\'Options/ResourcePacks\\' in your game'><green><bold>CLICK HERE</bold></hover></click>",
+   "expected": {
+    "color": "dark_gray",
+    "extra": [
+     {
+      "color": "gray",
+      "extra": [
+       {
+        "bold": true,
+        "color": "green",
+        "hover_event": {
+         "action": "show_text",
+         "value": {
+          "color": "green",
+          "text": "/!\\ install it from 'Options/ResourcePacks' in your game"
+         }
+        },
+        "text": "CLICK HERE"
+       },
+       "</click>"
+      ],
+      "text": " To download it from the internet, <click:open_url:'<pack_url>'>"
+     }
+    ],
+    "text": "\u00bb"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testGH5Quoted",
+   "input": "<dark_gray>\u00bb<gray> To download it from the internet, <click:open_url:\"https://www.google.com\"><hover:show_text:\"<green>/!\\ install it from Options/ResourcePacks in your game\"><green><bold>CLICK HERE</bold></hover></click>",
+   "expected": {
+    "color": "dark_gray",
+    "extra": [
+     {
+      "color": "gray",
+      "extra": [
+       {
+        "bold": true,
+        "color": "green",
+        "click_event": {
+         "action": "open_url",
+         "url": "https://www.google.com"
+        },
+        "hover_event": {
+         "action": "show_text",
+         "value": {
+          "color": "green",
+          "text": "/!\\ install it from Options/ResourcePacks in your game"
+         }
+        },
+        "text": "CLICK HERE"
+       }
+      ],
+      "text": " To download it from the internet, "
+     }
+    ],
+    "text": "\u00bb"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testDoubleNewLine",
+   "input": "<red>Hello\n\nWorld",
+   "expected": {
+    "color": "red",
+    "text": "Hello\n\nWorld"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testMismatchedTags",
+   "input": "<green>hello</red>",
+   "expected": {
+    "color": "green",
+    "text": "hello</red>"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testQuoteEscapingInArguments",
+   "input": "<lang:test:'\"\"'>",
+   "expected": {
+    "translate": "test",
+    "with": [
+     "\"\""
+    ]
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testQuoteEscapingInArguments",
+   "input": "<lang:test:'\\'\\''>",
+   "expected": {
+    "translate": "test",
+    "with": [
+     "''"
+    ]
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testQuoteEscapingInArguments",
+   "input": "<lang:test:\"''\">",
+   "expected": {
+    "translate": "test",
+    "with": [
+     "''"
+    ]
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testQuoteEscapingInArguments",
+   "input": "<lang:test:\"\\\"\\\"\">",
+   "expected": {
+    "translate": "test",
+    "with": [
+     "\"\""
+    ]
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testNonTerminatingQuote",
+   "input": "<red>Remember the<3\"</red> bug",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "Remember the<3\""
+     },
+     " bug"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testNonTerminatingQuote",
+   "input": "<red>Remember the<3'</red> bug",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "Remember the<3'"
+     },
+     " bug"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testNonTerminatingQuote",
+   "input": "<red>Remember the<h:\"</red> bug",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "Remember the<h:\""
+     },
+     " bug"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testNonTerminatingQuote",
+   "input": "<red>Remember the<h:\"</red> \"bug",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "Remember the<h:\""
+     },
+     " \"bug"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testNonTerminatingQuote",
+   "input": "<red>Remember the<h:\"</red> \">bug",
+   "expected": {
+    "color": "red",
+    "text": "Remember the<h:\"</red> \">bug"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testEscapeIncompleteTags",
+   "input": "<<aqua> a",
+   "expected": {
+    "extra": [
+     {
+      "color": "aqua",
+      "text": " a"
+     }
+    ],
+    "text": "<"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testAngleBracketsShit",
+   "input": "<gray><<yellow>TEST<gray>> Woo << double <3",
+   "expected": {
+    "color": "gray",
+    "extra": [
+     {
+      "color": "yellow",
+      "extra": [
+       {
+        "color": "gray",
+        "text": "> Woo << double <3"
+       }
+      ],
+      "text": "TEST"
+     }
+    ],
+    "text": "<"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testNoSwallowSpace",
+   "input": "<red><hover:show_text:\"Test\"> <lang:item.minecraft.stick>",
+   "expected": {
+    "color": "red",
+    "hover_event": {
+     "action": "show_text",
+     "value": "Test"
+    },
+    "extra": [
+     {
+      "translate": "item.minecraft.stick"
+     }
+    ],
+    "text": " "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testEscapeOutsideOfContext",
+   "input": "\\\"",
+   "expected": "\\\""
+  },
+  {
+   "source": "MiniMessageParserTest.testEscapesEscapablePlainText",
+   "input": "\\\\<red>hi",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "hi"
+     }
+    ],
+    "text": "\\"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testEscapeInsideOfContext",
+   "input": "<hover:show_text:'Look at\\\\ this \\''>Test",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": "Look at\\ this '"
+    },
+    "text": "Test"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testEscapeAtEnd",
+   "input": "Please don't crash \\",
+   "expected": "Please don't crash \\"
+  },
+  {
+   "source": "MiniMessageParserTest.testCaseInsensitive",
+   "input": "<red>this is <BOLD>an error</bold> message",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "bold": true,
+      "text": "an error"
+     },
+     " message"
+    ],
+    "text": "this is "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testCaseInsensitive",
+   "input": "<C:reD>also red",
+   "expected": {
+    "color": "red",
+    "text": "also red"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testClosingTagAtRootLevel",
+   "input": "one</blue>two",
+   "expected": "one</blue>two"
+  },
+  {
+   "source": "MiniMessageParserTest.testEmptyTagPart",
+   "input": "<hover:show_text:\"\">text</hover>",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": ""
+    },
+    "text": "text"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testEmptyTagPart",
+   "input": "<hover:show_text:>text</hover>",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": ""
+    },
+    "text": "text"
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testTreeOutput",
+   "input": "<red> RED <blue> <name> <click:open_url:https://github.com> good <action> </click>",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "blue",
+      "extra": [
+       {
+        "click_event": {
+         "action": "open_url",
+         "url": "https://github.com"
+        },
+        "text": " good <action> "
+       }
+      ],
+      "text": " <name> "
+     }
+    ],
+    "text": " RED "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testTagsSelfClosable",
+   "input": "<red>hello <lang:gameMode.creative/> there",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "translate": "gameMode.creative"
+     },
+     " there"
+    ],
+    "text": "hello "
+   }
+  },
+  {
+   "source": "MiniMessageParserTest.testIgnorableSelfClosable",
+   "input": "<red/>things",
+   "expected": "things"
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTagNames",
+   "input": "Hello <this_is_%not_allowed> but ignored?",
+   "expected": "Hello <this_is_%not_allowed> but ignored?"
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTagNames",
+   "input": "Hello <this_is_not_allowed!> but ignored?",
+   "expected": "Hello <this_is_not_allowed!> but ignored?"
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTagNames",
+   "input": "Hello <!?this_is_not_allowed> but ignored?",
+   "expected": "Hello <!?this_is_not_allowed> but ignored?"
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTagNames",
+   "input": "Hello <##this_is_%not_allowed> but ignored?",
+   "expected": "Hello <##this_is_%not_allowed> but ignored?"
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTagNames",
+   "input": "<3 >Mini<3 />Message</3 >",
+   "expected": "<3 >Mini<3 />Message</3 >"
+  },
+  {
+   "source": "MiniMessageParserTest.testInvalidTagNames",
+   "input": "this message <\"red\">isn't red",
+   "expected": "this message <\"red\">isn't red"
+  },
+  {
+   "source": "MiniMessageParserTest.invalidPreprocessTagNames",
+   "input": "Some<##>of<>these<tag>are<3 >tags",
+   "expected": "Some<##>of<>these<tag>are<3 >tags"
+  },
+  {
+   "source": "MiniMessageParserTest.testNonTerminatingQuoteArgument",
+   "input": "<hover:show_text_:\">",
+   "expected": "<hover:show_text_:\">"
+  },
+  {
+   "source": "MiniMessageTest.testNormalBuilder",
+   "input": "<red>Test",
+   "expected": {
+    "color": "red",
+    "text": "Test"
+   }
+  },
+  {
+   "source": "MiniMessageTest.testPlaceholderSimple",
+   "input": "<test>",
+   "expected": "<test>"
+  },
+  {
+   "source": "MiniMessageTest.testPlaceholderComponentInheritedStyle",
+   "input": "<green><bold><test>",
+   "expected": {
+    "bold": true,
+    "color": "green",
+    "text": "<test>"
+   }
+  },
+  {
+   "source": "MiniMessageTest.testPlaceholderComponentMixed",
+   "input": "<green><bold><test><test2>",
+   "expected": {
+    "bold": true,
+    "color": "green",
+    "text": "<test><test2>"
+   }
+  },
+  {
+   "source": "MiniMessageTest.testPreprocessing",
+   "input": "Hello",
+   "expected": "Hello"
+  },
+  {
+   "source": "MiniMessageTest.testPlaceholderInHover",
+   "input": "<hover:show_text:'<prefix>'>This is a test message.",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": "<prefix>"
+    },
+    "text": "This is a test message."
+   }
+  },
+  {
+   "source": "MiniMessageTest.testGroupingPlaceholderResolver",
+   "input": "<one><none><two>",
+   "expected": "<one><none><two>"
+  },
+  {
+   "source": "MiniMessageTest.testOrderOfPlaceholders",
+   "input": "<a><b><!c>",
+   "expected": {
+    "extra": [
+     {
+      "bold": true,
+      "text": "<!c>"
+     }
+    ],
+    "text": "<a>"
+   }
+  },
+  {
+   "source": "MiniMessageTest.testNodesInPlaceholder",
+   "input": "<red><username><gray>: <red><message>",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "gray",
+      "extra": [
+       {
+        "color": "red",
+        "text": "<message>"
+       }
+      ],
+      "text": ": "
+     }
+    ],
+    "text": "<username>"
+   }
+  },
+  {
+   "source": "MiniMessageTest.testLazyPlaceholder",
+   "input": "This is a <test>",
+   "expected": "This is a <test>"
+  },
+  {
+   "source": "MiniMessageTest.testNonStrict",
+   "input": "<gray>Example: <click:suggest_command:/plot flag set coral-dry true><gold>/plot flag set coral-dry true</gold></click></gray>",
+   "expected": {
+    "color": "gray",
+    "extra": [
+     {
+      "color": "gold",
+      "click_event": {
+       "action": "suggest_command",
+       "command": "/plot flag set coral-dry true"
+      },
+      "text": "/plot flag set coral-dry true"
+     }
+    ],
+    "text": "Example: "
+   }
+  },
+  {
+   "source": "MiniMessageTest.testStrictException",
+   "input": "<gray>Example: <click:suggest_command:/plot flag set coral-dry true><gold>/plot flag set coral-dry true<click></gold></gray>",
+   "expected": {
+    "color": "gray",
+    "extra": [
+     {
+      "color": "gold",
+      "click_event": {
+       "action": "suggest_command",
+       "command": "/plot flag set coral-dry true"
+      },
+      "text": "/plot flag set coral-dry true<click>"
+     }
+    ],
+    "text": "Example: "
+   }
+  },
+  {
+   "source": "MiniMessageTest.testMissingCloseOfHover",
+   "input": "<hover:show_text:'<blue>Hello</blue>'<red>TEST</red></hover><click:suggest_command:'/msg <user>'><user></click> <reset>: <hover:show_text:'<date>'><message></hover>",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "TEST"
+     },
+     "</hover>",
+     {
+      "click_event": {
+       "action": "suggest_command",
+       "command": "/msg <user>"
+      },
+      "text": "<user>"
+     },
+     " : ",
+     {
+      "hover_event": {
+       "action": "show_text",
+       "value": "<date>"
+      },
+      "text": "<message>"
+     }
+    ],
+    "text": "<hover:show_text:'<blue>Hello</blue>'"
+   }
+  },
+  {
+   "source": "MiniMessageTest.testNonEndingComponent",
+   "input": "<red is already created! Try different name! :)",
+   "expected": "<red is already created! Try different name! :)"
+  },
+  {
+   "source": "MiniMessageTest.testIncompleteTag",
+   "input": "<red>Click <click>here</click> to win a new <bold>car!",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "bold": true,
+      "text": "car!"
+     }
+    ],
+    "text": "Click <click>here</click> to win a new "
+   }
+  },
+  {
+   "source": "MiniMessageTest.allClosedTagsStrict",
+   "input": "<red>RED<green>GREEN</green>RED<blue>BLUE</blue></red>",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "green",
+      "text": "GREEN"
+     },
+     "RED",
+     {
+      "color": "blue",
+      "text": "BLUE"
+     }
+    ],
+    "text": "RED"
+   }
+  },
+  {
+   "source": "MiniMessageTest.unclosedTagStrict",
+   "input": "<red>RED<green>GREEN</green>RED<blue>BLUE",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "green",
+      "text": "GREEN"
+     },
+     "RED",
+     {
+      "color": "blue",
+      "text": "BLUE"
+     }
+    ],
+    "text": "RED"
+   }
+  },
+  {
+   "source": "MiniMessageTest.implicitCloseStrict",
+   "input": "<red>RED<green>GREEN</red>NO COLOR<blue>BLUE</blue>",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "extra": [
+       {
+        "color": "green",
+        "text": "GREEN"
+       }
+      ],
+      "text": "RED"
+     },
+     "NO COLOR",
+     {
+      "color": "blue",
+      "text": "BLUE"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "MiniMessageTest.implicitCloseNestedStrict",
+   "input": "<red>RED<green>GREEN<blue>BLUE<yellow>YELLOW</green>",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "green",
+      "extra": [
+       {
+        "color": "blue",
+        "extra": [
+         {
+          "color": "yellow",
+          "text": "YELLOW"
+         }
+        ],
+        "text": "BLUE"
+       }
+      ],
+      "text": "GREEN"
+     }
+    ],
+    "text": "RED"
+   }
+  },
+  {
+   "source": "MiniMessageTest.resetWhileStrict",
+   "input": "<red>RED<green>GREEN<reset>NO COLOR<blue>BLUE</blue>",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "extra": [
+       {
+        "color": "green",
+        "text": "GREEN"
+       }
+      ],
+      "text": "RED"
+     },
+     "NO COLOR",
+     {
+      "color": "blue",
+      "text": "BLUE"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "MiniMessageTest.debugModeSimple",
+   "input": "<red> RED </red>",
+   "expected": {
+    "color": "red",
+    "text": " RED "
+   }
+  },
+  {
+   "source": "MiniMessageTest.debugModeMoreComplex",
+   "input": "<red> RED <blue> BLUE <click> bad click </click>",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "blue",
+      "text": " BLUE <click> bad click </click>"
+     }
+    ],
+    "text": " RED "
+   }
+  },
+  {
+   "source": "MiniMessageTest.debugModeMoreComplexNoError",
+   "input": "<red> RED <blue> BLUE <click:open_url:https://github.com> good click </click>",
+   "expected": {
+    "color": "red",
+    "extra": [
+     {
+      "color": "blue",
+      "extra": [
+       {
+        "click_event": {
+         "action": "open_url",
+         "url": "https://github.com"
+        },
+        "text": " good click "
+       }
+      ],
+      "text": " BLUE "
+     }
+    ],
+    "text": " RED "
+   }
+  },
+  {
+   "source": "MiniMessageTest.testNegatedDecorationTags",
+   "input": "<!i>Not italic<!b>Not bold also</!b>back to italic.",
+   "expected": {
+    "italic": false,
+    "extra": [
+     {
+      "bold": false,
+      "text": "Not bold also"
+     },
+     "back to italic."
+    ],
+    "text": "Not italic"
+   }
+  },
+  {
+   "source": "extra.transition",
+   "input": "<transition:red:blue:0.5>Hello</transition>",
+   "expected": {
+    "color": "#AA55AA",
+    "text": "Hello"
+   }
+  },
+  {
+   "source": "extra.transition_phase_neg",
+   "input": "<transition:#ff0000:#00ff00:#0000ff:-0.25>x",
+   "expected": {
+    "color": "#808000",
+    "text": "x"
+   }
+  },
+  {
+   "source": "extra.pride",
+   "input": "<pride>Hello World</pride>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "#E50000",
+        "text": "H"
+       },
+       {
+        "color": "#F24700",
+        "text": "e"
+       },
+       {
+        "color": "#FF8D00",
+        "text": "l"
+       },
+       {
+        "color": "#FFBE00",
+        "text": "l"
+       },
+       {
+        "color": "#FFEE00",
+        "text": "o"
+       },
+       {
+        "color": "#81B811",
+        "text": " "
+       },
+       {
+        "color": "#028121",
+        "text": "W"
+       },
+       {
+        "color": "#016790",
+        "text": "o"
+       },
+       {
+        "color": "#004CFF",
+        "text": "r"
+       },
+       {
+        "color": "#3C26C4",
+        "text": "l"
+       },
+       {
+        "color": "#770088",
+        "text": "d"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.pride_flag",
+   "input": "<pride:trans>Trans flag</pride>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "#5BCFFB",
+        "text": "T"
+       },
+       {
+        "color": "#9FBFDE",
+        "text": "r"
+       },
+       {
+        "color": "#E4AFC0",
+        "text": "a"
+       },
+       {
+        "color": "#F8C7D0",
+        "text": "n"
+       },
+       {
+        "color": "#FDECEF",
+        "text": "s "
+       },
+       {
+        "color": "#F8C7D0",
+        "text": "f"
+       },
+       {
+        "color": "#E4AFC0",
+        "text": "l"
+       },
+       {
+        "color": "#9FBFDE",
+        "text": "a"
+       },
+       {
+        "color": "#5BCFFB",
+        "text": "g"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.reset",
+   "input": "<red><bold>a<reset>b",
+   "expected": {
+    "extra": [
+     {
+      "bold": true,
+      "color": "red",
+      "text": "a"
+     },
+     "b"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.newline_br",
+   "input": "a<br>b<newline>c",
+   "expected": "a\nb\nc"
+  },
+  {
+   "source": "extra.shadow_default",
+   "input": "<shadow:red>s</shadow> <!shadow>n",
+   "expected": {
+    "extra": [
+     {
+      "shadow_color": 1073698133,
+      "text": "s"
+     },
+     " ",
+     {
+      "shadow_color": 0,
+      "text": "n"
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.shadow_alpha",
+   "input": "<shadow:#ff000080>s",
+   "expected": {
+    "shadow_color": -2130771968,
+    "text": "s"
+   }
+  },
+  {
+   "source": "extra.click_copy",
+   "input": "<click:copy_to_clipboard:'hi there'>c</click>",
+   "expected": {
+    "click_event": {
+     "action": "copy_to_clipboard",
+     "value": "hi there"
+    },
+    "text": "c"
+   }
+  },
+  {
+   "source": "extra.click_url",
+   "input": "<click:open_url:https://example.com>c",
+   "expected": {
+    "click_event": {
+     "action": "open_url",
+     "url": "https://example.com"
+    },
+    "text": "c"
+   }
+  },
+  {
+   "source": "extra.hover_item",
+   "input": "<hover:show_item:diamond:3>i",
+   "expected": {
+    "hover_event": {
+     "action": "show_item",
+     "id": "minecraft:diamond",
+     "count": 3
+    },
+    "text": "i"
+   }
+  },
+  {
+   "source": "extra.hover_entity",
+   "input": "<hover:show_entity:pig:3a8b1a3e-0000-4000-8000-000000000001:'Pig'>e",
+   "expected": {
+    "hover_event": {
+     "action": "show_entity",
+     "id": "minecraft:pig",
+     "uuid": [
+      982194750,
+      16384,
+      -2147483648,
+      1
+     ],
+     "name": "Pig"
+    },
+    "text": "e"
+   }
+  },
+  {
+   "source": "extra.lang_args",
+   "input": "<lang:block.minecraft.diamond_block:'<red>x':y>",
+   "expected": {
+    "translate": "block.minecraft.diamond_block",
+    "with": [
+     {
+      "color": "red",
+      "text": "x"
+     },
+     "y"
+    ]
+   }
+  },
+  {
+   "source": "extra.tr_or",
+   "input": "<lang_or:missing.key:'fallback':arg>",
+   "expected": {
+    "translate": "missing.key",
+    "fallback": "fallback",
+    "with": [
+     "arg"
+    ]
+   }
+  },
+  {
+   "source": "extra.key",
+   "input": "<key:key.jump>",
+   "expected": {
+    "keybind": "key.jump"
+   }
+  },
+  {
+   "source": "extra.selector_sep",
+   "input": "<sel:@a:', '>",
+   "expected": {
+    "selector": "@a",
+    "separator": ", "
+   }
+  },
+  {
+   "source": "extra.score",
+   "input": "<score:@p:obj>",
+   "expected": {
+    "score": {
+     "name": "@p",
+     "objective": "obj"
+    }
+   }
+  },
+  {
+   "source": "extra.nbt_block",
+   "input": "<nbt:block:'1 2 3':'Items':interpret>",
+   "expected": {
+    "nbt": "Items",
+    "interpret": true,
+    "plain": false,
+    "block": "1 2 3"
+   }
+  },
+  {
+   "source": "extra.font",
+   "input": "<font:uniform>f</font>g",
+   "expected": {
+    "extra": [
+     {
+      "font": "minecraft:uniform",
+      "text": "f"
+     },
+     "g"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.insert",
+   "input": "<insert:hello>i",
+   "expected": {
+    "insertion": "hello",
+    "text": "i"
+   }
+  },
+  {
+   "source": "extra.decor_neg",
+   "input": "<bold>b<!bold>n<b:false>f<italic:true>i",
+   "expected": {
+    "bold": true,
+    "extra": [
+     {
+      "bold": false,
+      "extra": [
+       {
+        "italic": true,
+        "text": "i"
+       }
+      ],
+      "text": "nf"
+     }
+    ],
+    "text": "b"
+   }
+  },
+  {
+   "source": "extra.decor_aliases",
+   "input": "<b>1<i>2<em>3<u>4<st>5<obf>6",
+   "expected": {
+    "bold": true,
+    "extra": [
+     {
+      "italic": true,
+      "extra": [
+       {
+        "underlined": true,
+        "extra": [
+         {
+          "strikethrough": true,
+          "extra": [
+           {
+            "obfuscated": true,
+            "text": "6"
+           }
+          ],
+          "text": "5"
+         }
+        ],
+        "text": "4"
+       }
+      ],
+      "text": "23"
+     }
+    ],
+    "text": "1"
+   }
+  },
+  {
+   "source": "extra.color_named",
+   "input": "<color:dark_gray>a<c:#123456>b<colour:aqua>c<grey>d",
+   "expected": {
+    "color": "dark_gray",
+    "extra": [
+     {
+      "color": "#123456",
+      "extra": [
+       {
+        "color": "aqua",
+        "extra": [
+         {
+          "color": "gray",
+          "text": "d"
+         }
+        ],
+        "text": "c"
+       }
+      ],
+      "text": "b"
+     }
+    ],
+    "text": "a"
+   }
+  },
+  {
+   "source": "extra.escape",
+   "input": "\\<red>not a tag \\\\ <red>yes",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "text": "yes"
+     }
+    ],
+    "text": "<red>not a tag \\ "
+   }
+  },
+  {
+   "source": "extra.unknown",
+   "input": "<unknown>x</unknown>",
+   "expected": "<unknown>x</unknown>"
+  },
+  {
+   "source": "extra.unclosed_quote",
+   "input": "<hover:show_text:'abc>x",
+   "expected": {
+    "hover_event": {
+     "action": "show_text",
+     "value": "abc"
+    },
+    "text": "x"
+   }
+  },
+  {
+   "source": "extra.gradient_phase",
+   "input": "<gradient:red:blue:0.5>gradient text</gradient>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "#AA55AA",
+        "text": "g"
+       },
+       {
+        "color": "#9C55B8",
+        "text": "r"
+       },
+       {
+        "color": "#8E55C6",
+        "text": "a"
+       },
+       {
+        "color": "#8055D5",
+        "text": "d"
+       },
+       {
+        "color": "#7155E3",
+        "text": "i"
+       },
+       {
+        "color": "#6355F1",
+        "text": "e"
+       },
+       {
+        "color": "blue",
+        "text": "n"
+       },
+       {
+        "color": "#6355F1",
+        "text": "t"
+       },
+       {
+        "color": "#7155E3",
+        "text": " "
+       },
+       {
+        "color": "#8055D5",
+        "text": "t"
+       },
+       {
+        "color": "#8E55C6",
+        "text": "e"
+       },
+       {
+        "color": "#9C55B8",
+        "text": "x"
+       },
+       {
+        "color": "#AA55AA",
+        "text": "t"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.rainbow_rev",
+   "input": "<rainbow:!2>rainbow</rainbow>",
+   "expected": {
+    "extra": [
+     {
+      "extra": [
+       {
+        "color": "#FF5700",
+        "text": "r"
+       },
+       {
+        "color": "#FF0083",
+        "text": "a"
+       },
+       {
+        "color": "#A000FF",
+        "text": "i"
+       },
+       {
+        "color": "#003AFF",
+        "text": "n"
+       },
+       {
+        "color": "#00FFE9",
+        "text": "b"
+       },
+       {
+        "color": "#00FF0E",
+        "text": "o"
+       },
+       {
+        "color": "#CBFF00",
+        "text": "w"
+       }
+      ],
+      "text": ""
+     }
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.sprite",
+   "input": "<sprite:blocks:block/stone>",
+   "expected": {
+    "sprite": "minecraft:block/stone"
+   }
+  },
+  {
+   "source": "extra.head",
+   "input": "<head:Notch>",
+   "expected": {
+    "hat": true,
+    "player": "Notch"
+   }
+  },
+  {
+   "source": "extra.nested_close",
+   "input": "<red>a<blue>b</red>c",
+   "expected": {
+    "extra": [
+     {
+      "color": "red",
+      "extra": [
+       {
+        "color": "blue",
+        "text": "b"
+       }
+      ],
+      "text": "a"
+     },
+     "c"
+    ],
+    "text": ""
+   }
+  },
+  {
+   "source": "extra.empty",
+   "input": "",
+   "expected": ""
+  },
+  {
+   "source": "extra.plain",
+   "input": "just text",
+   "expected": "just text"
+  }
+ ]
+}

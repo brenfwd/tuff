@@ -1,0 +1,33 @@
+[package]
+name = "tuff-feature-builtin-vanilla-worldgen"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-item = { workspace = true }
+tuff-datapack = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-timings = { workspace = true }
+tokio = { workspace = true }
+flate2 = { workspace = true }
+rayon = { workspace = true }
+log = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tuff-core = { workspace = true }
+tuff-vanilla-common = { workspace = true }
+tuff-supervise = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-storage = { workspace = true }
+tuff-feature-builtin-vanilla-blocks = { workspace = true }
+tuff-feature-builtin-vanilla-commands = { workspace = true }
+tuff-test-support = { workspace = true }
+
+[[bench]]
+name = "terrain"
+harness = false
+test = false

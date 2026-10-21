@@ -1,0 +1,28 @@
+[package]
+name = "tuff-storage"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+flate2 = { workspace = true }
+indexmap = { workspace = true }
+libc = { workspace = true }
+log = { workspace = true }
+regex = { workspace = true }
+rand = { workspace = true }
+rusqlite = { workspace = true, features = ["hooks", "column_decltype", "limits"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-sqlite-nbt = { workspace = true }
+tuff-zip = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-item = { workspace = true }
+tuff-core = { workspace = true }
+tuff-storage = { workspace = true }

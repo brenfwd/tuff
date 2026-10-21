@@ -1,0 +1,21 @@
+[package]
+name = "rust-bots-consumer"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+tuff-plugin-sdk = { path = "../../../../tuff-plugin-sdk" }
+tuff-bots-api = { path = "../../../../../examples/rust-bots/api" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true
+
+[workspace]

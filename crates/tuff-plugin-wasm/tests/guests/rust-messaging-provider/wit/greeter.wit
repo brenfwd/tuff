@@ -1,0 +1,11 @@
+package tuff-examples:greeter;
+
+interface greet {
+    variant greet-error { empty-name }
+
+    greet: func(name: string) -> result<string, greet-error>;
+}
+
+interface counted {
+    counted: func(name: string, total: u32);
+}

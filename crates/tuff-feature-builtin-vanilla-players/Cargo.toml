@@ -1,0 +1,18 @@
+[package]
+name = "tuff-feature-builtin-vanilla-players"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-item = { workspace = true }
+tuff-datapack = { workspace = true }
+tuff-core = { workspace = true }
+tuff-vanilla-common = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-core = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-vanilla-data = { workspace = true }

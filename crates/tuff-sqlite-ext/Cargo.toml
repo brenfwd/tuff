@@ -1,0 +1,22 @@
+[package]
+name = "tuff-sqlite-ext"
+version = "0.1.0"
+edition = "2024"
+description = "Loadable SQLite extension with tuff's NBT query functions and views"
+
+# Its own workspace: the extension needs rusqlite's `loadable_extension`
+# feature, which must not unify with the server's statically bundled SQLite.
+[workspace]
+
+[lib]
+name = "tuff_sqlite"
+crate-type = ["cdylib"]
+
+[dependencies]
+rusqlite = { version = "0.40", default-features = false, features = ["functions", "loadable_extension"] }
+tuff-sqlite-nbt = { path = "../tuff-sqlite-nbt" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

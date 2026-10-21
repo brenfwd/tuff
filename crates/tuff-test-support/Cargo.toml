@@ -1,0 +1,40 @@
+[package]
+name = "tuff-test-support"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+tuff-item = { workspace = true }
+tuff-web-ui = { workspace = true }
+tuff-storage = { workspace = true }
+tuff-datapack = { workspace = true }
+tuff-trace = { workspace = true }
+tuff-wire = { workspace = true }
+tuff-nbt = { workspace = true }
+tuff-world-model = { workspace = true }
+tuff-http = { workspace = true }
+tuff-timings = { workspace = true }
+tuff-feature-builtin-vanilla-worldgen = { workspace = true }
+bytes = { workspace = true }
+rand = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+tuff-core = { workspace = true }
+tuff-feature-builtin-core-commands = { workspace = true }
+tuff-feature-builtin-vanilla-commands = { workspace = true }
+tuff-feature-builtin-vanilla-blocks = { workspace = true }
+tuff-feature-builtin-vanilla-combat = { workspace = true }
+tuff-feature-builtin-vanilla-players = { workspace = true }
+tuff-feature-builtin-vanilla-recipes = { workspace = true }
+tuff-feature-builtin-vanilla-loot = { workspace = true }
+tuff-vanilla-data = { workspace = true }
+tuff-feature-builtin-vanilla-dimensions = { workspace = true }
+tuff-feature-builtin-vanilla-entities = { workspace = true }
+tuff-feature-builtin-vanilla-items = { workspace = true }
+tuff-feature-builtin-vanilla-maps = { workspace = true }
+tuff-feature-builtin-vanilla-mobs = { workspace = true }
+tuff-feature-builtin-vanilla-redstone = { workspace = true }
+tuff-feature-builtin-vanilla-survival = { workspace = true }
+tuff-feature-builtin-vanilla-anticheat = { workspace = true }

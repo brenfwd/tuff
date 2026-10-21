@@ -1,0 +1,29 @@
+{
+  "id": "9.9",
+  "mainClass": "net.minecraft.client.main.Main",
+  "assetIndex": {"id": "99", "sha1": "SHA_INDEX", "url": "https://example.test/index.json"},
+  "downloads": {"client": {"sha1": "SHA_JAR", "url": "https://example.test/client.jar"}},
+  "javaVersion": {"component": "java-runtime-epsilon", "majorVersion": 25},
+  "libraries": [
+    {"name": "a:common:1", "downloads": {"artifact": {"path": "a/common/1/common-1.jar", "sha1": "SHA_COMMON", "url": "https://example.test/common.jar"}}},
+    {"name": "a:nat:1:natives-macos-arm64", "downloads": {"artifact": {"path": "a/nat/1/nat-1-natives-macos-arm64.jar", "sha1": "SHA_MAC", "url": "https://example.test/mac.jar"}},
+      "rules": [{"action": "allow", "os": {"name": "osx", "arch": "arm64"}}]},
+    {"name": "a:nat:1:natives-linux", "downloads": {"artifact": {"path": "a/nat/1/nat-1-natives-linux.jar", "sha1": "SHA_LINUX", "url": "https://example.test/linux.jar"}},
+      "rules": [{"action": "allow", "os": {"name": "linux"}}]},
+    {"name": "a:nat:1:natives-windows-x86", "downloads": {"artifact": {"path": "a/nat/1/nat-1-natives-windows-x86.jar", "sha1": "SHA_WINX86", "url": "https://example.test/winx86.jar"}},
+      "rules": [{"action": "allow", "os": {"name": "windows"}}, {"action": "disallow", "os": {"name": "windows", "arch": "x86"}}]},
+    {"name": "a:last:1", "downloads": {"artifact": {"path": "a/last/1/last-1.jar", "sha1": "SHA_LAST", "url": "https://example.test/last.jar"}}}
+  ],
+  "arguments": {
+    "game": [
+      "--username", "${auth_player_name}",
+      {"rules": [{"action": "allow", "features": {"has_custom_resolution": true}}], "value": ["--width", "${resolution_width}"]},
+      {"rules": [{"action": "allow", "features": {"is_demo_user": true}}], "value": "--demo"}
+    ],
+    "jvm": [
+      {"rules": [{"action": "allow", "os": {"name": "osx"}}], "value": ["-XstartOnFirstThread"]},
+      {"rules": [{"action": "allow", "os": {"name": "windows", "versionRange": {"max": "10"}}}], "value": "-Dold=1"},
+      "-cp", "${classpath}"
+    ]
+  }
+}

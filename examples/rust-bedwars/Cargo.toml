@@ -1,0 +1,24 @@
+[package]
+name = "rust-bedwars"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+name = "bedwars"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tuff-plugin-sdk = { path = "../../crates/tuff-plugin-sdk" }
+tuff-bots-api = { path = "../rust-bots/api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true
+
+[workspace]
