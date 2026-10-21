@@ -11,7 +11,6 @@ use tuff_core::world::messages::{AdvancementEvent, PlayerEvent};
 use tuff_core::world::player::Difficulty;
 use tuff_core::world::predicate::EntityFacts;
 use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
-use tuff_item::item::ItemStack;
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::is_air;
 use tuff_world_model::pos::ChunkPos;
@@ -42,7 +41,7 @@ pub fn dispensed(
     world: &mut dyn RegionWorld,
     target: BlockPos,
     facing: Facing,
-    stack: &ItemStack,
+    stack: &tuff_core::world::region_api::Fired,
 ) -> Option<DispenseOutcome> {
     let head = match stack.item {
         Item::CarvedPumpkin => Some(Block::CarvedPumpkin.default_state()),

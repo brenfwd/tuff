@@ -1452,7 +1452,7 @@ impl tuff_core::world::region_api::RegionHooks for InteractionHooks {
         pos: BlockPos,
         facing: Facing,
         _origin: [f64; 3],
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         super::dispense::dispense(world, pos, facing, stack)
     }

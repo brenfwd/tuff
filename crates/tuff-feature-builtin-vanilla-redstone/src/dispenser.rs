@@ -10,7 +10,7 @@ use tuff_core::world::item_port::Porter;
 use tuff_core::world::messages::RegionInternal;
 use tuff_core::world::physics::triangle;
 use tuff_core::world::region_api::{
-    BlockCause, DispenseOutcome, Dispensers, Insert, RegionTask, RegionWorld,
+    BlockCause, DispenseOutcome, Dispensers, Fired, Insert, RegionTask, RegionWorld,
 };
 use tuff_item::item::ItemStack;
 use tuff_vanilla_common::placement::step;
@@ -101,27 +101,82 @@ fn fire(world: &mut dyn RegionWorld, pos: BlockPos) {
     } else {
         stack.item.dispense()
     };
-    let outcome = if behaviour == Some(Dispense::Default) {
-        DispenseOutcome::Dropped
-    } else {
-        match run_hooks(world, pos, facing, &stack) {
-            Some(outcome) => outcome,
-            None if behaviour.is_none() => DispenseOutcome::Dropped,
-            None => return,
+    if behaviour == Some(Dispense::Default) {
+        complete(world, pos, slot, &stack, None, DispenseOutcome::Dropped);
+        return;
+    }
+    let one = take_one(world, pos, slot);
+    let fired = Fired::new(stack, one);
+    let outcome = run_hooks(world, pos, facing, &fired);
+    let kept = fired.taken();
+    let (stack, one) = fired.into_parts();
+    let one = (!kept).then_some(one).flatten();
+    let outcome = match outcome {
+        Some(outcome) => outcome,
+        None if behaviour.is_none() => DispenseOutcome::Dropped,
+        None => {
+            put_back(world, pos, facing, slot, one);
+            return;
         }
     };
     if outcome == DispenseOutcome::Remote {
-        forward(world, pos, facing, slot, stack);
+        forward(world, pos, facing, slot, stack, one);
         return;
     }
-    complete(world, pos, slot, &stack, outcome);
+    let kept = kept_or(one, kept, world, pos, facing, slot);
+    complete(world, pos, slot, &stack, kept, outcome);
+}
+
+/// `Some(())` when a hook kept the fired item; otherwise puts the item
+/// back into its slot first.
+fn kept_or(
+    one: Option<ItemStack>,
+    kept: bool,
+    world: &mut dyn RegionWorld,
+    pos: BlockPos,
+    facing: Facing,
+    slot: usize,
+) -> Option<()> {
+    if kept {
+        return Some(());
+    }
+    put_back(world, pos, facing, slot, one);
+    None
+}
+
+fn put_back(
+    world: &mut dyn RegionWorld,
+    pos: BlockPos,
+    facing: Facing,
+    slot: usize,
+    one: Option<ItemStack>,
+) {
+    let Some(one) = one else {
+        return;
+    };
+    let mut back = Some(one);
+    world.edit_container_slot(pos, slot, &mut |held| {
+        let fits = match (held.as_ref(), back.as_ref()) {
+            (None, _) => true,
+            (Some(held), Some(back)) => {
+                held.stacks_with(back) && held.count() < held.item.max_stack_size()
+            }
+            (Some(_), None) => false,
+        };
+        if fits && let Some(back) = back.take() {
+            ItemStack::put_back(held, back);
+        }
+    });
+    if let Some(back) = back {
+        drop_out(world, pos, facing, back);
+    }
 }
 
 fn run_hooks(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     facing: Facing,
-    stack: &ItemStack,
+    stack: &Fired,
 ) -> Option<DispenseOutcome> {
     let at = origin(pos, facing);
     let hooks = world.shared().region_hooks.clone();
@@ -177,35 +232,53 @@ fn forward(
     facing: Facing,
     slot: usize,
     stack: tuff_item::item::ItemSnapshot,
+    one: Option<ItemStack>,
 ) {
     let target = step(pos, facing);
     let Some(neighbour) = world.neighbor(ChunkPos::of_block(target).region()) else {
-        complete(world, pos, slot, &stack, DispenseOutcome::Dropped);
+        put_back(world, pos, facing, slot, one);
+        complete(world, pos, slot, &stack, None, DispenseOutcome::Dropped);
         return;
     };
     let reply = world.handle();
-    neighbour.internal(RegionInternal::Run(RegionTask::new(move |other| {
-        let outcome = run_hooks(other, pos, facing, &stack)
+    let carried = std::sync::Arc::new(std::sync::Mutex::new(one));
+    let sent = carried.clone();
+    let task = RegionTask::new(move |other| {
+        let one = sent.lock().ok().and_then(|mut one| one.take());
+        let fired = Fired::new(stack, one);
+        let outcome = run_hooks(other, pos, facing, &fired)
             .filter(|outcome| *outcome != DispenseOutcome::Remote)
             .unwrap_or(DispenseOutcome::Dropped);
+        let kept = fired.taken();
+        let (stack, one) = fired.into_parts();
         reply.internal(RegionInternal::Run(RegionTask::new(move |world| {
-            complete(world, pos, slot, &stack, outcome);
+            let facing = world.block(pos).map_or(Facing::North, facing_of);
+            let kept = kept_or(one, kept, world, pos, facing, slot);
+            complete(world, pos, slot, &stack, kept, outcome);
         })));
-    })));
+    });
+    if !neighbour.internal(RegionInternal::Run(task)) {
+        let one = carried.lock().ok().and_then(|mut one| one.take());
+        put_back(world, pos, facing, slot, one);
+    }
 }
 
+/// Finishes a dispense once its hooks ran; `kept` when a hook kept the
+/// fired item, which then is not taken from the slot again.
 fn complete(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     slot: usize,
     stack: &ItemStack,
+    kept: Option<()>,
     outcome: DispenseOutcome,
 ) {
     let Some(state) = world.block(pos) else {
         return;
     };
     let facing = facing_of(state);
-    if !slot_stack(world, pos, slot).is_some_and(|held| held.item == stack.item) {
+    if kept.is_none() && !slot_stack(world, pos, slot).is_some_and(|held| held.item == stack.item)
+    {
         return;
     }
     let sound = match outcome {
@@ -220,11 +293,15 @@ fn complete(
             }
         }
         DispenseOutcome::Dispensed => {
-            take(world, pos, slot);
+            if kept.is_none() {
+                take(world, pos, slot);
+            }
             LEVEL_EVENT_DISPENSE
         }
         DispenseOutcome::Launched { sound } => {
-            take(world, pos, slot);
+            if kept.is_none() {
+                take(world, pos, slot);
+            }
             sound.unwrap_or(LEVEL_EVENT_LAUNCH)
         }
         DispenseOutcome::Kept => LEVEL_EVENT_DISPENSE,

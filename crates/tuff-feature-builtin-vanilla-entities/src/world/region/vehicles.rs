@@ -52,7 +52,7 @@ impl RegionHooks for VehicleHooks {
         pos: BlockPos,
         facing: Facing,
         _origin: [f64; 3],
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<DispenseOutcome> {
         if let Some(kind) = stack.item.boat() {
             return Some(dispense_boat(world, pos, facing, kind, stack));

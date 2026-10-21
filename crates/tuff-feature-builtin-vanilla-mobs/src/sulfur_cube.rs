@@ -882,7 +882,7 @@ impl Species for SulfurCube {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
         if stack.item == Item::FlintAndSteel {
@@ -896,7 +896,7 @@ impl Species for SulfurCube {
             || !self.equip(
                 core,
                 stack.item,
-                || Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
+                || stack.take(),
                 cx,
             )
         {

@@ -391,7 +391,7 @@ impl<S: Species> RegionEntity for Mob<S> {
 
     fn dispensed_on(
         &mut self,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         if !self.core.is_alive() {

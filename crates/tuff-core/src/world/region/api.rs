@@ -302,7 +302,7 @@ impl RegionWorld for RegionActor {
     fn dispense_on_entity_in(
         &mut self,
         pos: BlockPos,
-        stack: &ItemStack,
+        stack: &crate::world::region_api::Fired,
     ) -> Option<crate::world::region_api::DispenseOutcome> {
         self.act_on_entities_in(pos, |entity, cx| entity.dispensed_on(stack, cx))
     }

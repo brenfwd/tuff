@@ -82,6 +82,53 @@ pub struct SeenPlayer {
     pub looks: crate::world::messages::PlayerLooks,
 }
 
+/// The item a dispenser fires: a picture of its slot to read (through
+/// `Deref`), and one item moved out of the slot that a hook keeps with
+/// [`Self::take`] (an equipped piece, a launched arrow). Whatever no hook
+/// took goes back to the slot.
+pub struct Fired {
+    shown: tuff_item::item::ItemSnapshot,
+    one: std::cell::RefCell<Option<ItemStack>>,
+}
+
+impl Fired {
+    pub fn new(shown: tuff_item::item::ItemSnapshot, one: Option<ItemStack>) -> Self {
+        Self {
+            shown,
+            one: std::cell::RefCell::new(one),
+        }
+    }
+
+    /// Moves the fired item out; `None` if a hook already took it or the
+    /// dispenser could not hand it over.
+    pub fn take(&self) -> Option<ItemStack> {
+        self.one.borrow_mut().take()
+    }
+
+    /// Puts back an item [`Self::take`] gave out that was not kept after all.
+    pub fn give_back(&self, stack: ItemStack) {
+        ItemStack::put_back(&mut self.one.borrow_mut(), stack);
+    }
+
+    /// Whether a hook kept the item.
+    pub fn taken(&self) -> bool {
+        self.one.borrow().is_none()
+    }
+
+    /// The picture and the item no hook kept.
+    pub fn into_parts(self) -> (tuff_item::item::ItemSnapshot, Option<ItemStack>) {
+        (self.shown, self.one.into_inner())
+    }
+}
+
+impl std::ops::Deref for Fired {
+    type Target = ItemStack;
+
+    fn deref(&self) -> &ItemStack {
+        &self.shown
+    }
+}
+
 /// What a dispenser did with an item a hook fired.
 #[derive(Debug, PartialEq)]
 pub enum DispenseOutcome {
@@ -522,12 +569,12 @@ pub trait RegionWorld: GrowthLevel {
     fn dispense_on_entity_in(
         &mut self,
         pos: BlockPos,
-        stack: &ItemStack,
+        stack: &Fired,
     ) -> Option<DispenseOutcome>;
     /// Puts one of `stack` (a dispenser's wearable) on an entity, else on a
     /// player with that armor slot free, standing in the block at `pos`;
     /// `None` if nobody there takes it.
-    fn dispense_equip_in(&mut self, pos: BlockPos, stack: &ItemStack) -> Option<DispenseOutcome> {
+    fn dispense_equip_in(&mut self, pos: BlockPos, stack: &Fired) -> Option<DispenseOutcome> {
         use tuff_vanilla_data::item::EquipmentSlot;
         if let Some(outcome) = self.dispense_on_entity_in(pos, stack) {
             return Some(outcome);
@@ -557,12 +604,21 @@ pub trait RegionWorld: GrowthLevel {
                 && z - half < z0 + 1.0
                 && p.armor[index].is_none()
         })?;
-        player
-            .handle
-            .send(crate::world::messages::PlayerEvent::DispenserEquip {
-                slot: equippable.slot,
-                stack: ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
-            });
+        let one = stack.take()?;
+        if let Err(refused) =
+            player
+                .handle
+                .try_send(crate::world::messages::PlayerEvent::DispenserEquip {
+                    slot: equippable.slot,
+                    stack: one,
+                })
+        {
+            if let crate::world::messages::PlayerEvent::DispenserEquip { stack: one, .. } = *refused
+            {
+                stack.give_back(one);
+            }
+            return None;
+        }
         Some(DispenseOutcome::Dispensed)
     }
     /// Takes an entity out of the region (no death, no drops), burning
@@ -993,7 +1049,7 @@ pub trait RegionHooks: Send + Sync {
         _pos: BlockPos,
         _facing: tuff_vanilla_data::block::Facing,
         _origin: [f64; 3],
-        _stack: &ItemStack,
+        _stack: &Fired,
     ) -> Option<DispenseOutcome> {
         None
     }
