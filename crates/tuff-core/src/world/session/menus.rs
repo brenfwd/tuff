@@ -287,14 +287,16 @@ impl PlayerSession {
                 }
             }
             Some(Station::Cartography { inputs, stale }) => {
-                let now = [
-                    menu.container[cartography::MAP].dup_unchecked(),
-                    menu.container[cartography::ADDITIONAL].dup_unchecked(),
-                ];
-                if now != **inputs {
-                    **inputs = now;
+                let slots = [cartography::MAP, cartography::ADDITIONAL];
+                let changed = slots
+                    .iter()
+                    .zip(inputs.iter())
+                    .any(|(&slot, seen)| menu.container[slot].as_ref() != seen.as_deref());
+                if changed {
+                    **inputs = slots.map(|slot| menu.container[slot].as_ref().map(tuff_item::item::ItemSnapshot::of));
                     *stale = inputs.iter().all(Option::is_some);
-                    if menu.container[cartography::RESULT].take().is_some() {
+                    if let Some(old) = menu.container[cartography::RESULT].take() {
+                        old.burn(tuff_item::item::BurnReason::Template);
                         self.send_menu_slot(cartography::RESULT);
                     }
                 }

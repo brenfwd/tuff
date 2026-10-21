@@ -1,7 +1,6 @@
 //! Player statistics bookkeeping.
 
 use crate::world::stats::Stat;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{CustomStat, StatType};
 
 use tuff_vanilla_data::Item;
@@ -17,10 +16,8 @@ impl PlayerSession {
     pub fn count_in(inventory: &Inventory, item: Item) -> i32 {
         inventory.slots()[5..]
             .iter()
-            .chain(std::iter::once(
-                &inventory.carried().map(DupUnchecked::dup_unchecked),
-            ))
             .flatten()
+            .chain(inventory.carried())
             .filter(|stack| stack.item == item)
             .map(|stack| i32::from(stack.count()))
             .sum()

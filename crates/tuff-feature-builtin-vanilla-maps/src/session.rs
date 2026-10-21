@@ -8,7 +8,6 @@ use tuff_core::world::region_api::{RegionHooks, RegionWorld};
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{HookFuture, SessionHooks, SessionTick};
 use tuff_core::world::stats::Stat;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{SoundEvent, StatType};
@@ -124,7 +123,7 @@ async fn fill_cartography(session: &mut PlayerSession) {
     if !std::mem::take(stale) {
         return;
     }
-    let [Some(map), Some(additional)] = (**inputs).dup_unchecked() else {
+    let [Some(map), Some(additional)] = (**inputs).clone() else {
         return;
     };
     let Some(id) = map.components.map_id else {
@@ -147,15 +146,20 @@ async fn fill_cartography(session: &mut PlayerSession) {
             if inputs[0].as_ref() == Some(&map) && inputs[1].as_ref() == Some(&additional)
     );
     if menu.window_id != window || !current || menu.container[cartography::RESULT] == result {
+        if let Some(result) = result {
+            result.burn(tuff_item::item::BurnReason::Template);
+        }
         return;
     }
-    menu.container[cartography::RESULT] = result;
+    if let Some(old) = std::mem::replace(&mut menu.container[cartography::RESULT], result) {
+        old.burn(tuff_item::item::BurnReason::Template);
+    }
     session.send_menu_slot(cartography::RESULT);
 }
 
 #[derive(Default)]
 struct Extending {
-    checked: Option<ItemStack>,
+    checked: Option<tuff_item::item::ItemSnapshot>,
 }
 
 /// Clears a crafting table's map extending result whose map cannot grow,
@@ -171,7 +175,7 @@ async fn check_extending(session: &mut PlayerSession) {
     let Some(result) = menu.container[0]
         .as_ref()
         .filter(|stack| post_processing(stack) == Some(Derivation::ZoomOut))
-        .map(DupUnchecked::dup_unchecked)
+        .map(tuff_item::item::ItemSnapshot::of)
     else {
         return;
     };
@@ -189,13 +193,15 @@ async fn check_extending(session: &mut PlayerSession) {
     let Some(menu) = session.menus.menu.as_mut() else {
         return;
     };
-    if menu.window_id != window || menu.container[0].as_ref() != Some(&result) {
+    if menu.window_id != window || menu.container[0].as_ref() != Some(&*result) {
         return;
     }
     if extends(data.as_ref()) {
         session.ext.entry::<Extending>().checked = Some(result);
     } else {
-        menu.container[0] = None;
+        if let Some(old) = menu.container[0].take() {
+            old.burn(tuff_item::item::BurnReason::Template);
+        }
         session.send_menu_slot(0);
     }
 }
@@ -211,7 +217,10 @@ async fn post_process(session: &mut PlayerSession) {
     let slots: Vec<usize> = (1..session.inventory.slots().len())
         .filter(|&slot| pending(&session.inventory.slots()[slot]))
         .collect();
-    let carried = pending(&session.inventory.carried().map(DupUnchecked::dup_unchecked));
+    let carried = session
+        .inventory
+        .carried()
+        .is_some_and(|stack| post_processing(stack).is_some());
     if slots.is_empty() && !carried {
         return;
     }
@@ -219,32 +228,36 @@ async fn post_process(session: &mut PlayerSession) {
     let Some(service) = shared.services.get::<MapService>() else {
         return;
     };
-    for slot in slots {
-        if let Some(mut stack) = session.inventory.slots()[slot].dup_unchecked() {
-            process(service, &mut stack).await;
-            session.inventory.set_slot(slot, Some(stack));
+    let targets = slots.into_iter().map(Some).chain(carried.then_some(None));
+    let mut jobs = Vec::new();
+    for target in targets {
+        let held = match target {
+            Some(slot) => session.inventory.slot_mut(slot),
+            None => session.inventory.carried_mut(),
+        };
+        if let Some(stack) = held
+            && let Some(how) = take_post_processing(stack)
+            && let Some(id) = stack.components.map_id
+        {
+            jobs.push((target, id, how));
         }
     }
-    if carried && let Some(mut stack) = session.inventory.carried().map(DupUnchecked::dup_unchecked)
-    {
-        process(service, &mut stack).await;
-        session.inventory.set_carried(Some(stack));
+    for (target, id, how) in jobs {
+        let Some(new) = service.derive(id, how).await else {
+            continue;
+        };
+        let held = match target {
+            Some(slot) => session.inventory.slot_mut(slot),
+            None => session.inventory.carried_mut(),
+        };
+        if let Some(stack) = held.as_mut().filter(|s| s.components.map_id == Some(id)) {
+            stack.components.map_id = Some(new);
+        }
     }
     if session.menus.menu.is_some() {
         session.send_menu_content();
     } else {
         session.send_inventory();
-    }
-}
-
-async fn process(service: &MapService, stack: &mut ItemStack) {
-    let Some(how) = take_post_processing(stack) else {
-        return;
-    };
-    if let Some(id) = stack.components.map_id
-        && let Some(new) = service.derive(id, how).await
-    {
-        stack.components.map_id = Some(new);
     }
 }
 
