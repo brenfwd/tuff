@@ -195,8 +195,7 @@ pub trait Interact: RegionWorld + Rest {
             off_hand: place.off_hand,
         };
         let inserted = place.held.and_then(|item| {
-            let held = ItemStack::mint(item, 1, MintReason::Transform)
-                .with_components(place.components.clone());
+            let held = ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
@@ -277,8 +276,12 @@ pub trait Interact: RegionWorld + Rest {
         let held = place
             .held
             .map(|item| {
-                tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::Template)
-                    .with_components(place.components.clone())
+                tuff_item::item::ItemStack::mint_with(
+                    item,
+                    1,
+                    &place.components,
+                    tuff_item::item::MintReason::Template,
+                )
             })
             .and_then(|stack| {
                 if composter::compostable(&stack).is_some() {
@@ -557,8 +560,8 @@ pub trait Interact: RegionWorld + Rest {
             _ if tuff_datapack::tags::is(item_tags::key::BANNERS, item) => {
                 let mut layers = place.components.banner_patterns.clone()?;
                 layers.pop()?;
-                let mut cleaned = ItemStack::mint(item, 1, MintReason::Transform)
-                    .with_components(place.components.clone());
+                let mut cleaned =
+                    ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
                 cleaned.components.banner_patterns = Some(layers);
                 self.lower_cauldron(pos, state);
                 place
@@ -569,8 +572,12 @@ pub trait Interact: RegionWorld + Rest {
             _ if item != Item::ShulkerBox
                 && tuff_datapack::tags::is(item_tags::key::SHULKER_BOXES, item) =>
             {
-                let cleaned = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Transform)
-                    .with_components(place.components.clone());
+                let cleaned = ItemStack::mint_with(
+                    Item::ShulkerBox,
+                    1,
+                    &place.components,
+                    MintReason::Transform,
+                );
                 self.lower_cauldron(pos, state);
                 place
                     .player
@@ -579,8 +586,12 @@ pub trait Interact: RegionWorld + Rest {
             }
             _ if tuff_datapack::tags::is(item_tags::key::CAULDRON_CAN_REMOVE_DYE, item) => {
                 place.components.dyed_color?;
-                let mut cleaned = ItemStack::mint(item, place.held_count, MintReason::Transform)
-                    .with_components(place.components.clone());
+                let mut cleaned = ItemStack::mint_with(
+                    item,
+                    place.held_count,
+                    &place.components,
+                    MintReason::Transform,
+                );
                 cleaned.components.dyed_color = None;
                 self.lower_cauldron(pos, state);
                 place
@@ -628,8 +639,7 @@ pub trait Interact: RegionWorld + Rest {
             });
         }
         let item = place.held?;
-        let held = ItemStack::mint(item, 1, MintReason::Template)
-            .with_components(place.components.clone());
+        let held = ItemStack::mint_with(item, 1, &place.components, MintReason::Template);
         let accepted = port.offer(self.as_dyn(), &at, &held);
         held.burn(tuff_item::item::BurnReason::Template);
         if !accepted {
@@ -867,8 +877,8 @@ pub trait Interact: RegionWorld + Rest {
             self.play_sound(SoundEvent::ItemLodestoneCompassLock, pos, 1.0, 1.0, None);
             let tracker =
                 LodestoneTracker::locked(&self.dimension_info().key, [pos.x, pos.y, pos.z]);
-            let mut locked = ItemStack::mint(Item::Compass, 1, MintReason::Transform)
-                .with_components(place.components.clone());
+            let mut locked =
+                ItemStack::mint_with(Item::Compass, 1, &place.components, MintReason::Transform);
             locked
                 .components
                 .other

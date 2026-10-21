@@ -29,7 +29,8 @@ fn with_block_entity(mut op: Place, nbt: Compound) -> Place {
     op.components = tuff_item::item::Components::from(tuff_item::item::ComponentPatch {
         other: Compound::new().with("minecraft:block_entity_data", nbt),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     op
 }

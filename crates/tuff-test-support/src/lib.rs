@@ -37,7 +37,7 @@ pub use tuff_core::world::messages::{
 };
 pub use tuff_core::world::player::Difficulty;
 pub use tuff_core::world::*;
-pub use tuff_item::item::{BurnReason, DupUnchecked, ItemStack, MintReason};
+pub use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason};
 pub use tuff_item::text::TextComponent;
 pub use tuff_nbt::{Compound, NamedTag, NbtLimits, Tag};
 pub use tuff_storage::backend::WorldBackend;
@@ -50,7 +50,7 @@ pub use tuff_world_model::chunk_meta::Decoded;
 pub use tuff_world_model::light::{SectionLight, min_light_section};
 pub use tuff_world_model::pos::{ChunkPos, RegionPos};
 
-pub type TransactionAnswer = Option<(bool, Vec<(BlockPos, Vec<Option<ItemStack>>)>)>;
+pub type TransactionAnswer = Option<(bool, Vec<(BlockPos, Vec<Option<ItemSnapshot>>)>)>;
 
 /// The overworld's placeholder terrain with the test seed.
 pub struct Generator(Overworld);
@@ -1234,6 +1234,54 @@ pub fn transaction_answer(event: PlayerEvent) -> TransactionAnswer {
     }
 }
 
+/// Stacks for what `changes` add, as the player's side of a transaction
+/// gives them.
+pub fn pool_for(changes: &[ContainerChange]) -> Vec<ItemStack> {
+    gains(
+        changes
+            .iter()
+            .map(|c| (c.expected.as_ref(), c.new.as_ref())),
+    )
+}
+
+/// [`pool_for`] for an entity container.
+pub fn entity_pool_for(changes: &[tuff_core::world::messages::EntitySlotChange]) -> Vec<ItemStack> {
+    gains(
+        changes
+            .iter()
+            .map(|c| (c.expected.as_ref(), c.new.as_ref())),
+    )
+}
+
+fn gains<'a>(
+    changes: impl Iterator<Item = (Option<&'a ItemSnapshot>, Option<&'a ItemSnapshot>)>,
+) -> Vec<ItemStack> {
+    changes
+        .filter_map(|(expected, new)| {
+            tuff_core::world::menu::settle::delta(expected.map(|s| &**s), new.map(|s| &**s)).1
+        })
+        .map(|shown| ItemStack::mint_like(&shown, shown.count(), MintReason::Test))
+        .collect()
+}
+
+/// A picture of a test stack, for a transaction's expected or new slot.
+pub fn snap<S: std::borrow::Borrow<ItemStack>>(stack: Option<S>) -> Option<ItemSnapshot> {
+    stack.as_ref().map(|stack| ItemSnapshot::of(stack.borrow()))
+}
+
+/// Test stacks showing what `pictures` show, to compare with.
+pub fn stacks(pictures: &[Option<ItemSnapshot>]) -> Vec<Option<ItemStack>> {
+    pictures
+        .iter()
+        .map(|slot| {
+            slot.as_ref()
+                .map(|shown| ItemStack::mint_like(shown, shown.count(), MintReason::Test))
+        })
+        .collect()
+}
+
+/// A transaction changing one slot, from pictures of what it holds and
+/// should hold.
 pub fn set_slot(
     pos: BlockPos,
     slot: usize,
@@ -1243,8 +1291,8 @@ pub fn set_slot(
     vec![ContainerChange {
         pos,
         slot,
-        expected,
-        new,
+        expected: expected.as_ref().map(ItemSnapshot::of),
+        new: new.as_ref().map(ItemSnapshot::of),
     }]
 }
 

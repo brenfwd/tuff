@@ -18,7 +18,6 @@ tuff-nbt = { workspace = true }
 tuff-storage = { workspace = true }
 tuff-vanilla-data = { workspace = true }
 tuff-world-model = { workspace = true }
-tuff-macros = { workspace = true }
 
 [dev-dependencies]
 tuff-core = { workspace = true }

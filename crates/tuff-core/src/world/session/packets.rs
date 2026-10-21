@@ -187,7 +187,12 @@ impl PlayerSession {
                 if hook.took
                     && let (Some(item), Some(before)) = (result_before, held_before)
                 {
-                    self.count_crafted(item, before, &drops);
+                    let dropped: i32 = drops
+                        .iter()
+                        .filter(|stack| stack.item == item)
+                        .map(|stack| i32::from(stack.count()))
+                        .sum();
+                    self.count_crafted(item, self.held_count(item) - before + dropped);
                 }
                 self.crafted_recipes(&hook.crafted);
                 self.refresh_inventory_result();

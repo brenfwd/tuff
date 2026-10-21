@@ -121,14 +121,6 @@ impl RegionActor {
         self.broadcast_slots(pos, &[slot]);
     }
 
-    /// Takes one item out of `slot` of the block container at `pos` for
-    /// good and tells its viewers.
-    pub(super) fn take_one(&mut self, pos: BlockPos, slot: usize) -> Option<ItemStack> {
-        let taken = self.take_one_out(pos, slot)?;
-        self.took_one(pos, slot, Some(&taken));
-        Some(taken)
-    }
-
     /// Reports the slots `changed` of a block container whose items were
     /// `before` and are now at `pos`.
     pub(super) fn report_block_slots(

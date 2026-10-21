@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::DupUnchecked;
 
 /// What a cartography table's second slot accepts.
 pub fn is_cartography_additional(stack: &ItemStack) -> bool {
@@ -28,22 +27,17 @@ pub(super) fn equipment_slot(stack: &ItemStack) -> Option<EquipmentSlot> {
     stack.equippable().map(|e| e.slot)
 }
 
-/// The crafting grid of a menu, wherever its slots live.
-pub fn grid_of(
+/// Takes the crafting grid of a menu out of its slots, wherever they live;
+/// [`set_grid`] puts it back.
+pub fn take_grid(
     kind: MenuKind,
-    container: &[Option<ItemStack>],
-    inventory: &Inventory,
+    container: &mut [Option<ItemStack>],
+    inventory: &mut Inventory,
 ) -> Vec<Option<ItemStack>> {
     let (range, _, _) = kind.grid().expect("a crafting menu");
     match kind {
-        MenuKind::Player => inventory.slots()[range]
-            .iter()
-            .map(DupUnchecked::dup_unchecked)
-            .collect::<Vec<_>>(),
-        _ => container[range]
-            .iter()
-            .map(DupUnchecked::dup_unchecked)
-            .collect::<Vec<_>>(),
+        MenuKind::Player => range.map(|slot| inventory.slot_mut(slot).take()).collect(),
+        _ => container[range].iter_mut().map(Option::take).collect(),
     }
 }
 
@@ -128,7 +122,7 @@ impl ResultHook for GridHook {
     ) {
         self.took = true;
         let (_, width, height) = self.kind.grid().expect("a crafting menu");
-        let mut grid = grid_of(self.kind, container, inventory);
+        let mut grid = take_grid(self.kind, container, inventory);
         if let Some(recipe) = self
             .recipes
             .grid_recipe(&grid, width, height)
@@ -286,7 +280,17 @@ pub fn merchant_sell_item(
         offer = trading::recipe_for(offers, b, a, hint);
     }
     match offer.filter(|i| !offers[*i].is_out_of_stock()) {
-        Some(index) => (Some(index), Some(offers[index].sell.dup_unchecked())),
+        Some(index) => {
+            let sell = &offers[index].sell;
+            (
+                Some(index),
+                Some(ItemStack::mint_like(
+                    sell,
+                    sell.count(),
+                    MintReason::Template,
+                )),
+            )
+        }
         None => (active, None),
     }
 }
@@ -302,6 +306,10 @@ pub struct MerchantHook<'a> {
 }
 
 impl ResultHook for MerchantHook<'_> {
+    fn made_as(&self) -> MintReason {
+        MintReason::Trade
+    }
+
     fn taken(
         &mut self,
         container: &mut [Option<ItemStack>],
@@ -347,10 +355,11 @@ pub fn merchant_move_items(
         drops: Vec::new(),
     };
     for slot in [merchant::PAYMENT_A, merchant::PAYMENT_B] {
-        let Some(mut stack) = view.container[slot].dup_unchecked() else {
+        let Some(mut stack) = view.container[slot].take() else {
             continue;
         };
         if !view.move_into(&mut stack, 3, 39, true) {
+            view.container[slot] = Some(stack);
             return;
         }
         view.container[slot] = (stack.count() > 0).then_some(stack);

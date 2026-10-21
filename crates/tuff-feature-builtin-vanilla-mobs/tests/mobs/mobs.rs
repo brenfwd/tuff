@@ -1112,7 +1112,8 @@ async fn a_spawn_egg_on_a_spawner_changes_what_it_spawns() {
                 ),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     let egg = place(&player, spawner, Item::ZombieSpawnEgg, 2);

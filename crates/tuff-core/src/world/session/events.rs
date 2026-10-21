@@ -543,10 +543,7 @@ impl PlayerSession {
             PlayerEvent::TradeAnswered {
                 window_id,
                 accepted,
-            } => {
-                self.transaction_answered(window_id, accepted, Vec::new())
-                    .await
-            }
+            } => self.trade_answered(window_id, accepted).await,
             PlayerEvent::AwardStat(stat, amount) => self.progress.stats.award_custom(stat, amount),
             PlayerEvent::WardenTracker(tracker) => self.progress.warden_tracker = tracker,
             PlayerEvent::WardenWarningLevel(Some(level)) => {
@@ -592,24 +589,27 @@ impl PlayerSession {
                 txn,
                 prepared,
                 contents,
+                taken,
             } => {
-                self.transaction_prepared(window_id, txn, prepared, contents)
+                self.transaction_prepared(window_id, txn, prepared, contents, taken)
                     .await
             }
             PlayerEvent::Transaction {
                 window_id,
                 accepted,
                 contents,
+                pool,
             } => {
-                self.transaction_answered(window_id, accepted, contents)
+                self.transaction_answered(window_id, accepted, contents, pool)
                     .await
             }
             PlayerEvent::EntityTransaction {
                 window_id,
                 accepted,
                 contents,
+                pool,
             } => {
-                self.entity_transaction_answered(window_id, accepted, contents)
+                self.entity_transaction_answered(window_id, accepted, contents, pool)
                     .await
             }
             PlayerEvent::EntitySlots {

@@ -21,6 +21,7 @@ use crate::world::entity::{EntityInteraction, InteractOutcome};
 use crate::world::messages::{ActionOutcome, Place};
 use crate::world::region_api::RegionWorld;
 use crate::world::session::PlayerSession;
+use tuff_item::item::ComponentsSnapshot;
 use tuff_item::item::display::{ModelData, full_identifier};
 use tuff_item::item::identity::{IDENTITY_KEY, ITEM_KEY, PRIVATE_KEY, client_custom_data};
 use tuff_item::item::{Components, ItemSnapshot, ItemStack};
@@ -143,7 +144,10 @@ impl CustomItemDef {
     }
 
     fn with_other(mut self, kind: DataComponentType, value: impl Into<Tag>) -> Self {
-        self.components.other.insert(kind.name(), value);
+        let value = value.into();
+        self.components.edit(|components| {
+            components.other.insert(kind.name(), value);
+        });
         self
     }
 
@@ -176,14 +180,16 @@ impl CustomItemDef {
 
     /// Feature data every new stack starts with, beside the identity.
     pub fn with_data(mut self, data: Compound) -> Self {
-        let mut merged = match self.components.other.remove(CUSTOM_DATA) {
-            Some(Tag::Compound(existing)) => existing,
-            _ => Compound::new(),
-        };
-        for (key, value) in data.iter() {
-            merged.insert(key, value.clone());
-        }
-        self.components.other.insert(CUSTOM_DATA, merged);
+        self.components.edit(|components| {
+            let mut merged = match components.other.remove(CUSTOM_DATA) {
+                Some(Tag::Compound(existing)) => existing,
+                _ => Compound::new(),
+            };
+            for (key, value) in data.iter() {
+                merged.insert(key, value.clone());
+            }
+            components.other.insert(CUSTOM_DATA, merged);
+        });
         self
     }
 
@@ -296,14 +302,17 @@ pub fn seen_by_entity(
 #[derive(Default)]
 struct PrivateStash(Vec<ItemSnapshot>);
 
-fn client_view(stack: &ItemStack) -> Components {
-    let mut components = stack.components.clone();
-    if let Some(view) = components
+fn client_view(stack: &ItemStack) -> ComponentsSnapshot {
+    let mut components = ComponentsSnapshot::of(&stack.components);
+    if let Some(view) = stack
+        .components
         .other
         .get(CUSTOM_DATA)
         .and_then(client_custom_data)
     {
-        components.other.insert(CUSTOM_DATA, view);
+        components.edit(|components| {
+            components.other.insert(CUSTOM_DATA, view);
+        });
     }
     components
 }
@@ -378,7 +387,7 @@ impl PlayerSession {
         let source = stash
             .and_then(|stash| {
                 stash.0.iter().rev().find(|stashed| {
-                    stashed.item == stack.item && client_view(stashed) == stack.components
+                    stashed.item == stack.item && *client_view(stashed) == stack.components
                 })
             })
             .cloned()

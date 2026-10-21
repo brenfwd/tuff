@@ -427,29 +427,35 @@ pub enum RegionRequest {
         except: Option<PlayerId>,
     },
     /// A click on an open block container: applied if every `expected`
-    /// matches, answered with [`PlayerEvent::Transaction`]. `took_result`
-    /// says the click took from a result slot, which collects a furnace's
-    /// experience.
+    /// matches, answered with [`PlayerEvent::Transaction`]. `pool` holds
+    /// what the player's side gave up; the slots put what they lose into
+    /// it and take what they gain out of it, and the rest goes back.
+    /// `took_result` says the click took from a result slot, which collects
+    /// a furnace's experience.
     ContainerTransaction {
         player: PlayerHandle,
         window_id: i32,
         changes: Vec<ContainerChange>,
+        pool: Vec<ItemStack>,
         took_result: bool,
     },
     /// The first phase of a transaction spanning two regions: validate
-    /// `changes` like [`Self::ContainerTransaction`] and lock their slots,
-    /// answering with [`PlayerEvent::TransactionPrepared`].
+    /// `changes` like [`Self::ContainerTransaction`], lock their slots and
+    /// take out what they lose, answering with
+    /// [`PlayerEvent::TransactionPrepared`].
     PrepareTransaction {
         player: PlayerHandle,
         window_id: i32,
         txn: u64,
         changes: Vec<ContainerChange>,
     },
-    /// The second phase: apply (`commit`) or drop the prepared changes.
+    /// The second phase: on `commit`, `items` fill what the prepared
+    /// slots gain; otherwise `items` are what they gave up, put back.
     ResolveTransaction {
         player: PlayerId,
         txn: u64,
         commit: bool,
+        items: Vec<ItemStack>,
     },
     /// Sends a viewer the full contents of the container at `pos`, after
     /// any update already sent to it.
@@ -514,6 +520,7 @@ pub enum RegionRequest {
         window_id: i32,
         entity: i32,
         changes: Vec<EntitySlotChange>,
+        pool: Vec<ItemStack>,
     },
     /// The player no longer views the container of `entity`.
     CloseEntityContainer {

@@ -302,7 +302,7 @@ impl Check for ItemIntegrity {
 mod tests {
     use super::super::facts;
     use super::*;
-    use tuff_item::item::MintReason;
+    use tuff_item::item::{ItemSnapshot, MintReason};
     use tuff_nbt::Compound;
 
     fn creative(stack: CreativeSlot) -> Serverbound {
@@ -330,7 +330,10 @@ mod tests {
     fn plain_and_reasonable_creative_stacks_pass() {
         let f = facts();
         let stone = ItemStack::mint(Item::Stone, 64, MintReason::Test);
-        assert_eq!(flag_of(&f, &creative(CreativeSlot::Stack(stone))), None);
+        assert_eq!(
+            flag_of(&f, &creative(CreativeSlot::Stack(ItemSnapshot::of(&stone)))),
+            None
+        );
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Empty)), None);
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Unsupported)), None);
         let data = with_data(Item::Stick, nested(MAX_NBT_DEPTH - 1));
@@ -359,7 +362,10 @@ mod tests {
             Some(ItemStack::mint(Item::Dirt, 65, MintReason::Test)),
         ]);
         assert_eq!(
-            flag_of(&f, &creative(CreativeSlot::Stack(shulker))),
+            flag_of(
+                &f,
+                &creative(CreativeSlot::Stack(ItemSnapshot::of(&shulker)))
+            ),
             Some(STACK_COUNT)
         );
         let mut crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
@@ -378,7 +384,10 @@ mod tests {
             .insert("minecraft:max_stack_size", Tag::Int(16));
         assert_eq!(tampered(sword.view()), Some(Tamper::DamageableStack));
         assert_eq!(
-            flag_of(&facts(), &creative(CreativeSlot::Stack(sword))),
+            flag_of(
+                &facts(),
+                &creative(CreativeSlot::Stack(ItemSnapshot::of(&sword)))
+            ),
             Some(ITEM_DATA)
         );
     }
@@ -405,7 +414,10 @@ mod tests {
         assert_eq!(
             flag_of(
                 &facts(),
-                &creative(CreativeSlot::Stack(with_data(Item::Stick, nested(500))))
+                &creative(CreativeSlot::Stack(ItemSnapshot::of(&with_data(
+                    Item::Stick,
+                    nested(500)
+                ))))
             ),
             Some(ITEM_DATA)
         );

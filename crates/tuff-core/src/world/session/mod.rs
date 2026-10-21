@@ -14,6 +14,7 @@ mod environment;
 mod hands;
 mod health;
 mod menus;
+pub use menus::{Place, Reasons, Sim};
 mod merchant_menu;
 pub mod mirror;
 pub mod plugin_inventory;
@@ -329,14 +330,17 @@ pub struct QueuedClick {
     pub carried: Option<HashedSlot>,
 }
 
-/// A transaction in flight: what to undo if it is rejected, and what to
-/// drop once it is accepted.
+/// A transaction in flight: where the stacks of the pool it carries came
+/// from, to put back on refusal, and the click's pictures to settle
+/// against once accepted.
 pub struct Pending {
-    pub inventory: Vec<(usize, Option<ItemStack>)>,
-    pub carried: Option<ItemStack>,
-    pub drops: Vec<ItemStack>,
-    /// A merchant screen's slots and offers before the trade.
-    pub merchant: Option<(Vec<Option<ItemStack>>, Vec<MerchantOffer>)>,
+    pub origins: Vec<Option<menus::Place>>,
+    pub sim: menus::Sim,
+    pub reasons: Option<menus::Reasons>,
+    /// The client's view may differ: send the screen once settled.
+    pub resend: bool,
+    /// A merchant screen's offers before the trade.
+    pub merchant: Option<Vec<MerchantOffer>>,
 }
 
 /// A transaction over both regions of a split double chest, waiting for
@@ -345,7 +349,14 @@ pub struct SplitTransaction {
     pub txn: u64,
     pub votes: u8,
     pub prepared: bool,
-    pub contents: Vec<(BlockPos, Vec<Option<ItemStack>>)>,
+    pub contents: Vec<(BlockPos, Vec<Option<tuff_item::item::ItemSnapshot>>)>,
+    /// What the player's side gave up.
+    pub pool: Vec<ItemStack>,
+    pub near_changes: Vec<crate::world::messages::ContainerChange>,
+    pub far_changes: Vec<crate::world::messages::ContainerChange>,
+    /// What each region took out of its slots once prepared.
+    pub near_taken: Vec<ItemStack>,
+    pub far_taken: Vec<ItemStack>,
 }
 
 /// The state of a crafting station menu beyond its slots.

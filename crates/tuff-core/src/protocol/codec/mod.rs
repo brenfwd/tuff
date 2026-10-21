@@ -116,10 +116,12 @@ impl HashedSlot {
 /// each added component's payload is prefixed with its byte length, so a
 /// component type this server cannot decode is skipped rather than making
 /// the rest of the packet unreadable.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+/// The stack is a picture of what the client asks for; the session makes
+/// it.
+#[derive(Clone, Debug, PartialEq)]
 pub enum CreativeSlot {
     Empty,
-    Stack(ItemStack),
+    Stack(tuff_item::item::ItemSnapshot),
     /// A stack this server cannot hold: a component type it cannot decode.
     Unsupported,
     /// A stack no client holds: an unknown item, or a count above the

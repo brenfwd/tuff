@@ -186,6 +186,7 @@ async fn a_sneaking_owner_opens_a_chested_donkeys_mount_screen() {
     let MenuSource::Entity { entity, contents } = open.source else {
         panic!("not an entity menu");
     };
+    let contents = stacks(&contents);
     assert_eq!(entity, donkey);
     assert_eq!(contents.len(), 2 + 15);
     assert_eq!(

@@ -4,7 +4,6 @@
 
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 
 use super::*;
 use tuff_item::item::{ItemSnapshot, ItemStack};
@@ -14,7 +13,8 @@ use tuff_vanilla_data::block::Facing;
 use super::{HOPPER_SUCK_MAX_Y, HOPPER_SUCK_MIN_Y};
 use crate::world::block_entity::{self, ContainerKind};
 use crate::world::experience;
-use crate::world::messages::{EntitySlotChange, MenuOpen, MenuSource};
+use crate::world::menu::settle;
+use crate::world::messages::{EntitySlotChange, MenuOpen, MenuSource, holds};
 use crate::world::region_api::SlotEdit;
 
 impl RegionActor {
@@ -90,7 +90,7 @@ impl RegionActor {
             .map(|slots| {
                 slots
                     .iter()
-                    .map(DupUnchecked::dup_unchecked)
+                    .map(|slot| slot.as_ref().map(ItemSnapshot::of))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
@@ -202,6 +202,7 @@ impl RegionActor {
         window_id: i32,
         entity: i32,
         changes: Vec<EntitySlotChange>,
+        mut pool: Vec<ItemStack>,
     ) {
         let holder = self.entity_holder(entity);
         let viewing = self
@@ -215,49 +216,79 @@ impl RegionActor {
             .get_mut(&entity)
             .and_then(|tracked| tracked.entity.container_mut());
         let Some(mut container) = container.filter(|_| viewing) else {
-            player.send(PlayerEvent::EntityTransaction {
-                window_id,
-                accepted: false,
-                contents: Vec::new(),
-            });
+            self.answer_entity_transaction(&player, window_id, false, Vec::new(), pool);
             return;
         };
-        let valid = changes
-            .iter()
-            .all(|change| container.get(change.slot) == Some(&change.expected));
-        if !valid {
-            player.send(PlayerEvent::EntityTransaction {
-                window_id,
-                accepted: false,
-                contents: container
-                    .iter()
-                    .map(DupUnchecked::dup_unchecked)
-                    .collect::<Vec<_>>(),
-            });
+        let valid = changes.iter().enumerate().all(|(index, change)| {
+            !changes[..index]
+                .iter()
+                .any(|other| other.slot == change.slot)
+                && container
+                    .get(change.slot)
+                    .is_some_and(|slot| holds(slot.as_ref(), change.expected.as_ref()))
+        });
+        let mut slots: Vec<Option<ItemStack>> = if valid {
+            changes
+                .iter()
+                .map(|change| container[change.slot].take())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let new: Vec<Option<ItemSnapshot>> = changes.iter().map(|c| c.new.clone()).collect();
+        let applied = valid && settle::apply(&mut slots, &new, &mut pool);
+        if !applied {
+            for (change, stack) in changes.iter().zip(slots) {
+                container[change.slot] = stack;
+            }
+            let contents = container
+                .iter()
+                .map(|slot| slot.as_ref().map(ItemSnapshot::of))
+                .collect();
+            self.answer_entity_transaction(&player, window_id, false, contents, pool);
             return;
         }
-        let mut slots = Vec::with_capacity(changes.len());
+        let mut changed = Vec::with_capacity(changes.len());
         let mut edits = Vec::new();
-        for change in changes {
+        for (change, stack) in changes.iter().zip(slots) {
             if holder.is_some() {
                 edits.push(SlotEdit::of(
                     change.slot,
-                    container[change.slot].as_ref(),
-                    change.new.as_ref(),
+                    change.expected.as_deref(),
+                    stack.as_ref(),
                 ));
             }
-            container[change.slot] = change.new;
-            slots.push(change.slot);
+            container[change.slot] = stack;
+            changed.push(change.slot);
         }
         if let Some(holder) = holder {
             self.report_container_edit(holder, edits);
         }
-        player.send(PlayerEvent::EntityTransaction {
+        self.answer_entity_transaction(&player, window_id, true, Vec::new(), pool);
+        self.entity_slots_changed(entity, &changed, Some(player.id));
+    }
+
+    /// Hands the pool back to the player; if their session is gone, what
+    /// it holds spills where they were.
+    fn answer_entity_transaction(
+        &mut self,
+        player: &PlayerHandle,
+        window_id: i32,
+        accepted: bool,
+        contents: Vec<Option<ItemSnapshot>>,
+        pool: Vec<ItemStack>,
+    ) {
+        let answer = PlayerEvent::EntityTransaction {
             window_id,
-            accepted: true,
-            contents: Vec::new(),
-        });
-        self.entity_slots_changed(entity, &slots, Some(player.id));
+            accepted,
+            contents,
+            pool,
+        };
+        if let Err(answer) = player.try_send(answer)
+            && let PlayerEvent::EntityTransaction { pool, .. } = *answer
+        {
+            self.spill_pool(None, player.id, pool);
+        }
     }
 
     /// Marks the entity for saving and shows its changed slots to everyone

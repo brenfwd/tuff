@@ -37,11 +37,12 @@ async fn seed_chest(
     let changes = slots
         .iter()
         .flat_map(|(slot, stack)| set_slot(pos, *slot, None, Some(stack.test_copy())))
-        .collect();
+        .collect::<Vec<_>>();
     region
         .request(RegionRequest::ContainerTransaction {
             player: player.clone(),
             window_id: 1,
+            pool: pool_for(&changes),
             changes,
             took_result: false,
         })
@@ -81,7 +82,7 @@ async fn chest_contents(
         })
         .await;
     match open.source {
-        MenuSource::Blocks { contents, .. } => contents,
+        MenuSource::Blocks { contents, .. } => stacks(&contents),
         other => panic!("expected a block container, got {other:?}"),
     }
 }

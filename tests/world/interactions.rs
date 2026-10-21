@@ -861,7 +861,7 @@ async fn adventure_placing_needs_a_matching_can_place_on_predicate() {
     ] {
         let mut click = place(&s.player, floor, Item::Stone, seq);
         click.may_build = false;
-        click.components = adventure_components("minecraft:can_place_on", block);
+        click.components = adventure_components("minecraft:can_place_on", block).into();
         s.region.request(RegionRequest::Place(click)).await;
         let result = outcome(&mut s.events, seq).await;
         assert_eq!(matches!(result, ActionOutcome::Placed { .. }), placed);

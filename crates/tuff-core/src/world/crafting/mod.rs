@@ -322,7 +322,13 @@ pub fn with_input_components(
         ),
         None => (input.item, 1 + extra_count, Components::default()),
     };
-    let mut components = input.components.clone();
+    let mut stack = ItemStack::mint_with(
+        item,
+        count.clamp(1, MAX_RESULT_COUNT) as u8,
+        &input.components,
+        MintReason::Crafting,
+    );
+    let components = &mut stack.components;
     for (key, value) in overrides.to_nbt() {
         components.other.remove(&key);
         if let Some(id) = key.strip_prefix('!') {
@@ -330,7 +336,7 @@ pub fn with_input_components(
         } else {
             let mut patch = Components::from_nbt(&Compound::new().with(key, value));
             let other = std::mem::take(&mut patch.other);
-            merge_typed(&mut components, patch);
+            merge_typed(components, patch);
             for (key, value) in other {
                 components.other.insert(key, value);
             }
@@ -338,12 +344,7 @@ pub fn with_input_components(
     }
     components.removed.sort();
     components.removed.dedup();
-    ItemStack::mint(
-        item,
-        count.clamp(1, MAX_RESULT_COUNT) as u8,
-        MintReason::Crafting,
-    )
-    .with_components(components)
+    stack
 }
 
 fn merge_typed(into: &mut Components, from: Components) {

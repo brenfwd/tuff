@@ -113,6 +113,7 @@ fn blocks(open: MenuOpen) -> OpenBlocks {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     (parts, contents, remote)
 }
 
@@ -159,9 +160,30 @@ async fn expect_both(
     found.map(Option::unwrap)
 }
 
+/// Works a click out on pictures of the open menu with `edit`, then
+/// settles it as the session does.
+async fn click(
+    session: &mut crate::world::session::PlayerSession,
+    edit: impl FnOnce(&mut crate::world::session::Sim),
+) {
+    let menu = session.menus.menu.as_ref().unwrap();
+    let mut sim = crate::world::session::Sim::of(&session.inventory, &menu.container);
+    edit(&mut sim);
+    session.settle_click(sim, false, false).await;
+}
+
 async fn expect_vote(events: &mut mpsc::UnboundedReceiver<PlayerEvent>) -> bool {
+    expect_vote_taken(events).await.0
+}
+
+/// A vote with what the region took out of its slots.
+async fn expect_vote_taken(
+    events: &mut mpsc::UnboundedReceiver<PlayerEvent>,
+) -> (bool, Vec<ItemStack>) {
     expect(events, |event| match event {
-        PlayerEvent::TransactionPrepared { prepared, .. } => Some(prepared),
+        PlayerEvent::TransactionPrepared {
+            prepared, taken, ..
+        } => Some((prepared, taken)),
         _ => None,
     })
     .await
@@ -218,6 +240,7 @@ async fn a_double_chest_across_a_region_border_opens_as_one_menu() {
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(split.west_pos, 4, None, Some(apple.test_copy())),
+            pool: pool_for(&set_slot(split.west_pos, 4, None, Some(apple.test_copy()))),
             took_result: false,
         })
         .await;
@@ -299,6 +322,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(split.west_pos, 0, None, Some(stone.test_copy())),
+            pool: pool_for(&set_slot(split.west_pos, 0, None, Some(stone.test_copy()))),
             took_result: false,
         })
         .await;
@@ -339,6 +363,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
             player: bob.clone(),
             window_id: 1,
             changes: set_slot(split.west_pos, 0, Some(stone.test_copy()), None),
+            pool: pool_for(&set_slot(split.west_pos, 0, Some(stone.test_copy()), None)),
             took_result: false,
         })
         .await;
@@ -347,12 +372,16 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
         "prepared slots are locked"
     );
 
-    for region in [&split.west, &split.east] {
+    for (region, items) in [
+        (&split.west, Vec::new()),
+        (&split.east, vec![stone.test_copy()]),
+    ] {
         region
             .request(RegionRequest::ResolveTransaction {
                 player: alice.id,
                 txn: 1,
                 commit: true,
+                items,
             })
             .await;
     }
@@ -379,6 +408,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
                 player: alice.id,
                 txn: 2,
                 commit: false,
+                items: Vec::new(),
             })
             .await;
     }
@@ -392,13 +422,15 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
             changes: set_slot(split.east_pos, 0, Some(stone.test_copy()), None),
         })
         .await;
-    assert!(expect_vote(&mut alice_events).await);
+    let (prepared, taken) = expect_vote_taken(&mut alice_events).await;
+    assert!(prepared);
     split
         .east
         .request(RegionRequest::ResolveTransaction {
             player: alice.id,
             txn: 3,
             commit: false,
+            items: taken,
         })
         .await;
     split
@@ -407,6 +439,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
             player: bob.clone(),
             window_id: 1,
             changes: set_slot(split.east_pos, 1, None, Some(stone.test_copy())),
+            pool: pool_for(&set_slot(split.east_pos, 1, None, Some(stone.test_copy()))),
             took_result: false,
         })
         .await;
@@ -497,25 +530,12 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
     let [right, left] = right_first(&split);
     let right_slot = 2;
     let left_slot = 27 + 5;
-    let set = |session: &mut crate::world::session::PlayerSession, slot, stack| {
-        let before = session
-            .menus
-            .menu
-            .as_ref()
-            .unwrap()
-            .container
-            .iter()
-            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
-            .collect::<Vec<_>>();
-        session.menus.menu.as_mut().unwrap().container[slot] = stack;
-        before
-    };
-
-    let before = set(&mut session, right_slot, Some(gold.test_copy()));
-    let inventory = session.inventory.clone();
-    session
-        .submit_container_changes(before, inventory, Vec::new(), false)
-        .await;
+    session.inventory.set_slot(36, Some(gold.test_copy()));
+    click(&mut session, |sim| {
+        sim.inventory.set_slot(36, None);
+        sim.container[right_slot] = Some(gold.test_copy());
+    })
+    .await;
     assert_eq!(
         expect_slots(&mut bob_events, right).await,
         vec![(right_slot, Some(gold.test_copy()))]
@@ -527,21 +547,12 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
     .await;
     session.on_event(answered).await;
 
-    let before = {
-        let menu = session.menus.menu.as_mut().unwrap();
-        let before = menu
-            .container
-            .iter()
-            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
-            .collect::<Vec<_>>();
-        menu.container[right_slot] = None;
-        menu.container[left_slot] = Some(gold.test_copy());
-        before
-    };
-    let inventory = session.inventory.clone();
-    session
-        .submit_container_changes(before, inventory, Vec::new(), false)
-        .await;
+    assert_eq!(session.inventory.slots()[36], None, "the gold went in");
+    click(&mut session, |sim| {
+        sim.container[right_slot] = None;
+        sim.container[left_slot] = Some(gold.test_copy());
+    })
+    .await;
     while session
         .menus
         .menu
@@ -571,25 +582,21 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
                 None,
                 Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test)),
             ),
+            pool: pool_for(&set_slot(
+                right,
+                0,
+                None,
+                Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test)),
+            )),
             took_result: false,
         })
         .await;
     assert!(expect(&mut bob_events, transaction_answer).await.0);
-    let before = {
-        let menu = session.menus.menu.as_mut().unwrap();
-        let before = menu
-            .container
-            .iter()
-            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
-            .collect::<Vec<_>>();
-        menu.container[0] = Some(gold.test_copy());
-        menu.container[left_slot] = None;
-        before
-    };
-    let inventory = session.inventory.clone();
-    session
-        .submit_container_changes(before, inventory, Vec::new(), false)
-        .await;
+    click(&mut session, |sim| {
+        sim.container[0] = Some(gold.test_copy());
+        sim.container[left_slot] = None;
+    })
+    .await;
     while session
         .menus
         .menu
@@ -667,6 +674,7 @@ async fn breaking_a_half_during_a_prepared_transaction_neither_dupes_nor_loses()
                 player: alice.clone(),
                 window_id: 1,
                 changes: set_slot(split.west_pos, 0, None, Some(stone.test_copy())),
+                pool: pool_for(&set_slot(split.west_pos, 0, None, Some(stone.test_copy()))),
                 took_result: false,
             })
             .await;
@@ -680,7 +688,8 @@ async fn breaking_a_half_during_a_prepared_transaction_neither_dupes_nor_loses()
                 changes: set_slot(split.west_pos, 0, Some(stone.test_copy()), None),
             })
             .await;
-        assert!(expect_vote(&mut alice_events).await);
+        let (prepared, taken) = expect_vote_taken(&mut alice_events).await;
+        assert!(prepared);
         split
             .west
             .request(RegionRequest::Break {
@@ -698,6 +707,7 @@ async fn breaking_a_half_during_a_prepared_transaction_neither_dupes_nor_loses()
                 player: alice.id,
                 txn: 1,
                 commit,
+                items: if commit { Vec::new() } else { taken },
             })
             .await;
         split.world.settle(2).await;
@@ -743,8 +753,14 @@ async fn stock(
                 pos,
                 slot: 0,
                 expected: None,
-                new: Some(stack),
+                new: snap(Some(&stack)),
             }],
+            pool: pool_for(&[ContainerChange {
+                pos,
+                slot: 0,
+                expected: None,
+                new: snap(Some(&stack)),
+            }]),
             took_result: false,
         })
         .await;
@@ -886,6 +902,7 @@ async fn a_hopper_pulls_from_the_far_half() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a hopper is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(
         contents[0],
         Some(ItemStack::mint(Item::Apple, 2, MintReason::Test))
@@ -947,6 +964,7 @@ async fn an_offhand_swap_during_a_refused_take_waits_for_the_answer() {
             player: bob.clone(),
             window_id: 1,
             changes: set_slot(right, 2, None, Some(gold.test_copy())),
+            pool: pool_for(&set_slot(right, 2, None, Some(gold.test_copy()))),
             took_result: false,
         })
         .await;
@@ -959,6 +977,7 @@ async fn an_offhand_swap_during_a_refused_take_waits_for_the_answer() {
             player: bob.clone(),
             window_id: 1,
             changes: set_slot(right, 2, Some(gold.test_copy()), None),
+            pool: pool_for(&set_slot(right, 2, Some(gold.test_copy()), None)),
             took_result: false,
         })
         .await;
@@ -967,21 +986,11 @@ async fn an_offhand_swap_during_a_refused_take_waits_for_the_answer() {
         "bob holds the gold"
     );
 
-    let before = session
-        .menus
-        .menu
-        .as_ref()
-        .unwrap()
-        .container
-        .iter()
-        .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
-        .collect::<Vec<_>>();
-    let inventory_before = session.inventory.clone();
-    session.menus.menu.as_mut().unwrap().container[2] = None;
-    session.inventory.set_slot(36, Some(gold.test_copy()));
-    session
-        .submit_container_changes(before, inventory_before, Vec::new(), false)
-        .await;
+    click(&mut session, |sim| {
+        sim.container[2] = None;
+        sim.inventory.set_slot(36, Some(gold.test_copy()));
+    })
+    .await;
     assert!(session.menus.menu.as_ref().unwrap().pending.is_some());
     session
         .on_packet(crate::protocol::play::Serverbound::PlayerAction {
@@ -1057,21 +1066,11 @@ async fn a_world_save_snapshots_the_player_only_between_transactions() {
     let gold = ItemStack::mint(Item::GoldIngot, 4, MintReason::Test);
     session.menus.menu.as_mut().unwrap().container[2] = Some(gold.test_copy());
 
-    let before = session
-        .menus
-        .menu
-        .as_ref()
-        .unwrap()
-        .container
-        .iter()
-        .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
-        .collect::<Vec<_>>();
-    let inventory_before = session.inventory.clone();
-    session.menus.menu.as_mut().unwrap().container[2] = None;
-    session.inventory.set_slot(36, Some(gold.test_copy()));
-    session
-        .submit_container_changes(before, inventory_before, Vec::new(), false)
-        .await;
+    click(&mut session, |sim| {
+        sim.container[2] = None;
+        sim.inventory.set_slot(36, Some(gold.test_copy()));
+    })
+    .await;
     assert!(session.inventory_busy());
 
     let (snapshotted, mut snapshot) = oneshot::channel();

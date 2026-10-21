@@ -4,7 +4,6 @@
 //! messages the owner applies, so no region ever awaits another.
 
 use std::collections::HashMap;
-use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::BlockState;
 use tuff_vanilla_data::block::{Facing, Type as ChestType};
@@ -13,7 +12,7 @@ use super::{Column, RegionActor, block_at};
 use crate::world::block_entity::{self, ContainerKind};
 use crate::world::messages::{RegionHandle, RegionInternal};
 use crate::world::placement;
-use tuff_item::item::{ItemSnapshot, ItemStack, SlotsCow};
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason, SlotsCow};
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::Chunk;
 use tuff_world_model::pos::{ChunkMap, ChunkPos};
@@ -66,15 +65,11 @@ pub(super) fn merged_view<'a>(
     let Some(other) = other else {
         return Some(SlotsCow::Borrowed(own));
     };
-    let mut joined = Vec::with_capacity(own.len() + other.len());
     if state.r#type() == Some(ChestType::Left) {
-        joined.extend(other.iter().map(DupUnchecked::dup_unchecked));
-        joined.extend(own.iter().map(DupUnchecked::dup_unchecked));
+        Some(SlotsCow::Joined(other, own))
     } else {
-        joined.extend(own.iter().map(DupUnchecked::dup_unchecked));
-        joined.extend(other.iter().map(DupUnchecked::dup_unchecked));
+        Some(SlotsCow::Joined(own, other))
     }
-    Some(SlotsCow::Owned(joined))
 }
 
 impl RegionActor {
@@ -160,7 +155,7 @@ impl RegionActor {
                     let Some(entity) = self.block_entity(*pos) else {
                         continue;
                     };
-                    let items = entity.items.dup_unchecked();
+                    let items = tuff_item::item::snapshot_slots(&entity.items);
                     if let Some(neighbour) = self.border.region_of_neighbour(partner) {
                         neighbour.internal(RegionInternal::HalfSnapshot {
                             pos: *pos,
@@ -190,8 +185,24 @@ impl RegionActor {
         }
     }
 
-    pub(super) fn half_snapshot(&mut self, pos: BlockPos, items: Option<Vec<Option<ItemStack>>>) {
-        self.sim.redstone.far_halves.insert(pos, items);
+    /// Keeps a far half's pictured contents as template stacks hoppers,
+    /// golems and comparators here read; they are never real items.
+    pub(super) fn half_snapshot(
+        &mut self,
+        pos: BlockPos,
+        items: Option<Vec<Option<ItemSnapshot>>>,
+    ) {
+        let mirror = items.map(|items| {
+            items
+                .iter()
+                .map(|slot| {
+                    slot.as_ref().map(|shown| {
+                        ItemStack::mint_like(shown, shown.count(), MintReason::Template)
+                    })
+                })
+                .collect()
+        });
+        self.sim.redstone.far_halves.insert(pos, mirror);
         for near in Self::horizontal_neighbours(pos) {
             if self.owns(near) {
                 self.sim.redstone.container_changes.insert(near);
@@ -204,7 +215,7 @@ impl RegionActor {
             .owns(pos)
             .then(|| {
                 self.block_entity(pos)
-                    .map(|entity| entity.items.dup_unchecked())
+                    .map(|entity| tuff_item::item::snapshot_slots(&entity.items))
             })
             .flatten();
         reply.internal(RegionInternal::HalfSnapshot { pos, items });
@@ -258,7 +269,7 @@ impl RegionActor {
     pub(super) fn half_drained(
         &mut self,
         pos: BlockPos,
-        stack: ItemStack,
+        stack: ItemSnapshot,
         golem: i32,
         at: BlockPos,
         reply: RegionHandle,
@@ -269,12 +280,13 @@ impl RegionActor {
         let Some((slot, taken)) = self.drain_local(pos, &stack) else {
             return;
         };
-        if !reply.internal(RegionInternal::HalfDrained {
+        if let Err(message) = reply.try_internal(RegionInternal::HalfDrained {
             golem,
             at,
-            stack: taken.dup_unchecked(),
-        }) {
-            self.undrain(pos, slot, taken);
+            stack: taken,
+        }) && let RegionInternal::HalfDrained { stack, .. } = *message
+        {
+            self.undrain(pos, slot, stack);
         }
     }
 
@@ -329,13 +341,17 @@ impl RegionActor {
         if !kind.can_extract(slot, stack, face) {
             return;
         }
-        let one = stack.dup_count_unchecked(1);
-        self.take_one(pos, slot);
-        if !reply.internal(RegionInternal::HalfPulled {
-            hopper,
-            stack: one.dup_unchecked(),
-        }) {
-            self.undrain(pos, slot, one);
+        let Some(one) = self.take_one_out(pos, slot) else {
+            return;
+        };
+        let shown = self.observes_containers().then(|| ItemSnapshot::of(&one));
+        match reply.try_internal(RegionInternal::HalfPulled { hopper, stack: one }) {
+            Ok(()) => self.took_one(pos, slot, shown.as_deref()),
+            Err(message) => {
+                if let RegionInternal::HalfPulled { stack, .. } = *message {
+                    self.return_one(pos, slot, stack);
+                }
+            }
         }
     }
 
@@ -362,25 +378,19 @@ impl RegionActor {
         let Some(items) = self.part_items(part) else {
             return false;
         };
-        let mut items = items
-            .iter()
-            .map(DupUnchecked::dup_unchecked)
-            .collect::<Vec<_>>();
-        let mut changed = Vec::new();
         let disabled = self
             .block_entity(part)
             .and_then(|entity| entity.crafter())
             .map_or(0, |crafter| crafter.disabled);
-        block_entity::insert(
+        block_entity::insert_room(
             &self.shared.recipes(),
             kind,
-            &mut items,
+            items,
             face,
-            stack.dup_count_unchecked(count),
-            &mut changed,
+            stack,
+            count,
             disabled,
-        )
-        .is_none()
+        ) == count
     }
 
     /// A copper golem's take from the parts of a joined container: the
@@ -411,14 +421,15 @@ impl RegionActor {
                 if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(part)
                     && let Some(held) = items[slot].as_mut()
                 {
-                    held.set_count_unchecked(held.count().saturating_sub(stack.count()));
-                    if held.count() == 0 {
+                    let left = held.count().saturating_sub(stack.count());
+                    held.resize(left, MintReason::Template, BurnReason::Template);
+                    if left == 0 {
                         items[slot] = None;
                     }
                 }
                 neighbour.internal(RegionInternal::HalfDrain {
                     pos: *part,
-                    stack: stack.dup_unchecked(),
+                    stack: ItemSnapshot::of(stack),
                     golem,
                     at,
                     reply: self.handle.clone(),
@@ -429,8 +440,8 @@ impl RegionActor {
         }
     }
 
-    /// Inserts into a far half from its snapshot and tells the owner;
-    /// returns what did not fit.
+    /// Inserts into a far half as its snapshot shows it and sends the
+    /// owner what goes in; returns what did not fit.
     pub(super) fn insert_far(
         &mut self,
         kind: ContainerKind,
@@ -444,31 +455,43 @@ impl RegionActor {
         let Some(Some(items)) = self.sim.redstone.far_halves.get(&part) else {
             return Some(stack);
         };
-        let mut items = items.dup_unchecked();
-        let before = stack.count();
-        let mut changed = Vec::new();
-        let rest = block_entity::insert(
-            &self.shared.recipes(),
-            kind,
-            &mut items,
-            face,
-            stack.dup_unchecked(),
-            &mut changed,
-            0,
-        );
-        let inserted = before - rest.as_ref().map_or(0, |rest| rest.count());
+        let recipes = self.shared.recipes();
+        let inserted =
+            block_entity::insert_room(&recipes, kind, items, face, &stack, stack.count(), 0);
         if inserted == 0 {
-            return rest;
-        }
-        if !neighbour.internal(RegionInternal::HalfInsert {
-            pos: part,
-            face,
-            stack: stack.dup_count_unchecked(inserted),
-            cause: self.sim.cause,
-        }) {
             return Some(stack);
         }
-        self.sim.redstone.far_halves.insert(part, Some(items));
+        let (moving, rest) = stack.split(inserted);
+        let shown = ItemStack::mint_like(&moving, moving.count(), MintReason::Template);
+        if let Err(message) = neighbour.try_internal(RegionInternal::HalfInsert {
+            pos: part,
+            face,
+            stack: moving,
+            cause: self.sim.cause,
+        }) {
+            shown.burn(BurnReason::Template);
+            let RegionInternal::HalfInsert { stack: back, .. } = *message else {
+                return rest;
+            };
+            return Some(match rest {
+                None => back,
+                Some(rest) => match ItemStack::merge(back, rest) {
+                    Ok(merged) => merged,
+                    Err((back, rest)) => {
+                        self.spill_stack(part, rest);
+                        back
+                    }
+                },
+            });
+        }
+        if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(&part) {
+            let mut changed = Vec::new();
+            if let Some(left) =
+                block_entity::insert(&recipes, kind, items, face, shown, &mut changed, 0)
+            {
+                left.burn(BurnReason::Template);
+            }
+        }
         rest
     }
 
@@ -477,8 +500,9 @@ impl RegionActor {
         if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(&part)
             && let Some(stack) = items[slot].as_mut()
         {
-            stack.set_count_unchecked(stack.count() - 1);
-            if stack.count() == 0 {
+            let left = stack.count().saturating_sub(1);
+            stack.resize(left, MintReason::Template, BurnReason::Template);
+            if left == 0 {
                 items[slot] = None;
             }
         }

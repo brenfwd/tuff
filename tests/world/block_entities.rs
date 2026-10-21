@@ -31,7 +31,7 @@ async fn place_with(
 ) -> BlockPos {
     let floor = BlockPos::new(x, Generator::new(1).height(x, z), z);
     let mut placing = place(player, floor, item, sequence);
-    placing.components = components;
+    placing.components = components.into();
     region.request(RegionRequest::Place(placing)).await;
     let result = outcome(events, sequence).await;
     assert!(
@@ -233,17 +233,19 @@ async fn broken_banners_and_named_chests_drop_their_data() {
         1,
     )
     .await;
-    let named = Components::from(ComponentPatch {
-        custom_name: Some(Box::new(TextComponent::new("Loot"))),
-        ..Default::default()
-    });
+    let named = || {
+        Components::from(ComponentPatch {
+            custom_name: Some(Box::new(TextComponent::new("Loot"))),
+            ..Default::default()
+        })
+    };
     let chest = place_with(
         &region,
         &alice,
         &mut alice_events,
         (8, 3),
         Item::Chest,
-        named.clone(),
+        named(),
         2,
     )
     .await;
@@ -286,7 +288,7 @@ async fn broken_banners_and_named_chests_drop_their_data() {
         .iter()
         .find(|s| s.item == Item::Chest)
         .expect("chest dropped");
-    assert_eq!(chest_drop.components, named);
+    assert_eq!(chest_drop.components, named());
     world.shutdown().await;
 }
 
@@ -459,7 +461,7 @@ async fn player_heads_give_note_blocks_their_sound() {
     .await;
     region
         .request(RegionRequest::Place(Place {
-            components: head("minecraft:entity.pig.ambient"),
+            components: head("minecraft:entity.pig.ambient").into(),
             ..place(&alice, note, Item::PlayerHead, 2)
         }))
         .await;
@@ -538,7 +540,7 @@ async fn block_entity_data_applies_only_for_operators_where_the_game_requires_it
         Item::Spawner,
         2,
     );
-    op.components = with_data("minecraft:mob_spawner", "SpawnData", spawn_data.clone());
+    op.components = with_data("minecraft:mob_spawner", "SpawnData", spawn_data.clone()).into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     outcome(&mut alice_events, 2).await;
@@ -649,6 +651,7 @@ async fn brewing_stands_brew_with_blaze_powder_and_show_their_bottles() {
     let MenuSource::Blocks { contents, data, .. } = open.source else {
         panic!("a brewing stand is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(
         contents,
         (0..5).map(|_| None).collect::<Vec<Option<ItemStack>>>()
@@ -670,7 +673,7 @@ async fn brewing_stands_brew_with_blaze_powder_and_show_their_bottles() {
         pos: block,
         slot,
         expected: None,
-        new,
+        new: snap(new),
     };
     region
         .request(RegionRequest::ContainerTransaction {
@@ -687,6 +690,17 @@ async fn brewing_stands_brew_with_blaze_powder_and_show_their_bottles() {
                     Some(ItemStack::mint(Item::BlazePowder, 1, MintReason::Test)),
                 ),
             ],
+            pool: pool_for(&[
+                change(1, potion(Item::Potion, Potion::Water)),
+                change(
+                    brewing::INGREDIENT,
+                    Some(ItemStack::mint(Item::NetherWart, 1, MintReason::Test)),
+                ),
+                change(
+                    brewing::FUEL,
+                    Some(ItemStack::mint(Item::BlazePowder, 1, MintReason::Test)),
+                ),
+            ]),
             took_result: false,
         })
         .await;

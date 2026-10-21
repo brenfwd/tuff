@@ -157,11 +157,7 @@ fn standing_turn(state: BlockState) -> Option<[f32; 4]> {
 fn profiled_head(state: BlockState, nbt: &Compound) -> Option<CarriedLook> {
     let rotation = standing_turn(state)?;
     let components = Components::from_nbt(&raw::collect_components(BlockEntityType::Skull, nbt));
-    components
-        .clone()
-        .into_patch()
-        .other
-        .get("minecraft:profile")?;
+    components.other.get("minecraft:profile")?;
     let mut item = ItemStack::mint(state.block().item()?, 1, MintReason::Template);
     item.components = components;
     Some(CarriedLook::ItemDisplay {
@@ -316,14 +312,7 @@ mod tests {
             panic!("{look:?}");
         };
         assert_eq!(item.item, tuff_vanilla_data::Item::PlayerHead);
-        assert!(
-            item.components
-                .clone()
-                .into_patch()
-                .other
-                .get("minecraft:profile")
-                .is_some()
-        );
+        assert!(item.components.other.get("minecraft:profile").is_some());
         assert_eq!(
             Carrier.look(state("minecraft:player_head[rotation=4]"), None),
             CarriedLook::BlockDisplay

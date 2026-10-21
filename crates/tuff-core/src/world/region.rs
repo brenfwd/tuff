@@ -840,8 +840,9 @@ impl RegionActor {
                 player,
                 window_id,
                 changes,
+                pool,
                 took_result,
-            } => self.container_transaction(player, window_id, changes, took_result),
+            } => self.container_transaction(player, window_id, changes, pool, took_result),
             RegionRequest::Blocks { op, reply } => {
                 let positions: Vec<BlockPos> = match &op {
                     BlockOp::Get { positions, .. } | BlockOp::Biomes { positions, .. } => {
@@ -1065,7 +1066,8 @@ impl RegionActor {
                 player,
                 txn,
                 commit,
-            } => self.resolve_transaction(player, txn, commit),
+                items,
+            } => self.resolve_transaction(player, txn, commit, items),
             RegionRequest::CommandBlockDone {
                 pos,
                 success,
@@ -1104,7 +1106,8 @@ impl RegionActor {
                 window_id,
                 entity,
                 changes,
-            } => self.entity_transaction(player, window_id, entity, changes),
+                pool,
+            } => self.entity_transaction(player, window_id, entity, changes, pool),
             RegionRequest::CloseEntityContainer { player, entity } => {
                 let viewing = self
                     .menus

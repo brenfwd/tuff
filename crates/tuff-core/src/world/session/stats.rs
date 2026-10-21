@@ -27,15 +27,9 @@ impl PlayerSession {
         Self::count_in(&self.inventory, item)
     }
 
-    /// Counts the `item`s a result slot gave: what the inventory gained
-    /// since it held `before`, plus what fell out.
-    pub fn count_crafted(&mut self, item: Item, before: i32, drops: &[ItemStack]) {
-        let dropped: i32 = drops
-            .iter()
-            .filter(|stack| stack.item == item)
-            .map(|stack| i32::from(stack.count()))
-            .sum();
-        let made = self.held_count(item) - before + dropped;
+    /// Counts the `made` `item`s a result slot gave: what the inventory
+    /// gained, plus what fell out.
+    pub fn count_crafted(&mut self, item: Item, made: i32) {
         if made > 0 {
             self.item_action_hooks(
                 super::hooks::ItemAction::Crafted,

@@ -3904,7 +3904,6 @@ dependencies = [
  "tokio",
  "tuff-core",
  "tuff-datapack",
- "tuff-macros",
  "tuff-nbt",
  "tuff-storage",
  "tuff-vanilla-data",

@@ -658,19 +658,22 @@ mod tests {
         chunk.set(0, 70, 1, Block::Chest.default_state());
         chunk.set(3, 70, 0, Block::Stone.default_state());
         let sign = raw::new(BlockEntityType::Sign, sign_at).with("is_waxed", true);
-        let mut chest = BlockEntity::new(ContainerKind::Chest);
-        chest.items[4] = Some(ItemStack::mint(Item::Apple, 7, MintReason::Test));
+        let chest = || {
+            let mut chest = BlockEntity::new(ContainerKind::Chest);
+            chest.items[4] = Some(ItemStack::mint(Item::Apple, 7, MintReason::Test));
+            chest
+        };
         meta.raw_block_entities.insert(sign_at, sign.clone());
         meta.raw_block_entities
             .insert(stale_at, raw::new(BlockEntityType::Bell, stale_at));
-        meta.block_entities.insert(chest_at, chest.clone());
+        meta.block_entities.insert(chest_at, chest());
         let encoded = encode(&chunk, &meta, pos, 5);
         assert_eq!(encoded.get_list(BLOCK_ENTITIES).unwrap().len(), 3);
         let Decoded::Chunk(_, reloaded) = decode(encoded, pos, ChunkShape::OVERWORLD).unwrap()
         else {
             panic!("full chunk");
         };
-        assert_eq!(reloaded.block_entities.get(&chest_at), Some(&chest));
+        assert_eq!(reloaded.block_entities.get(&chest_at), Some(&chest()));
         assert_eq!(
             reloaded.raw_block_entities,
             std::collections::HashMap::from([(sign_at, sign)])

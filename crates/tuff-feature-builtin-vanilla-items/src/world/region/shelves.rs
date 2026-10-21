@@ -82,8 +82,7 @@ pub trait Shelves: RegionWorld {
             .held
             .filter(|item| item_tags::BOOKSHELF_BOOKS.contains(item));
         if let Some(item) = book.filter(|_| !occupied) {
-            let stack = ItemStack::mint(item, 1, MintReason::Transform)
-                .with_components(place.components.clone());
+            let stack = ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
             let sound = if is_enchanted(&stack) {
                 SoundEvent::BlockChiseledBookshelfInsertEnchanted
             } else {
@@ -176,8 +175,12 @@ pub trait Shelves: RegionWorld {
     ) -> Option<ActionOutcome> {
         let pos = place.target;
         let held = place.held.map(|item| {
-            ItemStack::mint(item, place.held_count, MintReason::Transform)
-                .with_components(place.components.clone())
+            ItemStack::mint_with(
+                item,
+                place.held_count,
+                &place.components,
+                MintReason::Transform,
+            )
         });
         let mut items = read_items(self.raw_block_entity(pos)?, SHELF_SLOTS);
         let holding = held.is_some();

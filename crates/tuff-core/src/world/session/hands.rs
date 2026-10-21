@@ -372,7 +372,7 @@ impl PlayerSession {
             components: self
                 .inventory
                 .hand(off_hand)
-                .map(|stack| stack.components.clone())
+                .map(|stack| tuff_item::item::ComponentsSnapshot::of(&stack.components))
                 .unwrap_or_default(),
             held_count: self
                 .inventory
