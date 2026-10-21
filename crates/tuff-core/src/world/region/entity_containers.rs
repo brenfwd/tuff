@@ -396,6 +396,25 @@ impl RegionActor {
         self.container_entity_near([pos.x as f64 + 0.5, pos.y as f64 + 0.5, pos.z as f64 + 0.5])
     }
 
+    /// How many of `stack` [`Self::insert_into_entity`] would put into the
+    /// container of `entity`.
+    pub(super) fn entity_insert_room(&mut self, entity: i32, stack: &ItemStack) -> u8 {
+        let recipes = self.shared.recipes();
+        let Some(mut items) = self
+            .ents
+            .entities
+            .get_mut(&entity)
+            .and_then(|tracked| tracked.entity.container_mut())
+        else {
+            return 0;
+        };
+        let Some(items) = items.as_mut_slice() else {
+            return 0;
+        };
+        let kind = entity_container_kind(items.len());
+        block_entity::insert_room(&recipes, kind, items, None, stack, stack.count(), 0)
+    }
+
     /// Puts `stack` into the container of `entity` as a hopper would;
     /// returns what is left.
     pub(super) fn insert_into_entity(

@@ -65,7 +65,7 @@ async fn a_cube_swallows_a_block_from_a_player_and_shears_pop_it_out() {
     world.ticks(2).await;
     let id = cube(&region).await;
     let effect = interact(&region, &viewer, &mut events, id, Item::Tnt).await;
-    assert!(matches!(effect, HandEffect::Consume(1)), "{effect:?}");
+    assert!(matches!(effect, HandEffect::None), "{effect:?}");
     let nbt = entity_nbt(&region, id).await.unwrap();
     assert_eq!(body_item(&nbt).as_deref(), Some("minecraft:tnt"));
     let effect = interact(&region, &viewer, &mut events, id, Item::Shears).await;

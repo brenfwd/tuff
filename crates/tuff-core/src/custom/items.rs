@@ -292,8 +292,17 @@ pub fn seen_by_entity(
         return (None, None);
     };
     let hidden = (!def.inherit_behavior).then(|| EntityInteraction {
+        player: interaction.player,
+        player_uuid: interaction.player_uuid,
+        position: interaction.position,
+        location: interaction.location,
         stack: None,
-        ..interaction.clone()
+        hand: Default::default(),
+        off_hand: interaction.off_hand,
+        creative: interaction.creative,
+        sneaking: interaction.sneaking,
+        riding: interaction.riding,
+        hero: interaction.hero,
     });
     (Some(def), hidden)
 }

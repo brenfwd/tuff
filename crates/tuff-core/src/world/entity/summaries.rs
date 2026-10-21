@@ -513,8 +513,67 @@ pub struct AttackOutcome {
     pub health_lost: f32,
 }
 
+/// The clicking player's hand stack, moved into the click so an entity
+/// can keep items of it; the rest goes back to the player.
+#[derive(Debug, Default)]
+pub struct HandOffer {
+    stack: std::cell::RefCell<Option<tuff_item::item::ItemStack>>,
+    /// The inventory slot it came from.
+    pub slot: usize,
+}
+
+impl HandOffer {
+    pub fn new(stack: Option<tuff_item::item::ItemStack>) -> Self {
+        Self::from_slot(0, stack)
+    }
+
+    pub fn from_slot(slot: usize, stack: Option<tuff_item::item::ItemStack>) -> Self {
+        Self {
+            stack: std::cell::RefCell::new(stack),
+            slot,
+        }
+    }
+
+    /// Takes `n` of the offered items, or `None` if fewer are offered.
+    pub fn take(&self, n: u8) -> Option<tuff_item::item::ItemStack> {
+        let mut held = self.stack.borrow_mut();
+        let stack = held.as_mut().filter(|stack| stack.count() >= n)?;
+        if stack.count() == n {
+            return held.take();
+        }
+        Some(stack.take(n))
+    }
+
+    /// Takes every offered item.
+    pub fn take_all(&self) -> Option<tuff_item::item::ItemStack> {
+        self.stack.borrow_mut().take()
+    }
+
+    /// Hands `stack` to the player with what is left of the offer;
+    /// returns it if it does not fit there.
+    #[must_use]
+    pub fn give_back(
+        &self,
+        stack: tuff_item::item::ItemStack,
+    ) -> Option<tuff_item::item::ItemStack> {
+        let mut held = self.stack.borrow_mut();
+        match held.as_mut().filter(|held| !held.is_empty()) {
+            None => {
+                *held = Some(stack);
+                None
+            }
+            Some(held) => held.join(stack).err(),
+        }
+    }
+
+    /// What is still offered.
+    pub fn into_inner(self) -> Option<tuff_item::item::ItemStack> {
+        self.stack.into_inner().filter(|stack| !stack.is_empty())
+    }
+}
+
 /// A player's right click on an entity.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct EntityInteraction {
     pub player: PlayerId,
     pub player_uuid: u128,
@@ -522,6 +581,8 @@ pub struct EntityInteraction {
     /// Where on the entity the player clicked, relative to its position.
     pub location: [f64; 3],
     pub stack: Option<tuff_item::item::ItemSnapshot>,
+    /// The held stack itself (a creative copy for creative players).
+    pub hand: HandOffer,
     pub off_hand: bool,
     pub creative: bool,
     pub sneaking: bool,

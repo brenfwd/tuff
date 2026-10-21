@@ -665,16 +665,11 @@ impl Species for HappyGhast {
         }
         let stack = interaction.stack.as_deref()?;
         if is_harness(stack) && !harnessed(core) {
-            core.equipment.set(
-                tuff_vanilla_data::item::EquipmentSlot::Body,
-                Some(tuff_item::item::ItemStack::mint_like(
-                    stack,
-                    1,
-                    tuff_item::item::MintReason::Transform,
-                )),
-            );
+            let harness = interaction.hand.take(1)?;
+            core.equipment
+                .set(tuff_vanilla_data::item::EquipmentSlot::Body, Some(harness));
             core.sound(SoundEvent::EntityHappyGhastEquip, 1.0, 1.0, cx);
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         None
     }
@@ -827,6 +822,15 @@ mod tests {
                 1,
                 Default::default(),
             )),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (Some(tuff_item::item::ItemSnapshot::describe(
+                    stack,
+                    1,
+                    Default::default(),
+                )))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -859,7 +863,7 @@ mod tests {
             let mut ghast = happy_ghast();
             assert_eq!(ghast.seats(), 0);
             let outcome = ghast.interact(&click(tuff_vanilla_data::Item::BlueHarness), cx);
-            assert_eq!(outcome, Some(HandEffect::Consume(1)));
+            assert_eq!(outcome, Some(HandEffect::None));
             assert_eq!(ghast.seats(), 4);
             assert!(ghast.rideable_by_input() && ghast.flying_vehicle());
             assert!(

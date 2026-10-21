@@ -293,9 +293,15 @@ pub trait Interact: RegionWorld + Rest {
                 }
             });
         if let Some(stack) = held {
-            let accepted = level < composter::READY && port.offer(self.as_dyn(), &at, &stack);
             let item = stack.item;
-            stack.burn(tuff_item::item::BurnReason::Template);
+            let accepted = if level < composter::READY {
+                port.offer(self.as_dyn(), &at, stack)
+                    .map_err(|refused| refused.burn(tuff_item::item::BurnReason::Template))
+                    .is_ok()
+            } else {
+                stack.burn(tuff_item::item::BurnReason::Template);
+                false
+            };
             if level >= composter::READY {
                 if level > composter::READY {
                     return None;
@@ -640,10 +646,9 @@ pub trait Interact: RegionWorld + Rest {
             });
         }
         let item = place.held?;
-        let held = ItemStack::mint_with(item, 1, &place.components, MintReason::Template);
-        let accepted = port.offer(self.as_dyn(), &at, &held);
-        held.burn(tuff_item::item::BurnReason::Template);
-        if !accepted {
+        let held = ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
+        if let Err(refused) = port.offer(self.as_dyn(), &at, held) {
+            refused.burn(tuff_item::item::BurnReason::Transform);
             return None;
         }
         place.player.send(PlayerEvent::AwardStat(

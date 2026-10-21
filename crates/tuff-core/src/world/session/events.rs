@@ -185,6 +185,27 @@ impl PlayerSession {
                 ))]);
                 self.broadcast_entity(swing, false).await;
             }
+            PlayerEvent::HandReturned {
+                slot,
+                stack,
+                creative,
+            } => {
+                if creative {
+                    stack.burn(tuff_item::item::BurnReason::Creative);
+                    return;
+                }
+                let leftover = if self.is_dead() {
+                    Some(stack)
+                } else {
+                    self.inventory.put_back(slot, stack)
+                };
+                self.send_inventory();
+                if let Some(leftover) = leftover {
+                    let at = self.pose.position;
+                    self.spawn_item(leftover, at, [0.0; 3], player::THROWN_PICKUP_DELAY)
+                        .await;
+                }
+            }
             PlayerEvent::OfferItem {
                 item,
                 offer,

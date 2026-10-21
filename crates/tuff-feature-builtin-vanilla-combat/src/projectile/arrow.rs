@@ -88,7 +88,12 @@ pub struct Arrow {
     /// Set once a piercing arrow's failed hit sent a bounced copy back in
     /// its place; not saved.
     bounced: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// Where a piercing arrow leaves its item for the bounced copy that
+    /// came back in its place, which collects it; not saved.
+    handoff: Option<Handoff>,
 }
+
+type Handoff = std::sync::Arc<std::sync::Mutex<Option<ItemStack>>>;
 
 /// What a thrown trident adds to an arrow.
 #[derive(Debug, Clone, Default)]
@@ -248,6 +253,7 @@ impl Arrow {
             glow_ticks: SPECTRAL_GLOW_TICKS,
             trident: (kind == EntityType::Trident).then(Trident::default),
             bounced: None,
+            handoff: None,
         }
     }
 
@@ -281,7 +287,15 @@ impl Arrow {
     }
 
     /// This arrow bounced back off a victim it failed to hurt.
-    fn rebounded(&self, cx: &mut TickContext) -> Self {
+    /// It takes this arrow's item, or, for a piercing arrow flying on,
+    /// collects it once that arrow knows it bounced.
+    fn rebounded(&mut self, cx: &mut TickContext) -> Self {
+        let (item, handoff) = if self.pierce == 0 {
+            (std::mem::replace(&mut self.item, ItemStack::empty()), None)
+        } else {
+            let handoff = self.handoff.get_or_insert_with(Default::default).clone();
+            (ItemStack::empty(), Some(handoff))
+        };
         let mut arrow = Self {
             base: self.base.clone(),
             owner: self.owner.clone(),
@@ -294,7 +308,7 @@ impl Arrow {
             life: self.life,
             in_block: self.in_block,
             sound: self.sound,
-            item: ItemStack::mint_like(&self.item, self.item.count(), MintReason::Transform),
+            item,
             weapon: self.weapon.clone(),
             ticks: self.ticks,
             pierced: self.pierced.clone(),
@@ -305,6 +319,7 @@ impl Arrow {
             glow_ticks: self.glow_ticks,
             trident: self.trident.clone(),
             bounced: self.bounced.clone(),
+            handoff,
         };
         arrow.base.id = cx.shared.next_entity_id();
         arrow.base.uuid = cx.rng.r#gen();
@@ -314,6 +329,20 @@ impl Arrow {
         arrow.changed.clear();
         arrow.bounced = None;
         arrow
+    }
+
+    /// A bounced copy takes the item its piercing original left for it.
+    fn collect_handoff(&mut self) {
+        if !self.item.is_empty() || self.bounced.is_some() {
+            return;
+        }
+        let Some(handoff) = &self.handoff else {
+            return;
+        };
+        if let Some(item) = handoff.lock().ok().and_then(|mut left| left.take()) {
+            self.item = item;
+            self.handoff = None;
+        }
     }
 
     fn flags(&self) -> i8 {
@@ -746,6 +775,7 @@ impl Arrow {
 
 impl RegionEntity for Arrow {
     fn take_items(&mut self) -> Vec<ItemStack> {
+        self.collect_handoff();
         let item = std::mem::replace(&mut self.item, ItemStack::empty());
         if item.is_empty() {
             Vec::new()
@@ -860,8 +890,15 @@ impl RegionEntity for Arrow {
             .as_ref()
             .is_some_and(|b| b.load(std::sync::atomic::Ordering::Acquire))
         {
+            if let Some(handoff) = self.handoff.take()
+                && std::sync::Arc::strong_count(&handoff) > 1
+                && let Ok(mut left) = handoff.lock()
+            {
+                *left = Some(std::mem::replace(&mut self.item, ItemStack::empty()));
+            }
             return Tick::Discard;
         }
+        self.collect_handoff();
         self.ticks += 1;
         self.owner.has_been_shot = true;
         if self.life > 4

@@ -252,6 +252,13 @@ pub enum PlayerEvent {
         stack: ItemStack,
         picked_up: bool,
     },
+    /// What an entity left of the hand stack a click moved to it, back
+    /// for inventory `slot`; a creative copy is burned instead.
+    HandReturned {
+        slot: usize,
+        stack: ItemStack,
+        creative: bool,
+    },
     /// A tamed parrot touching this player wants to land on its shoulder.
     /// The session answers with `RegionInternal::ShoulderTaken` naming
     /// `offer`, holding a free shoulder for it until the region settles.

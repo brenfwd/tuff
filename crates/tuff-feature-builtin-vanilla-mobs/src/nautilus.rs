@@ -641,7 +641,7 @@ impl Species for Nautilus {
                 core.heal(NAUTILUS_FEED_HEAL);
                 return Some(food_effect(stack));
             }
-            let equipped = try_equip(core, stack, true, cx);
+            let equipped = try_equip(core, stack, &interaction.hand, true, cx);
             self.inventory.adopt(core);
             return equipped;
         }
@@ -952,6 +952,15 @@ mod tests {
                     1,
                     Default::default(),
                 )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::Pufferfish,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -981,6 +990,15 @@ mod tests {
                 1,
                 Default::default(),
             )),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (Some(tuff_item::item::ItemSnapshot::describe(
+                    item,
+                    1,
+                    Default::default(),
+                )))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking,
@@ -1052,7 +1070,7 @@ mod tests {
             assert!(nautilus.mount_refused(core, Some(&saddle)));
             assert!(!nautilus.mount_refused(core, None));
             let outcome = nautilus.interact(core, &click(Item::Saddle, false), cx);
-            assert_eq!(outcome, Some(HandEffect::Consume(1)));
+            assert_eq!(outcome, Some(HandEffect::None));
             assert!(saddled(core));
             assert!(core.equipment.mount_slots()[0].is_some());
             assert!(!nautilus.mount_refused(core, Some(&saddle)), "slot taken");

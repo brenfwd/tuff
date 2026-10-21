@@ -721,18 +721,12 @@ impl Species for Allay {
             return None;
         }
         match (core.equipment.main_hand().is_some(), stack) {
-            (false, Some(stack)) => {
-                core.equipment.set(
-                    EquipmentSlot::Mainhand,
-                    Some(ItemStack::mint_like(
-                        stack,
-                        1,
-                        tuff_item::item::MintReason::Transform,
-                    )),
-                );
+            (false, Some(_)) => {
+                let one = interaction.hand.take(1)?;
+                core.equipment.set(EquipmentSlot::Mainhand, Some(one));
                 core.sound(SoundEvent::EntityAllayItemGiven, 2.0, 1.0, cx);
                 self.liked_player = Some(interaction.player_uuid);
-                Some(HandEffect::Consume(1))
+                Some(HandEffect::None)
             }
             (true, None) if !interaction.off_hand => {
                 let held = core.equipment.take(EquipmentSlot::Mainhand)?;
@@ -862,6 +856,13 @@ mod tests {
             location: [0.0; 3],
             stack: item
                 .map(|item| tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (item.map(|item| {
+                    tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())
+                }))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand,
             creative: false,
             sneaking: false,
@@ -889,8 +890,10 @@ mod tests {
         with_context(|core, cx| {
             Allay::configure(core);
             let mut allay = Allay::create(cx.rng);
-            let effect = allay.interact(core, &interaction(9, Some(Item::Cobblestone), false), cx);
-            assert!(matches!(effect, Some(HandEffect::Consume(1))));
+            let click = interaction(9, Some(Item::Cobblestone), false);
+            let effect = allay.interact(core, &click, cx);
+            assert!(matches!(effect, Some(HandEffect::None)));
+            assert_eq!(click.hand.into_inner().map(|left| left.count()), Some(4));
             assert_eq!(
                 core.equipment.main_hand().map(|s| (s.item, s.count())),
                 Some((Item::Cobblestone, 1))

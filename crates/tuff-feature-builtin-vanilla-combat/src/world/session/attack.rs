@@ -573,29 +573,47 @@ impl CombatExt for PlayerSession {
         if distance_sq(self.eye(), position) > (ATTACK_REACH + 3.0).powi(2) {
             return;
         }
+        let Some(region) = self.region(chunk.region()).await else {
+            return;
+        };
+        let creative = self.mode.abilities.instabuild;
+        let slot = self.inventory.hand_slot(off_hand);
+        let hand = if creative {
+            self.inventory.hand(off_hand).map(|stack| {
+                ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Creative)
+            })
+        } else {
+            self.inventory.take_hand(off_hand)
+        };
         let interaction = tuff_core::world::entity::EntityInteraction {
             player: self.id,
             player_uuid: self.profile.id,
             position: self.pose.position,
             location,
-            stack: self
-                .inventory
-                .hand(off_hand)
-                .map(tuff_item::item::ItemSnapshot::of),
+            stack: hand.as_ref().map(tuff_item::item::ItemSnapshot::of),
+            hand: tuff_core::world::entity::HandOffer::from_slot(slot, hand),
             off_hand,
-            creative: self.mode.abilities.instabuild,
+            creative,
             sneaking,
             riding,
             hero: self.body.effects.amplifier(MobEffect::HeroOfTheVillage),
         };
-        if let Some(region) = self.region(chunk.region()).await {
-            region
-                .request(RegionRequest::InteractEntity {
-                    player: self.conn.handle.clone(),
-                    target,
-                    interaction,
-                })
-                .await;
+        if let Err(refused) = region
+            .try_request(RegionRequest::InteractEntity {
+                player: self.conn.handle.clone(),
+                target,
+                interaction,
+            })
+            .await
+            && let RegionRequest::InteractEntity { interaction, .. } = *refused
+            && let Some(stack) = interaction.hand.into_inner()
+        {
+            if creative {
+                stack.burn(tuff_item::item::BurnReason::Creative);
+            } else if let Some(leftover) = self.inventory.put_back(slot, stack) {
+                let at = self.pose.position;
+                self.spawn_item(leftover, at, [0.0; 3], 0).await;
+            }
         }
     }
 

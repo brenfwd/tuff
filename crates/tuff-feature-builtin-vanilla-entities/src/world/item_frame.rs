@@ -612,11 +612,11 @@ impl RegionEntity for ItemFrame {
             return None;
         }
         if self.item.is_none() {
-            let stack = interaction.stack.as_deref()?;
-            self.set_item(Some(ItemStack::mint_like(stack, 1, MintReason::Transform)));
+            let one = interaction.hand.take(1)?;
+            self.set_item(Some(one));
             report_item(None, self.item.as_ref(), Some(interaction.player), cx);
             self.sound(SoundEvent::EntityItemFrameAddItem, cx);
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         self.sound(SoundEvent::EntityItemFrameRotateItem, cx);
         self.set_rotation(self.rotation + 1);

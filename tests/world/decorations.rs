@@ -144,7 +144,7 @@ async fn an_item_frame_goes_on_a_wall_and_holds_and_turns_an_item() {
     )
     .await;
     assert_eq!(item, Some(Item::Diamond));
-    assert!(matches!(effect, HandEffect::Consume(1)));
+    assert!(matches!(effect, HandEffect::None));
     let nbt = saved(&s.region, id).await;
     let held = nbt.get("Item").and_then(Tag::as_compound).expect("an item");
     assert_eq!(held.get_str("id"), Some("minecraft:diamond"));
@@ -300,7 +300,7 @@ async fn an_armor_stand_is_placed_dressed_and_broken() {
     let mut helmet = interaction(&s.player, Some(Item::IronHelmet));
     helmet.location = [0.0, 1.8, 0.0];
     let (_, effect) = interact_with(&s.region, &s.player, &mut s.events, id, helmet).await;
-    assert!(matches!(effect, HandEffect::Consume(1)));
+    assert!(matches!(effect, HandEffect::None));
     let nbt = saved(&s.region, id).await;
     let worn = nbt
         .get("equipment")
@@ -331,12 +331,26 @@ async fn an_armor_stand_is_placed_dressed_and_broken() {
 
     let mut take = interaction(&s.player, None);
     take.location = [0.0, 1.8, 0.0];
-    let (item, effect) = interact_with(&s.region, &s.player, &mut s.events, id, take).await;
+    s.region
+        .request(RegionRequest::InteractEntity {
+            player: s.player.clone(),
+            target: id,
+            interaction: take,
+        })
+        .await;
+    let stack = expect(&mut s.events, |event| match event {
+        PlayerEvent::HandReturned { stack, .. } if stack.item != Item::Stick => Some(stack),
+        _ => None,
+    })
+    .await;
+    assert_eq!(stack.item, Item::IronHelmet, "the helmet goes to the hand");
+    let (item, effect) = expect(&mut s.events, |event| match event {
+        PlayerEvent::EntityInteracted { item, effect, .. } => Some((item, effect)),
+        _ => None,
+    })
+    .await;
     assert_eq!(item, None);
-    let HandEffect::Replace(Some(stack)) = effect else {
-        panic!("the helmet goes to the hand: {effect:?}");
-    };
-    assert_eq!(stack.item, Item::IronHelmet);
+    assert!(matches!(effect, HandEffect::None));
 
     let mut helmet = interaction(&s.player, Some(Item::IronHelmet));
     helmet.location = [0.0, 1.8, 0.0];
@@ -467,6 +481,7 @@ async fn a_framed_map_marks_its_frame_and_reaches_players_nearby() {
         tuff_item::item::ItemStack::mint(Item::FilledMap, 1, tuff_item::item::MintReason::Test);
     stack.components.map_id = Some(map);
     put.stack = Some(tuff_item::item::ItemSnapshot::of(&stack));
+    put.hand = tuff_core::world::entity::HandOffer::new(Some(stack));
     interact_with(&s.region, &s.player, &mut s.events, id, put).await;
     s.world
         .publish_players("minecraft:overworld", &[(&s.player, [6.0, 70.0, 8.0])]);

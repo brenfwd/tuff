@@ -503,10 +503,7 @@ async fn striders_can_be_saddled() {
     summon_fresh(&region, EntityType::Strider, [5.5, SKY as f64 + 1.0, 5.5]).await;
     let strider = mobs(&region, EntityType::Strider).await[0].id;
     let effect = interact(&region, &player, &mut events, strider, Item::Saddle).await;
-    assert!(matches!(
-        effect,
-        crate::world::messages::HandEffect::Consume(1)
-    ));
+    assert!(matches!(effect, crate::world::messages::HandEffect::None));
     world.shutdown().await;
 }
 

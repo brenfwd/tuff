@@ -31,6 +31,15 @@ fn click(item: Item) -> EntityInteraction {
             1,
             Default::default(),
         )),
+        hand: tuff_core::world::entity::HandOffer::new(
+            (Some(tuff_item::item::ItemSnapshot::describe(
+                item,
+                1,
+                Default::default(),
+            )))
+            .as_deref()
+            .map(tuff_item::item::ItemStack::test_copy),
+        ),
         off_hand: false,
         creative: false,
         sneaking: false,
@@ -270,11 +279,11 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
         let mut horse = tamed(EntityType::Horse, Compound::new());
         let saddle = click(Item::Saddle);
         assert!(horse.mount_refused_by(saddle.stack.as_deref()));
-        assert_eq!(horse.interact(&saddle, cx), Some(HandEffect::Consume(1)));
+        assert_eq!(horse.interact(&saddle, cx), Some(HandEffect::None));
         assert!(horse.rideable_by_input());
         let armor = click(Item::IronHorseArmor);
         assert!(horse.mount_refused_by(armor.stack.as_deref()));
-        assert_eq!(horse.interact(&armor, cx), Some(HandEffect::Consume(1)));
+        assert_eq!(horse.interact(&armor, cx), Some(HandEffect::None));
         let slots = horse.container().unwrap();
         assert_eq!(
             slots[tuff_core::world::menu::mount::BODY]

@@ -25,13 +25,26 @@ struct Probe {
 struct TestPort(Arc<Probe>);
 
 impl ItemPort for TestPort {
-    fn offer(&self, _: &mut dyn RegionWorld, at: &PortAccess, _: &ItemStack) -> bool {
+    fn offer(
+        &self,
+        _: &mut dyn RegionWorld,
+        at: &PortAccess,
+        stack: ItemStack,
+    ) -> Result<(), ItemStack> {
         self.0.faces.lock().unwrap().push(at.face);
-        at.face == Some(tuff_vanilla_data::block::Facing::Up)
+        if at.face != Some(tuff_vanilla_data::block::Facing::Up) {
+            return Err(stack);
+        }
+        stack.burn(tuff_item::item::BurnReason::Test);
+        Ok(())
     }
 
-    fn peek(&self, _: &dyn RegionWorld, _: &PortAccess) -> Option<ItemStack> {
-        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))
+    fn peek(&self, _: &dyn RegionWorld, _: &PortAccess) -> Option<tuff_item::item::ItemSnapshot> {
+        Some(tuff_item::item::ItemSnapshot::describe(
+            Item::Stick,
+            1,
+            Default::default(),
+        ))
     }
 
     fn take(&self, _: &mut dyn RegionWorld, _: &PortAccess) -> Option<ItemStack> {

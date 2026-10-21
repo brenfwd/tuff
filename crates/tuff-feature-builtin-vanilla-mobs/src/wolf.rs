@@ -365,11 +365,9 @@ impl Species for Wolf {
                 let sitting = core.tame.as_ref().is_some_and(|t| t.sitting);
                 let worn = core.equipment.get(EquipmentSlot::Body).is_some();
                 if stack.item == tuff_vanilla_data::Item::WolfArmor && !worn && !core.is_baby() {
-                    core.equipment.set(
-                        EquipmentSlot::Body,
-                        Some(ItemStack::mint(stack.item, 1, MintReason::Spawn)),
-                    );
-                    return Some(HandEffect::Consume(1));
+                    let armor = interaction.hand.take(1)?;
+                    core.equipment.set(EquipmentSlot::Body, Some(armor));
+                    return Some(HandEffect::None);
                 }
                 if sitting
                     && let Some(armor) = core.equipment.get_mut(EquipmentSlot::Body)
@@ -491,6 +489,13 @@ mod tests {
             location: [0.0; 3],
             stack: item
                 .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (item.map(|item| {
+                    tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())
+                }))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -688,7 +693,7 @@ mod tests {
             );
 
             let worn = wolf.interact(core, &interaction(1, Some(Item::WolfArmor)), cx);
-            assert!(matches!(worn, Some(HandEffect::Consume(1))));
+            assert!(matches!(worn, Some(HandEffect::None)));
             assert!(core.equipment.get(EquipmentSlot::Body).is_some());
 
             core.equipment

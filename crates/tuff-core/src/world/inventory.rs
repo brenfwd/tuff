@@ -240,7 +240,7 @@ impl Inventory {
         self.slots[slot].as_mut()
     }
 
-    pub(crate) fn hand_slot(&self, off_hand: bool) -> usize {
+    pub fn hand_slot(&self, off_hand: bool) -> usize {
         if off_hand {
             OFFHAND
         } else {
@@ -254,6 +254,23 @@ impl Inventory {
         match slot {
             EquipmentSlot::Mainhand => self.hand(false),
             other => self.slots[Self::armor_slot(other)?].as_ref(),
+        }
+    }
+
+    pub fn take_hand(&mut self, off_hand: bool) -> Option<ItemStack> {
+        let slot = self.hand_slot(off_hand);
+        self.slots[slot].take()
+    }
+
+    /// Puts `stack` back into `slot`, or wherever it fits if the slot
+    /// holds something else; hands back what did not fit.
+    pub fn put_back(&mut self, slot: usize, stack: ItemStack) -> Option<ItemStack> {
+        match self.slots.get_mut(slot) {
+            Some(held @ None) => {
+                *held = Some(stack);
+                None
+            }
+            _ => self.add(stack),
         }
     }
 

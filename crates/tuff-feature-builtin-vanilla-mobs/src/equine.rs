@@ -17,6 +17,7 @@ use super::goals::{
 use super::{Mob, MobCore, MobSounds, Species, animal, data, event};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::block_entity::{decode_items, encode_items};
+use tuff_core::world::entity::HandOffer;
 use tuff_core::world::entity::{
     Effect, EntityInteraction, InteractOutcome, RegionEntity, RiderInput, TickContext, take_bool,
     take_number,
@@ -167,6 +168,7 @@ fn ridden(core: &MobCore) -> bool {
 pub fn saddle_up(
     core: &mut MobCore,
     stack: &ItemStack,
+    hand: &HandOffer,
     sound: Option<SoundEvent>,
     cx: &mut TickContext,
 ) -> InteractOutcome {
@@ -177,12 +179,10 @@ pub fn saddle_up(
     if !eq.equip_on_interact || !matches!(eq.slot, EquipmentSlot::Saddle) {
         return None;
     }
-    core.equipment.set(
-        EquipmentSlot::Saddle,
-        Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
-    );
+    let saddle = hand.take(1)?;
+    core.equipment.set(EquipmentSlot::Saddle, Some(saddle));
     core.sound(sound.unwrap_or(eq.equip_sound), 1.0, 1.0, cx);
-    Some(HandEffect::Consume(1))
+    Some(HandEffect::None)
 }
 
 /// Sneak-click equipping on a tamed adult (a nautilus): a saddle, and
@@ -190,6 +190,7 @@ pub fn saddle_up(
 pub fn try_equip(
     core: &mut MobCore,
     stack: &ItemStack,
+    hand: &HandOffer,
     allow_body: bool,
     cx: &mut TickContext,
 ) -> InteractOutcome {
@@ -203,12 +204,10 @@ pub fn try_equip(
     {
         return None;
     }
-    core.equipment.set(
-        eq.slot,
-        Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
-    );
+    let one = hand.take(1)?;
+    core.equipment.set(eq.slot, Some(one));
     core.sound(eq.equip_sound, 1.0, 1.0, cx);
-    Some(HandEffect::Consume(1))
+    Some(HandEffect::None)
 }
 
 /// How a food item helps a horse: health, seconds of growing up, temper,
@@ -571,11 +570,8 @@ impl Equine {
         profile.chested && !self.has_chest && stack.item == Item::Chest && is_tame(core)
     }
 
-    fn equip(&mut self, core: &mut MobCore, slot: EquipmentSlot, stack: &ItemStack) {
-        core.equipment.set(
-            slot,
-            Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
-        );
+    fn equip(&mut self, core: &mut MobCore, slot: EquipmentSlot, one: ItemStack) {
+        core.equipment.set(slot, Some(one));
         core.equipment
             .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
         core.persistence_required = true;
@@ -656,16 +652,16 @@ impl Equine {
             return None;
         }
         if self.can_equip_saddle(core, profile, stack) {
-            self.equip(core, EquipmentSlot::Saddle, stack);
+            self.equip(core, EquipmentSlot::Saddle, interaction.hand.take(1)?);
             core.sound(SoundEvent::EntityHorseSaddle, 1.0, 1.0, cx);
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         if self.can_equip_armor(core, profile, stack) {
-            self.equip(core, EquipmentSlot::Body, stack);
+            self.equip(core, EquipmentSlot::Body, interaction.hand.take(1)?);
             if let Some(eq) = stack.equippable() {
                 core.sound(eq.equip_sound, 1.0, 1.0, cx);
             }
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         None
     }
