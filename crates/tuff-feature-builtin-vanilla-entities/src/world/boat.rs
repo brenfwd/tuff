@@ -799,12 +799,12 @@ impl RegionEntity for Boat {
         }
     }
 
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
-        has_chest(self.base.kind).then_some(self.items.as_slice())
+    fn container(&self) -> Option<tuff_core::world::entity_slots::ContainerSlots<'_>> {
+        has_chest(self.base.kind).then(|| self.items.as_slice().into())
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        has_chest(self.base.kind).then_some(self.items.as_mut_slice())
+    fn container_mut(&mut self) -> Option<tuff_core::world::entity_slots::ContainerSlotsMut<'_>> {
+        has_chest(self.base.kind).then(|| self.items.as_mut_slice().into())
     }
 
     fn take_loot_table(&mut self) -> Option<(String, i64)> {

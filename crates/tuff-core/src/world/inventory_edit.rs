@@ -72,7 +72,9 @@ fn give(inventory: &mut Inventory, one: &ItemStack, count: u32) -> bool {
     while remaining > 0 {
         let part = remaining.min(chunk);
         remaining -= part;
-        if let Some(left) = inventory.add(ItemStack::mint_like(one, part as u8, MintReason::Command)) {
+        if let Some(left) =
+            inventory.add(ItemStack::mint_like(one, part as u8, MintReason::Command))
+        {
             left.burn(BurnReason::Command);
         }
     }

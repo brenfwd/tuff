@@ -1,4 +1,5 @@
 use rand::SeedableRng;
+use tuff_item::item::DupUnchecked;
 
 use super::*;
 use tuff_core::world::entity::EntityBase;
@@ -72,7 +73,7 @@ fn a_tamed_saddled_horse_loads_as_drivable() {
     assert_eq!(
         entity
             .container()
-            .map(|slots| slots[mount::SADDLE].dup_unchecked()),
+            .map(|slots| slots[tuff_core::world::menu::mount::SADDLE].dup_unchecked()),
         Some(Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test))),
         "the screen's saddle slot shows the worn saddle"
     );
@@ -271,7 +272,9 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
         assert_eq!(horse.interact(&armor, cx), Some(HandEffect::Consume(1)));
         let slots = horse.container().unwrap();
         assert_eq!(
-            slots[mount::BODY].as_ref().map(|s| s.item),
+            slots[tuff_core::world::menu::mount::BODY]
+                .as_ref()
+                .map(|s| s.item),
             Some(Item::IronHorseArmor)
         );
         assert!(
@@ -322,22 +325,22 @@ fn a_donkey_chest_opens_a_fifteen_slot_inventory_that_saves() {
 
 #[tuff_core::watchdog]
 #[test]
-fn a_saddle_put_in_the_screen_is_worn_after_the_next_tick() {
+fn a_saddle_put_in_the_screen_is_worn_once_with_its_drop_chance() {
     super::super::tests::with_context(|core, cx| {
         Horse::configure(core);
         core.tame.as_mut().unwrap().owner = Some(77);
         let mut equine = Equine::default();
-        equine.inventory.slots_mut()[mount::SADDLE] =
-            Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
+        equine.inventory.adopt(core);
+        let [saddle, _] = core.equipment.mount_slots_mut();
+        *saddle = Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
+        equine.inventory.chest_from_screen();
         equine.inventory.sync(core, cx);
         assert!(saddled(core));
         assert_eq!(core.equipment.drop_chance(EquipmentSlot::Saddle), 2.0);
-        core.equipment.set(EquipmentSlot::Saddle, None);
+        let saddle = core.equipment.take(EquipmentSlot::Saddle);
         equine.inventory.sync(core, cx);
-        assert!(
-            equine.inventory.slots()[mount::SADDLE].is_none(),
-            "taking the saddle off elsewhere empties the slot"
-        );
+        assert!(saddle.is_some());
+        assert!(core.equipment.mount_slots()[0].is_none());
     });
 }
 

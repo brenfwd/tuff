@@ -824,7 +824,10 @@ pub trait RegionWorld: GrowthLevel {
 
     /// The container slots of the entity `uuid` in this region (a chest
     /// boat, a minecart).
-    fn entity_container_items(&self, _uuid: u128) -> Option<&[Option<ItemStack>]> {
+    fn entity_container_items(
+        &self,
+        _uuid: u128,
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         None
     }
 

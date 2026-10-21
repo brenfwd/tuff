@@ -52,6 +52,10 @@ impl Default for Equipment {
     }
 }
 
+const _: () = assert!(
+    matches!(SLOTS[6].0, EquipmentSlot::Body) && matches!(SLOTS[7].0, EquipmentSlot::Saddle)
+);
+
 fn index(slot: EquipmentSlot) -> Option<usize> {
     SLOTS.iter().position(|(s, ..)| *s == slot)
 }
@@ -112,6 +116,19 @@ impl Equipment {
         let item = self.items[index(slot)?].as_mut()?;
         self.changed = true;
         Some(item)
+    }
+
+    /// The saddle and body slots, in the order a mount's screen shows them.
+    pub fn mount_slots(&self) -> [&Option<ItemStack>; 2] {
+        let [.., body, saddle] = &self.items;
+        [saddle, body]
+    }
+
+    /// [`Self::mount_slots`] to change; marks the equipment changed.
+    pub fn mount_slots_mut(&mut self) -> [&mut Option<ItemStack>; 2] {
+        self.changed = true;
+        let [.., body, saddle] = &mut self.items;
+        [saddle, body]
     }
 
     /// Takes the item out of `slot`.

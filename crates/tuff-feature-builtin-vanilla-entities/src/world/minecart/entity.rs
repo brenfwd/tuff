@@ -50,12 +50,13 @@ impl RegionEntity for Minecart {
         }
     }
 
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
-        self.has_container().then_some(self.items.as_slice())
+    fn container(&self) -> Option<tuff_core::world::entity_slots::ContainerSlots<'_>> {
+        self.has_container().then(|| self.items.as_slice().into())
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        self.has_container().then_some(self.items.as_mut_slice())
+    fn container_mut(&mut self) -> Option<tuff_core::world::entity_slots::ContainerSlotsMut<'_>> {
+        self.has_container()
+            .then(|| self.items.as_mut_slice().into())
     }
 
     fn container_menu(&self) -> MenuKind {

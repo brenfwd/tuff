@@ -194,8 +194,8 @@ pub trait Species: Sized + Send + Debug + 'static {
         false
     }
 
-    /// The slots of an inventory players open on it (a mount's saddle,
-    /// armor and chest), with the menu they open as.
+    /// The chest of a mount's inventory, behind the saddle and body slots
+    /// its screen shows from the equipment, with the menu it opens as.
     fn inventory(&self) -> Option<(&[Option<ItemStack>], tuff_core::world::menu::MenuKind)> {
         None
     }

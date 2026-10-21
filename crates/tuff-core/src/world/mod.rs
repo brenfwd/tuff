@@ -37,6 +37,7 @@ pub mod dimension;
 pub mod drops;
 pub mod effects;
 pub mod entity;
+pub mod entity_slots;
 pub mod exploration;
 pub mod explosion;
 pub mod fake;

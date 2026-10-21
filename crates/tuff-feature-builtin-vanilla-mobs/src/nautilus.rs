@@ -539,7 +539,7 @@ impl Species for Nautilus {
 
     fn inventory(&self) -> Option<(&[Option<ItemStack>], MenuKind)> {
         Some((
-            self.inventory.slots(),
+            self.inventory.chest(),
             MenuKind::Mount {
                 columns: 0,
                 saddle: true,
@@ -549,7 +549,7 @@ impl Species for Nautilus {
     }
 
     fn inventory_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        Some(self.inventory.slots_mut())
+        Some(self.inventory.chest_from_screen())
     }
 
     fn inventory_opens_for(&self, core: &MobCore, player: i32, sneaking: bool) -> bool {
@@ -998,7 +998,7 @@ mod tests {
             assert!(nautilus.inventory_opens_for(core, 1, true));
             assert!(!nautilus.inventory_opens_for(core, 1, false));
             let (slots, kind) = nautilus.inventory().expect("a screen");
-            assert_eq!(slots.len(), 2);
+            assert!(slots.is_empty());
             assert_eq!(
                 kind,
                 MenuKind::Mount {
@@ -1007,8 +1007,12 @@ mod tests {
                     armor: MountArmor::Nautilus,
                 }
             );
-            nautilus.inventory_mut().unwrap()[0] =
-                Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
+            nautilus.inventory_mut().unwrap();
+            core.equipment.mount_slots_mut()[0].replace(ItemStack::mint(
+                Item::Saddle,
+                1,
+                MintReason::Test,
+            ));
             nautilus.tick(core, cx);
             assert!(saddled(core), "a saddle placed in the screen is worn");
             assert!(MountArmor::Nautilus.fits(&ItemStack::mint(
@@ -1042,7 +1046,7 @@ mod tests {
             let outcome = nautilus.interact(core, &click(Item::Saddle, false), cx);
             assert_eq!(outcome, Some(HandEffect::Consume(1)));
             assert!(saddled(core));
-            assert!(nautilus.inventory().unwrap().0[0].is_some());
+            assert!(core.equipment.mount_slots()[0].is_some());
             assert!(!nautilus.mount_refused(core, Some(&saddle)), "slot taken");
         });
     }

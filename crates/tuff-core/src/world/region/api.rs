@@ -807,7 +807,10 @@ impl RegionWorld for RegionActor {
         self.set_container_items_for_plugin(pos, slots)
     }
 
-    fn entity_container_items(&self, uuid: u128) -> Option<&[Option<ItemStack>]> {
+    fn entity_container_items(
+        &self,
+        uuid: u128,
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         self.entity_container_items_by_uuid(uuid)
     }
 

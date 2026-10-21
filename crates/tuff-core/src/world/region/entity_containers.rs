@@ -42,7 +42,7 @@ impl RegionActor {
             if !spectator {
                 player.send(super::containers::loot_generated(table.clone()));
             }
-            let slots = tracked.entity.container().map_or(0, <[_]>::len);
+            let slots = tracked.entity.container().map_or(0, |slots| slots.len());
             let [x, y, z] = tracked.entity.base().position;
             let origin = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
             let items = if seed == 0 {
@@ -56,7 +56,7 @@ impl RegionActor {
                     origin,
                     &items,
                 );
-                if let Some(container) = self
+                if let Some(mut container) = self
                     .ents
                     .entities
                     .get_mut(&target)
@@ -87,10 +87,13 @@ impl RegionActor {
         let contents = tracked
             .entity
             .container()
-            .unwrap_or(&[])
-            .iter()
-            .map(DupUnchecked::dup_unchecked)
-            .collect::<Vec<_>>();
+            .map(|slots| {
+                slots
+                    .iter()
+                    .map(DupUnchecked::dup_unchecked)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let kind = tracked.entity.container_menu();
         if !spectator {
             let viewers = self.menus.entity_viewers.entry(target).or_default();
@@ -211,7 +214,7 @@ impl RegionActor {
             .entities
             .get_mut(&entity)
             .and_then(|tracked| tracked.entity.container_mut());
-        let Some(container) = container.filter(|_| viewing) else {
+        let Some(mut container) = container.filter(|_| viewing) else {
             player.send(PlayerEvent::EntityTransaction {
                 window_id,
                 accepted: false,
@@ -346,6 +349,10 @@ impl RegionActor {
         else {
             return Some(stack);
         };
+        let mut items = items;
+        let Some(items) = items.as_mut_slice() else {
+            return Some(stack);
+        };
         let kind = entity_container_kind(items.len());
         let before = holder.map(|_| {
             items
@@ -384,7 +391,7 @@ impl RegionActor {
             .entities
             .get(&entity)
             .and_then(|tracked| tracked.entity.container())
-            .map_or(0, <[_]>::len);
+            .map_or(0, |slots| slots.len());
         let at = self
             .ents
             .entities
@@ -392,12 +399,15 @@ impl RegionActor {
             .map_or([0.0; 3], |tracked| tracked.entity.base().position);
         for slot in 0..size {
             let holder = self.entity_holder(entity);
-            let Some(held) = self
+            let Some(mut slots) = self
                 .ents
                 .entities
                 .get_mut(&entity)
-                .and_then(|tracked| tracked.entity.container_mut()?.get_mut(slot))
+                .and_then(|tracked| tracked.entity.container_mut())
             else {
+                continue;
+            };
+            let Some(held) = slots.get_mut(slot) else {
                 continue;
             };
             let old = holder.and_then(|_| held.as_ref().map(ItemSnapshot::of));
@@ -407,11 +417,12 @@ impl RegionActor {
             match accept(self, one) {
                 Ok(()) => {}
                 Err(one) => {
-                    if let Some(held) = self
+                    if let Some(mut slots) = self
                         .ents
                         .entities
                         .get_mut(&entity)
-                        .and_then(|tracked| tracked.entity.container_mut()?.get_mut(slot))
+                        .and_then(|tracked| tracked.entity.container_mut())
+                        && let Some(held) = slots.get_mut(slot)
                     {
                         ItemStack::put_back(held, one);
                     } else {
