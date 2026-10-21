@@ -1378,7 +1378,7 @@ impl<S: Species> Mob<S> {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item != tuff_vanilla_data::Item::Shears
             || interaction.sneaking
             || !self.species.can_shear_equipment(&self.core, interaction)

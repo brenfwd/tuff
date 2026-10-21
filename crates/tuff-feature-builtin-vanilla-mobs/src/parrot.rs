@@ -226,7 +226,7 @@ impl Species for Parrot {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref();
+        let stack = interaction.stack.as_deref();
         let tamed = core.tame.as_ref().is_some_and(|t| t.is_tamed());
         if let Some(stack) = stack {
             if !tamed && parrot_food(stack.item) {
@@ -267,7 +267,6 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 mod tests {
     use super::*;
     use crate::tests::with_context;
-    use tuff_item::item::MintReason;
 
     fn interaction(owner: u128, item: Option<Item>) -> EntityInteraction {
         EntityInteraction {
@@ -275,7 +274,8 @@ mod tests {
             player_uuid: owner,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::mint(item, 1, MintReason::Test)),
+            stack: item
+                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
             off_hand: false,
             creative: false,
             sneaking: false,

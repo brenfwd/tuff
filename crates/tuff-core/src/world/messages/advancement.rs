@@ -38,7 +38,7 @@ pub enum AdvancementEvent {
     /// The player reeled in a catch (or a hooked entity, with no items).
     FishingRodHooked {
         entity: crate::world::predicate::EntityFacts,
-        items: Vec<tuff_item::item::ItemStack>,
+        items: Vec<tuff_item::item::ItemSnapshot>,
     },
     /// The player opened a container whose loot table `0` just rolled.
     GeneratedLoot(String),

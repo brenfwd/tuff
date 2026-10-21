@@ -913,7 +913,7 @@ impl Species for Dolphin {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item) {
             return None;
         }
@@ -962,7 +962,11 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::mint(Item::Cod, 1, MintReason::Test)),
+            stack: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Cod,
+                1,
+                Default::default(),
+            )),
             off_hand: false,
             creative: false,
             sneaking: false,

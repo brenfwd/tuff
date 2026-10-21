@@ -8,7 +8,6 @@
 //! per player.
 
 use std::collections::HashMap;
-use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::Block;
 use tuff_vanilla_data::registry::SoundEvent;
@@ -85,7 +84,7 @@ struct Config {
 
 struct Vault {
     config: Config,
-    display_item: Option<ItemStack>,
+    display_item: Option<tuff_item::item::ItemSnapshot>,
     connected: Vec<u128>,
     connected_range: f64,
     rewarded: Vec<u128>,
@@ -152,7 +151,7 @@ impl Vault {
                     .get_str("override_loot_table_to_display")
                     .map(str::to_owned),
             },
-            display_item: stack_in(shared, "display_item"),
+            display_item: stack_in(shared, "display_item").map(ItemStack::into_template),
             connected: uuids(shared, "connected_players"),
             connected_range: double(
                 shared,
@@ -203,7 +202,7 @@ impl Vault {
         nbt.insert("server_data", server);
     }
 
-    fn set_display(&mut self, stack: Option<ItemStack>) {
+    fn set_display(&mut self, stack: Option<tuff_item::item::ItemSnapshot>) {
         if self.display_item != stack {
             self.display_item = stack;
             self.shared_dirty = true;
@@ -219,8 +218,10 @@ impl Vault {
         self.server_dirty = true;
     }
 
-    fn next_to_eject(&self) -> Option<ItemStack> {
-        self.items_to_eject.last().map(DupUnchecked::dup_unchecked)
+    fn next_to_eject(&self) -> Option<tuff_item::item::ItemSnapshot> {
+        self.items_to_eject
+            .last()
+            .map(tuff_item::item::ItemSnapshot::of)
     }
 
     fn ejection_progress(&self) -> f32 {
@@ -274,7 +275,11 @@ impl Vault {
             return;
         }
         let pick = world.rng().gen_range(0..items.len());
-        self.set_display(Some(items.swap_remove(pick)));
+        let shown = items.swap_remove(pick).into_template();
+        for rest in items {
+            rest.burn(tuff_item::item::BurnReason::Template);
+        }
+        self.set_display(Some(shown));
     }
 }
 
@@ -470,7 +475,11 @@ pub fn use_block(
     if !vault.can_eject(State::Active) {
         return interacted;
     }
-    let key = vault.config.key_item.dup_unchecked()?;
+    let key = vault
+        .config
+        .key_item
+        .as_ref()
+        .map(tuff_item::item::ItemSnapshot::of)?;
     if key.item != held || key.components != place.components || place.held_count < key.count() {
         play_fail(world, pos, SoundEvent::BlockVaultInsertItemFail);
         return interacted;

@@ -737,9 +737,8 @@ pub fn golem_room(items: &[Option<ItemStack>], stack: &ItemStack) -> u8 {
         match item {
             None => return stack.count(),
             Some(existing) if existing.stacks_with(stack) => {
-                room = room.saturating_add(
-                    existing.max_stack_size().saturating_sub(existing.count()),
-                );
+                room =
+                    room.saturating_add(existing.max_stack_size().saturating_sub(existing.count()));
                 if room >= stack.count() {
                     return stack.count();
                 }

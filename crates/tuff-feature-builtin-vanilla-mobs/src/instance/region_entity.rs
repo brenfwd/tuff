@@ -420,7 +420,7 @@ impl<S: Species> RegionEntity for Mob<S> {
         if let Some(effect) = animal::interact(self, interaction, cx) {
             return Some(effect);
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         let name = stack.components.custom_name.as_ref()?;
         if stack.item != tuff_vanilla_data::Item::NameTag {
             return None;

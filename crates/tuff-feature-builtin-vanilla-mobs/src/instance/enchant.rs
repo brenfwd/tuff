@@ -158,12 +158,9 @@ impl<S: Species> Mob<S> {
                 }
                 Action::ItemDamage(amount) => {
                     let rng = &mut *cx.rng;
-                    if self
-                        .core
-                        .equipment
-                        .get_mut(slot)
-                        .is_some_and(|stack| stack.hurt(amount, rng) == tuff_item::item::Hurt::Broken)
-                        && let Some(broken) = self.core.equipment.take(slot)
+                    if self.core.equipment.get_mut(slot).is_some_and(|stack| {
+                        stack.hurt(amount, rng) == tuff_item::item::Hurt::Broken
+                    }) && let Some(broken) = self.core.equipment.take(slot)
                     {
                         broken.burn(tuff_item::item::BurnReason::Broken);
                     }

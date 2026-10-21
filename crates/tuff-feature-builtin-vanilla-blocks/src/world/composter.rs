@@ -140,12 +140,12 @@ impl ItemPort for PotPort {
             return false;
         };
         let merged = match nbt.get_compound(POT_ITEM).and_then(ItemStack::from_storage) {
-            None => stack.dup_count_unchecked(1),
+            None => ItemStack::mint_like(stack, 1, MintReason::Transform),
             Some(mut held) => {
                 if !held.stacks_with(stack) || held.count() >= held.max_stack_size() {
                     return false;
                 }
-                held.grow(1, MintReason::CrossActor);
+                held.grow(1, MintReason::Transform);
                 held
             }
         };

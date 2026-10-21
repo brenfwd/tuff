@@ -1117,7 +1117,7 @@ impl Species for Piglin {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item != Item::GoldIngot
             || core.piglin.admire > 0
             || core.is_baby()
@@ -1486,4 +1486,3 @@ pub use zombified::*;
 #[cfg(test)]
 #[path = "piglin_tests.rs"]
 pub(crate) mod tests;
-

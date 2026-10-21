@@ -51,7 +51,7 @@ impl FireworkRocket {
     pub fn launched(
         id: i32,
         position: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         rng: &mut rand::rngs::StdRng,
     ) -> Self {
@@ -60,7 +60,7 @@ impl FireworkRocket {
             0.05,
             physics::triangle(rng, 0.0, 0.002297),
         ];
-        let lifetime = tuff_core::world::projectile::firework_lifetime(item, rng);
+        let lifetime = tuff_core::world::projectile::firework_lifetime(&item, rng);
         Self::build(id, position, velocity, item, owner, lifetime)
     }
 
@@ -69,11 +69,11 @@ impl FireworkRocket {
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         rng: &mut rand::rngs::StdRng,
     ) -> Self {
-        let lifetime = tuff_core::world::projectile::firework_lifetime(item, rng);
+        let lifetime = tuff_core::world::projectile::firework_lifetime(&item, rng);
         let mut rocket = Self::build(id, position, velocity, item, owner, lifetime);
         rocket.shot_at_angle = true;
         rocket
@@ -85,7 +85,7 @@ impl FireworkRocket {
         id: i32,
         player: i32,
         position: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         lifetime: i32,
     ) -> Self {
@@ -98,7 +98,7 @@ impl FireworkRocket {
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         lifetime: i32,
     ) -> Self {
@@ -115,7 +115,7 @@ impl FireworkRocket {
         Self {
             base,
             owner,
-            item: item.dup_count_unchecked(1),
+            item: item.keep(1, tuff_item::item::BurnReason::Template),
             life: 0,
             lifetime,
             shot_at_angle: false,

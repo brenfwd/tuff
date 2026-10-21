@@ -326,7 +326,7 @@ impl Witch {
         core.signal = 0;
         core.changed(DRINKING);
         if let Some(stack) = core.equipment.take(EquipmentSlot::Mainhand) {
-        if stack.item == Item::Potion
+            if stack.item == Item::Potion
                 && let Some(contents) = &stack.components.potion_contents
             {
                 let scale = stack.item.potion_duration_scale();

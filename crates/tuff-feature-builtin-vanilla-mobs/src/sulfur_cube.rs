@@ -691,10 +691,14 @@ impl SulfurCube {
             .other
             .insert("minecraft:bucket_entity_data", Tag::Compound(nbt));
         if let Some(held) = body(core) {
-            bucket
-                .components
-                .other
-                .insert(CONTENT, Tag::Compound(tuff_item::item::ItemSnapshot::of(held).with_count(1).to_nbt()));
+            bucket.components.other.insert(
+                CONTENT,
+                Tag::Compound(
+                    tuff_item::item::ItemSnapshot::of(held)
+                        .with_count(1)
+                        .to_nbt(),
+                ),
+            );
         }
         bucket
     }
@@ -802,7 +806,7 @@ impl Species for SulfurCube {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if core.is_baby() || self.is_primed() {
             return None;
         }

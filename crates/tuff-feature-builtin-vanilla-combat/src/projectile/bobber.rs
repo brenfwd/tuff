@@ -274,7 +274,7 @@ impl Bobber {
             dimension: String::new(),
             ..Default::default()
         };
-        let mut items = Vec::new();
+        let mut caught = Vec::new();
         if let Some(hooked) = self.hooked_id() {
             let target = cx
                 .entities
@@ -303,15 +303,19 @@ impl Bobber {
                 damage = if is_item { 3 } else { 5 };
             }
         } else if self.line.biting() {
-            items = cx
-                .shared
-                .block_loot()
-                .fishing(self.luck, self.open_water, &self.rod, cx.rng);
-            for stack in &items {
+            let items =
+                cx.shared
+                    .block_loot()
+                    .fishing(self.luck, self.open_water, &self.rod, cx.rng);
+            for stack in items {
+                if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item) {
+                    fish += 1;
+                }
+                caught.push(tuff_item::item::ItemSnapshot::of(&stack));
                 let delta = [0, 1, 2].map(|i| player.position[i] - self.base.position[i]);
                 let length = delta.iter().map(|c| c * c).sum::<f64>().sqrt();
                 cx.effects.push(Effect::DropItem {
-                    stack: stack.dup_unchecked(),
+                    stack,
                     position: self.base.position,
                     velocity: [
                         delta[0] * 0.1,
@@ -328,9 +332,6 @@ impl Bobber {
                     ],
                     amount: cx.rng.gen_range(1..=6),
                 });
-                if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item) {
-                    fish += 1;
-                }
             }
             damage = 1;
         }
@@ -338,12 +339,13 @@ impl Bobber {
             damage = 2;
         }
         if let Some(handle) = &self.owner.handle {
-            if damage > 0 && (self.hooked_id().is_some() || !items.is_empty() || self.line.biting())
+            if damage > 0
+                && (self.hooked_id().is_some() || !caught.is_empty() || self.line.biting())
             {
                 handle.send(PlayerEvent::Advancement(Box::new(
                     AdvancementEvent::FishingRodHooked {
                         entity: facts,
-                        items,
+                        items: caught,
                     },
                 )));
             }

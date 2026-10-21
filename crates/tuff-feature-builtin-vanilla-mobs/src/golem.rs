@@ -244,7 +244,7 @@ impl Species for IronGolem {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item != Item::IronIngot || !core.is_alive() {
             return None;
         }
@@ -887,7 +887,7 @@ impl Species for SnowGolem {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item != Item::Shears {
             return None;
         }
@@ -1152,7 +1152,7 @@ impl Species for CopperGolem {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         use tuff_core::protocol::play::level_event;
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item == Item::Shears
             && core
                 .equipment

@@ -640,7 +640,7 @@ impl Species for Panda {
             set_flag(core, FLAG_ON_BACK, false);
             return Some(HandEffect::None);
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if !panda_food(stack.item)
             || core.is_baby()
             || core.panda_flags & FLAG_SITTING != 0
@@ -1025,7 +1025,11 @@ mod tests {
                 player_uuid: 1,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::mint(Item::Bamboo, 1, MintReason::Test)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Bamboo,
+                    1,
+                    Default::default(),
+                )),
                 off_hand: false,
                 creative: false,
                 sneaking: false,

@@ -4,7 +4,6 @@
 use tuff_core::world::messages::{Attack, AttackKind, PlayerEvent, PlayerHandle, RegionRequest};
 use tuff_core::world::raycast;
 use tuff_core::world::session::*;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_common::combat;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::{Attribute, EntityType};
@@ -55,7 +54,7 @@ impl KineticExt for PlayerSession {
         let Some(stack) = self
             .inventory
             .hand(using.off_hand)
-            .map(DupUnchecked::dup_unchecked)
+            .map(tuff_item::item::ItemSnapshot::of)
         else {
             return;
         };
@@ -114,7 +113,7 @@ impl KineticExt for PlayerSession {
             .damage_type()
             .unwrap_or(&damage_type::PLAYER_ATTACK);
         let knockback_attribute = self.attribute(Attribute::AttackKnockback) as f32;
-        let weapon = Some(stack.dup_unchecked());
+        let weapon = Some(stack.clone());
         let test = |condition: &Option<KineticCondition>, relative: f64| {
             condition
                 .as_ref()

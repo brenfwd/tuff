@@ -87,7 +87,7 @@ impl RegionHooks for RangedRegionHooks {
             Some(place.player.clone()),
         );
         let id = world.shared().next_entity_id();
-        let rocket = FireworkRocket::launched(id, position, &stack, owner, world.rng());
+        let rocket = FireworkRocket::launched(id, position, stack, owner, world.rng());
         world.add_entity(Box::new(rocket));
         Some(ActionOutcome::Placed {
             off_hand: place.off_hand,

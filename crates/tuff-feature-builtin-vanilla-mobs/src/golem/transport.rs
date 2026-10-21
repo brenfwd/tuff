@@ -8,9 +8,13 @@ pub(super) type ContainerView<'a> = tuff_item::item::SlotsCow<'a>;
 /// sound and animation, and again when the dwell ends for the transfer.
 #[derive(Debug)]
 pub(super) enum Outcome {
-    Take { stack: tuff_item::item::ItemSnapshot },
+    Take {
+        stack: tuff_item::item::ItemSnapshot,
+    },
     TakeFail,
-    Deposit { stack: tuff_item::item::ItemSnapshot },
+    Deposit {
+        stack: tuff_item::item::ItemSnapshot,
+    },
     DepositFail,
 }
 
@@ -246,7 +250,8 @@ impl TransportItems {
         if Self::picking_up(mob) {
             match items.iter().flatten().next() {
                 Some(stack) => {
-                    let stack = tuff_item::item::ItemSnapshot::of(stack).with_count(stack.count().min(TAKE_MAX));
+                    let stack = tuff_item::item::ItemSnapshot::of(stack)
+                        .with_count(stack.count().min(TAKE_MAX));
                     Outcome::Take { stack }
                 }
                 None => Outcome::TakeFail,

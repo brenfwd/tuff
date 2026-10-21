@@ -198,7 +198,11 @@ impl SpearUse {
     }
 
     fn sweep(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
-        let Some(stack) = mob.equipment.main_hand().map(tuff_item::item::ItemSnapshot::of) else {
+        let Some(stack) = mob
+            .equipment
+            .main_hand()
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
             return;
         };
         let (Some(kinetic), Some(mut range)) =
@@ -309,7 +313,9 @@ impl SpearUse {
                 broken = mob
                     .equipment
                     .get_mut(tuff_vanilla_data::item::EquipmentSlot::Mainhand)
-                    .is_none_or(|weapon| weapon.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken);
+                    .is_none_or(|weapon| {
+                        weapon.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken
+                    });
             }
             if !(damages || knocks) {
                 continue;

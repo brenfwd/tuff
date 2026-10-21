@@ -703,7 +703,7 @@ impl Species for Allay {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref();
+        let stack = interaction.stack.as_deref();
         if let Some(stack) = stack
             && self.dancing
             && self.can_duplicate()
@@ -722,8 +722,14 @@ impl Species for Allay {
         }
         match (core.equipment.main_hand().is_some(), stack) {
             (false, Some(stack)) => {
-                core.equipment
-                    .set(EquipmentSlot::Mainhand, Some(ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform)));
+                core.equipment.set(
+                    EquipmentSlot::Mainhand,
+                    Some(ItemStack::mint_like(
+                        stack,
+                        1,
+                        tuff_item::item::MintReason::Transform,
+                    )),
+                );
                 core.sound(SoundEvent::EntityAllayItemGiven, 2.0, 1.0, cx);
                 self.liked_player = Some(interaction.player_uuid);
                 Some(HandEffect::Consume(1))
@@ -854,7 +860,8 @@ mod tests {
             player_uuid: player,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::mint(item, 5, MintReason::Test)),
+            stack: item
+                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())),
             off_hand,
             creative: false,
             sneaking: false,

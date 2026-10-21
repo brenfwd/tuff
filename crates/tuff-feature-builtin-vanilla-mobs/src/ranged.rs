@@ -85,7 +85,9 @@ impl MobCore {
         self.ammo_slot(weapon)
             .and_then(|slot| self.equipment.get(slot))
             .map(tuff_item::item::ItemSnapshot::of)
-            .unwrap_or_else(|| tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default()))
+            .unwrap_or_else(|| {
+                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default())
+            })
     }
 
     /// An arrow of `projectile` leaving `start`, fired from `weapon`.
@@ -218,7 +220,11 @@ impl MobCore {
         if projectiles.is_empty() {
             return;
         }
-        let Some(crossbow) = self.equipment.get(slot).map(tuff_item::item::ItemSnapshot::of) else {
+        let Some(crossbow) = self
+            .equipment
+            .get(slot)
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
             return;
         };
         let difficulty = f32::from(cx.shared.difficulty.borrow().id());
@@ -258,10 +264,9 @@ impl MobCore {
             };
             self.sound_as(sound, self.sound_category(), 1.0, pitch, cx);
             let wear = if rocket { 3 } else { 1 };
-            let broken = self
-                .equipment
-                .get_mut(slot)
-                .is_some_and(|crossbow| crossbow.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken);
+            let broken = self.equipment.get_mut(slot).is_some_and(|crossbow| {
+                crossbow.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken
+            });
             if broken {
                 if let Some(crossbow) = self.equipment.take(slot) {
                     crossbow.burn(BurnReason::Broken);
@@ -694,11 +699,7 @@ impl TridentAttack {
         let difficulty = cx.shared.difficulty.borrow().id();
         let uncertainty = 14.0 - f32::from(difficulty) * 4.0;
         let velocity = shot_velocity([dx, dy + horizontal * 0.2, dz], 1.6, uncertainty, cx.rng);
-        mob.launch(
-            start,
-            Shot::Arrow(ArrowShot::new(stack, velocity)),
-            cx,
-        );
+        mob.launch(start, Shot::Arrow(ArrowShot::new(stack, velocity)), cx);
         let pitch = 1.0 / (cx.rng.r#gen::<f32>() * 0.4 + 0.8);
         mob.sound(SoundEvent::EntityDrownedShoot, 1.0, pitch, cx);
     }

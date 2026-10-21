@@ -216,7 +216,7 @@ impl ArmorStand {
         if !current && self.bit(slot, PUT_ITEM_BIT) {
             return None;
         }
-        let held = interaction.stack.as_ref();
+        let held = interaction.stack.as_deref();
         if interaction.creative
             && !current
             && let Some(held) = held
@@ -240,12 +240,10 @@ impl ArmorStand {
         if let Some(held) = held {
             self.equip_sound(core, held, cx);
         }
-        let current = core
-            .equipment
-            .replace(
-                slot,
-                held.map(|held| ItemStack::mint_like(held, held.count(), MintReason::Transform)),
-            );
+        let current = core.equipment.replace(
+            slot,
+            held.map(|held| ItemStack::mint_like(held, held.count(), MintReason::Transform)),
+        );
         Some(HandEffect::Replace(current.map(Box::new)))
     }
 
@@ -460,7 +458,7 @@ impl Species for ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let held = interaction.stack.as_ref();
+        let held = interaction.stack.as_deref();
         if self.marker || held.is_some_and(|s| s.item == Item::NameTag) {
             return None;
         }
@@ -504,8 +502,10 @@ impl Species for ArmorStand {
         {
             return None;
         }
-        core.equipment
-            .set(equippable.slot, Some(ItemStack::mint_like(stack, 1, MintReason::Transform)));
+        core.equipment.set(
+            equippable.slot,
+            Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
+        );
         core.sound(equippable.equip_sound, 1.0, 1.0, cx);
         Some(DispenseOutcome::Dispensed)
     }

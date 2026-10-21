@@ -317,8 +317,14 @@ pub fn dispense_equip(
     {
         return None;
     }
-    core.equipment
-        .set(equippable.slot, Some(ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform)));
+    core.equipment.set(
+        equippable.slot,
+        Some(ItemStack::mint_like(
+            stack,
+            1,
+            tuff_item::item::MintReason::Transform,
+        )),
+    );
     core.equipment
         .set_drop_chance(equippable.slot, PRESERVED_DROP_CHANCE);
     core.persistence_required = true;

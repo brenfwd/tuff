@@ -154,7 +154,10 @@ impl OminousItemSpawner {
             Item::Arrow | Item::TippedArrow | Item::SpectralArrow => {
                 let velocity =
                     projectile::shot_velocity(down, SHOT_POWER, SHOT_UNCERTAINTY, cx.rng);
-                let mut arrow = ArrowShot::new(item.dup_count_unchecked(1), velocity);
+                let mut arrow = ArrowShot::new(
+                    ItemStack::mint_like(&item, 1, tuff_item::item::MintReason::Transform),
+                    velocity,
+                );
                 arrow.pickup = Some(Pickup::Allowed);
                 Some(Shot::Arrow(arrow))
             }
@@ -179,7 +182,11 @@ impl OminousItemSpawner {
                     };
                     Shot::Thrown {
                         kind,
-                        item: item.dup_unchecked(),
+                        item: ItemStack::mint_like(
+                            &item,
+                            item.count(),
+                            tuff_item::item::MintReason::Transform,
+                        ),
                         velocity: projectile::shot_velocity(down, power, uncertainty, cx.rng),
                     }
                 }),
@@ -194,7 +201,10 @@ impl OminousItemSpawner {
             cx.shared.entity_types.launch(launch, cx.rng)
         });
         match launched {
-            Some(entity) => cx.effects.push(Effect::Spawn(entity)),
+            Some(entity) => {
+                item.burn(tuff_item::item::BurnReason::Transform);
+                cx.effects.push(Effect::Spawn(entity));
+            }
             None => cx.effects.push(Effect::DropItem {
                 stack: item,
                 position,

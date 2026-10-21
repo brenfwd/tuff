@@ -47,7 +47,7 @@ async fn shot_at_player(item: &ItemStack) -> EntityHit {
         ))
         .await;
     let arrow = Arrow::from_item(
-        item,
+        item.test_copy(),
         world.shared.next_entity_id(),
         [4.5, f64::from(SKY) + 2.0, 7.5],
         [2.5, 0.0, 0.0],
@@ -390,7 +390,7 @@ async fn rockets_with_stars_burst_on_what_they_hit_and_hurt_it() {
         world.shared.next_entity_id(),
         [5.5, f64::from(SKY) + 1.5, 7.5],
         [1.6, 0.0, 0.0],
-        &starry_rocket(2),
+        starry_rocket(2),
         Default::default(),
         &mut rng,
     );
@@ -569,7 +569,7 @@ async fn loyal_tridents_fly_home_to_be_picked_up() {
         ))
         .await;
     let trident = Arrow::trident(
-        &trident_with(&[("loyalty", 3)]),
+        trident_with(&[("loyalty", 3)]),
         world.shared.next_entity_id(),
         [5.5, f64::from(SKY) + 2.0, 7.5],
         [2.0, 0.0, 0.0],
@@ -615,7 +615,7 @@ async fn channeling_tridents_call_lightning_on_what_they_hit_in_a_storm() {
         ))
         .await;
     let trident = Arrow::trident(
-        &trident_with(&[("channeling", 1)]),
+        trident_with(&[("channeling", 1)]),
         world.shared.next_entity_id(),
         [4.5, f64::from(SKY) + 2.0, 7.5],
         [2.5, 0.0, 0.0],
@@ -653,7 +653,7 @@ async fn a_channeling_trident_striking_a_lightning_rod_in_a_storm_calls_lightnin
     world.ticks(20).await;
     let throw = |world: &TestWorld| {
         Arrow::trident(
-            &trident_with(&[("channeling", 1)]),
+            trident_with(&[("channeling", 1)]),
             world.shared.next_entity_id(),
             [4.5, f64::from(SKY) + 2.5, 7.5],
             [2.5, 0.0, 0.0],

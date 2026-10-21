@@ -140,7 +140,7 @@ impl Species for Cow {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item != Item::Bucket || core.is_baby() {
             return None;
         }
@@ -337,7 +337,7 @@ impl Species for Mooshroom {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if core.is_baby() {
             return None;
         }
@@ -552,7 +552,7 @@ impl Species for Pig {
         interaction: &tuff_core::world::entity::EntityInteraction,
         cx: &mut TickContext,
     ) -> tuff_core::world::entity::InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         super::equine::saddle_up(core, stack, Some(SoundEvent::EntityPigSaddle), cx)
     }
 
@@ -790,7 +790,7 @@ impl Species for Sheep {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item == Item::Shears {
             return sheep_shear(self, core, play::sound_category::PLAYERS, cx)
                 .then_some(HandEffect::Damage(1));

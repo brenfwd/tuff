@@ -672,13 +672,17 @@ mod tests {
             ..player()
         };
         let reeled = |items: &[ItemStack]| {
+            let items: Vec<_> = items
+                .iter()
+                .map(tuff_item::item::ItemSnapshot::of)
+                .collect();
             registry.matches(
                 criterion.trigger,
                 &conditions,
                 &Event::FishingRodHooked {
                     rod: &rod,
                     entity: &hook,
-                    items,
+                    items: &items,
                 },
                 &player(),
             )

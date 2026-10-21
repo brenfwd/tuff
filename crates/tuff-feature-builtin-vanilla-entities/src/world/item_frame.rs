@@ -612,8 +612,8 @@ impl RegionEntity for ItemFrame {
             return None;
         }
         if self.item.is_none() {
-            let stack = interaction.stack.as_ref()?;
-            self.set_item(Some(stack.dup_unchecked()));
+            let stack = interaction.stack.as_deref()?;
+            self.set_item(Some(ItemStack::mint_like(stack, 1, MintReason::Transform)));
             report_item(None, self.item.as_ref(), Some(interaction.player), cx);
             self.sound(SoundEvent::EntityItemFrameAddItem, cx);
             return Some(HandEffect::Consume(1));

@@ -411,7 +411,7 @@ async fn sheep_are_sheared_and_dyed_and_cows_milked() {
             player: viewer.clone(),
             target: sheep[1].id,
             interaction: EntityInteraction {
-                stack: Some(tag),
+                stack: Some(tuff_item::item::ItemSnapshot::of(&tag)),
                 ..interaction(&viewer, None)
             },
         })

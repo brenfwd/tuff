@@ -250,7 +250,12 @@ impl tuff_core::world::item_port::ItemPort for JukeboxPort {
         at: &tuff_core::world::item_port::PortAccess,
         stack: &ItemStack,
     ) -> bool {
-        accepts(world, at.pos, stack) && insert(world, at.pos, stack.dup_unchecked())
+        accepts(world, at.pos, stack)
+            && insert(
+                world,
+                at.pos,
+                ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Transform),
+            )
     }
 
     fn replace(

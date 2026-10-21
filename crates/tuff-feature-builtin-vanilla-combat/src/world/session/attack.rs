@@ -3,7 +3,6 @@
 
 use rand::Rng;
 use tuff_core::world::stats::Stat;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{CustomStat, StatType};
 
 use tuff_vanilla_data::Item;
@@ -251,7 +250,11 @@ impl CombatExt for PlayerSession {
         if self.is_dead() || self.mode.game_mode == GameMode::Spectator {
             return;
         }
-        let Some(stack) = self.inventory.hand(false).map(DupUnchecked::dup_unchecked) else {
+        let Some(stack) = self
+            .inventory
+            .hand(false)
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
             return;
         };
         let Some(piercing) = stack.piercing_weapon() else {
@@ -305,7 +308,7 @@ impl CombatExt for PlayerSession {
             })
             .map(|(id, kind, _, position)| (id, kind, position))
             .collect();
-        let weapon = Some(stack.dup_unchecked());
+        let weapon = Some(stack.clone());
         let mut hit_something = false;
         let dismountable = |victim: EntityType| {
             piercing.dismounts
@@ -451,13 +454,17 @@ impl CombatExt for PlayerSession {
     }
 
     async fn wind_burst(&mut self, victim: EntityType, fall_distance: f64) {
-        let Some(weapon) = self.inventory.hand(false).map(DupUnchecked::dup_unchecked) else {
+        let Some(weapon) = self
+            .inventory
+            .hand(false)
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
             return;
         };
         let context =
             combat::DamageContext::melee(victim).with_attacker_state(fall_distance, false);
         let bursts: Vec<_> = combat::post_attack(
-            &[(EquipmentSlot::Mainhand, &weapon)],
+            &[(EquipmentSlot::Mainhand, &*weapon)],
             combat::Side::Attacker,
             &context,
             &mut self.rng,
@@ -574,7 +581,7 @@ impl CombatExt for PlayerSession {
             stack: self
                 .inventory
                 .hand(off_hand)
-                .map(DupUnchecked::dup_unchecked),
+                .map(tuff_item::item::ItemSnapshot::of),
             off_hand,
             creative: self.mode.abilities.instabuild,
             sneaking,

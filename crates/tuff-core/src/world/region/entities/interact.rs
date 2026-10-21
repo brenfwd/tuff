@@ -242,7 +242,7 @@ impl RegionActor {
             }
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_ref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item),
                 effect,
             });
             return;
@@ -251,7 +251,7 @@ impl RegionActor {
             return;
         };
         if tracked.entity.seats() > 0
-            && !tracked.entity.mount_refused_by(seen.stack.as_ref())
+            && !tracked.entity.mount_refused_by(seen.stack.as_deref())
             && !interaction.sneaking
             && !interaction.riding
             && self.mount(&mut tracked, &player, interaction.player_uuid)
@@ -316,7 +316,7 @@ impl RegionActor {
         if let Some(effect) = outcome {
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_ref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item),
                 effect,
             });
         }

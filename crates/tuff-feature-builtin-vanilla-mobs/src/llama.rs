@@ -927,28 +927,40 @@ mod tests {
                 player_uuid: 77,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::mint(Item::Chest, 1, MintReason::Test)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Chest,
+                    1,
+                    Default::default(),
+                )),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
                 riding: false,
                 hero: None,
             };
-            assert!(llama.mount_refused_by(chest.stack.as_ref()));
+            assert!(llama.mount_refused_by(chest.stack.as_deref()));
             llama.interact(&chest, cx);
             assert_eq!(llama.container().unwrap().len(), 2 + 4 * 3);
             let carpet = EntityInteraction {
-                stack: Some(ItemStack::mint(Item::RedCarpet, 1, MintReason::Test)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::RedCarpet,
+                    1,
+                    Default::default(),
+                )),
                 ..chest.clone()
             };
-            assert!(llama.mount_refused_by(carpet.stack.as_ref()));
+            assert!(llama.mount_refused_by(carpet.stack.as_deref()));
             assert!(llama.interact(&carpet, cx).is_some());
             let saddle = EntityInteraction {
-                stack: Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Saddle,
+                    1,
+                    Default::default(),
+                )),
                 ..chest
             };
             assert!(
-                !llama.mount_refused_by(saddle.stack.as_ref()),
+                !llama.mount_refused_by(saddle.stack.as_deref()),
                 "llamas take no saddle"
             );
         });
