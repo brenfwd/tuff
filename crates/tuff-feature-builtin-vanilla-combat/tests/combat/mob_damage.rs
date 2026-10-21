@@ -10,7 +10,7 @@ use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::EntityType;
 
 fn enchanted(item: Item, enchantments: &[(&str, i32)]) -> ItemStack {
-    let mut stack = ItemStack::new(item, 1);
+    let mut stack = ItemStack::mint(item, 1, MintReason::Test);
     stack.components.enchantments = Some(Enchantments::new(
         enchantments
             .iter()
@@ -79,7 +79,7 @@ async fn protection_on_a_mobs_armor_softens_hits() {
     let y = SKY as f64 + 1.0;
     let plain = zombie_wearing(
         &region,
-        ItemStack::new(Item::IronChestplate, 1),
+        ItemStack::mint(Item::IronChestplate, 1, MintReason::Test),
         [5.5, y, 5.5],
     )
     .await;

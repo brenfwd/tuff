@@ -4,6 +4,7 @@
 //! survive untouched.
 
 use std::io;
+use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::version::DATA_VERSION;
 
@@ -166,7 +167,7 @@ impl WardenTracker {
 pub const SHOULDER_KEYS: [&str; 2] = ["ShoulderEntityLeft", "ShoulderEntityRight"];
 
 /// The fields of a player file this server simulates.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct PlayerState {
     pub dimension: String,
     pub position: [f64; 3],
@@ -375,7 +376,7 @@ impl PlayerRecord {
             }
             let mut stack = entry.clone();
             stack.remove("Slot");
-            if let Some(stack) = ItemStack::from_nbt(&stack) {
+            if let Some(stack) = ItemStack::from_storage(&stack) {
                 ender_items.push((slot as usize, stack));
             }
         }
@@ -622,7 +623,7 @@ impl PlayerRecord {
 fn stored_slots(raw: &Compound) -> Vec<(usize, ItemStack)> {
     let mut slots = Vec::new();
     let mut take = |window: usize, nbt: &Compound| {
-        if let Some(stack) = ItemStack::from_nbt(nbt) {
+        if let Some(stack) = ItemStack::from_storage(nbt) {
             slots.push((window, stack));
         }
     };
@@ -692,7 +693,7 @@ pub fn edit_inventory(
         .slots()
         .iter()
         .enumerate()
-        .filter_map(|(slot, stack)| stack.clone().map(|s| (slot, s)))
+        .filter_map(|(slot, stack)| stack.dup_unchecked().map(|s| (slot, s)))
         .collect();
     let (list, equipment) = slot_lists(raw, &slots);
     raw.insert("Inventory", Tag::from(list));
@@ -715,6 +716,7 @@ pub fn save(docs: &dyn Documents, uuid: u128, root: Compound) -> io::Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     fn defaults() -> PlayerState {
@@ -979,8 +981,14 @@ mod tests {
             .with(
                 "equipment",
                 Compound::new()
-                    .with("offhand", ItemStack::new(Item::Torch, 3).to_nbt())
-                    .with("body", ItemStack::new(Item::Saddle, 1).to_nbt()),
+                    .with(
+                        "offhand",
+                        ItemStack::mint(Item::Torch, 3, MintReason::Test).to_nbt(),
+                    )
+                    .with(
+                        "body",
+                        ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                    ),
             )
             .with(
                 "EnderItems",
@@ -998,23 +1006,34 @@ mod tests {
         let (record, mut state) = PlayerRecord::decode(raw, &defaults());
         assert_eq!(
             state.ender_items,
-            vec![(26, ItemStack::new(Item::Apple, 2))]
+            vec![(26, ItemStack::mint(Item::Apple, 2, MintReason::Test))]
         );
-        state.ender_items.push((0, ItemStack::new(Item::Stone, 4)));
+        state
+            .ender_items
+            .push((0, ItemStack::mint(Item::Stone, 4, MintReason::Test)));
         assert_eq!(state.position, [0.5, 70.0, 0.5]);
         let slot = |state: &PlayerState, window| {
             state
                 .slots
                 .iter()
                 .find(|(w, _)| *w == window)
-                .map(|(_, s)| s.clone())
+                .map(|(_, s)| s.dup_unchecked())
         };
-        assert_eq!(slot(&state, 36), Some(ItemStack::new(Item::Dirt, 5)));
-        assert_eq!(slot(&state, 20), Some(ItemStack::new(Item::Stone, 1)));
+        assert_eq!(
+            slot(&state, 36),
+            Some(ItemStack::mint(Item::Dirt, 5, MintReason::Test))
+        );
+        assert_eq!(
+            slot(&state, 20),
+            Some(ItemStack::mint(Item::Stone, 1, MintReason::Test))
+        );
         let sword = slot(&state, 37).unwrap();
         assert_eq!(sword.item, Item::DiamondSword);
         assert_eq!(sword.damage(), 3);
-        assert_eq!(slot(&state, 45), Some(ItemStack::new(Item::Torch, 3)));
+        assert_eq!(
+            slot(&state, 45),
+            Some(ItemStack::mint(Item::Torch, 3, MintReason::Test))
+        );
 
         state.position = [10.0, 64.0, -3.0];
         state.slots.retain(|(w, _)| *w != 20);
@@ -1062,7 +1081,7 @@ mod tests {
         assert!(
             reloaded
                 .ender_items
-                .contains(&(0, ItemStack::new(Item::Stone, 4)))
+                .contains(&(0, ItemStack::mint(Item::Stone, 4, MintReason::Test)))
         );
     }
 }

@@ -52,7 +52,7 @@ async fn an_internal_message_sent_before_a_tick_is_handled_first() {
     let (world, region, viewer, mut events, at) = pickup_world(&dir).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 3),
+            stack: ItemStack::mint(Item::Stone, 3, MintReason::Test),
             position: at,
             velocity: [0.0; 3],
             pickup_delay: 0,
@@ -84,7 +84,7 @@ async fn a_request_sent_before_a_tick_is_handled_first() {
     for round in 0..300 {
         region
             .request(RegionRequest::SpawnItem {
-                stack: ItemStack::new(Item::Stone, 1),
+                stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
                 position: at,
                 velocity: [0.0; 3],
                 pickup_delay: 0,

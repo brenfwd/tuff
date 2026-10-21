@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 use tuff_core::world::predicate::slot_range;
 use tuff_datapack::slot_source::{SlotSource, SlotSourceRef};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 use super::{Context, functions, match_tool};
 
@@ -31,7 +31,7 @@ pub(super) fn provide(raw: &str, context: &Context) -> Vec<ItemStack> {
     slots(&reference, context, 0)
         .into_iter()
         .map(|(_, stack)| stack)
-        .filter(|stack| stack.count > 0)
+        .filter(|stack| stack.count() > 0)
         .collect()
 }
 
@@ -95,7 +95,7 @@ fn evaluate(source: &SlotSource, context: &Context, depth: usize) -> Vec<(i32, I
                 .filter_map(|tag| {
                     let entry = tag.as_compound()?;
                     let slot = i32::from(entry.get("Slot")?.as_byte()?);
-                    let stack = ItemStack::from_nbt(entry)?;
+                    let stack = ItemStack::mint_from_nbt(entry, MintReason::Template)?;
                     wanted.contains(&slot).then_some((slot, stack))
                 })
                 .collect();

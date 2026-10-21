@@ -678,7 +678,7 @@ async fn a_fake_item_appears_and_leaves_without_being_collectable() {
     let at = s.above;
     s.region
         .request(RegionRequest::SpawnFakeItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [at.x as f64 + 0.5, at.y as f64 + 3.0, at.z as f64 + 0.5],
         })
         .await;
@@ -887,7 +887,7 @@ async fn adventure_breaking_needs_a_matching_can_break_predicate() {
     place_blocks(&s.world, &s.region, [(target, Block::Dirt.default_state())]).await;
     let eye = [1.5, target.y as f64 + 1.62, 2.5];
     for (seq, block, broken) in [(1, "minecraft:stone", false), (2, "minecraft:dirt", true)] {
-        let mut tool = ItemStack::new(Item::Stick, 1);
+        let mut tool = ItemStack::mint(Item::Stick, 1, MintReason::Test);
         tool.components = adventure_components("minecraft:can_break", block);
         s.region
             .request(RegionRequest::BreakRestricted {

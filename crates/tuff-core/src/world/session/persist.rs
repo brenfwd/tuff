@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::DupUnchecked;
 
 const SAVE_BARRIER_HOLD: Duration = Duration::from_secs(3);
 
@@ -147,7 +148,7 @@ impl PlayerSession {
             self.inventory.set_slot(slot, Some(stack));
         }
         self.inventory.set_selected(state.selected);
-        self.menus.ender_items = vec![None; ENDER_CHEST_SLOTS];
+        self.menus.ender_items = (0..ENDER_CHEST_SLOTS).map(|_| None).collect();
         for (slot, stack) in state.ender_items {
             self.menus.ender_items[slot] = Some(stack);
         }
@@ -180,7 +181,12 @@ impl PlayerSession {
         self.body.shoulders.entities = state.shoulders;
         self.body.effects = state.effects;
         self.body.attributes = state.attributes;
-        self.progress.last_inventory = self.inventory.slots().to_vec();
+        self.progress.last_inventory = self
+            .inventory
+            .slots()
+            .iter()
+            .map(DupUnchecked::dup_unchecked)
+            .collect::<Vec<_>>();
         Ok(())
     }
 
@@ -212,13 +218,13 @@ impl PlayerSession {
                 .slots()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| stack.clone().map(|s| (slot, s)))
+                .filter_map(|(slot, stack)| stack.dup_unchecked().map(|s| (slot, s)))
                 .collect(),
             ender_items: self
                 .ender_items()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| stack.clone().map(|s| (slot, s)))
+                .filter_map(|(slot, stack)| stack.dup_unchecked().map(|s| (slot, s)))
                 .collect(),
             game_mode: self.mode.game_mode,
             previous_game_mode: self.mode.previous_game_mode,

@@ -8,7 +8,7 @@ use tuff_vanilla_data::{Block, BlockState, Item, tag};
 use tuff_core::world::game_event::{Context, GameEvent, Source};
 use tuff_core::world::messages::{ActionOutcome, HandEffect};
 use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -402,7 +402,12 @@ pub fn harvest(
                 0.2,
                 world.rng().r#gen::<f64>() * 0.2 - 0.1,
             ];
-            world.spawn_item_at(ItemStack::new(Item::Honeycomb, 1), at, velocity, 10);
+            world.spawn_item_at(
+                ItemStack::mint(Item::Honeycomb, 1, MintReason::Spawn),
+                at,
+                velocity,
+                10,
+            );
         }
         HandEffect::Damage(1)
     } else {
@@ -443,11 +448,16 @@ pub fn dispensed_at(
                 0.2,
                 world.rng().r#gen::<f64>() * 0.2 - 0.1,
             ];
-            world.spawn_item_at(ItemStack::new(Item::Honeycomb, 1), at, velocity, 10);
+            world.spawn_item_at(
+                ItemStack::mint(Item::Honeycomb, 1, MintReason::Spawn),
+                at,
+                velocity,
+                10,
+            );
         }
         DispenseOutcome::Worn(1)
     } else {
-        DispenseOutcome::Exchanged(ItemStack::new(Item::HoneyBottle, 1))
+        DispenseOutcome::Exchanged(ItemStack::mint(Item::HoneyBottle, 1, MintReason::Spawn))
     };
     if let Some(emptied) = state.with("honey_level", "0") {
         world.put_block(target, emptied);

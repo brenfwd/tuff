@@ -13,7 +13,7 @@ pub const EXPLORATION_PENDING: &str = "tuff:exploration_map";
 
 /// What entity loot tables can see of the entity the loot comes from and
 /// of whatever killed or sheared it.
-#[derive(Debug, Clone, Default)]
+#[derive(tuff_item::item::DupClone, Debug, Default)]
 pub struct EntityFacts {
     pub kind: Option<tuff_vanilla_data::registry::EntityType>,
     pub on_fire: bool,

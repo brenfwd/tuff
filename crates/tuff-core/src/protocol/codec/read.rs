@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::MintReason;
 use tuff_world_model::BlockPos;
 
 fn read_text_nbt(reader: &mut PacketReader) -> Result<Option<TextComponent>> {
@@ -108,7 +109,7 @@ impl ReadExt for PacketReader {
         let item = u32::try_from(item).ok().and_then(Item::from_id);
         let stack = match item {
             Some(Item::Air) => return Ok(CreativeSlot::Empty),
-            Some(item) => ItemStack::new(item, 1).with_components(components),
+            Some(item) => ItemStack::mint(item, 1, MintReason::Network).with_components(components),
             None => return Ok(CreativeSlot::Invalid),
         };
         if !supported {
@@ -117,7 +118,11 @@ impl ReadExt for PacketReader {
         if count > stack.max_stack_size() as i32 {
             return Ok(CreativeSlot::Invalid);
         }
-        Ok(CreativeSlot::Stack(stack.with_count(count as u8)))
+        Ok(CreativeSlot::Stack(ItemStack::mint_like(
+            &stack,
+            count as u8,
+            MintReason::Network,
+        )))
     }
 
     fn read_component(
@@ -221,11 +226,15 @@ impl ReadExt for PacketReader {
         if item == Item::Air || !supported {
             return Ok(None);
         }
-        let stack = ItemStack::new(item, 1).with_components(components);
+        let stack = ItemStack::mint(item, 1, MintReason::Network).with_components(components);
         if !(1..=stack.max_stack_size() as i32).contains(&count) {
             return Err(BufferError::InvalidEnum(count));
         }
-        Ok(Some(stack.with_count(count as u8)))
+        Ok(Some(ItemStack::mint_like(
+            &stack,
+            count as u8,
+            MintReason::Network,
+        )))
     }
 
     fn read_component_at(

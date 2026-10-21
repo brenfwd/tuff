@@ -1,4 +1,6 @@
 use super::*;
+use tuff_item::item::BurnReason;
+use tuff_item::item::MintReason;
 use tuff_nbt::Compound;
 use tuff_wire::Buffer;
 use tuff_world_model::BlockPos;
@@ -96,7 +98,10 @@ fn creative_slot_accepts_plain_stacks_only() {
     assert_eq!(slot(-5, 0, 0, 0), (CreativeSlot::Empty, 0));
     assert_eq!(
         slot(64, stone, 0, 0),
-        (CreativeSlot::Stack(ItemStack::new(Item::Stone, 64)), 0)
+        (
+            CreativeSlot::Stack(ItemStack::mint(Item::Stone, 64, MintReason::Test)),
+            0
+        )
     );
     assert_eq!(slot(65, stone, 0, 0).0, CreativeSlot::Invalid);
     assert_eq!(slot(2, sword, 0, 0).0, CreativeSlot::Invalid);
@@ -106,7 +111,7 @@ fn creative_slot_accepts_plain_stacks_only() {
 }
 
 fn damaged_named_pickaxe() -> ItemStack {
-    let mut stack = ItemStack::new(Item::DiamondPickaxe, 1);
+    let mut stack = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     stack.set_damage(3);
     stack.components.custom_name = Some(Box::new(TextComponent::new("Sharp")));
     stack.components.enchantments = Some(Enchantments::new([
@@ -145,7 +150,7 @@ fn bytes_reader(bytes: &[u8]) -> PacketReader {
 /// component payloads are each prefixed with their byte length.
 fn write_creative_slot(stack: &ItemStack) -> PacketWriter {
     let mut w = PacketWriter::new();
-    w.write_var_int(stack.count as i32);
+    w.write_var_int(stack.count() as i32);
     w.write_var_int(stack.item.id() as i32);
     let added = stack.components.network_added();
     let removed = stack.components.network_removed();
@@ -182,13 +187,13 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         exact,
     };
     let pickaxe = |f: fn(&mut ItemStack)| {
-        let mut stack = ItemStack::new(Item::DiamondPickaxe, 1);
+        let mut stack = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
         f(&mut stack);
         stack
     };
     let mut cases = vec![
         case(
-            ItemStack::new(Item::Stone, 64),
+            ItemStack::mint(Item::Stone, 64, MintReason::Test),
             "40010000",
             "40010000",
             true,
@@ -221,7 +226,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
             true,
         ),
     ];
-    let mut book = ItemStack::new(Item::EnchantedBook, 1);
+    let mut book = ItemStack::mint(Item::EnchantedBook, 1, MintReason::Test);
     book.components.stored_enchantments =
         Some(Enchantments::new([("minecraft:mending".to_owned(), 1)]));
     cases.push(case(
@@ -230,7 +235,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "01f30a01002d03011701",
         true,
     ));
-    let mut sword = ItemStack::new(Item::DiamondSword, 1);
+    let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     sword.components.enchantments = Some(Enchantments::new([
         ("minecraft:sharpness".to_owned(), 5),
         ("minecraft:unbreaking".to_owned(), 3),
@@ -241,7 +246,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "019a0801000d050228032105",
         false,
     ));
-    let mut strength = ItemStack::new(Item::Potion, 1);
+    let mut strength = ItemStack::mint(Item::Potion, 1, MintReason::Test);
     strength.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Strength),
         ..Default::default()
@@ -252,7 +257,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "01f709010035050122000000",
         true,
     ));
-    let mut custom = ItemStack::new(Item::Potion, 1);
+    let mut custom = ItemStack::mint(Item::Potion, 1, MintReason::Test);
     custom.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Swiftness),
         custom_color: Some(0x123456),
@@ -290,7 +295,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "019c080200060808000553686172700b24020800046c696e650a080005636f6c6f720004626c756508000474657874000374776f00",
         true,
     ));
-    let mut named = ItemStack::new(Item::Stone, 1);
+    let mut named = ItemStack::mint(Item::Stone, 1, MintReason::Test);
     named
         .components
         .other
@@ -301,7 +306,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "0101010009080800054e616d6564",
         true,
     ));
-    let mut data = ItemStack::new(Item::Stone, 1);
+    let mut data = ItemStack::mint(Item::Stone, 1, MintReason::Test);
     data.components
         .other
         .insert("minecraft:custom_data", Compound::new().with("k", 1));
@@ -311,7 +316,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "01010100000a0a0300016b0000000100",
         true,
     ));
-    let mut no_attributes = ItemStack::new(Item::DiamondSword, 1);
+    let mut no_attributes = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     no_attributes.components.removed = vec!["minecraft:attribute_modifiers".into()];
     cases.push(case(no_attributes, "019a08000110", "019a08000110", true));
     cases.push(case(
@@ -320,7 +325,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "019c080601030103060808000553686172700d050228030805130102000a0a0300016b00000001000b08010800046c696e651c",
         false,
     ));
-    let mut stand = ItemStack::new(Item::ArmorStand, 1);
+    let mut stand = ItemStack::mint(Item::ArmorStand, 1, MintReason::Test);
     stand.components.other.insert(
         "minecraft:entity_data",
         Compound::new()
@@ -333,7 +338,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "01fd0a01003c0c050a010005536d616c6c0100",
         true,
     ));
-    let mut bucket = ItemStack::new(Item::AxolotlBucket, 1);
+    let mut bucket = ItemStack::mint(Item::AxolotlBucket, 1, MintReason::Test);
     bucket.components.other.insert(
         "minecraft:bucket_entity_data",
         Compound::new().with("Variant", 2),
@@ -344,7 +349,7 @@ fn game_encoded_stacks() -> Vec<GameEncoded> {
         "01f30801003d100a03000756617269616e740000000200",
         true,
     ));
-    let mut chest = ItemStack::new(Item::Chest, 1);
+    let mut chest = ItemStack::mint(Item::Chest, 1, MintReason::Test);
     chest.components.other.insert(
         "minecraft:block_entity_data",
         Compound::new()
@@ -380,7 +385,7 @@ fn creative_slot_decoding_matches_the_game() {
         let mut r = bytes_reader(&unhex(case.creative));
         assert_eq!(
             r.read_creative_slot().unwrap(),
-            CreativeSlot::Stack(case.stack.clone()),
+            CreativeSlot::Stack(case.stack.dup_unchecked()),
             "{}",
             case.creative
         );
@@ -408,9 +413,9 @@ fn creative_slot_decodes_real_client_payloads() {
             panic!("{payload}");
         };
         assert_eq!(r.remaining(), 0);
-        assert_eq!(stack.count, 1);
+        assert_eq!(stack.count(), 1);
         assert_eq!(stack.components.damage, Some(damage));
-        let mut expected = ItemStack::new(stack.item, 1);
+        let mut expected = ItemStack::mint(stack.item, 1, MintReason::Test);
         expected.components.damage = Some(damage);
         assert_eq!(stack, expected);
     }
@@ -423,11 +428,11 @@ fn slot_components_round_trip_through_the_creative_decoder() {
     let mut r = reader(write_creative_slot(&stack));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(stack.clone())
+        CreativeSlot::Stack(stack.dup_unchecked())
     );
     assert_eq!(r.remaining(), 0);
 
-    let mut potion = ItemStack::new(Item::Potion, 1);
+    let mut potion = ItemStack::mint(Item::Potion, 1, MintReason::Test);
     potion.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Swiftness),
         custom_color: Some(0x123456),
@@ -457,7 +462,7 @@ fn slot_components_round_trip_through_the_creative_decoder() {
 #[tuff_core::watchdog]
 #[test]
 fn suspicious_stew_effects_round_trip_on_the_wire() {
-    let mut stew = ItemStack::new(Item::SuspiciousStew, 1);
+    let mut stew = ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Test);
     stew.components.suspicious_stew_effects = Some(vec![
         SuspiciousEffect {
             effect: MobEffect::NightVision,
@@ -476,23 +481,26 @@ fn suspicious_stew_effects_round_trip_on_the_wire() {
 #[tuff_core::watchdog]
 #[test]
 fn bundle_contents_round_trip_on_the_wire_nested() {
-    let mut inner = ItemStack::new(Item::Bundle, 1);
-    inner.edit_bundle(|c| c.try_insert(&mut ItemStack::new(Item::Stone, 8)));
-    let mut outer = ItemStack::new(Item::Bundle, 1);
-    outer.edit_bundle(|c| c.try_insert(&mut ItemStack::new(Item::Dirt, 20)));
+    let mut inner = ItemStack::mint(Item::Bundle, 1, MintReason::Test);
+    inner.edit_bundle(|c| c.try_insert(&mut ItemStack::mint(Item::Stone, 8, MintReason::Test)));
+    let mut outer = ItemStack::mint(Item::Bundle, 1, MintReason::Test);
+    outer.edit_bundle(|c| c.try_insert(&mut ItemStack::mint(Item::Dirt, 20, MintReason::Test)));
     outer.edit_bundle(|c| c.try_insert(&mut inner));
     let mut r = reader(write_creative_slot(&outer));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(outer.clone())
+        CreativeSlot::Stack(outer.dup_unchecked())
     );
-    assert_eq!(ItemStack::from_nbt(&outer.to_nbt()).unwrap(), outer);
+    assert_eq!(
+        ItemStack::mint_from_nbt(&outer.to_nbt(), MintReason::Test).unwrap(),
+        outer
+    );
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn ominous_bottle_amplifiers_round_trip_on_the_wire() {
-    let mut bottle = ItemStack::new(Item::OminousBottle, 1);
+    let mut bottle = ItemStack::mint(Item::OminousBottle, 1, MintReason::Test);
     bottle.set_ominous_bottle_amplifier(0);
     assert_eq!(bottle.components.ominous_bottle_amplifier, None);
     assert_eq!(bottle.ominous_bottle_amplifier(), Some(0));
@@ -500,7 +508,7 @@ fn ominous_bottle_amplifiers_round_trip_on_the_wire() {
     let mut r = reader(write_creative_slot(&bottle));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(bottle.clone())
+        CreativeSlot::Stack(bottle.dup_unchecked())
     );
     assert_eq!(r.remaining(), 0);
     let saved = bottle.components.to_nbt();
@@ -511,7 +519,7 @@ fn ominous_bottle_amplifiers_round_trip_on_the_wire() {
 #[tuff_core::watchdog]
 #[test]
 fn block_state_components_round_trip_on_the_wire() {
-    let mut light = ItemStack::new(Item::Light, 1);
+    let mut light = ItemStack::mint(Item::Light, 1, MintReason::Test);
     light
         .components
         .other
@@ -526,8 +534,8 @@ fn block_state_components_round_trip_on_the_wire() {
 #[tuff_core::watchdog]
 #[test]
 fn a_sulfur_cube_bucket_sends_and_takes_back_what_it_holds() {
-    let mut bucket = ItemStack::new(Item::SulfurCubeBucket, 1);
-    let held = ItemStack::new(Item::Tnt, 1).to_nbt();
+    let mut bucket = ItemStack::mint(Item::SulfurCubeBucket, 1, MintReason::Test);
+    let held = ItemStack::mint(Item::Tnt, 1, MintReason::Test).to_nbt();
     bucket
         .components
         .other
@@ -541,7 +549,7 @@ fn a_sulfur_cube_bucket_sends_and_takes_back_what_it_holds() {
 #[test]
 fn display_components_round_trip_on_the_wire() {
     use tuff_item::item::display::{ModelData, TooltipDisplay};
-    let mut stack = ItemStack::new(Item::Paper, 3);
+    let mut stack = ItemStack::mint(Item::Paper, 3, MintReason::Test);
     let other = &mut stack.components.other;
     other.insert("minecraft:item_model", "ex:ruby");
     other.insert("minecraft:tooltip_style", "ex:fancy");
@@ -566,7 +574,7 @@ fn display_components_round_trip_on_the_wire() {
     let mut r = reader(write_creative_slot(&stack));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(stack.clone())
+        CreativeSlot::Stack(stack.dup_unchecked())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -574,10 +582,10 @@ fn display_components_round_trip_on_the_wire() {
     w.write_item_template(stack.view());
     assert_eq!(
         reader(w).read_item_template(0).unwrap(),
-        Some(stack.clone())
+        Some(stack.dup_unchecked())
     );
 
-    let mut short = ItemStack::new(Item::Paper, 1);
+    let mut short = ItemStack::mint(Item::Paper, 1, MintReason::Test);
     short
         .components
         .other
@@ -591,12 +599,12 @@ fn display_components_round_trip_on_the_wire() {
         Some("minecraft:ruby")
     );
 
-    let mut over = stack.clone();
-    over.count = 17;
+    let mut over = stack.dup_unchecked();
+    over.resize(17, MintReason::Test, BurnReason::Test);
     let mut r = reader(write_creative_slot(&over));
     assert_eq!(r.read_creative_slot().unwrap(), CreativeSlot::Invalid);
 
-    let mut broken = ItemStack::new(Item::Paper, 1);
+    let mut broken = ItemStack::mint(Item::Paper, 1, MintReason::Test);
     broken.components.other.insert("minecraft:rarity", "mythic");
     broken
         .components
@@ -635,15 +643,15 @@ fn display_component_reads_are_bounded() {
 #[tuff_core::watchdog]
 #[test]
 fn charged_crossbows_round_trip_their_projectiles_as_templates() {
-    let mut crossbow = ItemStack::new(Item::Crossbow, 1);
+    let mut crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
     crossbow.components.charged_projectiles = Some(vec![
-        ItemStack::new(Item::Arrow, 1),
-        ItemStack::new(Item::FireworkRocket, 1),
+        ItemStack::mint(Item::Arrow, 1, MintReason::Test),
+        ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test),
     ]);
     let mut r = reader(write_creative_slot(&crossbow));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(crossbow.clone())
+        CreativeSlot::Stack(crossbow.dup_unchecked())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -665,27 +673,31 @@ fn charged_crossbows_round_trip_their_projectiles_as_templates() {
     assert_eq!(r.read_var_int().unwrap(), 0);
     assert_eq!(r.read_var_int().unwrap(), Item::FireworkRocket.id() as i32);
 
-    let saved = ItemStack::from_nbt(&crossbow.to_nbt()).unwrap();
+    let saved = ItemStack::mint_from_nbt(&crossbow.to_nbt(), MintReason::Test).unwrap();
     assert_eq!(saved, crossbow);
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn pot_decorations_are_sent_as_optional_templates_per_side() {
-    let mut pot = ItemStack::new(Item::DecoratedPot, 1);
+    let mut pot = ItemStack::mint(Item::DecoratedPot, 1, MintReason::Test);
     pot.components.other.insert(
         DataComponentType::PotDecorations.name(),
         tuff_item::item::pot_decorations_to_nbt(&[
-            Some(ItemStack::new(Item::AnglerPotterySherd, 1)),
+            Some(ItemStack::mint(
+                Item::AnglerPotterySherd,
+                1,
+                MintReason::Test,
+            )),
             None,
-            Some(ItemStack::new(Item::Brick, 1)),
+            Some(ItemStack::mint(Item::Brick, 1, MintReason::Test)),
             None,
         ]),
     );
     let mut r = reader(write_creative_slot(&pot));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(pot.clone())
+        CreativeSlot::Stack(pot.dup_unchecked())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -725,7 +737,7 @@ fn pot_decorations_are_sent_as_optional_templates_per_side() {
 #[tuff_core::watchdog]
 #[test]
 fn inline_banner_and_trim_definitions_are_sent_in_full() {
-    let mut banner = ItemStack::new(Item::WhiteBanner, 1);
+    let mut banner = ItemStack::mint(Item::WhiteBanner, 1, MintReason::Test);
     banner.components.banner_patterns = Some(vec![BannerLayer {
         pattern: "tuff:custom".into(),
         inline: Some("tuff.key".into()),
@@ -740,7 +752,7 @@ fn inline_banner_and_trim_definitions_are_sent_in_full() {
             .any(|w| w == b"\x00\x0btuff:custom\x08tuff.key")
     );
 
-    let mut armor = ItemStack::new(Item::DiamondChestplate, 1);
+    let mut armor = ItemStack::mint(Item::DiamondChestplate, 1, MintReason::Test);
     let mut trim = ArmorTrim::named("", "minecraft:coast");
     trim.inline_material = Some(tuff_item::item::decor::InlineTrimMaterial {
         palette_id: "tuff:glow".into(),
@@ -756,13 +768,13 @@ fn inline_banner_and_trim_definitions_are_sent_in_full() {
 #[tuff_core::watchdog]
 #[test]
 fn inline_banner_and_trim_definitions_decode_from_creative_slots() {
-    let mut banner = ItemStack::new(Item::WhiteBanner, 1);
+    let mut banner = ItemStack::mint(Item::WhiteBanner, 1, MintReason::Test);
     banner.components.banner_patterns = Some(vec![BannerLayer {
         pattern: "tuff:custom".into(),
         inline: Some("tuff.key".into()),
         color: DyeColor::Red,
     }]);
-    let mut armor = ItemStack::new(Item::DiamondChestplate, 1);
+    let mut armor = ItemStack::mint(Item::DiamondChestplate, 1, MintReason::Test);
     let mut trim = ArmorTrim::named("", "");
     trim.inline_material = Some(InlineTrimMaterial {
         palette_id: "tuff:glow".into(),
@@ -784,16 +796,16 @@ fn inline_banner_and_trim_definitions_decode_from_creative_slots() {
 #[tuff_core::watchdog]
 #[test]
 fn container_components_round_trip_and_bound_their_nesting() {
-    let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
+    let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
     shulker.components.container = Some(vec![
         None,
         Some(damaged_named_pickaxe()),
-        Some(ItemStack::new(Item::Stone, 64)),
+        Some(ItemStack::mint(Item::Stone, 64, MintReason::Test)),
     ]);
     let mut r = reader(write_creative_slot(&shulker));
     assert_eq!(
         r.read_creative_slot().unwrap(),
-        CreativeSlot::Stack(shulker.clone())
+        CreativeSlot::Stack(shulker.dup_unchecked())
     );
     assert_eq!(r.remaining(), 0);
 
@@ -822,9 +834,9 @@ fn container_components_round_trip_and_bound_their_nesting() {
     assert_eq!(r.read_var_int().unwrap(), 1);
 
     let boxed = |layers: u32| {
-        let mut nested = ItemStack::new(Item::ShulkerBox, 1);
+        let mut nested = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
         for _ in 0..layers {
-            let mut outer = ItemStack::new(Item::ShulkerBox, 1);
+            let mut outer = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
             outer.components.container = Some(vec![Some(nested)]);
             nested = outer;
         }
@@ -858,7 +870,7 @@ fn container_components_round_trip_and_bound_their_nesting() {
 #[tuff_core::watchdog]
 #[test]
 fn typed_entity_data_without_a_known_id_stays_off_the_wire() {
-    let mut stack = ItemStack::new(Item::ArmorStand, 1);
+    let mut stack = ItemStack::mint(Item::ArmorStand, 1, MintReason::Test);
     stack.components.other.insert(
         "minecraft:entity_data",
         Compound::new()
@@ -868,7 +880,7 @@ fn typed_entity_data_without_a_known_id_stays_off_the_wire() {
     let mut w = PacketWriter::new();
     w.write_slot(Some(stack.view()));
     assert_eq!(hex(&w.into_bytes()), "01fd0a0000");
-    let mut stack = ItemStack::new(Item::Chest, 1);
+    let mut stack = ItemStack::mint(Item::Chest, 1, MintReason::Test);
     stack.components.other.insert(
         "minecraft:block_entity_data",
         Compound::new().with("Lock", "x"),
@@ -940,7 +952,7 @@ fn unknown_component_types_are_skipped_but_unsupported() {
     w.write_var_int(0);
     w.write_var_int(1);
     w.write_var_int(DataComponentType::Tool.id() as i32);
-    let mut expected = ItemStack::new(Item::Stone, 1);
+    let mut expected = ItemStack::mint(Item::Stone, 1, MintReason::Test);
     expected.components.removed = vec!["minecraft:tool".into()];
     assert_eq!(
         reader(w).read_creative_slot().unwrap(),
@@ -1032,7 +1044,7 @@ fn hashed_slots_match_component_checksums() {
     assert!(!HashedSlot::matches(Some(&count), Some(stack.view())));
     assert!(HashedSlot::matches(None, None));
     assert!(!HashedSlot::matches(Some(&exact), None));
-    let plain = ItemStack::new(Item::Stone, 3);
+    let plain = ItemStack::mint(Item::Stone, 3, MintReason::Test);
     let plain_view = HashedSlot {
         item: Item::Stone.id(),
         count: 3,

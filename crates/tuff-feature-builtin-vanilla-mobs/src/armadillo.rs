@@ -19,7 +19,7 @@ use tuff_core::world::entity::{Effect, EntityInteraction, InteractOutcome, TickC
 use tuff_core::world::game_event::GameEvent;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::DispenseOutcome;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 
 use super::Damage;
@@ -329,7 +329,11 @@ impl Species for Armadillo {
             .as_ref()
             .is_some_and(|stack| stack.item == Item::Brush);
         if brush && !core.is_baby() {
-            core.drop_item(ItemStack::new(Item::ArmadilloScute, 1), 0.0, cx);
+            core.drop_item(
+                ItemStack::mint(Item::ArmadilloScute, 1, MintReason::Spawn),
+                0.0,
+                cx,
+            );
             core.sound(SoundEvent::EntityArmadilloBrush, 1.0, 1.0, cx);
             cx.effects.push(Effect::GameEvent {
                 event: GameEvent::EntityInteract,
@@ -378,7 +382,11 @@ impl Species for Armadillo {
         if stack.item != Item::Brush || core.is_baby() {
             return None;
         }
-        core.drop_item(ItemStack::new(Item::ArmadilloScute, 1), 0.0, cx);
+        core.drop_item(
+            ItemStack::mint(Item::ArmadilloScute, 1, MintReason::Spawn),
+            0.0,
+            cx,
+        );
         core.sound(SoundEvent::EntityArmadilloBrush, 1.0, 1.0, cx);
         Some(DispenseOutcome::Worn(BRUSH_WEAR))
     }
@@ -525,7 +533,7 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::new(item, 1)),
+            stack: Some(ItemStack::mint(item, 1, MintReason::Test)),
             off_hand: false,
             creative: false,
             sneaking: false,

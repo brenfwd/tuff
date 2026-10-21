@@ -3,6 +3,7 @@
 //! `block_entities` list with the game's schema; block entities of other
 //! kinds pass through as raw NBT.
 
+use tuff_item::item::DupUnchecked;
 pub mod analog;
 pub mod editors;
 pub mod raw;
@@ -316,14 +317,14 @@ fn crafter_accepts(items: &[Option<ItemStack>], slot: usize, disabled: u16) -> b
     let Some(current) = &items[slot] else {
         return true;
     };
-    if current.count >= current.max_stack_size() {
+    if current.count() >= current.max_stack_size() {
         return false;
     }
     !(slot + 1..CRAFTER_SLOTS).any(|other| {
         disabled & (1 << other) == 0
             && match &items[other] {
                 None => true,
-                Some(stack) => stack.count < current.count && stack.stacks_with(current),
+                Some(stack) => stack.count() < current.count() && stack.stacks_with(current),
             }
     })
 }
@@ -422,7 +423,7 @@ impl State {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
 pub struct BlockEntity {
     pub kind: ContainerKind,
     pub items: Vec<Option<ItemStack>>,
@@ -439,7 +440,7 @@ impl BlockEntity {
     pub fn new(kind: ContainerKind) -> Self {
         Self {
             kind,
-            items: vec![None; kind.size()],
+            items: (0..kind.size()).map(|_| None).collect(),
             custom_name: None,
             transfer_cooldown: NO_COOLDOWN,
             state: State::for_kind(kind),
@@ -512,9 +513,10 @@ impl BlockEntity {
     }
 
     pub fn is_full(&self) -> bool {
-        self.items
-            .iter()
-            .all(|slot| slot.as_ref().is_some_and(|s| s.count >= s.max_stack_size()))
+        self.items.iter().all(|slot| {
+            slot.as_ref()
+                .is_some_and(|s| s.count() >= s.max_stack_size())
+        })
     }
 
     /// The NBT clients need to render this block entity (a campfire's
@@ -674,7 +676,7 @@ impl BlockEntity {
 /// `size` slots filled from saved `Items` entries; entries with a slot out
 /// of range or an unreadable stack are dropped.
 pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemStack>> {
-    let mut items = vec![None; size];
+    let mut items: Vec<Option<ItemStack>> = (0..size).map(|_| None).collect();
     for entry in entries {
         let Some(entry) = entry.as_compound() else {
             continue;
@@ -685,7 +687,7 @@ pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemSt
         }
         let mut stack = entry.clone();
         stack.remove("Slot");
-        items[slot as usize] = ItemStack::from_nbt(&stack);
+        items[slot as usize] = ItemStack::from_storage(&stack);
     }
     items
 }
@@ -743,16 +745,15 @@ pub fn golem_place(
             }
             Some(existing) if existing.stacks_with(&held) => {
                 let max = existing.max_stack_size();
-                if existing.count >= max {
+                if existing.count() >= max {
                     continue;
                 }
-                let room = max - existing.count;
-                existing.count += room.min(held.count);
+                let room = max - existing.count();
+                existing.transfer(&mut held, room);
                 changed.push(slot);
-                if held.count <= room {
+                if held.count() == 0 {
                     return (None, false);
                 }
-                held.count -= room;
             }
             Some(_) => {}
         }
@@ -774,7 +775,7 @@ pub fn insert(
     disabled: u16,
 ) -> Option<ItemStack> {
     for slot in kind.slots_for_face(face) {
-        if stack.count == 0 {
+        if stack.count() == 0 {
             break;
         }
         if !kind.can_insert(recipes, items, slot, &stack, face, disabled) {
@@ -782,26 +783,25 @@ pub fn insert(
         }
         match &mut items[slot] {
             None => {
-                items[slot] = Some(stack.clone());
-                stack.count = 0;
+                let count = stack.count();
+                items[slot] = Some(stack.take(count));
                 changed.push(slot);
             }
             Some(current)
-                if current.stacks_with(&stack) && current.count <= current.max_stack_size() =>
+                if current.stacks_with(&stack) && current.count() <= current.max_stack_size() =>
             {
                 let moved = stack
-                    .count
-                    .min(stack.max_stack_size().saturating_sub(current.count));
+                    .count()
+                    .min(stack.max_stack_size().saturating_sub(current.count()));
                 if moved > 0 {
-                    current.count += moved;
-                    stack.count -= moved;
+                    current.transfer(&mut stack, moved);
                     changed.push(slot);
                 }
             }
             Some(_) => {}
         }
     }
-    (stack.count > 0).then_some(stack)
+    (stack.count() > 0).then_some(stack)
 }
 
 /// Whether every slot of `items` reachable through `face` is full.
@@ -809,7 +809,7 @@ pub fn is_full(kind: ContainerKind, items: &[Option<ItemStack>], face: Option<Fa
     kind.slots_for_face(face).into_iter().all(|slot| {
         items[slot]
             .as_ref()
-            .is_some_and(|s| s.count >= s.max_stack_size())
+            .is_some_and(|s| s.count() >= s.max_stack_size())
     })
 }
 
@@ -832,15 +832,13 @@ pub fn transfer_one(
         if !from_kind.can_extract(slot, stack, from_face) {
             continue;
         }
-        let one = stack.clone().with_count(1);
+        let Some(one) = ItemStack::take_from(&mut from[slot], 1) else {
+            continue;
+        };
         let mut changed = Vec::new();
-        if insert(recipes, into_kind, into, into_face, one, &mut changed, 0).is_none() {
-            let stack = from[slot].as_mut().unwrap();
-            stack.count -= 1;
-            if stack.count == 0 {
-                from[slot] = None;
-            }
-            return Some((slot, changed));
+        match insert(recipes, into_kind, into, into_face, one, &mut changed, 0) {
+            None => return Some((slot, changed)),
+            Some(back) => ItemStack::put_back(&mut from[slot], back),
         }
     }
     None
@@ -863,13 +861,13 @@ pub fn scatter(
             pos.y as f64 + rng.r#gen::<f64>() * (1.0 - ITEM_WIDTH),
             pos.z as f64 + rng.r#gen::<f64>() * (1.0 - ITEM_WIDTH) + ITEM_WIDTH / 2.0,
         ];
-        while stack.count > 0 {
-            let piece = (rng.gen_range(0..21) + 10).min(stack.count as i32) as u8;
-            stack.count -= piece;
+        while stack.count() > 0 {
+            let piece = (rng.gen_range(0..21) + 10).min(stack.count() as i32) as u8;
+            let piece = stack.take(piece);
             let mut triangle =
                 |mode: f64| mode + DEVIATION * (rng.r#gen::<f64>() - rng.r#gen::<f64>());
             let velocity = [triangle(0.0), triangle(0.2), triangle(0.0)];
-            drops.push((stack.clone().with_count(piece), position, velocity));
+            drops.push((piece, position, velocity));
         }
     }
     drops
@@ -881,7 +879,12 @@ pub fn spilled(entity: &BlockEntity) -> Vec<ItemStack> {
     if entity.kind == ContainerKind::ShulkerBox {
         return Vec::new();
     }
-    entity.items.iter().flatten().cloned().collect()
+    entity
+        .items
+        .iter()
+        .flatten()
+        .map(DupUnchecked::dup_unchecked)
+        .collect()
 }
 
 /// Splits a chunk's stored `block_entities` into the modeled ones and the

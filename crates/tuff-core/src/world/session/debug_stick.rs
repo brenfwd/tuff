@@ -155,6 +155,7 @@ impl PlayerSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Block;
 
     #[tuff_core::watchdog]
@@ -190,7 +191,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn the_selection_is_stored_per_block_on_the_stack() {
-        let mut stack = ItemStack::new(Item::DebugStick, 1);
+        let mut stack = ItemStack::mint(Item::DebugStick, 1, MintReason::Test);
         let stairs = Block::OakStairs.default_state();
         let stone = Block::Stone.default_state();
         assert_eq!(selected(&stack, stairs), None);

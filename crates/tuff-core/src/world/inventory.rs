@@ -22,7 +22,7 @@ const MAIN: RangeInclusive<usize> = 9..=35;
 const HOTBAR: RangeInclusive<usize> = 36..=44;
 const OFFHAND: usize = 45;
 
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct Inventory {
     slots: Box<[Option<ItemStack>]>,
     carried: Option<ItemStack>,
@@ -35,7 +35,7 @@ pub struct Inventory {
 impl Default for Inventory {
     fn default() -> Self {
         Self {
-            slots: vec![None; SLOTS].into_boxed_slice(),
+            slots: std::iter::repeat_with(|| None).take(SLOTS).collect(),
             carried: None,
             selected: 0,
             state_id: 0,
@@ -49,23 +49,18 @@ impl Default for Inventory {
 fn merge(to: &mut Option<ItemStack>, from: ItemStack, limit: u8) -> Option<ItemStack> {
     match to {
         None => {
-            let moved = from.count.min(limit);
-            let rest = from.count - moved;
-            let placed = from.with_count(moved);
-            let leftover = (rest > 0).then(|| placed.clone().with_count(rest));
+            let (placed, leftover) = from.split(limit.max(1));
             *to = Some(placed);
             leftover
         }
         Some(existing) if existing.stacks_with(&from) => {
             let room = limit
                 .min(existing.max_stack_size())
-                .saturating_sub(existing.count);
-            let moved = from.count.min(room);
-            existing.count += moved;
-            (from.count > moved).then(|| {
-                let rest = from.count - moved;
-                from.with_count(rest)
-            })
+                .saturating_sub(existing.count());
+            if room == 0 {
+                return Some(from);
+            }
+            existing.absorb(from, existing.count() + room)
         }
         Some(_) => Some(from),
     }
@@ -227,10 +222,8 @@ impl Inventory {
             let Some(effects) = stack.death_protection() else {
                 continue;
             };
-            let mut used = stack.clone();
-            used.count = 1;
-            stack.count -= 1;
-            if stack.count == 0 {
+            let used = stack.take(1);
+            if stack.count() == 0 {
                 self.slots[slot] = None;
             }
             return Some((used, effects));
@@ -323,7 +316,7 @@ impl Inventory {
             return Hurt::Unchanged;
         };
         let outcome = stack.hurt(amount, rng);
-        if stack.count == 0 {
+        if stack.count() == 0 {
             self.slots[slot] = None;
         }
         outcome
@@ -331,10 +324,9 @@ impl Inventory {
 
     fn take(&mut self, slot: usize, count: u8) -> Option<ItemStack> {
         let stack = self.slots[slot].as_mut()?;
-        let taken = count.min(stack.count);
-        if stack.count > taken {
-            stack.count -= taken;
-            Some(stack.clone().with_count(taken))
+        let taken = count.min(stack.count());
+        if stack.count() > taken {
+            Some(stack.take(taken))
         } else {
             self.slots[slot].take()
         }
@@ -369,12 +361,12 @@ impl Inventory {
             room += match &self.slots[slot] {
                 None => u32::from(limit),
                 Some(s) if s.stacks_with(stack) => {
-                    u32::from(limit.min(s.max_stack_size()).saturating_sub(s.count))
+                    u32::from(limit.min(s.max_stack_size()).saturating_sub(s.count()))
                 }
                 Some(_) => 0,
             };
         }
-        room.min(u32::from(stack.count)) as u8
+        room.min(u32::from(stack.count())) as u8
     }
 
     /// Merges `stack` into each slot of `targets` accepted by `accepts`,
@@ -486,14 +478,15 @@ mod tests {
     use crate::world::menu::{NoResult, OUTSIDE};
     use rand::SeedableRng;
     use rand::rngs::StdRng;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     fn dirt(count: u8) -> Option<ItemStack> {
-        Some(ItemStack::new(Item::Dirt, count))
+        Some(ItemStack::mint(Item::Dirt, count, MintReason::Test))
     }
 
     fn pickaxe(damage: u32) -> ItemStack {
-        let mut stack = ItemStack::new(Item::DiamondPickaxe, 1);
+        let mut stack = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
         stack.set_damage(damage);
         stack
     }
@@ -502,7 +495,7 @@ mod tests {
     #[test]
     fn death_clear_destroys_vanishing_items() {
         let mut inv = Inventory::default();
-        let mut cursed = ItemStack::new(Item::Stone, 1);
+        let mut cursed = ItemStack::mint(Item::Stone, 1, MintReason::Test);
         cursed.components.enchantments = Some(tuff_item::item::Enchantments::new(vec![(
             "minecraft:vanishing_curse".to_string(),
             1,
@@ -510,7 +503,10 @@ mod tests {
         inv.slots[20] = Some(cursed);
         inv.slots[21] = dirt(3);
         let drops = inv.clear_dropping_survivors();
-        assert_eq!(drops, vec![ItemStack::new(Item::Dirt, 3)]);
+        assert_eq!(
+            drops,
+            vec![ItemStack::mint(Item::Dirt, 3, MintReason::Test)]
+        );
         assert!(inv.slots[20].is_none());
     }
 
@@ -519,7 +515,10 @@ mod tests {
     fn add_prefers_existing_stacks_then_hotbar() {
         let mut inv = Inventory::default();
         inv.slots[20] = dirt(60);
-        assert_eq!(inv.add(ItemStack::new(Item::Dirt, 10)), None);
+        assert_eq!(
+            inv.add(ItemStack::mint(Item::Dirt, 10, MintReason::Test)),
+            None
+        );
         assert_eq!(inv.slots[20], dirt(64));
         assert_eq!(inv.slots[36], dirt(6));
     }
@@ -531,24 +530,30 @@ mod tests {
         for slot in HOTBAR.chain(MAIN) {
             inv.slots[slot] = dirt(64);
         }
-        assert_eq!(inv.add(ItemStack::new(Item::Dirt, 3)), dirt(3));
+        assert_eq!(
+            inv.add(ItemStack::mint(Item::Dirt, 3, MintReason::Test)),
+            dirt(3)
+        );
         inv.slots[OFFHAND] = dirt(62);
-        assert_eq!(inv.add(ItemStack::new(Item::Dirt, 3)), dirt(1));
+        assert_eq!(
+            inv.add(ItemStack::mint(Item::Dirt, 3, MintReason::Test)),
+            dirt(1)
+        );
     }
 
     #[tuff_core::watchdog]
     #[test]
     fn stacks_with_different_components_do_not_merge() {
-        let mut named = ItemStack::new(Item::Dirt, 10);
+        let mut named = ItemStack::mint(Item::Dirt, 10, MintReason::Test);
         named.components.custom_name = Some(Box::new("Named".into()));
         let mut inv = Inventory::default();
         inv.slots[36] = dirt(10);
-        assert_eq!(inv.add(named.clone()), None);
+        assert_eq!(inv.add(named.dup_unchecked()), None);
         assert_eq!(inv.slots[36], dirt(10));
-        assert_eq!(inv.slots[37], Some(named.clone()));
-        assert_eq!(inv.add(named.clone().with_count(5)), None);
-        assert_eq!(inv.slots[37], Some(named.clone().with_count(15)));
-        inv.carried = Some(named.clone().with_count(1));
+        assert_eq!(inv.slots[37], Some(named.dup_unchecked()));
+        assert_eq!(inv.add(named.dup_count_unchecked(5)), None);
+        assert_eq!(inv.slots[37], Some(named.dup_count_unchecked(15)));
+        inv.carried = Some(named.dup_count_unchecked(1));
         inv.click(
             36,
             0,
@@ -557,7 +562,7 @@ mod tests {
             &mut NoResult,
             &crate::world::crafting::RecipeSet::default(),
         );
-        assert_eq!(inv.slots[36], Some(named.with_count(1)));
+        assert_eq!(inv.slots[36], Some(named.dup_count_unchecked(1)));
         assert_eq!(inv.carried, dirt(10));
         inv.carried = Some(pickaxe(3));
         inv.slots[38] = Some(pickaxe(0));
@@ -585,7 +590,7 @@ mod tests {
     }
 
     fn enchanted(item: Item) -> Option<ItemStack> {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         stack.components.enchantments = Some(tuff_item::item::Enchantments::new([(
             "minecraft:sharpness".to_string(),
             1,
@@ -617,31 +622,40 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn pick_selects_swaps_or_creates_matching_components() {
-        let mut named = ItemStack::new(Item::Dirt, 1);
+        let mut named = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
         named.components.custom_name = Some(Box::new("Named".into()));
         let mut inv = Inventory::default();
-        inv.slots[36] = Some(named.clone());
+        inv.slots[36] = Some(named.dup_unchecked());
         inv.slots[40] = dirt(5);
-        assert!(inv.pick(ItemStack::new(Item::Dirt, 1), false));
+        assert!(inv.pick(ItemStack::mint(Item::Dirt, 1, MintReason::Test), false));
         assert_eq!(inv.selected, 4);
 
         inv.selected = 0;
-        inv.slots[20] = Some(ItemStack::new(Item::Stone, 3));
-        assert!(inv.pick(ItemStack::new(Item::Stone, 1), false));
+        inv.slots[20] = Some(ItemStack::mint(Item::Stone, 3, MintReason::Test));
+        assert!(inv.pick(ItemStack::mint(Item::Stone, 1, MintReason::Test), false));
         assert_eq!(inv.selected, 1);
-        assert_eq!(inv.slots[37], Some(ItemStack::new(Item::Stone, 3)));
+        assert_eq!(
+            inv.slots[37],
+            Some(ItemStack::mint(Item::Stone, 3, MintReason::Test))
+        );
         assert_eq!(inv.slots[20], None);
 
-        assert!(!inv.pick(ItemStack::new(Item::Glass, 1), false));
+        assert!(!inv.pick(ItemStack::mint(Item::Glass, 1, MintReason::Test), false));
         assert_eq!(inv.selected, 1);
 
         for slot in 36..=44 {
-            inv.slots[slot].get_or_insert(ItemStack::new(Item::Sand, 1));
+            inv.slots[slot].get_or_insert(ItemStack::mint(Item::Sand, 1, MintReason::Test));
         }
-        assert!(inv.pick(ItemStack::new(Item::Glass, 1), true));
+        assert!(inv.pick(ItemStack::mint(Item::Glass, 1, MintReason::Test), true));
         assert_eq!(inv.selected, 1);
-        assert_eq!(inv.slots[37], Some(ItemStack::new(Item::Glass, 1)));
-        assert_eq!(inv.slots[9], Some(ItemStack::new(Item::Stone, 3)));
+        assert_eq!(
+            inv.slots[37],
+            Some(ItemStack::mint(Item::Glass, 1, MintReason::Test))
+        );
+        assert_eq!(
+            inv.slots[9],
+            Some(ItemStack::mint(Item::Stone, 3, MintReason::Test))
+        );
     }
 
     #[tuff_core::watchdog]
@@ -664,7 +678,7 @@ mod tests {
     fn pick_block_prefers_hotbar_then_swaps_into_it() {
         let mut inv = Inventory::default();
         inv.slots[20] = dirt(3);
-        inv.slots[36] = Some(ItemStack::new(Item::Stone, 1));
+        inv.slots[36] = Some(ItemStack::mint(Item::Stone, 1, MintReason::Test));
         inv.set_selected(0);
         assert_eq!(inv.find_item(Item::Dirt), Some(20));
         inv.pick_slot(20);
@@ -672,13 +686,19 @@ mod tests {
         assert_eq!(inv.slots[37], dirt(3));
         assert_eq!(inv.slots[20], None);
         for slot in HOTBAR {
-            inv.slots[slot] = Some(ItemStack::new(Item::Stone, 1));
+            inv.slots[slot] = Some(ItemStack::mint(Item::Stone, 1, MintReason::Test));
         }
         inv.set_selected(4);
-        inv.add_and_pick(ItemStack::new(Item::Torch, 1));
+        inv.add_and_pick(ItemStack::mint(Item::Torch, 1, MintReason::Test));
         assert_eq!(inv.selected(), 4);
-        assert_eq!(inv.slots[40], Some(ItemStack::new(Item::Torch, 1)));
-        assert_eq!(inv.slots[9], Some(ItemStack::new(Item::Stone, 1)));
+        assert_eq!(
+            inv.slots[40],
+            Some(ItemStack::mint(Item::Torch, 1, MintReason::Test))
+        );
+        assert_eq!(
+            inv.slots[9],
+            Some(ItemStack::mint(Item::Stone, 1, MintReason::Test))
+        );
     }
 
     #[tuff_core::watchdog]
@@ -723,7 +743,7 @@ mod tests {
     fn clicking_different_item_swaps_and_armor_slots_reject_blocks() {
         let mut inv = Inventory::default();
         inv.slots[36] = dirt(5);
-        inv.slots[37] = Some(ItemStack::new(Item::Stone, 2));
+        inv.slots[37] = Some(ItemStack::mint(Item::Stone, 2, MintReason::Test));
         inv.click(
             36,
             0,
@@ -741,7 +761,10 @@ mod tests {
             &crate::world::crafting::RecipeSet::default(),
         );
         assert_eq!(inv.slots[37], dirt(5));
-        assert_eq!(inv.carried, Some(ItemStack::new(Item::Stone, 2)));
+        assert_eq!(
+            inv.carried,
+            Some(ItemStack::mint(Item::Stone, 2, MintReason::Test))
+        );
         inv.click(
             5,
             0,
@@ -751,7 +774,7 @@ mod tests {
             &crate::world::crafting::RecipeSet::default(),
         );
         assert_eq!(inv.slots[5], None);
-        inv.carried = Some(ItemStack::new(Item::IronHelmet, 1));
+        inv.carried = Some(ItemStack::mint(Item::IronHelmet, 1, MintReason::Test));
         inv.click(
             5,
             0,
@@ -760,7 +783,10 @@ mod tests {
             &mut NoResult,
             &crate::world::crafting::RecipeSet::default(),
         );
-        assert_eq!(inv.slots[5], Some(ItemStack::new(Item::IronHelmet, 1)));
+        assert_eq!(
+            inv.slots[5],
+            Some(ItemStack::mint(Item::IronHelmet, 1, MintReason::Test))
+        );
     }
 
     #[tuff_core::watchdog]
@@ -815,7 +841,7 @@ mod tests {
                 &mut NoResult,
                 &crate::world::crafting::RecipeSet::default()
             ),
-            vec![ItemStack::new(Item::Dirt, 1)]
+            vec![ItemStack::mint(Item::Dirt, 1, MintReason::Test)]
         );
         assert_eq!(
             inv.click(
@@ -826,7 +852,7 @@ mod tests {
                 &mut NoResult,
                 &crate::world::crafting::RecipeSet::default()
             ),
-            vec![ItemStack::new(Item::Dirt, 2)]
+            vec![ItemStack::mint(Item::Dirt, 2, MintReason::Test)]
         );
         assert_eq!(inv.slots[38], None);
     }
@@ -951,7 +977,7 @@ mod tests {
                 &mut NoResult,
                 &crate::world::crafting::RecipeSet::default()
             ),
-            vec![ItemStack::new(Item::Dirt, 1)]
+            vec![ItemStack::mint(Item::Dirt, 1, MintReason::Test)]
         );
         inv.slots[2] = dirt(2);
         assert!(inv.close().is_empty());

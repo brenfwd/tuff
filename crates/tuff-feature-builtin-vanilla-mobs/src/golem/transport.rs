@@ -2,11 +2,11 @@ use super::*;
 
 /// A container's item slots at a position, read-only (see
 /// [`TickContext::container`]).
-pub(super) type ContainerView<'a> = std::borrow::Cow<'a, [Option<ItemStack>]>;
+pub(super) type ContainerView<'a> = tuff_item::item::SlotsCow<'a>;
 
 /// What examining a target chest resolves to: sampled on arrival for the
 /// sound and animation, and again when the dwell ends for the transfer.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(super) enum Outcome {
     Take { stack: ItemStack },
     TakeFail,
@@ -246,8 +246,7 @@ impl TransportItems {
         if Self::picking_up(mob) {
             match items.iter().flatten().next() {
                 Some(stack) => {
-                    let mut stack = stack.clone();
-                    stack.count = stack.count.min(TAKE_MAX);
+                    let stack = stack.dup_count_unchecked(stack.count().min(TAKE_MAX));
                     Outcome::Take { stack }
                 }
                 None => Outcome::TakeFail,
@@ -261,7 +260,7 @@ impl TransportItems {
             let matches = empty || items.iter().flatten().any(|s| s.item == held.item);
             if matches {
                 Outcome::Deposit {
-                    stack: held.clone(),
+                    stack: held.dup_unchecked(),
                 }
             } else {
                 Outcome::DepositFail
@@ -326,17 +325,19 @@ impl TransportItems {
                 self.visited.clear();
             }
             Outcome::Deposit { stack } => {
-                let mut view = (cx.container)(target).unwrap_or_default().into_owned();
+                let mut view = (cx.container)(target)
+                    .unwrap_or_default()
+                    .into_owned_unchecked();
                 let (left, _) = tuff_core::world::block_entity::golem_place(
                     &mut view,
-                    stack.clone(),
+                    stack.dup_unchecked(),
                     &mut Vec::new(),
                 );
-                let placed = stack.count - left.as_ref().map_or(0, |l| l.count);
+                let placed = stack.count() - left.as_ref().map_or(0, |l| l.count());
                 if placed > 0 {
                     cx.effects.push(Effect::CopperGolemDeposit {
                         pos: target,
-                        stack: stack.with_count(placed),
+                        stack: stack.dup_count_unchecked(placed),
                     });
                 }
                 if left.is_none() {

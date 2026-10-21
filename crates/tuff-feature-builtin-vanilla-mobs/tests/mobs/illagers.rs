@@ -163,7 +163,8 @@ async fn pillagers_load_and_fire_their_crossbow() {
         "equipment",
         Compound::new().with(
             "mainhand",
-            tuff_item::item::ItemStack::new(Item::Crossbow, 1).to_nbt(),
+            tuff_item::item::ItemStack::mint(Item::Crossbow, 1, tuff_item::item::MintReason::Test)
+                .to_nbt(),
         ),
     );
     summon(
@@ -228,7 +229,8 @@ async fn illusioners_shoot_arrows() {
         "equipment",
         Compound::new().with(
             "mainhand",
-            tuff_item::item::ItemStack::new(Item::Bow, 1).to_nbt(),
+            tuff_item::item::ItemStack::mint(Item::Bow, 1, tuff_item::item::MintReason::Test)
+                .to_nbt(),
         ),
     );
     summon(
@@ -316,7 +318,11 @@ async fn a_raised_shield_stuns_or_throws_back_the_ravager_biting_it() {
     let id = mobs(&region, EntityType::Ravager).await[0].id;
     defender.inventory_mut().set_slot(
         Inventory::OFFHAND_SLOT,
-        Some(tuff_item::item::ItemStack::new(Item::Shield, 1)),
+        Some(tuff_item::item::ItemStack::mint(
+            Item::Shield,
+            1,
+            tuff_item::item::MintReason::Test,
+        )),
     );
     defender.hold_up(true, 10);
     let mut hit = EntityHit::new(12.0, &tuff_vanilla_data::damage_type::MOB_ATTACK);

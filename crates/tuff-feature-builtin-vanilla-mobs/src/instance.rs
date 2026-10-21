@@ -3,6 +3,7 @@
 //! feature) is one `Species` impl and a registry entry.
 
 use std::fmt::Debug;
+use tuff_item::item::DupUnchecked;
 
 use rand::Rng;
 use rand::rngs::StdRng;
@@ -380,7 +381,12 @@ impl<S: Species> Mob<S> {
                         equipment: damage
                             .weapon
                             .iter()
-                            .map(|w| (tuff_vanilla_data::item::EquipmentSlot::Mainhand, w.clone()))
+                            .map(|w| {
+                                (
+                                    tuff_vanilla_data::item::EquipmentSlot::Mainhand,
+                                    w.dup_unchecked(),
+                                )
+                            })
                             .collect(),
                         ..kind_only(kind)
                     })
@@ -439,7 +445,7 @@ impl<S: Species> Mob<S> {
             let mut facts = EntityFacts {
                 kind: Some(self.core.base.kind),
                 on_fire: self.core.base.on_fire(),
-                attacker_weapon: damage.weapon.clone(),
+                attacker_weapon: damage.weapon.dup_unchecked(),
                 attacker_kind: damage.attacker.map(|(_, kind)| kind),
                 killed_by_player: player_killed,
                 damage_kind: Some(damage.kind),
@@ -468,7 +474,7 @@ impl<S: Species> Mob<S> {
                 }
             }
             let context = damage.context(self.core.base.kind);
-            let weapon = damage.weapon.clone();
+            let weapon = damage.weapon.dup_unchecked();
             let boost = |chance: f32, rng: &mut rand::rngs::StdRng| match &weapon {
                 Some(weapon) => combat::equipment_drop_chance(weapon, &context, chance, rng),
                 None => chance,
@@ -1388,7 +1394,7 @@ impl<S: Species> Mob<S> {
         let slot = SHEARABLE_SLOTS
             .into_iter()
             .find(|slot| shearable(self.core.equipment.get(*slot), interaction.creative))?;
-        let worn = self.core.equipment.get(slot)?.clone();
+        let worn = self.core.equipment.get(slot)?.dup_unchecked();
         let sound = worn.equippable()?.shearing_sound;
         self.core.equipment.set(slot, None);
         cx.effects.push(Effect::GameEvent {
@@ -1399,7 +1405,7 @@ impl<S: Species> Mob<S> {
         let seats = self.core.kind().passenger_attachments();
         let height = seats.iter().map(|seat| seat[1]).sum::<f64>() / seats.len().max(1) as f64;
         self.core
-            .drop_item(worn.clone(), height * self.core.size_ratio(), cx);
+            .drop_item(worn.dup_unchecked(), height * self.core.size_ratio(), cx);
         self.core.sound(sound, 1.0, 1.0, cx);
         cx.effects.push(Effect::Advancement {
             player: interaction.player_uuid,

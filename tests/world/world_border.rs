@@ -239,7 +239,10 @@ async fn items_inside_the_border_stop_at_its_edge_but_not_without_one() {
     set_border(&world, narrow(0.2, 5.0));
     let region = world.region(ChunkPos::new(0, 0).region()).await;
     let motion = Compound::new()
-        .with("Item", ItemStack::new(Item::Stone, 1).to_nbt())
+        .with(
+            "Item",
+            ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+        )
         .with(
             "Motion",
             Tag::List(vec![Tag::Double(0.4), Tag::Double(0.0), Tag::Double(0.0)]),

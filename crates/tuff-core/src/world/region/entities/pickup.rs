@@ -165,7 +165,7 @@ impl RegionActor {
                 collector.handle.send(PlayerEvent::OfferItem {
                     item: *id,
                     offer,
-                    stack: item.stack.clone(),
+                    stack: item.stack.dup_unchecked(),
                     region: self.handle.clone(),
                 });
             }
@@ -261,14 +261,10 @@ impl RegionActor {
         if item.reserved.is_some() || item.pickup_delay > 0 {
             return;
         }
-        let taken = count.min(item.stack.count);
-        let mut stack = item.stack.clone();
-        stack.count = taken;
-        let rest = (taken < item.stack.count).then(|| {
-            let mut rest = item.stack.clone();
-            rest.count -= taken;
-            rest
-        });
+        let taken = count.min(item.stack.count());
+        let stack = item.stack.dup_count_unchecked(taken);
+        let rest = (taken < item.stack.count())
+            .then(|| item.stack.dup_count_unchecked(item.stack.count() - taken));
         let thrower = item.thrower();
         let at = item.base.position;
         if let Some(base) = self.ents.entities.get(&collector).map(|t| t.entity.base()) {
@@ -334,7 +330,7 @@ impl RegionActor {
         if let Some((handle, _)) = player {
             handle.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::ThrownItemPickedUpByEntity {
-                    item: stack.clone(),
+                    item: stack.dup_unchecked(),
                     entity: picker,
                 },
             )));
@@ -342,7 +338,7 @@ impl RegionActor {
         if let Some(picked_by) = picked_by {
             picked_by.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::ThrownItemPickedUpByPlayer {
-                    item: stack.clone(),
+                    item: stack.dup_unchecked(),
                     thrower: facts,
                 },
             )));
@@ -389,7 +385,7 @@ impl RegionActor {
         }
         let pickup = crate::world::region_api::ItemPickup {
             taker,
-            stack: stack.clone(),
+            stack: stack.dup_unchecked(),
             position,
             thrower,
         };
@@ -484,13 +480,12 @@ impl RegionActor {
             }
             return;
         }
-        let taken = taken.min(item.stack.count);
-        let mut granted = item.stack.clone();
-        granted.count = taken;
+        let taken = taken.min(item.stack.count());
+        let granted = item.stack.dup_count_unchecked(taken);
         let thrower = item.thrower();
         let at = item.base.position;
         if !player.send(PlayerEvent::ItemGranted {
-            stack: granted.clone(),
+            stack: granted.dup_unchecked(),
             picked_up: true,
         }) {
             return;
@@ -506,11 +501,8 @@ impl RegionActor {
         };
 
         let chunk = item.base.chunk();
-        let rest = (taken < item.stack.count).then(|| {
-            let mut rest = item.stack.clone();
-            rest.count -= taken;
-            rest
-        });
+        let rest = (taken < item.stack.count())
+            .then(|| item.stack.dup_count_unchecked(item.stack.count() - taken));
         let take = packets([framed(&play::TakeItemEntity {
             collected: id,
             collector: player.id,
@@ -546,7 +538,7 @@ impl RegionActor {
         let Some(item) = tracked.entity.downcast_mut::<ItemEntity>() else {
             return;
         };
-        item.stack = stack.clone();
+        item.stack = stack.dup_unchecked();
         let chunk = item.base.chunk();
         let data = tracked.data_packets(&[(
             metadata::ITEM_STACK,
@@ -569,7 +561,8 @@ impl RegionActor {
             .iter()
             .filter_map(|(id, tracked)| {
                 let item = tracked.entity.downcast_ref::<ItemEntity>()?;
-                experience::intersects(item.bounds(), area).then(|| (*id, item.stack.clone()))
+                experience::intersects(item.bounds(), area)
+                    .then(|| (*id, item.stack.dup_unchecked()))
             })
             .collect();
         found.sort_unstable_by_key(|(id, _)| *id);

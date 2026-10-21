@@ -20,7 +20,7 @@ use tuff_core::world::entity::{
     Effect, EntityBase, EntityHit, TickContext, take_bool, take_number,
 };
 use tuff_core::world::player::Difficulty;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_world_model::BlockPos;
 
@@ -93,8 +93,10 @@ impl MobCore {
             } else {
                 Item::CarvedPumpkin
             };
-            self.equipment
-                .set(EquipmentSlot::Head, Some(ItemStack::new(item, 1)));
+            self.equipment.set(
+                EquipmentSlot::Head,
+                Some(ItemStack::mint(item, 1, MintReason::Spawn)),
+            );
             self.equipment.set_drop_chance(EquipmentSlot::Head, 0.0);
         }
     }
@@ -648,7 +650,7 @@ fn ride_camel_husk(core: &mut MobCore, cx: &mut TickContext) {
     }
     core.equipment.set(
         EquipmentSlot::Mainhand,
-        Some(ItemStack::new(Item::IronSpear, 1)),
+        Some(ItemStack::mint(Item::IronSpear, 1, MintReason::Spawn)),
     );
     let types = &cx.shared.entity_types;
     let Some(mut camel) = types.create(
@@ -710,15 +712,17 @@ impl Zombie {
                 } else {
                     Item::FishingRod
                 };
-                core.equipment
-                    .set(EquipmentSlot::Mainhand, Some(ItemStack::new(item, 1)));
+                core.equipment.set(
+                    EquipmentSlot::Mainhand,
+                    Some(ItemStack::mint(item, 1, MintReason::Spawn)),
+                );
             }
             if core.equipment.get(EquipmentSlot::Offhand).is_none()
                 && cx.rng.r#gen::<f32>() < NAUTILUS_SHELL_CHANCE
             {
                 core.equipment.set(
                     EquipmentSlot::Offhand,
-                    Some(ItemStack::new(Item::NautilusShell, 1)),
+                    Some(ItemStack::mint(Item::NautilusShell, 1, MintReason::Spawn)),
                 );
                 core.equipment.set_drop_chance(EquipmentSlot::Offhand, 2.0);
             }
@@ -730,8 +734,10 @@ impl Zombie {
                     1 => Item::IronSpear,
                     _ => Item::IronShovel,
                 };
-                core.equipment
-                    .set(EquipmentSlot::Mainhand, Some(ItemStack::new(item, 1)));
+                core.equipment.set(
+                    EquipmentSlot::Mainhand,
+                    Some(ItemStack::mint(item, 1, MintReason::Spawn)),
+                );
             }
         }
         core.populate_spawn_enchantments(difficulty, cx.rng);
@@ -794,7 +800,7 @@ mod tests {
         let rides = |trident: bool, baby: bool| {
             let mut count = 0;
             crate::tests::with_context(|core, cx| {
-                let stack = trident.then(|| ItemStack::new(Item::Trident, 1));
+                let stack = trident.then(|| ItemStack::mint(Item::Trident, 1, MintReason::Test));
                 core.equipment.set(EquipmentSlot::Mainhand, stack);
                 core.set_zombie_baby(baby);
                 for seed in 0..400 {
@@ -889,7 +895,11 @@ mod tests {
                     let mut rng = StdRng::seed_from_u64(seed);
                     core.equipment.set(
                         EquipmentSlot::Chest,
-                        Some(ItemStack::new(Item::DiamondChestplate, 1)),
+                        Some(ItemStack::mint(
+                            Item::DiamondChestplate,
+                            1,
+                            MintReason::Test,
+                        )),
                     );
                     core.populate_spawn_enchantments(difficulty, &mut rng);
                     let chest = core.equipment.get(EquipmentSlot::Chest).unwrap();

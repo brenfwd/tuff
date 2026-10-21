@@ -8,7 +8,7 @@ use tuff_core::world::messages::{
 };
 use tuff_core::world::redstone::UPDATE_ALL;
 use tuff_core::world::region_api::{RegionHooks, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::registry::{CustomStat, SoundEvent};
 use tuff_vanilla_data::tag::item as item_tags;
@@ -25,7 +25,7 @@ pub struct Lecterns;
 
 fn book(world: &dyn RegionWorld, pos: BlockPos) -> Option<(ItemStack, i32)> {
     let nbt = world.raw_block_entity(pos)?;
-    let book = nbt.get_compound("Book").and_then(ItemStack::from_nbt)?;
+    let book = nbt.get_compound("Book").and_then(ItemStack::from_storage)?;
     Some((book, nbt.get_int("Page").unwrap_or(0)))
 }
 
@@ -142,7 +142,8 @@ impl RegionHooks for Lecterns {
             let item = place
                 .held
                 .filter(|item| item_tags::LECTERN_BOOKS.contains(item))?;
-            let book = ItemStack::new(item, 1).with_components(place.components.clone());
+            let book = ItemStack::mint(item, 1, MintReason::CrossActor)
+                .with_components(place.components.clone());
             place_book(world, place.target, state, book);
             world.play_sound(SoundEvent::ItemBookPut, place.target, 1.0, 1.0, None);
             return Some(ActionOutcome::Used {

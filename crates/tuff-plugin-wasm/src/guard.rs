@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use tuff_item::item::DupUnchecked;
 
 use tuff_core::protocol::play::{self, Serverbound};
 use tuff_core::world::entity::{Culprit, ProjectileLanding};
@@ -721,9 +722,9 @@ fn use_in_air(session: &mut PlayerSession, sequence: i32) -> Verdict {
     if !host.listens(EventKinds::USE_ITEM) {
         return Verdict::Allow;
     }
-    let Some(held) =
-        session.inventory.slots()[Inventory::hotbar_slot(session.inventory.selected())].clone()
-    else {
+    let Some(held) = session.inventory.slots()
+        [Inventory::hotbar_slot(session.inventory.selected())]
+    .dup_unchecked() else {
         return Verdict::Allow;
     };
     let matched = host.intercepts(

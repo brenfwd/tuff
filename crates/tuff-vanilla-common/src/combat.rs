@@ -12,7 +12,7 @@ use tuff_vanilla_data::registry::{Attribute, EntityType, MobEffect};
 
 use tuff_core::world::damage_type_in_tag;
 use tuff_core::world::player::Difficulty;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 use crate::enchant_effects::facts_of;
 use tuff_core::world::attributes::applies_in;
@@ -510,7 +510,7 @@ pub fn ammo_use(weapon: &ItemStack, ammo: Item, count: f32) -> f32 {
         for entry in &def.effects.ammo_use {
             let applies = enchantment::item_requirement(
                 entry.requirements.as_ref(),
-                &ItemStack::new(ammo, 1),
+                &ItemStack::mint(ammo, 1, MintReason::Template),
                 level,
                 &mut rng,
             );

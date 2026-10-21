@@ -51,7 +51,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     subscribe(&region, &other, &mut other_events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let diamond = ItemStack::new(Item::Diamond, 3);
+    let diamond = ItemStack::mint(Item::Diamond, 3, MintReason::Test);
     let saved = diamond.to_nbt().with("Slot", 4i8);
     summon(
         &region,
@@ -64,19 +64,19 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
 
     let contents = sneak_open(&region, &player, &mut events, boat).await;
     assert_eq!(contents.len(), 27);
-    assert_eq!(contents[4], Some(diamond.clone()));
+    assert_eq!(contents[4], Some(diamond.dup_unchecked()));
     sneak_open(&region, &other, &mut other_events, boat).await;
 
     let take = vec![
         EntitySlotChange {
             slot: 4,
-            expected: Some(diamond.clone()),
+            expected: Some(diamond.dup_unchecked()),
             new: None,
         },
         EntitySlotChange {
             slot: 0,
             expected: None,
-            new: Some(ItemStack::new(Item::Stick, 1)),
+            new: Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
         },
     ];
     region
@@ -100,7 +100,10 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     .await;
     assert_eq!(
         slots,
-        vec![(4, None), (0, Some(ItemStack::new(Item::Stick, 1)))]
+        vec![
+            (4, None),
+            (0, Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)))
+        ]
     );
 
     region
@@ -119,7 +122,10 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     })
     .await;
     assert!(!accepted, "a stale click is refused");
-    assert_eq!(contents[0], Some(ItemStack::new(Item::Stick, 1)));
+    assert_eq!(
+        contents[0],
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))
+    );
     assert_eq!(contents[4], None);
 
     let data = chest_boat_data(&region, boat).await;
@@ -243,7 +249,9 @@ async fn a_player_shift_clicks_items_out_of_a_chest_boat() {
     let (viewer, mut events) = PlayerHandle::new(999);
     subscribe(&region, &viewer, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let saved = ItemStack::new(Item::Diamond, 3).to_nbt().with("Slot", 4i8);
+    let saved = ItemStack::mint(Item::Diamond, 3, MintReason::Test)
+        .to_nbt()
+        .with("Slot", 4i8);
     summon(
         &region,
         EntityType::SpruceChestBoat,
@@ -298,7 +306,7 @@ async fn a_player_shift_clicks_items_out_of_a_chest_boat() {
             .inventory()
             .slots()
             .iter()
-            .any(|s| s.as_ref() == Some(&ItemStack::new(Item::Diamond, 3)))
+            .any(|s| s.as_ref() == Some(&ItemStack::mint(Item::Diamond, 3, MintReason::Test)))
     );
     let data = chest_boat_data(&region, boat).await;
     assert!(data.get_list("Items").unwrap_or(&[]).is_empty());
@@ -450,7 +458,9 @@ async fn killing_a_chest_boat_scatters_its_stacks_in_pieces() {
     let (player, mut events) = PlayerHandle::new(100);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let saved = ItemStack::new(Item::Stone, 64).to_nbt().with("Slot", 0i8);
+    let saved = ItemStack::mint(Item::Stone, 64, MintReason::Test)
+        .to_nbt()
+        .with("Slot", 0i8);
     summon(
         &region,
         EntityType::OakChestBoat,
@@ -477,10 +487,10 @@ async fn killing_a_chest_boat_scatters_its_stacks_in_pieces() {
         let stack = data
             .get("Item")
             .and_then(|tag| tag.as_compound())
-            .and_then(ItemStack::from_nbt)
+            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
             .expect("a saved stack");
         if stack.item == Item::Stone {
-            pieces.push(stack.count);
+            pieces.push(stack.count());
         }
     }
     assert_eq!(pieces.iter().map(|c| u32::from(*c)).sum::<u32>(), 64);

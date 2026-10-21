@@ -15,7 +15,7 @@ use tuff_core::world::entity::{
 };
 use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::{damage_type_in_tag, framed, packets, physics};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -424,7 +424,7 @@ impl Painting {
         if creative {
             return;
         }
-        let mut stack = ItemStack::new(Item::Painting, 1);
+        let mut stack = ItemStack::mint(Item::Painting, 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base
             .custom_name

@@ -157,7 +157,7 @@ pub fn finish(
         .services
         .get::<ExplorationMaps>()?
         .request(dimension, origin, spec)?;
-    let mut stack = stack.clone();
+    let mut stack = stack.dup_unchecked();
     let (tx, rx) = oneshot::channel();
     tokio::spawn(async move {
         let found = answer.await.ok().flatten().map(|map| {
@@ -261,6 +261,7 @@ impl WorldService for ExplorationMaps {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     #[tuff_core::watchdog]
@@ -283,7 +284,7 @@ mod tests {
         assert_eq!(defaults.decoration, MapDecorationType::Mansion);
         assert_eq!(defaults.search_radius, 50);
 
-        let mut stack = ItemStack::new(Item::PlainsVillageMap, 1);
+        let mut stack = ItemStack::mint(Item::PlainsVillageMap, 1, MintReason::Test);
         mark(&mut stack, &spec);
         assert_eq!(pending(&stack), Some(spec));
         ExploredMap {

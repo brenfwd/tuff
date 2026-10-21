@@ -166,7 +166,7 @@ mod launch_tests {
     use tuff_core::world::effects::ActiveEffect;
     use tuff_core::world::entity::{Culprit, Registry};
     use tuff_core::world::projectile::{ArrowShot, Owner, Pickup};
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_world_model::BlockPos;
 
     fn registry() -> Registry {
@@ -197,23 +197,29 @@ mod launch_tests {
     fn every_shot_launches_as_its_own_type() {
         let velocity = [0.0, 0.5, 1.0];
         let shots = [
-            Shot::Arrow(ArrowShot::new(ItemStack::new(Item::Arrow, 1), velocity)),
             Shot::Arrow(ArrowShot::new(
-                ItemStack::new(Item::SpectralArrow, 1),
+                ItemStack::mint(Item::Arrow, 1, MintReason::Test),
                 velocity,
             )),
-            Shot::Arrow(ArrowShot::new(ItemStack::new(Item::Trident, 1), velocity)),
+            Shot::Arrow(ArrowShot::new(
+                ItemStack::mint(Item::SpectralArrow, 1, MintReason::Test),
+                velocity,
+            )),
+            Shot::Arrow(ArrowShot::new(
+                ItemStack::mint(Item::Trident, 1, MintReason::Test),
+                velocity,
+            )),
             Shot::Thrown {
                 kind: EntityType::Snowball,
-                item: ItemStack::new(Item::Snowball, 1),
+                item: ItemStack::mint(Item::Snowball, 1, MintReason::Test),
                 velocity,
             },
             Shot::Firework {
-                item: ItemStack::new(Item::FireworkRocket, 1),
+                item: ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test),
                 flight: Flight::Shot(velocity),
             },
             Shot::Firework {
-                item: ItemStack::new(Item::FireworkRocket, 1),
+                item: ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test),
                 flight: Flight::Launched,
             },
             Shot::WindCharge {
@@ -236,12 +242,12 @@ mod launch_tests {
                 dangerous: true,
             },
             Shot::EyeOfEnder {
-                item: ItemStack::new(Item::EnderEye, 1),
+                item: ItemStack::mint(Item::EnderEye, 1, MintReason::Test),
                 target: BlockPos::new(100, 30, 100),
             },
             Shot::Bobber {
                 rotation: (0.0, 0.0),
-                rod: ItemStack::new(Item::FishingRod, 1),
+                rod: ItemStack::mint(Item::FishingRod, 1, MintReason::Test),
                 luck: 0.0,
             },
         ];
@@ -256,14 +262,17 @@ mod launch_tests {
     #[tuff_core::watchdog]
     #[test]
     fn an_arrow_shot_carries_what_the_shooter_set() {
-        let bow = ItemStack::new(Item::Bow, 1);
-        let mut shot = ArrowShot::new(ItemStack::new(Item::Arrow, 1), [0.0, 0.0, 2.0]);
+        let bow = ItemStack::mint(Item::Bow, 1, MintReason::Test);
+        let mut shot = ArrowShot::new(
+            ItemStack::mint(Item::Arrow, 1, MintReason::Test),
+            [0.0, 0.0, 2.0],
+        );
         shot.pickup = Some(Pickup::CreativeOnly);
         shot.crit = true;
         shot.damage = Some(4.5);
         shot.pierce = 2;
         shot.fire_ticks = 100;
-        shot.weapon = Some(bow.clone());
+        shot.weapon = Some(bow.dup_unchecked());
         shot.sound = Some(SoundEvent::ItemCrossbowHit);
         shot.effects
             .push(ActiveEffect::timed(MobEffect::Slowness, 600, 0));
@@ -289,7 +298,10 @@ mod launch_tests {
             id: 1,
             position: [0.0, 64.0, 0.0],
             owner,
-            shot: Shot::Arrow(ArrowShot::new(ItemStack::new(Item::Arrow, 1), [0.0; 3])),
+            shot: Shot::Arrow(ArrowShot::new(
+                ItemStack::mint(Item::Arrow, 1, MintReason::Test),
+                [0.0; 3],
+            )),
         };
         let registry = registry();
         let player = Owner::of(Culprit::player(3, 9, "Shooter"), None);
@@ -303,7 +315,7 @@ mod launch_tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_thrown_trident_is_a_trident_and_its_own_weapon() {
-        let trident = ItemStack::new(Item::Trident, 1);
+        let trident = ItemStack::mint(Item::Trident, 1, MintReason::Test);
         let entity = launch(Shot::Arrow(ArrowShot::new(trident, [0.0, 0.0, 2.5])));
         let arrow = entity.downcast_ref::<arrow::Arrow>().unwrap();
         assert!(arrow.trident.is_some());

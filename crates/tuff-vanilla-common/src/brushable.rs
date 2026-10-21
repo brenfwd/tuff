@@ -3,6 +3,7 @@
 //! and they fall like sand but shatter where they land.
 
 use std::collections::HashMap;
+use tuff_item::item::BurnReason;
 
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -234,16 +235,16 @@ fn complete(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState, playe
     let (item, face) = match world.raw_block_entity_mut(pos) {
         Some(nbt) => (
             nbt.remove(ITEM)
-                .and_then(|tag| tag.as_compound().and_then(ItemStack::from_nbt)),
+                .and_then(|tag| tag.as_compound().and_then(ItemStack::from_storage)),
             nbt.get_byte(HIT_DIRECTION).map(from_legacy_direction),
         ),
         None => (None, None),
     };
-    if let Some(mut stack) = item {
+    if let Some(stack) = item {
         let take: u8 = rand::Rng::gen_range(world.rng(), 10..=30);
         let (dx, dy, dz) = face.unwrap_or(Facing::Up).step();
         let drop = BlockPos::new(pos.x + dx, pos.y + dy, pos.z + dz);
-        stack.count = stack.count.min(take);
+        let stack = stack.keep(take, BurnReason::Destroyed);
         let position = [
             f64::from(drop.x) + 0.5,
             f64::from(drop.y) + 0.625,
@@ -296,7 +297,7 @@ pub fn check_reset(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState
 pub fn held_item(nbt: &Compound) -> Option<ItemStack> {
     nbt.get(ITEM)
         .and_then(|tag| tag.as_compound())
-        .and_then(ItemStack::from_nbt)
+        .and_then(ItemStack::from_storage)
 }
 
 #[cfg(test)]

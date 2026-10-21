@@ -11,9 +11,10 @@ async fn using_a_goat_horn_starts_its_cooldown_and_a_second_use_is_ignored() {
     let world = TestWorld::start(dir.path());
     let (mut player, _out) = session_with_outbound(&world, 78);
     let slot = Inventory::hotbar_slot(0);
-    player
-        .inventory_mut()
-        .set_slot(slot, Some(ItemStack::new(Item::GoatHorn, 1)));
+    player.inventory_mut().set_slot(
+        slot,
+        Some(ItemStack::mint(Item::GoatHorn, 1, MintReason::Test)),
+    );
     assert!(!player.on_cooldown(Item::GoatHorn));
     player.use_item(false).await;
     assert!(player.on_cooldown(Item::GoatHorn));

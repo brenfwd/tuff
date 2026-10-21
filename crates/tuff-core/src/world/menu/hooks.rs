@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::DupUnchecked;
 
 /// What a cartography table's second slot accepts.
 pub fn is_cartography_additional(stack: &ItemStack) -> bool {
@@ -35,8 +36,14 @@ pub fn grid_of(
 ) -> Vec<Option<ItemStack>> {
     let (range, _, _) = kind.grid().expect("a crafting menu");
     match kind {
-        MenuKind::Player => inventory.slots()[range].to_vec(),
-        _ => container[range].to_vec(),
+        MenuKind::Player => inventory.slots()[range]
+            .iter()
+            .map(DupUnchecked::dup_unchecked)
+            .collect::<Vec<_>>(),
+        _ => container[range]
+            .iter()
+            .map(DupUnchecked::dup_unchecked)
+            .collect::<Vec<_>>(),
     }
 }
 
@@ -124,8 +131,13 @@ impl ResultHook for GridHook {
             .grid_recipe(&grid, width, height)
             .and_then(|name| self.recipes.resolve(name))
         {
-            self.crafted
-                .push((recipe, grid.iter().flatten().cloned().collect()));
+            self.crafted.push((
+                recipe,
+                grid.iter()
+                    .flatten()
+                    .map(DupUnchecked::dup_unchecked)
+                    .collect(),
+            ));
         }
         for leftover in self.recipes.take_result(&mut grid, width, height) {
             if let Some(dropped) = inventory.add(leftover) {
@@ -174,12 +186,12 @@ impl ResultHook for StonecutterHook {
             container[stonecutter::INPUT].as_ref(),
         ) {
             let name = self.recipes.resolve(name).expect("a recipe of this set");
-            self.crafted.push((name, vec![input.clone()]));
+            self.crafted.push((name, vec![input.dup_unchecked()]));
         }
         let remaining = match container[stonecutter::INPUT].as_mut() {
             Some(input) => {
-                input.count -= 1;
-                input.count > 0
+                input.shrink(1, BurnReason::CraftingInput);
+                input.count() > 0
             }
             None => false,
         };
@@ -210,8 +222,8 @@ impl ResultHook for LoomHook {
         self.took = true;
         for slot in [loom::BANNER, loom::DYE] {
             if let Some(stack) = container[slot].as_mut() {
-                stack.count -= 1;
-                if stack.count == 0 {
+                stack.shrink(1, BurnReason::CraftingInput);
+                if stack.count() == 0 {
                     container[slot] = None;
                 }
             }
@@ -236,8 +248,8 @@ impl ResultHook for CartographyHook {
         self.took = true;
         for slot in [cartography::MAP, cartography::ADDITIONAL] {
             if let Some(stack) = container[slot].as_mut() {
-                stack.count -= 1;
-                if stack.count == 0 {
+                stack.shrink(1, BurnReason::CraftingInput);
+                if stack.count() == 0 {
                     container[slot] = None;
                 }
             }
@@ -267,7 +279,7 @@ pub fn merchant_sell_item(
         offer = trading::recipe_for(offers, b, a, hint);
     }
     match offer.filter(|i| !offers[*i].is_out_of_stock()) {
-        Some(index) => (Some(index), Some(offers[index].sell.clone())),
+        Some(index) => (Some(index), Some(offers[index].sell.dup_unchecked())),
         None => (active, None),
     }
 }
@@ -328,13 +340,13 @@ pub fn merchant_move_items(
         drops: Vec::new(),
     };
     for slot in [merchant::PAYMENT_A, merchant::PAYMENT_B] {
-        let Some(mut stack) = view.container[slot].clone() else {
+        let Some(mut stack) = view.container[slot].dup_unchecked() else {
             continue;
         };
         if !view.move_into(&mut stack, 3, 39, true) {
             return;
         }
-        view.container[slot] = (stack.count > 0).then_some(stack);
+        view.container[slot] = (stack.count() > 0).then_some(stack);
     }
     if view.container[merchant::PAYMENT_A].is_some()
         || view.container[merchant::PAYMENT_B].is_some()
@@ -347,23 +359,25 @@ pub fn merchant_move_items(
             continue;
         };
         for window in 3..39 {
-            let Some(item) = view.get(window).cloned() else {
+            let Some(item) = view.get(window) else {
                 continue;
             };
-            if !cost.matches(&item) {
+            if !cost.matches(item) {
                 continue;
             }
-            let current = view.container[slot].clone();
-            if current.as_ref().is_some_and(|c| !c.stacks_with(&item)) {
+            if view.container[slot]
+                .as_ref()
+                .is_some_and(|c| !c.stacks_with(item))
+            {
                 continue;
             }
             let max = item.max_stack_size();
-            let have = current.as_ref().map_or(0, |c| c.count);
-            let moved = (max - have).min(item.count);
-            view.container[slot] = Some(item.clone().with_count(have + moved));
-            let left = item.count - moved;
-            *view.get_mut(window) = (left > 0).then(|| item.with_count(left));
-            if have + moved >= max {
+            let have = view.container[slot].as_ref().map_or(0, |c| c.count());
+            let Some(part) = ItemStack::take_from(view.get_mut(window), max - have) else {
+                continue;
+            };
+            ItemStack::put_back(&mut view.container[slot], part);
+            if view.container[slot].as_ref().map_or(0, |c| c.count()) >= max {
                 break;
             }
         }
@@ -400,13 +414,19 @@ impl ResultHook for SmithingHook {
             .map(|slot| container[slot].as_ref());
         if let Some((name, _)) = self.recipes.smithing(inputs[0], inputs[1], inputs[2]) {
             let name = self.recipes.resolve(name).expect("a recipe of this set");
-            self.crafted
-                .push((name, inputs.into_iter().flatten().cloned().collect()));
+            self.crafted.push((
+                name,
+                inputs
+                    .into_iter()
+                    .flatten()
+                    .map(DupUnchecked::dup_unchecked)
+                    .collect(),
+            ));
         }
         for slot in [smithing::TEMPLATE, smithing::BASE, smithing::ADDITION] {
             if let Some(stack) = container[slot].as_mut() {
-                stack.count -= 1;
-                if stack.count == 0 {
+                stack.shrink(1, BurnReason::CraftingInput);
+                if stack.count() == 0 {
                     container[slot] = None;
                 }
             }
@@ -461,9 +481,9 @@ impl ResultHook for AnvilHook {
         self.took = true;
         if self.repair_count > 0 {
             if let Some(stack) = container[anvil::ADDITION].as_mut()
-                && stack.count > self.repair_count
+                && stack.count() > self.repair_count
             {
-                stack.count -= self.repair_count;
+                stack.shrink(self.repair_count, BurnReason::CraftingInput);
             } else {
                 container[anvil::ADDITION] = None;
             }

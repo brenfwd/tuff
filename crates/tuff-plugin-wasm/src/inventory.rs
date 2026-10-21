@@ -183,7 +183,7 @@ fn click(session: &mut PlayerSession, window: i32, slot: i16, button: i8, mode: 
                 slot,
                 click,
                 item: item.unwrap_or_default().to_owned(),
-                count: stack.as_ref().map_or(0, |stack| stack.count),
+                count: stack.as_ref().map_or(0, |stack| stack.count()),
                 cancelled: cancel,
             }),
             Some(who),

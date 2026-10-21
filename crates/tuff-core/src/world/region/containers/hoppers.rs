@@ -1,4 +1,6 @@
 use super::*;
+use tuff_item::item::BurnReason;
+use tuff_item::item::MintReason;
 
 impl RegionActor {
     /// The container block at `pos` as a hopper sees it: its kind and the
@@ -104,7 +106,7 @@ impl RegionActor {
             return;
         };
         let before = std::mem::take(&mut entity.items);
-        let mut items = before.clone();
+        let mut items = before.dup_unchecked();
         let data_before = entity.data();
         let mut data = std::mem::replace(&mut entity.state, block_entity::State::Plain);
         let mut view = block_entity::TickView {
@@ -125,7 +127,7 @@ impl RegionActor {
         entity.state = data;
         let changed_slots: Vec<(usize, Option<ItemStack>)> = (0..entity.items.len())
             .filter(|slot| before[*slot] != entity.items[*slot])
-            .map(|slot| (slot, entity.items[slot].clone()))
+            .map(|slot| (slot, entity.items[slot].dup_unchecked()))
             .collect();
         let data_after = entity.data();
         let changed_data: Vec<(usize, i32)> = data_after
@@ -206,12 +208,17 @@ impl RegionActor {
             face,
             by,
         };
-        if !port.offer(self, &at, &stack.clone().with_count(1)) {
+        let probe = ItemStack::mint_like(&stack, 1, MintReason::Template);
+        let offered = port.offer(self, &at, &probe);
+        probe.burn(BurnReason::Template);
+        if !offered {
             return Insert::Refused(stack);
         }
-        match stack.count {
-            0 | 1 => Insert::Stored,
-            n => Insert::Refused(stack.with_count(n - 1)),
+        let (stored, rest) = stack.split(1);
+        stored.burn(BurnReason::Plugin);
+        match rest {
+            None => Insert::Stored,
+            Some(rest) => Insert::Refused(rest),
         }
     }
 
@@ -242,7 +249,7 @@ impl RegionActor {
                     continue;
                 };
                 let was_empty = entity.is_empty();
-                let mut items = entity.items.clone();
+                let mut items = entity.items.dup_unchecked();
                 let disabled = entity.crafter().map_or(0, |crafter| crafter.disabled);
                 let rest = block_entity::insert(
                     &recipes,
@@ -260,13 +267,13 @@ impl RegionActor {
                 }
                 let slots: Vec<(usize, Option<ItemStack>)> = changed
                     .iter()
-                    .map(|slot| (*slot, items[*slot].clone()))
+                    .map(|slot| (*slot, items[*slot].dup_unchecked()))
                     .collect();
                 (rest, was_empty, slots)
             };
             if !slots.is_empty() {
                 for (slot, stack) in &slots {
-                    self.set_container_slot(*part, *slot, stack.clone());
+                    self.set_container_slot(*part, *slot, stack.dup_unchecked());
                 }
                 self.hopper_cooldown_after_insert(*part, from, was_empty);
                 self.broadcast_slots(*part, slots);
@@ -298,16 +305,18 @@ impl RegionActor {
         }
         let entity = self.block_entity(pos)?;
         let (slot, mut held) = entity.items.iter().enumerate().find_map(|(slot, s)| {
-            Some((slot, s.as_ref().filter(|s| s.stacks_with(stack))?.clone()))
+            Some((
+                slot,
+                s.as_ref().filter(|s| s.stacks_with(stack))?.dup_unchecked(),
+            ))
         })?;
-        let count = stack.count.min(held.count);
+        let count = stack.count().min(held.count());
         if count == 0 {
             return None;
         }
-        let taken = held.clone().with_count(count);
-        held.count -= count;
-        let value = (held.count > 0).then_some(held);
-        self.write_container_slot(pos, slot, value.clone());
+        let taken = held.take(count);
+        let value = (held.count() > 0).then_some(held);
+        self.write_container_slot(pos, slot, value.dup_unchecked());
         self.broadcast_slots(pos, vec![(slot, value)]);
         Some((slot, taken))
     }
@@ -343,12 +352,12 @@ impl RegionActor {
                 rest = Some(stack);
                 continue;
             };
-            let before = observed.then(|| entity.items.clone());
+            let before = observed.then(|| entity.items.dup_unchecked());
             let mut changed = Vec::new();
             let (left, ended) = block_entity::golem_place(&mut entity.items, stack, &mut changed);
             let slots = changed
                 .iter()
-                .map(|slot| (*slot, entity.items[*slot].clone()))
+                .map(|slot| (*slot, entity.items[*slot].dup_unchecked()))
                 .collect();
             self.report_block_slots(part, before, &changed);
             self.broadcast_slots(part, slots);
@@ -384,7 +393,7 @@ impl RegionActor {
             let Some(one) = self
                 .block_entity(pos)
                 .and_then(|entity| entity.items[slot].as_ref())
-                .map(|stack| stack.clone().with_count(1))
+                .map(|stack| stack.dup_count_unchecked(1))
             else {
                 continue;
             };
@@ -408,7 +417,7 @@ impl RegionActor {
                 let Some(one) = self
                     .block_entity(pos)
                     .and_then(|entity| entity.items[slot].as_ref())
-                    .map(|stack| stack.clone().with_count(1))
+                    .map(|stack| stack.dup_count_unchecked(1))
                 else {
                     continue;
                 };
@@ -434,7 +443,7 @@ impl RegionActor {
                         .part_items(part)
                         .and_then(|items| items[slot].as_ref())
                         .filter(|stack| kind.can_extract(slot, stack, face))
-                        .map(|stack| stack.clone().with_count(1))
+                        .map(|stack| stack.dup_count_unchecked(1))
                     else {
                         continue;
                     };
@@ -486,9 +495,15 @@ impl RegionActor {
             pos.z as f64 + 1.0,
         ];
         for (id, stack) in self.items_in(suck) {
-            let rest = self.insert_into(ContainerKind::Hopper, &[pos], None, stack.clone(), None);
+            let rest = self.insert_into(
+                ContainerKind::Hopper,
+                &[pos],
+                None,
+                stack.dup_unchecked(),
+                None,
+            );
             match rest {
-                Some(rest) if rest.count == stack.count => continue,
+                Some(rest) if rest.count() == stack.count() => continue,
                 Some(rest) => {
                     self.set_item_stack(id, rest);
                     return true;

@@ -9,6 +9,7 @@
 //! zombified piglin nearby hold a grudge against the attacker.
 
 use rand::Rng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -26,7 +27,7 @@ use tuff_core::world::entity::{
     Effect, EntityInteraction, InteractOutcome, NearbyPlayer, TickContext,
 };
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 const BARTER_TABLE: &str = "minecraft:gameplay/piglin_bartering";
 /// Ticks a piglin admires the gold it was handed.
@@ -106,19 +107,17 @@ impl PiglinBrain {
             || self
                 .inventory
                 .iter()
-                .any(|s| s.item == item && s.count < s.item.max_stack_size())
+                .any(|s| s.item == item && s.count() < s.item.max_stack_size())
     }
 
     fn add(&mut self, mut stack: ItemStack) -> Option<ItemStack> {
         for held in &mut self.inventory {
             if held.item == stack.item && held.components == stack.components {
-                let room = held.item.max_stack_size().saturating_sub(held.count);
-                let moved = room.min(stack.count);
-                held.count += moved;
-                stack.count -= moved;
+                let room = held.item.max_stack_size().saturating_sub(held.count());
+                held.transfer(&mut stack, room);
             }
         }
-        if stack.count == 0 {
+        if stack.count() == 0 {
             return None;
         }
         if self.inventory.len() < INVENTORY_SLOTS {
@@ -841,7 +840,7 @@ impl Piglin {
     /// fit is thrown.
     fn equip_or_store(&mut self, core: &mut MobCore, stack: ItemStack, cx: &mut TickContext) {
         if let Some(slot) = replaces_current(core, stack.item) {
-            if let Some(old) = core.equipment.get(slot).cloned() {
+            if let Some(old) = core.equipment.get(slot).map(DupUnchecked::dup_unchecked) {
                 core.drop_item(old, 0.0, cx);
             }
             core.equipment.set(slot, Some(stack));
@@ -857,7 +856,7 @@ impl Piglin {
     /// Holds `stack` in its off hand (dropping what was there) and
     /// admires it.
     fn hold_and_admire(&mut self, core: &mut MobCore, stack: ItemStack, cx: &mut TickContext) {
-        if let Some(held) = core.equipment.get(EquipmentSlot::Offhand).cloned() {
+        if let Some(held) = offhand_copy(core) {
             core.drop_item(held, 0.0, cx);
         }
         core.equipment.set(EquipmentSlot::Offhand, Some(stack));
@@ -873,7 +872,7 @@ impl Piglin {
     /// The admiring is over: gold is traded for its barter, anything
     /// else it loves is worn or pocketed.
     fn finish_admiring(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        let Some(held) = core.equipment.get(EquipmentSlot::Offhand).cloned() else {
+        let Some(held) = offhand_copy(core) else {
             return;
         };
         core.equipment.set(EquipmentSlot::Offhand, None);
@@ -1009,7 +1008,7 @@ impl Species for Piglin {
         if let Some(tuff_nbt::Tag::List(list)) = nbt.remove("Inventory") {
             core.piglin.inventory = list
                 .iter()
-                .filter_map(|tag| ItemStack::from_nbt(tag.as_compound()?))
+                .filter_map(|tag| ItemStack::from_storage(tag.as_compound()?))
                 .take(INVENTORY_SLOTS)
                 .collect();
         }
@@ -1129,7 +1128,8 @@ impl Species for Piglin {
         {
             return None;
         }
-        self.hold_and_admire(core, ItemStack::new(Item::GoldIngot, 1), cx);
+        let gold = ItemStack::mint(Item::GoldIngot, 1, MintReason::Transform);
+        self.hold_and_admire(core, gold, cx);
         Some(HandEffect::Consume(1))
     }
 
@@ -1143,7 +1143,7 @@ impl Species for Piglin {
         core.piglin.celebrate = None;
         if core.piglin.admire > 0 {
             core.piglin.admire = 0;
-            if let Some(held) = core.equipment.get(EquipmentSlot::Offhand).cloned() {
+            if let Some(held) = offhand_copy(core) {
                 core.equipment.set(EquipmentSlot::Offhand, None);
                 if held.item != Item::GoldIngot {
                     self.equip_or_store(core, held, cx);
@@ -1206,8 +1206,10 @@ impl Species for Piglin {
                 } else {
                     Item::GoldenSword
                 };
-                core.equipment
-                    .set(EquipmentSlot::Mainhand, Some(ItemStack::new(weapon, 1)));
+                core.equipment.set(
+                    EquipmentSlot::Mainhand,
+                    Some(ItemStack::mint(weapon, 1, MintReason::Spawn)),
+                );
             }
         }
         if !core.is_baby() {
@@ -1218,7 +1220,8 @@ impl Species for Piglin {
                 (EquipmentSlot::Feet, Item::GoldenBoots),
             ] {
                 if cx.rng.r#gen::<f32>() < ARMOR_CHANCE {
-                    core.equipment.set(slot, Some(ItemStack::new(item, 1)));
+                    core.equipment
+                        .set(slot, Some(ItemStack::mint(item, 1, MintReason::Spawn)));
                 }
             }
         }
@@ -1380,7 +1383,7 @@ impl Species for PiglinBrute {
         });
         core.equipment.set(
             EquipmentSlot::Mainhand,
-            Some(ItemStack::new(Item::GoldenAxe, 1)),
+            Some(ItemStack::mint(Item::GoldenAxe, 1, MintReason::Spawn)),
         );
     }
 }
@@ -1485,3 +1488,9 @@ pub use zombified::*;
 #[cfg(test)]
 #[path = "piglin_tests.rs"]
 pub(crate) mod tests;
+
+fn offhand_copy(core: &MobCore) -> Option<ItemStack> {
+    core.equipment
+        .get(EquipmentSlot::Offhand)
+        .map(DupUnchecked::dup_unchecked)
+}

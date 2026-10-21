@@ -85,12 +85,12 @@ impl ClickBefore {
             seen.push(index);
             if let Some(stack) = stack_at(index) {
                 bundle |= stack.is_bundle();
-                add(&mut totals, stack.item, u32::from(stack.count));
+                add(&mut totals, stack.item, u32::from(stack.count()));
             }
         }
         if let Some(stack) = session.inventory.carried() {
             bundle |= stack.is_bundle();
-            add(&mut totals, stack.item, u32::from(stack.count));
+            add(&mut totals, stack.item, u32::from(stack.count()));
         }
         let result = kind.result_slot();
         let on_result = result
@@ -137,7 +137,7 @@ pub fn tampered(stack: tuff_item::item::ItemView<'_>) -> Option<Tamper> {
 
 fn walk(stack: tuff_item::item::ItemView<'_>, bytes: &mut usize) -> Result<(), Tamper> {
     let max = stack.max_stack_size();
-    if stack.count == 0 || stack.count > max {
+    if stack.count() == 0 || stack.count() > max {
         return Err(Tamper::Count);
     }
     if max > 1 && stack.max_damage().is_some() {
@@ -302,6 +302,7 @@ impl Check for ItemIntegrity {
 mod tests {
     use super::super::facts;
     use super::*;
+    use tuff_item::item::MintReason;
     use tuff_nbt::Compound;
 
     fn creative(stack: CreativeSlot) -> Serverbound {
@@ -313,7 +314,7 @@ mod tests {
     }
 
     fn with_data(item: Item, data: Tag) -> ItemStack {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         stack.components.other.insert("minecraft:custom_data", data);
         stack
     }
@@ -328,14 +329,17 @@ mod tests {
     #[test]
     fn plain_and_reasonable_creative_stacks_pass() {
         let f = facts();
-        let stone = ItemStack::new(Item::Stone, 64);
+        let stone = ItemStack::mint(Item::Stone, 64, MintReason::Test);
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Stack(stone))), None);
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Empty)), None);
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Unsupported)), None);
         let data = with_data(Item::Stick, nested(MAX_NBT_DEPTH - 1));
         assert_eq!(tampered(data.view()), None);
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
-        shulker.components.container = Some(vec![Some(ItemStack::new(Item::Dirt, 64)), None]);
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
+        shulker.components.container = Some(vec![
+            Some(ItemStack::mint(Item::Dirt, 64, MintReason::Test)),
+            None,
+        ]);
         assert_eq!(tampered(shulker.view()), None);
     }
 
@@ -347,23 +351,27 @@ mod tests {
             flag_of(&f, &creative(CreativeSlot::Invalid)),
             Some(STACK_COUNT)
         );
-        let swords = ItemStack::new(Item::DiamondSword, 2);
+        let swords = ItemStack::mint(Item::DiamondSword, 2, MintReason::Test);
         assert_eq!(tampered(swords.view()), Some(Tamper::Count));
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
-        shulker.components.container = Some(vec![None, Some(ItemStack::new(Item::Dirt, 65))]);
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
+        shulker.components.container = Some(vec![
+            None,
+            Some(ItemStack::mint(Item::Dirt, 65, MintReason::Test)),
+        ]);
         assert_eq!(
             flag_of(&f, &creative(CreativeSlot::Stack(shulker))),
             Some(STACK_COUNT)
         );
-        let mut crossbow = ItemStack::new(Item::Crossbow, 1);
-        crossbow.components.charged_projectiles = Some(vec![ItemStack::new(Item::Arrow, 0)]);
+        let mut crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
+        crossbow.components.charged_projectiles =
+            Some(vec![ItemStack::mint(Item::Arrow, 0, MintReason::Test)]);
         assert_eq!(tampered(crossbow.view()), Some(Tamper::Count));
     }
 
     #[tuff_core::watchdog]
     #[test]
     fn stackable_tools_are_tampered() {
-        let mut sword = ItemStack::new(Item::DiamondSword, 1);
+        let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         sword
             .components
             .other
@@ -386,8 +394,12 @@ mod tests {
             Some(Tamper::NbtSize)
         );
         let small = Tag::List(vec![Tag::String("x".repeat(1024)); 100]);
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
-        shulker.components.container = Some(vec![Some(with_data(Item::Stick, small.clone())); 3]);
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
+        shulker.components.container = Some(
+            (0..3)
+                .map(|_| Some(with_data(Item::Stick, small.clone())))
+                .collect(),
+        );
         assert_eq!(tampered(shulker.view()), Some(Tamper::NbtSize));
         assert_eq!(tampered(with_data(Item::Stick, small).view()), None);
         assert_eq!(

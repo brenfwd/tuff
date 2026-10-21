@@ -668,7 +668,10 @@ async fn a_galloping_jumping_horse_is_not_set_back_and_a_sped_up_one_is() {
         .with("Tame", true)
         .with(
             "equipment",
-            Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+            Compound::new().with(
+                "saddle",
+                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            ),
         )
         .with(
             "attributes",
@@ -731,7 +734,10 @@ async fn a_horse_may_jump_but_not_fly() {
         .with("Tame", true)
         .with(
             "equipment",
-            Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+            Compound::new().with(
+                "saddle",
+                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            ),
         )
         .with(
             "attributes",
@@ -785,7 +791,10 @@ async fn a_camel_that_flies_or_sprints_past_its_speed_is_set_back() {
     track(&mut w, &world, Block::Stone, None).await;
     let nbt = Compound::new().with("Tame", true).with(
         "equipment",
-        Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+        Compound::new().with(
+            "saddle",
+            ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+        ),
     );
     let _ = Tag::Byte(0);
     let start = [w.x - 10.0, 101.0, w.z];
@@ -865,7 +874,10 @@ fn saddled_tame() -> Compound {
         .with("Tame", true)
         .with(
             "equipment",
-            Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+            Compound::new().with(
+                "saddle",
+                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            ),
         )
 }
 
@@ -1004,7 +1016,7 @@ async fn run_past_the_server_run(
     if let Some(item) = held {
         w.session.inventory_mut().set_slot(
             tuff_core::world::inventory::Inventory::hotbar_slot(0),
-            Some(ItemStack::new(item, 1)),
+            Some(ItemStack::mint(item, 1, MintReason::Test)),
         );
     }
     let start = [w.x - 19.0, 101.0, w.z];
@@ -1035,7 +1047,10 @@ async fn a_camel_pig_and_strider_driven_far_past_their_run_are_held_to_it() {
     assert!(gain < 7.0 && corrections > 0, "camel {gain} {corrections}");
     let saddled = Compound::new().with(
         "equipment",
-        Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+        Compound::new().with(
+            "saddle",
+            ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+        ),
     );
     let (gain, corrections) = run_past_the_server_run(
         EntityType::Pig,
@@ -1063,7 +1078,10 @@ async fn a_camel_pig_and_strider_driven_far_past_their_run_are_held_to_it() {
 async fn a_harnessed_happy_ghast_driven_far_past_its_flight_is_held_to_it() {
     let harness = Compound::new().with(
         "equipment",
-        Compound::new().with("body", ItemStack::new(Item::WhiteHarness, 1).to_nbt()),
+        Compound::new().with(
+            "body",
+            ItemStack::mint(Item::WhiteHarness, 1, MintReason::Test).to_nbt(),
+        ),
     );
     let (gain, corrections) =
         run_past_the_server_run(EntityType::HappyGhast, harness, None, 39).await;

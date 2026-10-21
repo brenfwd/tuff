@@ -117,7 +117,7 @@ async fn mined_ore_drops_its_experience_unless_silk_touched() {
     .await;
     assert!(matches!(result, BlockOpResult::Set(2)));
 
-    let mut silk = ItemStack::new(Item::IronPickaxe, 1);
+    let mut silk = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     silk.components.enchantments =
         Some(Enchantments::new([("minecraft:silk_touch".to_owned(), 1)]));
     region
@@ -146,7 +146,7 @@ async fn mined_ore_drops_its_experience_unless_silk_touched() {
         .request(RegionRequest::Break {
             player: viewer.clone(),
             pos: ore,
-            tool: Some(ItemStack::new(Item::IronPickaxe, 1)),
+            tool: Some(ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test)),
             mode: BreakMode::Finish,
             sequence: 2,
         })
@@ -278,11 +278,11 @@ async fn directives_change_the_players_inventory_and_experience() {
     let world = TestWorld::start(dir.path());
     let (mut session, _outbound) = session(&world, 7);
 
-    let stone = ItemStack::new(Item::Stone, 1);
+    let stone = ItemStack::mint(Item::Stone, 1, MintReason::Test);
     let reply = session
         .apply_directive(
             Directive::Give {
-                stack: stone.clone(),
+                stack: stone.dup_unchecked(),
                 count: 70,
             },
             source(),
@@ -295,7 +295,7 @@ async fn directives_change_the_players_inventory_and_experience() {
         .iter()
         .flatten()
         .filter(|s| s.item == Item::Stone)
-        .map(|s| s.count)
+        .map(|s| s.count())
         .collect();
     assert_eq!(stacks, [64, 6], "the game splits gifts into full stacks");
 
@@ -334,7 +334,7 @@ async fn directives_change_the_players_inventory_and_experience() {
         .slots()
         .iter()
         .flatten()
-        .map(|s| s.count)
+        .map(|s| s.count())
         .sum();
     assert_eq!(left, 60);
     let rest = session
@@ -440,9 +440,10 @@ async fn enchant_checks_the_held_item_like_the_game() {
         Some("commands.enchant.failed.itemless")
     );
     let hand = crate::world::inventory::Inventory::hotbar_slot(0);
-    session
-        .inventory_mut()
-        .set_slot(hand, Some(ItemStack::new(Item::DiamondSword, 1)));
+    session.inventory_mut().set_slot(
+        hand,
+        Some(ItemStack::mint(Item::DiamondSword, 1, MintReason::Test)),
+    );
     let sharp = session
         .apply_directive(
             Directive::Enchant {
@@ -484,9 +485,10 @@ async fn enchant_checks_the_held_item_like_the_game() {
         )
         .await;
     assert!(unbreaking.affected);
-    session
-        .inventory_mut()
-        .set_slot(hand, Some(ItemStack::new(Item::Stone, 1)));
+    session.inventory_mut().set_slot(
+        hand,
+        Some(ItemStack::mint(Item::Stone, 1, MintReason::Test)),
+    );
     let stone = session
         .apply_directive(
             Directive::Enchant {
@@ -510,7 +512,7 @@ async fn mending_spends_orb_experience_on_a_damaged_item_before_granting_xp() {
     let world = TestWorld::start(dir.path());
     let (mut session, _outbound) = session(&world, 10);
     let hand = crate::world::inventory::Inventory::hotbar_slot(0);
-    let mut pick = ItemStack::new(Item::DiamondPickaxe, 1);
+    let mut pick = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     pick.set_damage(10);
     pick.components.enchantments = Some(Enchantments::new([("minecraft:mending".to_owned(), 1)]));
     session.inventory_mut().set_slot(hand, Some(pick));

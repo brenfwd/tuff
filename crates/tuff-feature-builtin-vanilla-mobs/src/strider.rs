@@ -15,7 +15,7 @@ use super::physics::block_pos;
 use super::{MobCore, MobSounds, Species, data};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::entity::{EntityInteraction, InteractOutcome, RiderInput, TickContext};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_world_model::BlockPos;
 
 const BOOST_TIME: u8 = data::SPECIES;
@@ -196,14 +196,15 @@ impl Species for Strider {
                         "equipment",
                         tuff_nbt::Compound::new().with(
                             "mainhand",
-                            ItemStack::new(Item::WarpedFungusOnAStick, 1).to_nbt(),
+                            ItemStack::mint(Item::WarpedFungusOnAStick, 1, MintReason::Spawn)
+                                .to_nbt(),
                         ),
                     )
                     .with(tuff_core::world::entity::FINALIZE_SPAWN, true),
             );
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Saddle,
-                Some(ItemStack::new(Item::Saddle, 1)),
+                Some(ItemStack::mint(Item::Saddle, 1, MintReason::Spawn)),
             );
             core.equipment.set_drop_chance(
                 tuff_vanilla_data::item::EquipmentSlot::Saddle,
@@ -225,7 +226,7 @@ impl Species for Strider {
         {
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Saddle,
-                Some(ItemStack::new(Item::Saddle, 1)),
+                Some(ItemStack::mint(Item::Saddle, 1, MintReason::Spawn)),
             );
         }
     }

@@ -4,6 +4,7 @@
 use super::RegionActor;
 use super::sim::BlockWatchers;
 use crate::world::region_api::{ContainerEdit, ContainerHolder, SlotEdit};
+use tuff_item::item::DupUnchecked;
 use tuff_item::item::ItemStack;
 use tuff_world_model::BlockPos;
 
@@ -57,7 +58,7 @@ impl RegionActor {
         else {
             return false;
         };
-        let new = observed.then(|| stack.clone());
+        let new = observed.then(|| stack.dup_unchecked());
         let old = std::mem::replace(current, stack);
         if let Some(new) = new {
             self.report_container_edit(
@@ -73,13 +74,13 @@ impl RegionActor {
     pub(super) fn take_one(&mut self, pos: BlockPos, slot: usize) {
         let Some(mut rest) = self
             .block_entity(pos)
-            .and_then(|entity| entity.items.get(slot)?.clone())
+            .and_then(|entity| entity.items.get(slot)?.dup_unchecked())
         else {
             return;
         };
-        rest.count -= 1;
-        let rest = (rest.count > 0).then_some(rest);
-        self.write_container_slot(pos, slot, rest.clone());
+        rest.set_count_unchecked(rest.count() - 1);
+        let rest = (rest.count() > 0).then_some(rest);
+        self.write_container_slot(pos, slot, rest.dup_unchecked());
         self.broadcast_slots(pos, vec![(slot, rest)]);
     }
 
@@ -102,8 +103,8 @@ impl RegionActor {
             .filter_map(|&slot| {
                 Some(SlotEdit {
                     slot,
-                    old: before.get(slot)?.clone(),
-                    new: items.get(slot)?.clone(),
+                    old: before.get(slot)?.dup_unchecked(),
+                    new: items.get(slot)?.dup_unchecked(),
                 })
             })
             .collect();
@@ -137,7 +138,7 @@ impl RegionActor {
             return false;
         }
         for (slot, stack) in &slots {
-            self.set_container_slot(pos, *slot, stack.clone());
+            self.set_container_slot(pos, *slot, stack.dup_unchecked());
         }
         self.broadcast_slots(pos, slots);
         true
@@ -224,11 +225,11 @@ impl RegionActor {
         }
         let mut edits = Vec::with_capacity(slots.len());
         for (slot, stack) in &slots {
-            let old = std::mem::replace(&mut items[*slot], stack.clone());
+            let old = std::mem::replace(&mut items[*slot], stack.dup_unchecked());
             edits.push(SlotEdit {
                 slot: *slot,
                 old,
-                new: stack.clone(),
+                new: stack.dup_unchecked(),
             });
         }
         if let Some(holder) = holder {

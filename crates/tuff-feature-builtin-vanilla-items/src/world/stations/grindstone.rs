@@ -54,7 +54,7 @@ fn merged(input: &ItemStack, additional: &ItemStack) -> Option<ItemStack> {
         }
         count = 2;
     }
-    let mut result = input.clone().with_count(count);
+    let mut result = input.dup_count_unchecked(count);
     if result.is_damageable() {
         result.components.max_damage = Some(durability);
         result.set_damage(durability.saturating_sub(remaining));
@@ -86,13 +86,13 @@ pub fn compute(input: Option<&ItemStack>, additional: Option<&ItemStack>) -> Opt
     if input.is_none() && additional.is_none() {
         return None;
     }
-    if input.is_some_and(|s| s.count > 1) || additional.is_some_and(|s| s.count > 1) {
+    if input.is_some_and(|s| s.count() > 1) || additional.is_some_and(|s| s.count() > 1) {
         return None;
     }
     match (input, additional) {
         (Some(input), Some(additional)) => merged(input, additional),
         (Some(only), None) | (None, Some(only)) => {
-            holds_enchantments(only).then(|| without_non_curses(only.clone()))
+            holds_enchantments(only).then(|| without_non_curses(only.dup_unchecked()))
         }
         (None, None) => None,
     }
@@ -122,9 +122,10 @@ pub fn award(amount: i32, rng: &mut (impl Rng + ?Sized)) -> i32 {
 mod tests {
     use super::*;
     use tuff_item::item::Enchantments;
+    use tuff_item::item::MintReason;
 
     fn enchanted(item: Item, entries: &[(&str, i32)]) -> ItemStack {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         let list = Enchantments::new(entries.iter().map(|(id, level)| (id.to_string(), *level)));
         if item == Item::EnchantedBook {
             stack.components.stored_enchantments = Some(list);
@@ -146,7 +147,13 @@ mod tests {
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].0, "minecraft:vanishing_curse");
         assert_eq!(out.components.repair_cost, Some(1));
-        assert!(compute(Some(&ItemStack::new(Item::IronSword, 1)), None).is_none());
+        assert!(
+            compute(
+                Some(&ItemStack::mint(Item::IronSword, 1, MintReason::Test)),
+                None
+            )
+            .is_none()
+        );
     }
 
     #[tuff_core::watchdog]
@@ -161,21 +168,27 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn two_damaged_tools_merge_with_a_five_percent_bonus() {
-        let mut a = ItemStack::new(Item::IronPickaxe, 1);
-        let mut b = ItemStack::new(Item::IronPickaxe, 1);
+        let mut a = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
+        let mut b = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
         let max = a.max_damage().unwrap();
         a.set_damage(max - 10);
         b.set_damage(max - 20);
         let out = compute(Some(&a), Some(&b)).expect("result");
         assert_eq!(out.damage(), max - (30 + max * 5 / 100));
-        assert!(compute(Some(&a), Some(&ItemStack::new(Item::IronSword, 1))).is_none());
+        assert!(
+            compute(
+                Some(&a),
+                Some(&ItemStack::mint(Item::IronSword, 1, MintReason::Test))
+            )
+            .is_none()
+        );
     }
 
     #[tuff_core::watchdog]
     #[test]
     fn stacks_and_unequal_pairs_give_nothing() {
         let mut stack = enchanted(Item::IronSword, &[("minecraft:sharpness", 1)]);
-        stack.count = 2;
+        stack.grow(1, MintReason::Test);
         assert!(compute(Some(&stack), None).is_none());
     }
 

@@ -3,8 +3,8 @@
 //! joined chest from the pair; changes to the far half travel back as
 //! messages the owner applies, so no region ever awaits another.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
+use tuff_item::item::DupUnchecked;
 
 use tuff_vanilla_data::BlockState;
 use tuff_vanilla_data::block::{Facing, Type as ChestType};
@@ -13,7 +13,7 @@ use super::{Column, RegionActor, block_at};
 use crate::world::block_entity::{self, ContainerKind};
 use crate::world::messages::{RegionHandle, RegionInternal};
 use crate::world::placement;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, SlotsCow};
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::Chunk;
 use tuff_world_model::pos::{ChunkMap, ChunkPos};
@@ -44,7 +44,7 @@ pub(super) fn merged_view<'a>(
     halo: &ChunkMap<Chunk>,
     far: &'a Snapshots,
     pos: BlockPos,
-) -> Option<Cow<'a, [Option<ItemStack>]>> {
+) -> Option<SlotsCow<'a>> {
     let own = columns
         .get(&ChunkPos::of_block(pos))?
         .meta
@@ -53,28 +53,28 @@ pub(super) fn merged_view<'a>(
         .items
         .as_slice();
     let Some(state) = block_at(columns, halo, pos) else {
-        return Some(Cow::Borrowed(own));
+        return Some(SlotsCow::Borrowed(own));
     };
     let block = |p| block_at(columns, halo, p);
     let Some(partner) = verified_partner(&block, pos, state) else {
-        return Some(Cow::Borrowed(own));
+        return Some(SlotsCow::Borrowed(own));
     };
     let other = match columns.get(&ChunkPos::of_block(partner)) {
         Some(column) => column.meta.block_entities.get(&partner).map(|e| &e.items),
         None => far.get(&partner).and_then(Option::as_ref),
     };
     let Some(other) = other else {
-        return Some(Cow::Borrowed(own));
+        return Some(SlotsCow::Borrowed(own));
     };
     let mut joined = Vec::with_capacity(own.len() + other.len());
     if state.r#type() == Some(ChestType::Left) {
-        joined.extend(other.iter().cloned());
-        joined.extend(own.iter().cloned());
+        joined.extend(other.iter().map(DupUnchecked::dup_unchecked));
+        joined.extend(own.iter().map(DupUnchecked::dup_unchecked));
     } else {
-        joined.extend(own.iter().cloned());
-        joined.extend(other.iter().cloned());
+        joined.extend(own.iter().map(DupUnchecked::dup_unchecked));
+        joined.extend(other.iter().map(DupUnchecked::dup_unchecked));
     }
-    Some(Cow::Owned(joined))
+    Some(SlotsCow::Owned(joined))
 }
 
 impl RegionActor {
@@ -160,7 +160,7 @@ impl RegionActor {
                     let Some(entity) = self.block_entity(*pos) else {
                         continue;
                     };
-                    let items = entity.items.clone();
+                    let items = entity.items.dup_unchecked();
                     if let Some(neighbour) = self.border.region_of_neighbour(partner) {
                         neighbour.internal(RegionInternal::HalfSnapshot {
                             pos: *pos,
@@ -202,7 +202,10 @@ impl RegionActor {
     pub(super) fn half_requested(&mut self, pos: BlockPos, reply: RegionHandle) {
         let items = self
             .owns(pos)
-            .then(|| self.block_entity(pos).map(|entity| entity.items.clone()))
+            .then(|| {
+                self.block_entity(pos)
+                    .map(|entity| entity.items.dup_unchecked())
+            })
             .flatten();
         reply.internal(RegionInternal::HalfSnapshot { pos, items });
     }
@@ -269,7 +272,7 @@ impl RegionActor {
         if !reply.internal(RegionInternal::HalfDrained {
             golem,
             at,
-            stack: taken.clone(),
+            stack: taken.dup_unchecked(),
         }) {
             self.undrain(pos, slot, taken);
         }
@@ -279,18 +282,20 @@ impl RegionActor {
     pub(super) fn undrain(&mut self, pos: BlockPos, slot: usize, stack: ItemStack) {
         let current = self
             .block_entity(pos)
-            .and_then(|entity| entity.items.get(slot).cloned())
+            .and_then(|entity| entity.items.get(slot).map(DupUnchecked::dup_unchecked))
             .flatten();
         match current {
             None => {
-                self.write_container_slot(pos, slot, Some(stack.clone()));
+                self.write_container_slot(pos, slot, Some(stack.dup_unchecked()));
                 self.broadcast_slots(pos, vec![(slot, Some(stack))]);
             }
-            Some(mut held) if held.stacks_with(&stack) => {
-                held.count = held.count.saturating_add(stack.count);
-                self.write_container_slot(pos, slot, Some(held.clone()));
-                self.broadcast_slots(pos, vec![(slot, Some(held))]);
-            }
+            Some(mut held) if held.stacks_with(&stack) => match held.join(stack) {
+                Ok(()) => {
+                    self.write_container_slot(pos, slot, Some(held.dup_unchecked()));
+                    self.broadcast_slots(pos, vec![(slot, Some(held))]);
+                }
+                Err(stack) => self.spill_stack(pos, stack),
+            },
             Some(_) => self.spill_stack(pos, stack),
         }
     }
@@ -318,11 +323,11 @@ impl RegionActor {
         if !kind.can_extract(slot, stack, face) {
             return;
         }
-        let one = stack.clone().with_count(1);
+        let one = stack.dup_count_unchecked(1);
         self.take_one(pos, slot);
         if !reply.internal(RegionInternal::HalfPulled {
             hopper,
-            stack: one.clone(),
+            stack: one.dup_unchecked(),
         }) {
             self.undrain(pos, slot, one);
         }
@@ -350,7 +355,10 @@ impl RegionActor {
         let Some(items) = self.part_items(part) else {
             return false;
         };
-        let mut items = items.to_vec();
+        let mut items = items
+            .iter()
+            .map(DupUnchecked::dup_unchecked)
+            .collect::<Vec<_>>();
         let mut changed = Vec::new();
         let disabled = self
             .block_entity(part)
@@ -361,7 +369,7 @@ impl RegionActor {
             kind,
             &mut items,
             face,
-            stack.clone(),
+            stack.dup_unchecked(),
             &mut changed,
             disabled,
         )
@@ -396,14 +404,14 @@ impl RegionActor {
                 if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(part)
                     && let Some(held) = items[slot].as_mut()
                 {
-                    held.count = held.count.saturating_sub(stack.count);
-                    if held.count == 0 {
+                    held.set_count_unchecked(held.count().saturating_sub(stack.count()));
+                    if held.count() == 0 {
                         items[slot] = None;
                     }
                 }
                 neighbour.internal(RegionInternal::HalfDrain {
                     pos: *part,
-                    stack: stack.clone(),
+                    stack: stack.dup_unchecked(),
                     golem,
                     at,
                     reply: self.handle.clone(),
@@ -429,26 +437,26 @@ impl RegionActor {
         let Some(Some(items)) = self.sim.redstone.far_halves.get(&part) else {
             return Some(stack);
         };
-        let mut items = items.clone();
-        let before = stack.count;
+        let mut items = items.dup_unchecked();
+        let before = stack.count();
         let mut changed = Vec::new();
         let rest = block_entity::insert(
             &self.shared.recipes(),
             kind,
             &mut items,
             face,
-            stack.clone(),
+            stack.dup_unchecked(),
             &mut changed,
             0,
         );
-        let inserted = before - rest.as_ref().map_or(0, |rest| rest.count);
+        let inserted = before - rest.as_ref().map_or(0, |rest| rest.count());
         if inserted == 0 {
             return rest;
         }
         if !neighbour.internal(RegionInternal::HalfInsert {
             pos: part,
             face,
-            stack: stack.clone().with_count(inserted),
+            stack: stack.dup_count_unchecked(inserted),
             cause: self.sim.cause,
         }) {
             return Some(stack);
@@ -462,8 +470,8 @@ impl RegionActor {
         if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(&part)
             && let Some(stack) = items[slot].as_mut()
         {
-            stack.count -= 1;
-            if stack.count == 0 {
+            stack.set_count_unchecked(stack.count() - 1);
+            if stack.count() == 0 {
                 items[slot] = None;
             }
         }

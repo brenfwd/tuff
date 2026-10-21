@@ -649,17 +649,22 @@ async fn brewing_stands_brew_with_blaze_powder_and_show_their_bottles() {
     let MenuSource::Blocks { contents, data, .. } = open.source else {
         panic!("a brewing stand is a block container");
     };
-    assert_eq!(contents, vec![None; 5]);
+    assert_eq!(
+        contents,
+        (0..5).map(|_| None).collect::<Vec<Option<ItemStack>>>()
+    );
     assert_eq!(data, vec![0; 4]);
 
     let potion = |item: Item, potion: Potion| {
-        Some(ItemStack::new(item, 1).with_components(ComponentPatch {
-            potion_contents: Some(Box::new(PotionContents {
-                potion: Some(potion),
+        Some(
+            ItemStack::mint(item, 1, MintReason::Test).with_components(ComponentPatch {
+                potion_contents: Some(Box::new(PotionContents {
+                    potion: Some(potion),
+                    ..Default::default()
+                })),
                 ..Default::default()
-            })),
-            ..Default::default()
-        }))
+            }),
+        )
     };
     let change = |slot: usize, new: Option<ItemStack>| ContainerChange {
         pos: block,
@@ -675,9 +680,12 @@ async fn brewing_stands_brew_with_blaze_powder_and_show_their_bottles() {
                 change(1, potion(Item::Potion, Potion::Water)),
                 change(
                     brewing::INGREDIENT,
-                    Some(ItemStack::new(Item::NetherWart, 1)),
+                    Some(ItemStack::mint(Item::NetherWart, 1, MintReason::Test)),
                 ),
-                change(brewing::FUEL, Some(ItemStack::new(Item::BlazePowder, 1))),
+                change(
+                    brewing::FUEL,
+                    Some(ItemStack::mint(Item::BlazePowder, 1, MintReason::Test)),
+                ),
             ],
             took_result: false,
         })

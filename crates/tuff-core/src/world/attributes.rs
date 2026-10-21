@@ -445,6 +445,7 @@ pub fn modifier_operation(
 mod tests {
     use super::*;
     use crate::world::messages::{AttributeAnswer, AttributeCommand, AttributeOp};
+    use tuff_item::item::MintReason;
 
     #[tuff_core::watchdog]
     #[test]
@@ -485,7 +486,7 @@ mod tests {
         use tuff_vanilla_data::Item;
         use tuff_vanilla_data::item::EquipmentSlot;
         for item in [Item::CarvedPumpkin, Item::ZombieHead, Item::DragonHead] {
-            let stack = ItemStack::new(item, 1);
+            let stack = ItemStack::mint(item, 1, MintReason::Test);
             let worn = [(EquipmentSlot::Head, &stack)];
             let hidden = Modifiers::equipment(&worn).value(Attribute::WaypointTransmitRange);
             assert_eq!(hidden, 0.0, "{item:?}");

@@ -1,6 +1,7 @@
 //! Riding vehicles: boats and other seated entities.
 
 use crate::world::messages::{GivenMotion, VehicleMotion, VehicleRequest};
+use tuff_item::item::MintReason;
 
 use tuff_vanilla_data::registry::EntityType;
 
@@ -448,8 +449,10 @@ impl PlayerSession {
         let wear = if item == Item::CarrotOnAStick { 7 } else { 1 };
         self.hurt_hand(off_hand, wear).await;
         if !self.mode.abilities.instabuild && self.inventory.hand(off_hand).is_none() {
-            self.inventory
-                .set_hand(off_hand, Some(ItemStack::new(Item::FishingRod, 1)));
+            self.inventory.set_hand(
+                off_hand,
+                Some(ItemStack::mint(Item::FishingRod, 1, MintReason::Transform)),
+            );
             self.send_inventory();
         }
     }

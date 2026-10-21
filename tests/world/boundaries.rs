@@ -87,7 +87,7 @@ async fn items_cross_region_boundaries_and_persist_in_the_new_region() {
     let generator = Generator::new(1);
     let y = generator.height(511, 8).max(generator.height(513, 8)) + 3;
     west.request(RegionRequest::SpawnItem {
-        stack: ItemStack::new(Item::Dirt, 4),
+        stack: ItemStack::mint(Item::Dirt, 4, MintReason::Test),
         position: [511.5, y as f64, 8.5],
         velocity: [0.6, 0.0, 0.0],
         pickup_delay: 10_000,
@@ -546,7 +546,7 @@ async fn nearby_players_are_offered_items() {
     region.request(update(&viewer, 1, at)).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 3),
+            stack: ItemStack::mint(Item::Stone, 3, MintReason::Test),
             position: at,
             velocity: [0.0; 3],
             pickup_delay: 0,
@@ -563,14 +563,14 @@ async fn nearby_players_are_offered_items() {
         _ => None,
     })
     .await;
-    assert_eq!(stack, ItemStack::new(Item::Stone, 3));
+    assert_eq!(stack, ItemStack::mint(Item::Stone, 3, MintReason::Test));
     answer(&from, &viewer, item, offer, 3);
     let granted = expect(&mut events, |event| match event {
         PlayerEvent::ItemGranted { stack, .. } => Some(stack),
         _ => None,
     })
     .await;
-    assert_eq!(granted, ItemStack::new(Item::Stone, 3));
+    assert_eq!(granted, ItemStack::mint(Item::Stone, 3, MintReason::Test));
     expect(&mut events, |event| match event {
         PlayerEvent::Untrack { entity, .. } if entity == item => Some(()),
         _ => None,
@@ -624,7 +624,7 @@ fn grants(events: &mut tokio::sync::mpsc::UnboundedReceiver<PlayerEvent>) -> u32
     let mut count = 0;
     while let Ok(event) = events.try_recv() {
         if let PlayerEvent::ItemGranted { stack, .. } = event {
-            count += u32::from(stack.count);
+            count += u32::from(stack.count());
         }
     }
     count
@@ -649,7 +649,7 @@ async fn a_refusing_player_does_not_starve_another_one_next_to_the_item() {
         .await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 3),
+            stack: ItemStack::mint(Item::Stone, 3, MintReason::Test),
             position: at,
             velocity: [0.0; 3],
             pickup_delay: 0,
@@ -696,7 +696,7 @@ async fn a_refused_item_is_offered_again_once_there_is_room() {
     region.request(update(&viewer, 1, at)).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 3),
+            stack: ItemStack::mint(Item::Stone, 3, MintReason::Test),
             position: at,
             velocity: [0.0; 3],
             pickup_delay: 0,
@@ -739,7 +739,7 @@ async fn items_just_across_a_region_border_are_offered() {
         let owner = if item_x < 512.0 { &west } else { &east };
         owner
             .request(RegionRequest::SpawnItem {
-                stack: ItemStack::new(Item::Stone, 1),
+                stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
                 position: [item_x, y as f64, 8.5],
                 velocity: [0.0; 3],
                 pickup_delay: 0,
@@ -782,7 +782,7 @@ async fn a_late_answer_to_an_expired_offer_grants_nothing() {
         .await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 3),
+            stack: ItemStack::mint(Item::Stone, 3, MintReason::Test),
             position: at,
             velocity: [0.0; 3],
             pickup_delay: 0,
@@ -853,7 +853,7 @@ async fn an_answer_reaching_a_region_without_the_item_grants_nothing() {
     west.request(update(&viewer, 1, feet)).await;
     east.request(update(&viewer, 1, feet)).await;
     west.request(RegionRequest::SpawnItem {
-        stack: ItemStack::new(Item::Stone, 2),
+        stack: ItemStack::mint(Item::Stone, 2, MintReason::Test),
         position: [511.4, y as f64, 8.5],
         velocity: [0.0; 3],
         pickup_delay: 0,

@@ -1087,9 +1087,10 @@ pub(crate) mod tests {
         assert!(!mob.within_melee_range(&far));
         mob.equipment.set(
             tuff_vanilla_data::item::EquipmentSlot::Mainhand,
-            Some(tuff_item::item::ItemStack::new(
+            Some(tuff_item::item::ItemStack::mint(
                 tuff_vanilla_data::Item::WoodenSpear,
                 1,
+                tuff_item::item::MintReason::Test,
             )),
         );
         assert!(!mob.within_melee_range(&near));

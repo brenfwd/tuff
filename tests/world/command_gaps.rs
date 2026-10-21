@@ -273,18 +273,18 @@ async fn particle_directive_reaches_players_in_range_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn item_slots_are_replaced_filled_and_overridden() {
     use crate::world::messages::SlotFill;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
 
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let (mut player, _frames) = session_with_outbound(&world, 2000);
-    let stick = ItemStack::new(Item::Stick, 1);
+    let stick = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     let ids = |name: &str| crate::world::predicate::slot_range(name).unwrap();
     let set = |name: &str, mode| Directive::SetSlots {
         ids: ids(name),
         name: name.to_owned(),
-        stack: stick.clone(),
+        stack: stick.dup_unchecked(),
         mode,
     };
 

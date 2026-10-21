@@ -341,7 +341,7 @@ async fn teleport_entities_ignores_unowned_ids_and_other_dimensions() {
     let start = [8.5, SKY as f64, 8.5];
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Dirt, 1),
+            stack: ItemStack::mint(Item::Dirt, 1, MintReason::Test),
             position: start,
             velocity: [0.0; 3],
             pickup_delay: 10_000,

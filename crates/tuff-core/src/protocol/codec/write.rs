@@ -59,14 +59,14 @@ impl WriteExt for PacketWriter {
             self.write_var_int(0);
             return;
         };
-        self.write_var_int(stack.count as i32);
+        self.write_var_int(stack.count() as i32);
         self.write_var_int(stack.item.id() as i32);
         write_component_patch(self, stack);
     }
 
     fn write_item_template(&mut self, stack: ItemView<'_>) {
         self.write_var_int(stack.item.id() as i32);
-        self.write_var_int(stack.count as i32);
+        self.write_var_int(stack.count() as i32);
         write_component_patch(self, stack);
     }
 

@@ -27,7 +27,7 @@ fn room(item: &ItemEntity) -> u8 {
     item.stack
         .max_stack_size()
         .min(64)
-        .saturating_sub(item.stack.count)
+        .saturating_sub(item.stack.count())
 }
 
 impl RegionActor {
@@ -46,7 +46,10 @@ impl RegionActor {
             return;
         };
         let reach = item.merge_reach();
-        let (stack, owner) = (item.stack.clone(), item.base.extra.get("Owner").cloned());
+        let (stack, owner) = (
+            item.stack.dup_unchecked(),
+            item.base.extra.get("Owner").cloned(),
+        );
         for neighbour in self.pos.neighbors() {
             if !experience::intersects(region_box(neighbour), reach) {
                 continue;
@@ -55,7 +58,7 @@ impl RegionActor {
                 handle.internal(RegionInternal::BorderMerge(BorderMerge::Probe {
                     from: self.pos,
                     item: id,
-                    stack: stack.clone(),
+                    stack: stack.dup_unchecked(),
                     owner: owner.clone(),
                     reach,
                 }));
@@ -98,12 +101,11 @@ impl RegionActor {
                 };
                 let other = self.item(target).expect("a candidate");
                 if probe.absorbs(other) {
-                    let moved = room(&probe).min(other.stack.count);
+                    let moved = room(&probe).min(other.stack.count());
                     let (pickup_delay, age, at) =
                         (other.pickup_delay, other.age, other.base.position);
-                    let mut stack = other.stack.clone();
-                    let left = stack.count - moved;
-                    stack.count = moved;
+                    let stack = other.stack.dup_count_unchecked(moved);
+                    let left = other.stack.count() - moved;
                     if handle.internal(RegionInternal::BorderMerge(BorderMerge::Take {
                         item,
                         stack,
@@ -117,7 +119,7 @@ impl RegionActor {
                     handle.internal(RegionInternal::BorderMerge(BorderMerge::Give {
                         to: self.pos,
                         item,
-                        count: probe.stack.count,
+                        count: probe.stack.count(),
                         target,
                         room: room(other),
                     }));
@@ -132,20 +134,19 @@ impl RegionActor {
             } => {
                 let Some(own) = self
                     .item(item)
-                    .filter(|own| own.mergeable() && own.stack.count == count)
+                    .filter(|own| own.mergeable() && own.stack.count() == count)
                 else {
                     return;
                 };
                 let Some(handle) = self.border.neighbors.get(&to).cloned() else {
                     return;
                 };
-                let moved = room.min(own.stack.count);
+                let moved = room.min(own.stack.count());
                 if moved == 0 {
                     return;
                 }
                 let (pickup_delay, age, at) = (own.pickup_delay, own.age, own.base.position);
-                let mut stack = own.stack.clone();
-                stack.count = moved;
+                let stack = own.stack.dup_count_unchecked(moved);
                 if handle.internal(RegionInternal::BorderMerge(BorderMerge::Take {
                     item: target,
                     stack,
@@ -165,7 +166,7 @@ impl RegionActor {
             } => {
                 let fits = self
                     .item(item)
-                    .is_some_and(|own| own.stack.stacks_with(&stack) && room(own) >= stack.count);
+                    .is_some_and(|own| own.stack.stacks_with(&stack) && room(own) >= stack.count());
                 if !fits {
                     self.spawn_item_at(stack, at, [0.0; 3], pickup_delay);
                     return;
@@ -180,8 +181,11 @@ impl RegionActor {
                 };
                 own.pickup_delay = own.pickup_delay.max(pickup_delay);
                 own.age = own.age.min(age);
-                let mut merged = own.stack.clone();
-                merged.count += stack.count;
+                let mut merged = own.stack.dup_unchecked();
+                if let Err(stack) = merged.join(stack) {
+                    self.spawn_item_at(stack, at, [0.0; 3], pickup_delay);
+                    return;
+                }
                 self.set_item_stack(item, merged);
             }
         }
@@ -193,8 +197,10 @@ impl RegionActor {
             self.remove_entity(id, &[]);
             return;
         }
-        if let Some(mut stack) = self.item(id).map(|item| item.stack.clone()) {
-            stack.count = left;
+        if let Some(stack) = self
+            .item(id)
+            .map(|item| item.stack.dup_count_unchecked(left))
+        {
             self.set_item_stack(id, stack);
         }
     }

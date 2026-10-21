@@ -147,7 +147,7 @@ async fn a_sneaking_owner_opens_a_chested_donkeys_mount_screen() {
     let (player, mut events) = PlayerHandle::new(302);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let diamond = ItemStack::new(Item::Diamond, 2);
+    let diamond = ItemStack::mint(Item::Diamond, 2, MintReason::Test);
     let nbt = tamed().with("ChestedHorse", true).with(
         "Items",
         Tag::List(vec![Tag::Compound(diamond.to_nbt().with("Slot", 3i8))]),

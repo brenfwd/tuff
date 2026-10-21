@@ -7,6 +7,8 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::{EquipmentSlot, ModifierOperation};
 use tuff_vanilla_data::registry::{Attribute, EntityType, SoundEvent};
 use tuff_vanilla_data::sulfur_cube::{
@@ -27,7 +29,7 @@ use tuff_core::world::explosion::{BlockInteraction, Explosion};
 use tuff_core::world::game_event::GameEvent;
 use tuff_core::world::messages::{HandEffect, PlayerEvent};
 use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -294,7 +296,7 @@ impl SulfurCube {
     /// Follows a change of the swallowed block: its archetypes' modifiers
     /// and effects, and the goals it only has while empty.
     fn sync_body(&mut self, core: &mut MobCore) {
-        let current = body(core).cloned();
+        let current = body(core).map(DupUnchecked::dup_unchecked);
         if current == self.applied {
             return;
         }
@@ -357,13 +359,13 @@ impl SulfurCube {
         if core.is_baby() {
             return false;
         }
-        if let Some(held) = body(core).cloned() {
+        if let Some(held) = body(core).map(DupUnchecked::dup_unchecked) {
             if held.item == stack.item {
                 return false;
             }
             self.drop_at_top(core, held, cx);
         }
-        self.hold(core, stack.clone().with_count(1));
+        self.hold(core, stack.dup_count_unchecked(1));
         core.persistence_required = true;
         core.sound(SoundEvent::EntitySulfurCubeAbsorb, 1.0, 1.0, cx);
         true
@@ -384,7 +386,7 @@ impl SulfurCube {
 
     /// Spits the block out; the cube leaves loose items alone for a while.
     fn eject(&mut self, core: &mut MobCore, category: i32, cx: &mut TickContext) -> bool {
-        let Some(held) = body(core).cloned() else {
+        let Some(held) = body(core).map(DupUnchecked::dup_unchecked) else {
             return false;
         };
         core.equipment.set(EquipmentSlot::Body, None);
@@ -685,7 +687,7 @@ impl SulfurCube {
             nbt.insert("age", age);
             nbt.insert("age_locked", locked);
         });
-        let mut bucket = ItemStack::new(Item::SulfurCubeBucket, 1);
+        let mut bucket = ItemStack::mint(Item::SulfurCubeBucket, 1, MintReason::Spawn);
         bucket
             .components
             .other
@@ -694,7 +696,7 @@ impl SulfurCube {
             bucket
                 .components
                 .other
-                .insert(CONTENT, Tag::Compound(held.clone().with_count(1).to_nbt()));
+                .insert(CONTENT, Tag::Compound(held.dup_count_unchecked(1).to_nbt()));
         }
         bucket
     }
@@ -887,7 +889,7 @@ impl Species for SulfurCube {
 
     fn took_item(&mut self, core: &mut MobCore, stack: ItemStack) {
         if body(core).is_none() && swallowable(stack.item) {
-            self.hold(core, stack.with_count(1));
+            self.hold(core, stack.keep(1, BurnReason::Consumed));
             self.pending_absorb_sound = true;
         }
     }
@@ -1202,11 +1204,12 @@ pub fn from_bucket(
     let mut entity = super::load::<SulfurCube>(base, &mut nbt)?;
     let content = components
         .and_then(|c| c.get_compound(CONTENT))
-        .and_then(ItemStack::from_nbt);
+        .and_then(ItemStack::from_storage);
     if let Some(content) = content
         && let Some(mob) = entity.downcast_mut::<Mob<SulfurCube>>()
     {
-        mob.species.hold(&mut mob.core, content.with_count(1));
+        mob.species
+            .hold(&mut mob.core, content.keep(1, BurnReason::Destroyed));
     }
     Some(entity)
 }
@@ -1260,8 +1263,10 @@ mod tests {
     fn a_swallowed_block_brings_its_archetype() {
         let mut mob = cube();
         assert!(!mob.core.goals.is_empty());
-        mob.species
-            .hold(&mut mob.core, ItemStack::new(Item::OakPlanks, 1));
+        mob.species.hold(
+            &mut mob.core,
+            ItemStack::mint(Item::OakPlanks, 1, MintReason::Test),
+        );
         assert!(mob.core.goals.is_empty(), "a full cube does nothing itself");
         assert!(mob.core.omnidirectional_air);
         assert!((mob.core.attribute(Attribute::Bounciness) - 0.9).abs() < 1.0e-6);
@@ -1275,20 +1280,22 @@ mod tests {
         assert!(!mob.core.goals.is_empty());
         assert_eq!(mob.core.attribute(Attribute::Bounciness), 0.0);
         assert_eq!(mob.species.effects, Effects::default());
-        mob.species
-            .hold(&mut mob.core, ItemStack::new(Item::Tnt, 1));
+        mob.species.hold(
+            &mut mob.core,
+            ItemStack::mint(Item::Tnt, 1, MintReason::Test),
+        );
         assert_eq!(
             mob.species.effects.explosion.map(|e| e.fuse),
             Some(120),
             "TNT makes it explosive"
         );
         super::super::tests::with_context(|_, cx| {
-            let tnt = ItemStack::new(Item::Tnt, 1);
+            let tnt = ItemStack::mint(Item::Tnt, 1, MintReason::Test);
             assert!(
                 !mob.species.equip(&mut mob.core, &tnt, cx),
                 "it holds TNT already"
             );
-            let magma = ItemStack::new(Item::MagmaBlock, 1);
+            let magma = ItemStack::mint(Item::MagmaBlock, 1, MintReason::Test);
             assert!(mob.species.equip(&mut mob.core, &magma, cx));
             assert!(
                 cx.effects.iter().any(

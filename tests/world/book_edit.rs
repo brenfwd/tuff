@@ -19,28 +19,35 @@ async fn editing_and_signing_a_book_rewrites_the_held_stack() {
     let world = TestWorld::start(dir.path());
     let (mut player, _out) = session_with_outbound(&world, 77);
     let slot = Inventory::hotbar_slot(2);
-    player
-        .inventory_mut()
-        .set_slot(slot, Some(ItemStack::new(Item::WritableBook, 1)));
+    player.inventory_mut().set_slot(
+        slot,
+        Some(ItemStack::mint(Item::WritableBook, 1, MintReason::Test)),
+    );
 
     player
         .handle_packet(edit(2, &["hello", "world"], None))
         .await;
-    let book = player.inventory_mut().slots()[slot].clone().unwrap();
+    let book = player.inventory_mut().slots()[slot]
+        .dup_unchecked()
+        .unwrap();
     assert_eq!(book.item, Item::WritableBook);
     assert_eq!(book.components.writable_book.as_ref().unwrap().len(), 2);
 
     player
         .handle_packet(edit(2, &["hello"], Some("Title")))
         .await;
-    let book = player.inventory_mut().slots()[slot].clone().unwrap();
+    let book = player.inventory_mut().slots()[slot]
+        .dup_unchecked()
+        .unwrap();
     assert_eq!(book.item, Item::WrittenBook);
     let written = book.components.written_book.as_ref().unwrap();
     assert_eq!(written.title.raw, "Title");
     assert_eq!(written.pages.len(), 1);
 
     player.handle_packet(edit(2, &["again"], None)).await;
-    let book = player.inventory_mut().slots()[slot].clone().unwrap();
+    let book = player.inventory_mut().slots()[slot]
+        .dup_unchecked()
+        .unwrap();
     assert_eq!(book.item, Item::WrittenBook, "a signed book stays signed");
     world.shutdown().await;
 }
@@ -52,14 +59,17 @@ async fn an_edit_for_a_slot_without_a_book_or_with_oversize_pages_is_ignored() {
     let world = TestWorld::start(dir.path());
     let (mut player, _out) = session_with_outbound(&world, 78);
     let slot = Inventory::hotbar_slot(0);
-    player
-        .inventory_mut()
-        .set_slot(slot, Some(ItemStack::new(Item::WritableBook, 1)));
+    player.inventory_mut().set_slot(
+        slot,
+        Some(ItemStack::mint(Item::WritableBook, 1, MintReason::Test)),
+    );
     player.handle_packet(edit(1, &["x"], None)).await;
     assert!(player.inventory_mut().slots()[Inventory::hotbar_slot(1)].is_none());
     let long = "a".repeat(1025);
     player.handle_packet(edit(0, &[&long], None)).await;
-    let book = player.inventory_mut().slots()[slot].clone().unwrap();
+    let book = player.inventory_mut().slots()[slot]
+        .dup_unchecked()
+        .unwrap();
     assert!(book.components.writable_book.is_none());
     world.shutdown().await;
 }
@@ -87,7 +97,7 @@ async fn using_a_book_sends_open_book_for_that_hand_only() {
     assert!(!opened(&mut out, false));
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::WritableBook, 1)),
+        Some(ItemStack::mint(Item::WritableBook, 1, MintReason::Test)),
     );
     player.handle_packet(use_item(false)).await;
     assert!(opened(&mut out, false));
@@ -112,7 +122,7 @@ async fn opening_a_signed_book_resolves_its_score_pages_once() {
         "score",
         Compound::new().with("name", "Bob").with("objective", "pts"),
     ));
-    let mut stack = ItemStack::new(Item::WrittenBook, 1);
+    let mut stack = ItemStack::mint(Item::WrittenBook, 1, MintReason::Test);
     stack.components.written_book = Some(Box::new(WrittenBook {
         title: Filterable::plain("T".to_owned()),
         author: "a".to_owned(),
@@ -128,7 +138,9 @@ async fn opening_a_signed_book_resolves_its_score_pages_once() {
             sequence: 1,
         })
         .await;
-    let book = player.inventory_mut().slots()[slot].clone().unwrap();
+    let book = player.inventory_mut().slots()[slot]
+        .dup_unchecked()
+        .unwrap();
     let written = book.components.written_book.as_ref().unwrap();
     assert!(written.resolved);
     let json = tuff_item::text::TextComponent::from_nbt(&written.pages[0].raw)

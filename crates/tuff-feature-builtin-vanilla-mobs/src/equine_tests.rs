@@ -26,7 +26,7 @@ fn click(item: Item) -> EntityInteraction {
         player_uuid: 77,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: Some(ItemStack::new(item, 1)),
+        stack: Some(ItemStack::mint(item, 1, MintReason::Test)),
         off_hand: false,
         creative: false,
         sneaking: false,
@@ -62,13 +62,18 @@ fn a_tamed_saddled_horse_loads_as_drivable() {
         EntityType::Horse,
         Compound::new().with(
             "equipment",
-            Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+            Compound::new().with(
+                "saddle",
+                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            ),
         ),
     );
     assert!(entity.rideable_by_input());
     assert_eq!(
-        entity.container().map(|slots| slots[mount::SADDLE].clone()),
-        Some(Some(ItemStack::new(Item::Saddle, 1))),
+        entity
+            .container()
+            .map(|slots| slots[mount::SADDLE].dup_unchecked()),
+        Some(Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test))),
         "the screen's saddle slot shows the worn saddle"
     );
 }
@@ -301,7 +306,8 @@ fn a_donkey_chest_opens_a_fifteen_slot_inventory_that_saves() {
                 armor: MountArmor::None
             }
         );
-        donkey.container_mut().unwrap()[4] = Some(ItemStack::new(Item::Diamond, 3));
+        donkey.container_mut().unwrap()[4] =
+            Some(ItemStack::mint(Item::Diamond, 3, MintReason::Test));
         let saved = tuff_core::world::entity::save(&*donkey);
         assert_eq!(saved.get("ChestedHorse"), Some(&Tag::Byte(1)));
         let mut nbt = saved.clone();
@@ -309,7 +315,7 @@ fn a_donkey_chest_opens_a_fifteen_slot_inventory_that_saves() {
         let loaded = load_entity(base, &mut nbt);
         assert_eq!(
             loaded.container().unwrap()[4],
-            Some(ItemStack::new(Item::Diamond, 3))
+            Some(ItemStack::mint(Item::Diamond, 3, MintReason::Test))
         );
     });
 }
@@ -321,7 +327,8 @@ fn a_saddle_put_in_the_screen_is_worn_after_the_next_tick() {
         Horse::configure(core);
         core.tame.as_mut().unwrap().owner = Some(77);
         let mut equine = Equine::default();
-        equine.inventory.slots_mut()[mount::SADDLE] = Some(ItemStack::new(Item::Saddle, 1));
+        equine.inventory.slots_mut()[mount::SADDLE] =
+            Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
         equine.inventory.sync(core, cx);
         assert!(saddled(core));
         assert_eq!(core.equipment.drop_chance(EquipmentSlot::Saddle), 2.0);

@@ -125,7 +125,7 @@ impl RegionHandle {
 }
 
 /// A player's state as seen by the regions it is in or near.
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct PlayerUpdate {
     pub handle: PlayerHandle,
     pub uuid: u128,

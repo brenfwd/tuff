@@ -181,7 +181,10 @@ async fn a_double_chest_across_a_region_border_opens_as_one_menu() {
     );
     let (parts, contents, remote) = blocks(open);
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
-    assert_eq!(contents, vec![None; 54]);
+    assert_eq!(
+        contents,
+        (0..54).map(|_| None).collect::<Vec<Option<ItemStack>>>()
+    );
     assert_eq!(remote.map(|(pos, _)| pos), Some(split.east_pos));
 
     split
@@ -197,20 +200,20 @@ async fn a_double_chest_across_a_region_border_opens_as_one_menu() {
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
     assert_eq!(remote.map(|(pos, _)| pos), Some(split.west_pos));
 
-    let apple = ItemStack::new(Item::Apple, 3);
+    let apple = ItemStack::mint(Item::Apple, 3, MintReason::Test);
     split
         .west
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
             window_id: 1,
-            changes: set_slot(split.west_pos, 4, None, Some(apple.clone())),
+            changes: set_slot(split.west_pos, 4, None, Some(apple.dup_unchecked())),
             took_result: false,
         })
         .await;
     assert!(expect(&mut alice_events, transaction_answer).await.0);
     assert_eq!(
         expect_slots(&mut bob_events, split.west_pos).await,
-        vec![(4, Some(apple.clone()))],
+        vec![(4, Some(apple.dup_unchecked()))],
         "a viewer who opened the other half sees the change"
     );
 
@@ -278,13 +281,13 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
         expect(events, container_menu).await;
     }
 
-    let stone = ItemStack::new(Item::Stone, 8);
+    let stone = ItemStack::mint(Item::Stone, 8, MintReason::Test);
     split
         .west
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
             window_id: 1,
-            changes: set_slot(split.west_pos, 0, None, Some(stone.clone())),
+            changes: set_slot(split.west_pos, 0, None, Some(stone.dup_unchecked())),
             took_result: false,
         })
         .await;
@@ -298,7 +301,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
                     player: alice.clone(),
                     window_id: 1,
                     txn,
-                    changes: set_slot(split.west_pos, 0, Some(stone.clone()), None),
+                    changes: set_slot(split.west_pos, 0, Some(stone.dup_unchecked()), None),
                 },
             ),
             (
@@ -307,7 +310,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
                     player: alice.clone(),
                     window_id: 1,
                     txn,
-                    changes: set_slot(split.east_pos, 0, None, Some(stone.clone())),
+                    changes: set_slot(split.east_pos, 0, None, Some(stone.dup_unchecked())),
                 },
             ),
         ]
@@ -324,7 +327,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
         .request(RegionRequest::ContainerTransaction {
             player: bob.clone(),
             window_id: 1,
-            changes: set_slot(split.west_pos, 0, Some(stone.clone()), None),
+            changes: set_slot(split.west_pos, 0, Some(stone.dup_unchecked()), None),
             took_result: false,
         })
         .await;
@@ -344,7 +347,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
     }
     assert_eq!(
         expect_both(&mut bob_events, split.west_pos, split.east_pos).await,
-        [vec![(0, None)], vec![(0, Some(stone.clone()))]]
+        [vec![(0, None)], vec![(0, Some(stone.dup_unchecked()))]]
     );
 
     for (region, request) in moving(2) {
@@ -375,7 +378,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
             player: alice.clone(),
             window_id: 1,
             txn: 3,
-            changes: set_slot(split.east_pos, 0, Some(stone.clone()), None),
+            changes: set_slot(split.east_pos, 0, Some(stone.dup_unchecked()), None),
         })
         .await;
     assert!(expect_vote(&mut alice_events).await);
@@ -392,7 +395,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
         .request(RegionRequest::ContainerTransaction {
             player: bob.clone(),
             window_id: 1,
-            changes: set_slot(split.east_pos, 1, None, Some(stone.clone())),
+            changes: set_slot(split.east_pos, 1, None, Some(stone.dup_unchecked())),
             took_result: false,
         })
         .await;
@@ -416,7 +419,7 @@ async fn transactions_over_both_halves_commit_or_abort_together() {
         _ => None,
     })
     .await;
-    assert_eq!(slots[0], (0, Some(stone.clone())));
+    assert_eq!(slots[0], (0, Some(stone.dup_unchecked())));
     split.world.shutdown().await;
     drop(split.dir);
 }
@@ -474,24 +477,30 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
             .is_some_and(|m| m.remote.is_some())
     );
 
-    let gold = ItemStack::new(Item::GoldIngot, 4);
+    let gold = ItemStack::mint(Item::GoldIngot, 4, MintReason::Test);
     let [right, left] = right_first(&split);
     let right_slot = 2;
     let left_slot = 27 + 5;
     let set = |session: &mut crate::world::session::PlayerSession, slot, stack| {
-        let before = session.menus.menu.as_ref().unwrap().container.clone();
+        let before = session
+            .menus
+            .menu
+            .as_ref()
+            .unwrap()
+            .container
+            .dup_unchecked();
         session.menus.menu.as_mut().unwrap().container[slot] = stack;
         before
     };
 
-    let before = set(&mut session, right_slot, Some(gold.clone()));
+    let before = set(&mut session, right_slot, Some(gold.dup_unchecked()));
     let inventory = session.inventory.clone();
     session
         .submit_container_changes(before, inventory, Vec::new(), false)
         .await;
     assert_eq!(
         expect_slots(&mut bob_events, right).await,
-        vec![(right_slot, Some(gold.clone()))]
+        vec![(right_slot, Some(gold.dup_unchecked()))]
     );
     let answered = expect(&mut session.conn.events, |event| match event {
         event @ PlayerEvent::Transaction { .. } => Some(event),
@@ -502,9 +511,9 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
 
     let before = {
         let menu = session.menus.menu.as_mut().unwrap();
-        let before = menu.container.clone();
+        let before = menu.container.dup_unchecked();
         menu.container[right_slot] = None;
-        menu.container[left_slot] = Some(gold.clone());
+        menu.container[left_slot] = Some(gold.dup_unchecked());
         before
     };
     let inventory = session.inventory.clone();
@@ -526,7 +535,10 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
     }
     assert_eq!(
         expect_both(&mut bob_events, right, left).await,
-        [vec![(right_slot, None)], vec![(5, Some(gold.clone()))]]
+        [
+            vec![(right_slot, None)],
+            vec![(5, Some(gold.dup_unchecked()))]
+        ]
     );
 
     split
@@ -534,15 +546,20 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
         .request(RegionRequest::ContainerTransaction {
             player: bob.clone(),
             window_id: 1,
-            changes: set_slot(right, 0, None, Some(ItemStack::new(Item::Dirt, 1))),
+            changes: set_slot(
+                right,
+                0,
+                None,
+                Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test)),
+            ),
             took_result: false,
         })
         .await;
     assert!(expect(&mut bob_events, transaction_answer).await.0);
     let before = {
         let menu = session.menus.menu.as_mut().unwrap();
-        let before = menu.container.clone();
-        menu.container[0] = Some(gold.clone());
+        let before = menu.container.dup_unchecked();
+        menu.container[0] = Some(gold.dup_unchecked());
         menu.container[left_slot] = None;
         before
     };
@@ -567,10 +584,10 @@ async fn a_session_moves_items_between_halves_in_different_regions() {
     let menu = session.menus.menu.as_ref().unwrap();
     assert_eq!(
         menu.container[0],
-        Some(ItemStack::new(Item::Dirt, 1)),
+        Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test)),
         "a refused half restores the menu from both regions"
     );
-    assert_eq!(menu.container[left_slot], Some(gold.clone()));
+    assert_eq!(menu.container[left_slot], Some(gold.dup_unchecked()));
     split
         .west
         .request(RegionRequest::RefreshContainer {
@@ -605,7 +622,7 @@ async fn breaking_a_half_during_a_prepared_transaction_neither_dupes_nor_loses()
     }
 
     let (alice, mut alice_events) = PlayerHandle::new(100);
-    let stone = ItemStack::new(Item::Stone, 8);
+    let stone = ItemStack::mint(Item::Stone, 8, MintReason::Test);
     for commit in [true, false] {
         let split = split_chest(&mut [(&alice, &mut alice_events)]).await;
         split
@@ -623,7 +640,7 @@ async fn breaking_a_half_during_a_prepared_transaction_neither_dupes_nor_loses()
             .request(RegionRequest::ContainerTransaction {
                 player: alice.clone(),
                 window_id: 1,
-                changes: set_slot(split.west_pos, 0, None, Some(stone.clone())),
+                changes: set_slot(split.west_pos, 0, None, Some(stone.dup_unchecked())),
                 took_result: false,
             })
             .await;
@@ -634,7 +651,7 @@ async fn breaking_a_half_during_a_prepared_transaction_neither_dupes_nor_loses()
                 player: alice.clone(),
                 window_id: 1,
                 txn: 1,
-                changes: set_slot(split.west_pos, 0, Some(stone.clone()), None),
+                changes: set_slot(split.west_pos, 0, Some(stone.dup_unchecked()), None),
             })
             .await;
         assert!(expect_vote(&mut alice_events).await);
@@ -743,7 +760,7 @@ async fn a_comparator_reads_both_halves_across_the_border() {
         &alice,
         &mut alice_events,
         split.west_pos,
-        ItemStack::new(Item::Stone, 64),
+        ItemStack::mint(Item::Stone, 64, MintReason::Test),
         1,
     )
     .await;
@@ -785,7 +802,7 @@ async fn a_hopper_fills_the_far_half() {
         &alice,
         &mut events,
         split.east_pos,
-        ItemStack::new(Item::Apple, 1),
+        ItemStack::mint(Item::Apple, 1, MintReason::Test),
         1,
     )
     .await;
@@ -796,7 +813,7 @@ async fn a_hopper_fills_the_far_half() {
         &alice,
         &mut events,
         above,
-        Some(ItemStack::new(Item::Apple, 2)),
+        Some(ItemStack::mint(Item::Apple, 2, MintReason::Test)),
     )
     .await;
     split.world.ticks(40).await;
@@ -810,7 +827,10 @@ async fn a_hopper_fills_the_far_half() {
         )))
         .await;
     let (_, contents, _) = blocks(expect(&mut events, container_menu).await);
-    assert_eq!(contents[0], Some(ItemStack::new(Item::Apple, 3)));
+    assert_eq!(
+        contents[0],
+        Some(ItemStack::mint(Item::Apple, 3, MintReason::Test))
+    );
     split.world.shutdown().await;
 }
 
@@ -824,7 +844,7 @@ async fn a_hopper_pulls_from_the_far_half() {
         &alice,
         &mut events,
         split.east_pos,
-        ItemStack::new(Item::Apple, 2),
+        ItemStack::mint(Item::Apple, 2, MintReason::Test),
         1,
     )
     .await;
@@ -840,7 +860,10 @@ async fn a_hopper_pulls_from_the_far_half() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a hopper is a block container");
     };
-    assert_eq!(contents[0], Some(ItemStack::new(Item::Apple, 2)));
+    assert_eq!(
+        contents[0],
+        Some(ItemStack::mint(Item::Apple, 2, MintReason::Test))
+    );
     split.world.shutdown().await;
 }
 
@@ -890,26 +913,26 @@ async fn an_offhand_swap_during_a_refused_take_waits_for_the_answer() {
     let open = expect(&mut session.conn.events, container_menu).await;
     session.on_event(PlayerEvent::MenuOpen(open)).await;
 
-    let gold = ItemStack::new(Item::GoldIngot, 4);
+    let gold = ItemStack::mint(Item::GoldIngot, 4, MintReason::Test);
     let right = split.east_pos;
     split
         .east
         .request(RegionRequest::ContainerTransaction {
             player: bob.clone(),
             window_id: 1,
-            changes: set_slot(right, 2, None, Some(gold.clone())),
+            changes: set_slot(right, 2, None, Some(gold.dup_unchecked())),
             took_result: false,
         })
         .await;
     assert!(expect(&mut bob_events, transaction_answer).await.0);
-    session.menus.menu.as_mut().unwrap().container[2] = Some(gold.clone());
+    session.menus.menu.as_mut().unwrap().container[2] = Some(gold.dup_unchecked());
 
     split
         .east
         .request(RegionRequest::ContainerTransaction {
             player: bob.clone(),
             window_id: 1,
-            changes: set_slot(right, 2, Some(gold.clone()), None),
+            changes: set_slot(right, 2, Some(gold.dup_unchecked()), None),
             took_result: false,
         })
         .await;
@@ -918,10 +941,16 @@ async fn an_offhand_swap_during_a_refused_take_waits_for_the_answer() {
         "bob holds the gold"
     );
 
-    let before = session.menus.menu.as_ref().unwrap().container.clone();
+    let before = session
+        .menus
+        .menu
+        .as_ref()
+        .unwrap()
+        .container
+        .dup_unchecked();
     let inventory_before = session.inventory.clone();
     session.menus.menu.as_mut().unwrap().container[2] = None;
-    session.inventory.set_slot(36, Some(gold.clone()));
+    session.inventory.set_slot(36, Some(gold.dup_unchecked()));
     session
         .submit_container_changes(before, inventory_before, Vec::new(), false)
         .await;
@@ -997,13 +1026,19 @@ async fn a_world_save_snapshots_the_player_only_between_transactions() {
         .await;
     let open = expect(&mut session.conn.events, container_menu).await;
     session.on_event(PlayerEvent::MenuOpen(open)).await;
-    let gold = ItemStack::new(Item::GoldIngot, 4);
-    session.menus.menu.as_mut().unwrap().container[2] = Some(gold.clone());
+    let gold = ItemStack::mint(Item::GoldIngot, 4, MintReason::Test);
+    session.menus.menu.as_mut().unwrap().container[2] = Some(gold.dup_unchecked());
 
-    let before = session.menus.menu.as_ref().unwrap().container.clone();
+    let before = session
+        .menus
+        .menu
+        .as_ref()
+        .unwrap()
+        .container
+        .dup_unchecked();
     let inventory_before = session.inventory.clone();
     session.menus.menu.as_mut().unwrap().container[2] = None;
-    session.inventory.set_slot(36, Some(gold.clone()));
+    session.inventory.set_slot(36, Some(gold.dup_unchecked()));
     session
         .submit_container_changes(before, inventory_before, Vec::new(), false)
         .await;

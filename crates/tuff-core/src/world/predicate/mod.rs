@@ -22,7 +22,7 @@ mod sub;
 pub use sub::slot_range;
 
 /// An entity as a predicate sees it.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, Default, PartialEq)]
 pub struct EntityFacts {
     pub kind: Option<EntityType>,
     /// The entity id, when the source of the facts knows it.
@@ -196,7 +196,7 @@ pub trait PredicateWorld {
 }
 
 /// A damage source.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
 pub struct DamageFacts {
     pub kind: &'static DamageType,
     /// The entity the damage is blamed on.
@@ -359,7 +359,7 @@ pub fn item(predicate: &Value, stack: &ItemStack) -> bool {
     };
     fields.iter().all(|(key, value)| match key.as_str() {
         "items" => in_set(value, stack.item.name(), |tag| item_in_tag(stack.item, tag)),
-        "count" => bounds(value, f64::from(stack.count)),
+        "count" => bounds(value, f64::from(stack.count())),
         "components" => value.as_object().is_some_and(|components| {
             let patch = stack.components.to_nbt();
             components.iter().all(|(id, expected)| {

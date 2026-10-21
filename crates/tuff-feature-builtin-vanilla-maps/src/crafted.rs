@@ -52,15 +52,15 @@ pub fn cartography_result(
                 && data.scale < MAX_SCALE =>
         {
             Some(with_post_processing(
-                map.clone().with_count(1),
+                map.dup_count_unchecked(1),
                 Derivation::ZoomOut,
             ))
         }
         Item::GlassPane if !data.locked => Some(with_post_processing(
-            map.clone().with_count(1),
+            map.dup_count_unchecked(1),
             Derivation::Lock,
         )),
-        Item::Map => Some(map.clone().with_count(2)),
+        Item::Map => Some(map.dup_count_unchecked(2)),
         _ => None,
     }
 }
@@ -74,9 +74,10 @@ pub fn extends(data: Option<&MapData>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
 
     fn map(id: u32) -> ItemStack {
-        let mut stack = ItemStack::new(Item::FilledMap, 3);
+        let mut stack = ItemStack::mint(Item::FilledMap, 3, MintReason::Test);
         stack.components.map_id = Some(id);
         stack
     }
@@ -90,9 +91,9 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn paper_zooms_out_unlocked_maps_below_the_top_scale() {
-        let paper = ItemStack::new(Item::Paper, 1);
+        let paper = ItemStack::mint(Item::Paper, 1, MintReason::Test);
         let result = cartography_result(&map(4), &paper, &data(1, false)).unwrap();
-        assert_eq!(result.count, 1);
+        assert_eq!(result.count(), 1);
         assert_eq!(result.components.map_id, Some(4));
         assert_eq!(post_processing(&result), Some(Derivation::ZoomOut));
         assert!(cartography_result(&map(4), &paper, &data(MAX_SCALE, false)).is_none());
@@ -105,15 +106,15 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn glass_locks_and_empty_maps_clone() {
-        let pane = ItemStack::new(Item::GlassPane, 1);
+        let pane = ItemStack::mint(Item::GlassPane, 1, MintReason::Test);
         let result = cartography_result(&map(2), &pane, &data(0, false)).unwrap();
         assert_eq!(post_processing(&result), Some(Derivation::Lock));
         assert!(cartography_result(&map(2), &pane, &data(0, true)).is_none());
-        let empty = ItemStack::new(Item::Map, 5);
+        let empty = ItemStack::mint(Item::Map, 5, MintReason::Test);
         let copies = cartography_result(&map(2), &empty, &data(0, true)).unwrap();
-        assert_eq!(copies.count, 2);
+        assert_eq!(copies.count(), 2);
         assert_eq!(post_processing(&copies), None);
-        let stone = ItemStack::new(Item::Stone, 1);
+        let stone = ItemStack::mint(Item::Stone, 1, MintReason::Test);
         assert!(cartography_result(&map(2), &stone, &data(0, false)).is_none());
     }
 

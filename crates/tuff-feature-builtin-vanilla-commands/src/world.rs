@@ -3,6 +3,7 @@
 //! chunks, split per region and summed.
 
 use std::collections::BTreeMap;
+use tuff_item::item::DupUnchecked;
 
 use tokio::sync::oneshot;
 use tuff_vanilla_data::registry::EntityType;
@@ -371,7 +372,7 @@ pub async fn replace_port_item(
     let groups = group_by_region(&[pos]);
     let results = per_region(ctx, dimension, groups, |_| BlockOp::ReplacePortItem {
         pos: to_block_pos(pos),
-        stack: stack.clone(),
+        stack: stack.dup_unchecked(),
     })
     .await?;
     Ok(results

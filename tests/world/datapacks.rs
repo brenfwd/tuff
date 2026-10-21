@@ -768,7 +768,7 @@ fn dirt_table(item: &str) -> String {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn packs_change_recipes_loot_and_tags_and_reload_resends_them() {
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
     let dir = TestDir::new();
     let table = dirt_table("minecraft:diamond");
@@ -801,8 +801,12 @@ async fn packs_change_recipes_loot_and_tags_and_reload_resends_them() {
 
     let recipes = world.shared.recipes();
     assert_eq!(
-        recipes.grid_result(&[Some(ItemStack::new(Item::Emerald, 1))], 1, 1),
-        Some(ItemStack::new(Item::Dirt, 4))
+        recipes.grid_result(
+            &[Some(ItemStack::mint(Item::Emerald, 1, MintReason::Test))],
+            1,
+            1
+        ),
+        Some(ItemStack::mint(Item::Dirt, 4, MintReason::Test))
     );
     assert!(recipes.get("a:gem_to_dirt").is_some());
     assert!(recipes.get("minecraft:stick").is_none());
@@ -815,7 +819,10 @@ async fn packs_change_recipes_loot_and_tags_and_reload_resends_them() {
         contents.tags_packet,
         tuff_datapack::tags::TagSet::vanilla().network_body()
     );
-    assert_eq!(dirt_drops(&world), [ItemStack::new(Item::Diamond, 1)]);
+    assert_eq!(
+        dirt_drops(&world),
+        [ItemStack::mint(Item::Diamond, 1, MintReason::Test)]
+    );
 
     let (mut player, mut outbound) = content_session(&world);
     let tags = tuff_vanilla_data::packet::play::Clientbound::UpdateTags.id();
@@ -829,7 +836,10 @@ async fn packs_change_recipes_loot_and_tags_and_reload_resends_them() {
         dirt_table("minecraft:emerald").as_bytes(),
     );
     assert_eq!(console(&world, "reload").await, ["Reloading!"]);
-    assert_eq!(dirt_drops(&world), [ItemStack::new(Item::Emerald, 1)]);
+    assert_eq!(
+        dirt_drops(&world),
+        [ItemStack::mint(Item::Emerald, 1, MintReason::Test)]
+    );
     player.resend_reloaded_data();
     let frames: Vec<i32> = std::iter::from_fn(|| outbound.try_recv().ok())
         .map(|frame| framed_packet_id(&frame))
@@ -840,7 +850,10 @@ async fn packs_change_recipes_loot_and_tags_and_reload_resends_them() {
     assert_eq!(sent(&mut outbound, tags), 0, "sent once per reload");
 
     console(&world, r#"datapack disable "file/content""#).await;
-    assert_eq!(dirt_drops(&world), [ItemStack::new(Item::Dirt, 1)]);
+    assert_eq!(
+        dirt_drops(&world),
+        [ItemStack::mint(Item::Dirt, 1, MintReason::Test)]
+    );
     assert!(world.shared.recipes().get("minecraft:stick").is_some());
     world.shutdown().await;
 }
@@ -980,13 +993,15 @@ async fn command_tag_arguments_read_the_tags_packs_define() {
         .unwrap()
         .resolved(&tags)
         .unwrap();
-    assert!(gems.test(&tuff_item::item::ItemStack::new(
+    assert!(gems.test(&tuff_item::item::ItemStack::mint(
         tuff_vanilla_data::Item::Emerald,
-        1
+        1,
+        tuff_item::item::MintReason::Test
     )));
-    assert!(!gems.test(&tuff_item::item::ItemStack::new(
+    assert!(!gems.test(&tuff_item::item::ItemStack::mint(
         tuff_vanilla_data::Item::Diamond,
-        1
+        1,
+        tuff_item::item::MintReason::Test
     )));
     world.shutdown().await;
 }
@@ -1244,7 +1259,7 @@ async fn pack_enchantments_change_melee_damage_and_post_attack_effects() {
     );
     let world = TestWorld::start(dir.path());
     let contents = world.shared.datapacks.contents();
-    let mut sword = ItemStack::new(Item::DiamondSword, 1);
+    let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     sword.components.enchantments = Some(tuff_item::item::Enchantments::new(vec![
         ("zap:shock".into(), 1),
         ("minecraft:sharpness".into(), 1),
@@ -1282,7 +1297,7 @@ async fn pack_enchantments_change_melee_damage_and_post_attack_effects() {
     )
     .await;
     let cow = mobs(&region, tuff_vanilla_data::registry::EntityType::Cow).await[0].id;
-    let mut zap = ItemStack::new(Item::DiamondSword, 1);
+    let mut zap = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     zap.components.enchantments = Some(tuff_item::item::Enchantments::new(vec![(
         "zap:shock".into(),
         1,

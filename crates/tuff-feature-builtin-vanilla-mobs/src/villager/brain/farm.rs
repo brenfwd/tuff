@@ -2,6 +2,7 @@
 //! bone meal, and baking bread from wheat at its composter.
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{SoundEvent, VillagerProfession};
 use tuff_vanilla_data::{Block, BlockState, Item, tag};
@@ -12,7 +13,7 @@ use crate::physics::block_pos;
 use tuff_core::world::entity::{Effect, TickContext};
 use tuff_core::world::item_port::{PortAccess, Porter};
 use tuff_core::world::region_api::{RegionTask, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_world_model::BlockPos;
 
 const SCAN_INTERVAL: u64 = 40;
@@ -206,7 +207,7 @@ impl Villager {
         core.move_to_block(target, 1, SPEED, cx);
         core.equipment.set(
             EquipmentSlot::Mainhand,
-            Some(ItemStack::new(Item::BoneMeal, 1)),
+            Some(ItemStack::mint(Item::BoneMeal, 1, MintReason::Spawn)),
         );
         self.brain.farm.session = Some(Session::Bonemeal {
             target,
@@ -348,8 +349,8 @@ impl Villager {
                 state: block.default_state(),
             });
             core.sound(SoundEvent::ItemCropPlant, 1.0, 1.0, cx);
-            stack.count -= 1;
-            if stack.count == 0 {
+            stack.shrink(1, BurnReason::Consumed);
+            if stack.count() == 0 {
                 *slot = None;
             }
             return;
@@ -409,8 +410,8 @@ impl Villager {
             return false;
         };
         let stack = slot.as_mut().expect("found a stack");
-        stack.count -= 1;
-        if stack.count == 0 {
+        stack.shrink(1, BurnReason::Consumed);
+        if stack.count() == 0 {
             *slot = None;
         }
         let max = crop_max(state.block());
@@ -448,17 +449,21 @@ impl Villager {
             if stack.item != Item::Wheat {
                 continue;
             }
-            let used = wheat.min(stack.count as u32);
-            stack.count -= used as u8;
+            let used = wheat.min(stack.count() as u32);
+            stack.shrink(used as u8, BurnReason::Consumed);
             wheat -= used;
-            if stack.count == 0 {
+            if stack.count() == 0 {
                 *slot = None;
             }
             if wheat == 0 {
                 break;
             }
         }
-        if let Some(rest) = self.add_item(ItemStack::new(Item::Bread, loaves as u8)) {
+        if let Some(rest) = self.add_item(ItemStack::mint(
+            Item::Bread,
+            loaves as u8,
+            MintReason::Spawn,
+        )) {
             core.drop_item(rest, 0.5, cx);
         }
     }
@@ -489,7 +494,7 @@ impl Villager {
             let Some(index) = COMPOSTED_SEEDS.iter().position(|seed| *seed == stack.item) else {
                 continue;
             };
-            let count = u32::from(stack.count);
+            let count = u32::from(stack.count());
             seen[index] += count;
             let using = (seen[index].saturating_sub(SEEDS_KEPT))
                 .min(budget)
@@ -505,7 +510,7 @@ impl Villager {
                         block: Some(state),
                         random: &mut |bound| rng.gen_range(0..bound.max(1)),
                     });
-                    stack.count -= 1;
+                    stack.shrink(1, BurnReason::Consumed);
                     if layers > 0 {
                         level = (i32::from(level) + layers).clamp(0, 7) as u8;
                     }
@@ -516,7 +521,7 @@ impl Villager {
             }
         }
         for slot in self.inventory.iter_mut() {
-            if slot.as_ref().is_some_and(|stack| stack.count == 0) {
+            if slot.as_ref().is_some_and(|stack| stack.count() == 0) {
                 *slot = None;
             }
         }

@@ -7,6 +7,8 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::{Item, tag};
 
@@ -258,7 +260,7 @@ impl Fox {
     fn eat_from_mouth(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         self.ticks_since_eaten += 1;
         let slot = EquipmentSlot::Mainhand;
-        let Some(held) = core.equipment.get(slot).cloned() else {
+        let Some(held) = core.equipment.get(slot).map(DupUnchecked::dup_unchecked) else {
             return;
         };
         let consumable = held.item.food().is_some() && held.consumable().is_some();
@@ -267,8 +269,8 @@ impl Fox {
         }
         if self.ticks_since_eaten > EAT_TICKS {
             let mut rest = held;
-            rest.count = rest.count.saturating_sub(1);
-            core.equipment.set(slot, (rest.count > 0).then_some(rest));
+            rest.shrink(1, BurnReason::Consumed);
+            core.equipment.set(slot, (rest.count() > 0).then_some(rest));
             self.ticks_since_eaten = 0;
         } else if self.ticks_since_eaten > EAT_TICKS - 40 && cx.rng.gen_range(0.0..1.0f32) < 0.1 {
             core.sound(SoundEvent::EntityFoxEat, 1.0, 1.0, cx);
@@ -406,6 +408,7 @@ mod tests {
     use crate::goals::Tempt;
     use crate::tests::with_world;
     use tuff_core::protocol::play::metadata::POSE;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Block;
 
     fn roofed(pos: BlockPos) -> Option<tuff_vanilla_data::BlockState> {
@@ -562,29 +565,35 @@ mod tests {
             core.base.on_ground = true;
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::SweetBerries, 2)),
+                Some(ItemStack::mint(Item::SweetBerries, 2, MintReason::Test)),
             );
             for _ in 0..EAT_TICKS {
                 fox.tick(core, cx);
             }
             assert_eq!(
-                core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.count),
+                core.equipment
+                    .get(EquipmentSlot::Mainhand)
+                    .map(|s| s.count()),
                 Some(2)
             );
             fox.tick(core, cx);
             assert_eq!(
-                core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.count),
+                core.equipment
+                    .get(EquipmentSlot::Mainhand)
+                    .map(|s| s.count()),
                 Some(1)
             );
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::Feather, 1)),
+                Some(ItemStack::mint(Item::Feather, 1, MintReason::Test)),
             );
             for _ in 0..EAT_TICKS + 5 {
                 fox.tick(core, cx);
             }
             assert_eq!(
-                core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.count),
+                core.equipment
+                    .get(EquipmentSlot::Mainhand)
+                    .map(|s| s.count()),
                 Some(1)
             );
         });

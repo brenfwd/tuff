@@ -3,6 +3,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::DyeColor;
 use tuff_vanilla_data::registry::{Attribute, EntityType};
 use tuff_vanilla_data::tag;
@@ -23,7 +24,7 @@ use tuff_core::world::drops::EntityFacts;
 use tuff_core::world::entity::NearbyPlayer;
 use tuff_core::world::entity::{EntityInteraction, InteractOutcome, TickContext, take};
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 const PREY: [EntityType; 3] = [EntityType::Sheep, EntityType::Rabbit, EntityType::Fox];
@@ -92,7 +93,14 @@ fn armor_tier(stack: Option<&ItemStack>) -> usize {
 fn scute_particles(core: &MobCore, cx: &mut TickContext) {
     use tuff_core::protocol::codec::WriteExt;
     let mut options = tuff_wire::PacketWriter::new();
-    options.write_item_template(ItemStack::new(tuff_vanilla_data::Item::ArmadilloScute, 1).view());
+    options.write_item_template(
+        ItemStack::mint(
+            tuff_vanilla_data::Item::ArmadilloScute,
+            1,
+            MintReason::Spawn,
+        )
+        .view(),
+    );
     let options = options.into_bytes();
     let [x, y, z] = core.base.position;
     let packet = tuff_core::world::framed(&tuff_core::protocol::play::ParticlesWithOptions {
@@ -123,7 +131,7 @@ impl Species for Wolf {
             .equipment
             .get(EquipmentSlot::Body)
             .filter(|stack| stack.item == tuff_vanilla_data::Item::WolfArmor)
-            .cloned()
+            .map(DupUnchecked::dup_unchecked)
         else {
             return false;
         };
@@ -357,13 +365,18 @@ impl Species for Wolf {
             if owned && let Some(stack) = stack {
                 use tuff_vanilla_data::item::EquipmentSlot;
                 let sitting = core.tame.as_ref().is_some_and(|t| t.sitting);
-                let worn = core.equipment.get(EquipmentSlot::Body).cloned();
+                let worn = core
+                    .equipment
+                    .get(EquipmentSlot::Body)
+                    .map(DupUnchecked::dup_unchecked);
                 if stack.item == tuff_vanilla_data::Item::WolfArmor
                     && worn.is_none()
                     && !core.is_baby()
                 {
-                    core.equipment
-                        .set(EquipmentSlot::Body, Some(ItemStack::new(stack.item, 1)));
+                    core.equipment.set(
+                        EquipmentSlot::Body,
+                        Some(ItemStack::mint(stack.item, 1, MintReason::Spawn)),
+                    );
                     return Some(HandEffect::Consume(1));
                 }
                 if sitting
@@ -478,6 +491,7 @@ mod tests {
     use super::*;
     use crate::tests::with_context;
     use tuff_core::protocol::play::MetadataValue;
+    use tuff_item::item::DupUnchecked;
 
     fn interaction(owner: u128, item: Option<tuff_vanilla_data::Item>) -> EntityInteraction {
         EntityInteraction {
@@ -485,7 +499,7 @@ mod tests {
             player_uuid: owner,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::new(item, 1)),
+            stack: item.map(|item| ItemStack::mint(item, 1, MintReason::Test)),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -526,7 +540,7 @@ mod tests {
                 !wolf.absorb_hurt(core, &hit, 4.0, cx),
                 "no armor, no absorb"
             );
-            let armor = ItemStack::new(tuff_vanilla_data::Item::WolfArmor, 1);
+            let armor = ItemStack::mint(tuff_vanilla_data::Item::WolfArmor, 1, MintReason::Test);
             let max = armor.max_damage().unwrap();
             core.equipment.set(EquipmentSlot::Body, Some(armor));
             assert!(wolf.absorb_hurt(core, &hit, 3.2, cx));
@@ -591,7 +605,7 @@ mod tests {
             );
             let mut wolf = crate::Mob::<Wolf>::new(base, cx.rng);
             wolf.core.try_tame(1, 1.0, cx);
-            let armor = ItemStack::new(tuff_vanilla_data::Item::WolfArmor, 1);
+            let armor = ItemStack::mint(tuff_vanilla_data::Item::WolfArmor, 1, MintReason::Test);
             wolf.core.equipment.set(EquipmentSlot::Body, Some(armor));
             let shears = Some(tuff_vanilla_data::Item::Shears);
             assert_eq!(wolf.interact(&interaction(2, shears), cx), None);
@@ -686,7 +700,11 @@ mod tests {
             assert!(matches!(worn, Some(HandEffect::Consume(1))));
             assert!(core.equipment.get(EquipmentSlot::Body).is_some());
 
-            let mut armor = core.equipment.get(EquipmentSlot::Body).cloned().unwrap();
+            let mut armor = core
+                .equipment
+                .get(EquipmentSlot::Body)
+                .map(DupUnchecked::dup_unchecked)
+                .unwrap();
             armor.set_damage(40);
             core.equipment.set(EquipmentSlot::Body, Some(armor));
             core.set_sitting(false);

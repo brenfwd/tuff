@@ -301,7 +301,7 @@ pub fn synced_values(kind: EntityType, nbt: &Compound) -> Vec<(u8, MetadataValue
             MetadataValue::BlockState(block_state(nbt.get("block_state")).id()),
         )),
         EntityType::ItemDisplay => {
-            let stack = nbt.get_compound("item").and_then(ItemStack::from_nbt);
+            let stack = nbt.get_compound("item").and_then(ItemStack::from_storage);
             values.push((
                 SUBTYPE,
                 MetadataValue::Slot(stack.as_ref().map(tuff_item::item::ItemSnapshot::of)),

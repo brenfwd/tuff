@@ -4,7 +4,8 @@ use super::*;
 use crate::protocol::play::{self, GameMode, PlayerActionStatus};
 use rand::Rng;
 use tokio::sync::oneshot;
-use tuff_item::item::{ItemStack, LodestoneTracker, StackCooldown};
+use tuff_item::item::DupUnchecked;
+use tuff_item::item::{ItemStack, LodestoneTracker, MintReason, StackCooldown};
 use tuff_storage::admin::PermissionLevel;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -175,7 +176,7 @@ impl PlayerSession {
         match self.region_of(position) {
             Some(handle) if self.may_destroy(position) => {
                 let player = self.conn.handle.clone();
-                let tool = self.inventory.hand(false).cloned();
+                let tool = self.inventory.hand(false).map(DupUnchecked::dup_unchecked);
                 let request = if self.mode.abilities.may_build {
                     RegionRequest::Break {
                         player,
@@ -371,7 +372,10 @@ impl PlayerSession {
                 .hand(off_hand)
                 .map(|stack| stack.components.clone())
                 .unwrap_or_default(),
-            held_count: self.inventory.hand(off_hand).map_or(0, |stack| stack.count),
+            held_count: self
+                .inventory
+                .hand(off_hand)
+                .map_or(0, |stack| stack.count()),
             off_hand,
             off_hand_item: self
                 .inventory
@@ -394,8 +398,7 @@ impl PlayerSession {
                     self.inventory
                         .slots()
                         .get(Inventory::hotbar_slot(i))
-                        .cloned()
-                        .flatten()
+                        .and_then(DupUnchecked::dup_unchecked)
                 })
                 .collect(),
             selected: self.inventory.selected(),
@@ -719,7 +722,12 @@ impl PlayerSession {
             if !gone {
                 continue;
             }
-            let Some(mut stack) = self.inventory.slots().get(slot).cloned().flatten() else {
+            let Some(mut stack) = self
+                .inventory
+                .slots()
+                .get(slot)
+                .and_then(DupUnchecked::dup_unchecked)
+            else {
                 continue;
             };
             stack.components.other.insert(
@@ -804,7 +812,7 @@ impl PlayerSession {
             return;
         }
         if let Some(item) = picked_entity_item(kind) {
-            self.try_pick(ItemStack::new(item, 1));
+            self.try_pick(ItemStack::mint(item, 1, MintReason::Transform));
         }
     }
 
@@ -873,7 +881,8 @@ impl PlayerSession {
             .request(RegionRequest::EntityData { id: entity, reply })
             .await;
         let data = answer.await.ok()??;
-        data.get_compound("Item").and_then(ItemStack::from_nbt)
+        data.get_compound("Item")
+            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Creative))
     }
 
     fn try_pick(&mut self, stack: ItemStack) {
@@ -900,19 +909,29 @@ impl PlayerSession {
                     } else {
                         Inventory::hotbar_slot(self.inventory.selected())
                     };
-                    self.inventory
-                        .set_slot(slot, Some(ItemStack::new(result, 1)));
+                    self.inventory.set_slot(
+                        slot,
+                        Some(ItemStack::mint(result, 1, MintReason::Transform)),
+                    );
                 }
             }
             HandEffect::Exchange(result) => {
-                self.apply_exchange(off_hand, creative, ItemStack::new(result, 1))
-                    .await;
+                self.apply_exchange(
+                    off_hand,
+                    creative,
+                    ItemStack::mint(result, 1, MintReason::Transform),
+                )
+                .await;
             }
             HandEffect::ExchangeStack(result) => {
                 self.apply_exchange(off_hand, creative, *result).await;
             }
             HandEffect::Split(result) => {
-                let lone = !creative && self.inventory.hand(off_hand).is_some_and(|h| h.count == 1);
+                let lone = !creative
+                    && self
+                        .inventory
+                        .hand(off_hand)
+                        .is_some_and(|h| h.count() == 1);
                 if lone {
                     let slot = if off_hand {
                         Inventory::OFFHAND_SLOT
@@ -975,7 +994,7 @@ impl PlayerSession {
         ];
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.3, eye[2]];
-        let kept = stack.clone();
+        let kept = stack.dup_unchecked();
         let item = self.thrown_item(stack, position, velocity);
         let region = ChunkPos::of_position(position).region();
         let spawned = match self.region(region).await {
@@ -1028,7 +1047,7 @@ impl PlayerSession {
         pickup_delay: u32,
     ) {
         let region = ChunkPos::of_position(position).region();
-        let kept = stack.clone();
+        let kept = stack.dup_unchecked();
         let spawned = match self.region(region).await {
             Some(handle) => {
                 handle
@@ -1130,7 +1149,7 @@ impl PlayerSession {
                 event,
                 data,
                 ticks: destroying.ticks(self.tick),
-                tool: self.inventory.hand(false).cloned(),
+                tool: self.inventory.hand(false).map(DupUnchecked::dup_unchecked),
                 miner: self.miner(),
                 eye: self.eye(),
             })))
@@ -1214,7 +1233,7 @@ pub fn picked_block_stack(
             components.insert(key, value.clone());
         }
     }
-    let stack = ItemStack::new(item, 1);
+    let stack = ItemStack::mint(item, 1, MintReason::Transform);
     if components.is_empty() {
         return Some(stack);
     }
@@ -1273,7 +1292,7 @@ mod pick_tests {
         let mut sign = raw::new(BlockEntityType::Sign, pos);
         sign.insert("is_waxed", true);
         let plain = picked_block_stack(state, Some(&sign), false).unwrap();
-        assert_eq!(plain, ItemStack::new(Item::OakSign, 1));
+        assert_eq!(plain, ItemStack::mint(Item::OakSign, 1, MintReason::Test));
         let waxed = picked_block_stack(state, Some(&sign), true).unwrap();
         let stored = waxed.components.to_nbt();
         assert!(stored.contains_key("minecraft:waxed"));
@@ -1300,12 +1319,15 @@ mod pick_tests {
         let mut entity = crate::world::block_entity::BlockEntity::new(
             crate::world::block_entity::ContainerKind::ShulkerBox,
         );
-        entity.items[3] = Some(ItemStack::new(Item::Stone, 4));
+        entity.items[3] = Some(ItemStack::mint(Item::Stone, 4, MintReason::Test));
         let saved = entity.encode(pos);
         let state = Block::ShulkerBox.default_state();
         let stack = picked_block_stack(state, Some(&saved), true).unwrap();
         let container = stack.components.container.as_ref().unwrap();
-        assert_eq!(container[3], Some(ItemStack::new(Item::Stone, 4)));
+        assert_eq!(
+            container[3],
+            Some(ItemStack::mint(Item::Stone, 4, MintReason::Test))
+        );
     }
 
     #[tuff_core::watchdog]

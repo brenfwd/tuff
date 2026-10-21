@@ -1,6 +1,6 @@
 use super::*;
 use tuff_core::world::session::PlayerSession;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::Item;
 
 fn diamonds(session: &PlayerSession) -> u32 {
@@ -10,7 +10,7 @@ fn diamonds(session: &PlayerSession) -> u32 {
         .iter()
         .flatten()
         .filter(|stack| stack.item == Item::Diamond)
-        .map(|stack| stack.count as u32)
+        .map(|stack| stack.count() as u32)
         .sum()
 }
 
@@ -21,7 +21,9 @@ async fn a_drop_no_region_takes_goes_back_to_the_inventory() {
     let world = TestWorld::start(dir.path());
     let (mut session, _out) = session_with_outbound(&world, 5);
     world.shutdown().await;
-    session.throw_item(ItemStack::new(Item::Diamond, 3)).await;
+    session
+        .throw_item(ItemStack::mint(Item::Diamond, 3, MintReason::Test))
+        .await;
     assert_eq!(diamonds(&session), 3);
 }
 
@@ -32,14 +34,14 @@ async fn a_pickup_granted_while_leaving_is_kept() {
     let world = TestWorld::start(dir.path());
     let (mut session, _out) = session_with_outbound(&world, 5);
     session.conn.handle.send(PlayerEvent::ItemGranted {
-        stack: ItemStack::new(Item::Diamond, 4),
+        stack: ItemStack::mint(Item::Diamond, 4, MintReason::Test),
         picked_up: true,
     });
     session.leave().await;
     assert_eq!(diamonds(&session), 4);
     assert!(
         !session.conn.handle.send(PlayerEvent::ItemGranted {
-            stack: ItemStack::new(Item::Diamond, 1),
+            stack: ItemStack::mint(Item::Diamond, 1, MintReason::Test),
             picked_up: true,
         }),
         "a grant after leaving is refused, so the region keeps the item"

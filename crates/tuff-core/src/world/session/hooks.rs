@@ -28,7 +28,7 @@ fn done<'a>() -> HookFuture<'a> {
 }
 
 /// What an interceptor decides about one serverbound packet.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Verdict {
     /// Pass it on unchanged.
     Allow,

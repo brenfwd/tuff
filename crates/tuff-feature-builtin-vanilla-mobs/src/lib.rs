@@ -5,6 +5,7 @@
 //! and [`Mob`] joins the two into a [`RegionEntity`], so new mob types
 //! (vanilla or feature) are one `Species` impl and a registry entry.
 
+use tuff_item::item::DupUnchecked;
 pub mod allay;
 pub mod animal;
 pub mod armadillo;
@@ -197,7 +198,7 @@ pub struct MobSounds {
 }
 
 /// What hurt a mob.
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct Damage {
     pub kind: &'static DamageType,
     /// The player responsible, by entity id and UUID.
@@ -284,7 +285,7 @@ impl Damage {
             projectile: hit.projectile,
             projectile_id: hit.projectile_id,
             position: hit.position,
-            weapon: hit.weapon.clone(),
+            weapon: hit.weapon.dup_unchecked(),
             aim: None,
             burning_projectile: hit.projectile.is_some() && hit.ignite > 0.0,
         }
@@ -767,9 +768,9 @@ pub(crate) mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_spawn_egg_hatches_the_type_its_entity_data_names() {
-        use tuff_item::item::ItemStack;
+        use tuff_item::item::{ItemStack, MintReason};
         use tuff_vanilla_data::registry::EntityType;
-        let mut egg = ItemStack::new(tuff_vanilla_data::Item::CowSpawnEgg, 1);
+        let mut egg = ItemStack::mint(tuff_vanilla_data::Item::CowSpawnEgg, 1, MintReason::Test);
         assert_eq!(egg_entity_type(&egg), Some(EntityType::Cow));
         egg.components.other.insert(
             "minecraft:entity_data",

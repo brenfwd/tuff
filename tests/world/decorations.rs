@@ -240,7 +240,7 @@ async fn a_frame_falls_off_when_its_wall_goes() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn summoned_frames_keep_their_saved_state() {
     let s = scene(1003).await;
-    let item = ItemStack::new(Item::Map, 1).to_nbt();
+    let item = ItemStack::mint(Item::Map, 1, MintReason::Test).to_nbt();
     let nbt = Compound::new()
         .with("Facing", 2i8)
         .with("Item", item)
@@ -463,7 +463,8 @@ async fn a_framed_map_marks_its_frame_and_reaches_players_nearby() {
         .unwrap();
     let id = frame_on_a_wall(&mut s, Item::ItemFrame).await;
     let mut put = interaction(&s.player, Some(Item::FilledMap));
-    let mut stack = tuff_item::item::ItemStack::new(Item::FilledMap, 1);
+    let mut stack =
+        tuff_item::item::ItemStack::mint(Item::FilledMap, 1, tuff_item::item::MintReason::Test);
     stack.components.map_id = Some(map);
     put.stack = Some(stack);
     interact_with(&s.region, &s.player, &mut s.events, id, put).await;

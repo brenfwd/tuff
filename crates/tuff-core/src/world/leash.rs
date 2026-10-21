@@ -16,7 +16,7 @@ use crate::world::entity::{
     Effect, EntityBase, EntitySummary, NearbyPlayer, RegionEntity, TickContext,
 };
 use crate::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -310,7 +310,7 @@ pub struct Body<'a> {
 
 /// The lead stack an entity drops when its lead comes off.
 pub fn lead() -> ItemStack {
-    ItemStack::new(Item::Lead, 1)
+    ItemStack::mint(Item::Lead, 1, MintReason::EntityDrop)
 }
 
 pub fn center(bounds: [f64; 6]) -> [f64; 3] {

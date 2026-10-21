@@ -10,7 +10,7 @@ fn click(item: Item) -> EntityInteraction {
         player_uuid: 1,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: Some(ItemStack::new(item, 1)),
+        stack: Some(ItemStack::mint(item, 1, MintReason::Test)),
         off_hand: false,
         creative: false,
         sneaking: false,
@@ -75,8 +75,10 @@ fn shears_take_a_gifted_poppy_off_a_copper_golem() {
         let mut golem = mob::<CopperGolem>(EntityType::CopperGolem, [0.5, 64.0, 0.5], cx);
         let (core, species) = (&mut golem.core, &mut golem.species);
         assert_eq!(species.interact(core, &click(Item::Shears), cx), None);
-        core.equipment
-            .set(EquipmentSlot::Saddle, Some(ItemStack::new(Item::Poppy, 1)));
+        core.equipment.set(
+            EquipmentSlot::Saddle,
+            Some(ItemStack::mint(Item::Poppy, 1, MintReason::Test)),
+        );
         cx.effects.clear();
         assert_eq!(
             species.interact(core, &click(Item::Shears), cx),
@@ -726,12 +728,18 @@ fn a_copper_golem_takes_the_whole_stack_and_holds_only_what_the_chest_gives() {
             "components",
             tuff_nbt::Compound::new().with("minecraft:damage", tuff_nbt::Tag::Int(500)),
         );
-    let pick = ItemStack::from_nbt(&nbt).expect("a damaged pickaxe");
-    assert!(!pick.stacks_with(&ItemStack::new(Item::NetheritePickaxe, 1)));
+    let pick = ItemStack::mint_from_nbt(&nbt, MintReason::Test).expect("a damaged pickaxe");
+    assert!(!pick.stacks_with(&ItemStack::mint(
+        Item::NetheritePickaxe,
+        1,
+        MintReason::Test
+    )));
     let items: &'static [Option<ItemStack>] =
-        Box::leak(vec![Some(pick.clone())].into_boxed_slice());
+        Box::leak(vec![Some(pick.dup_unchecked())].into_boxed_slice());
     run_with_chest(Block::Air, |goal, core, cx| {
-        cx.container = Box::leak(Box::new(move |_| Some(std::borrow::Cow::Borrowed(items))));
+        cx.container = Box::leak(Box::new(move |_| {
+            Some(tuff_item::item::SlotsCow::Borrowed(items))
+        }));
         goal.finish(core, cx, BlockPos::new(3, 64, 0));
         assert_eq!(
             core.equipment.get(EquipmentSlot::Mainhand),
@@ -742,13 +750,13 @@ fn a_copper_golem_takes_the_whole_stack_and_holds_only_what_the_chest_gives() {
             .effects
             .iter()
             .filter_map(|e| match e {
-                Effect::CopperGolemTake { stack, .. } => Some(stack.clone()),
+                Effect::CopperGolemTake { stack, .. } => Some(stack.dup_unchecked()),
                 _ => None,
             })
             .collect();
-        assert_eq!(taken, vec![pick.clone()], "components ride along");
+        assert_eq!(taken, vec![pick.dup_unchecked()], "components ride along");
         let mut golem = CopperGolem::default();
-        golem.took_item(core, pick.clone());
+        golem.took_item(core, pick.dup_unchecked());
         assert_eq!(core.equipment.get(EquipmentSlot::Mainhand), Some(&pick));
     });
 }

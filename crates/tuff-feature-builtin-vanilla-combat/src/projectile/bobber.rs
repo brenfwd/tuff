@@ -311,7 +311,7 @@ impl Bobber {
                 let delta = [0, 1, 2].map(|i| player.position[i] - self.base.position[i]);
                 let length = delta.iter().map(|c| c * c).sum::<f64>().sqrt();
                 cx.effects.push(Effect::DropItem {
-                    stack: stack.clone(),
+                    stack: stack.dup_unchecked(),
                     position: self.base.position,
                     velocity: [
                         delta[0] * 0.1,

@@ -18,7 +18,7 @@ use tuff_core::world::physics;
 use tuff_core::world::projectile::{Owner, block_hit, margin, rotation_of, targets_along};
 use tuff_core::world::region_api::RegionWorld;
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::{Block, BlockState};
 use tuff_world_model::BlockPos;
@@ -115,7 +115,7 @@ impl FireworkRocket {
         Self {
             base,
             owner,
-            item: item.clone().with_count(1),
+            item: item.dup_count_unchecked(1),
             life: 0,
             lifetime,
             shot_at_angle: false,
@@ -376,9 +376,9 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     let mut owner = Owner::default();
     owner.load(nbt);
     let item = take(nbt, "FireworksItem", |tag| {
-        ItemStack::from_nbt(tag.as_compound()?)
+        ItemStack::from_storage(tag.as_compound()?)
     })
-    .unwrap_or_else(|| ItemStack::new(Item::FireworkRocket, 1));
+    .unwrap_or_else(|| ItemStack::mint(Item::FireworkRocket, 1, MintReason::Template));
     Some(Box::new(FireworkRocket {
         base,
         owner,
@@ -398,7 +398,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn rockets_without_a_fireworks_patch_fly_for_one() {
-        let plain = ItemStack::new(Item::FireworkRocket, 1);
+        let plain = ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test);
         assert_eq!(
             tuff_core::world::projectile::firework_flight(&plain),
             (1, 0)

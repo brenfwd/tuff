@@ -7,7 +7,7 @@ use crate::crafting::registered::vanilla_set;
 use tuff_core::world::block_entity::brewing;
 use tuff_core::world::crafting::brewing::{BrewTick, Brewing};
 use tuff_core::world::crafting::result_stack;
-use tuff_item::item::{ComponentPatch, ItemStack, PotionContents};
+use tuff_item::item::{ComponentPatch, ItemStack, MintReason, PotionContents};
 use tuff_vanilla_data::recipe::BrewingRecipe;
 
 fn tick(block: BlockState, items: &mut [Option<ItemStack>], stand: &mut Brewing) -> BrewTick {
@@ -31,13 +31,15 @@ fn is_fuel(stack: &ItemStack) -> bool {
 }
 
 fn potion(item: Item, potion: Potion) -> Option<ItemStack> {
-    Some(ItemStack::new(item, 1).with_components(ComponentPatch {
-        potion_contents: Some(Box::new(PotionContents {
-            potion: Some(potion),
+    Some(
+        ItemStack::mint(item, 1, MintReason::Test).with_components(ComponentPatch {
+            potion_contents: Some(Box::new(PotionContents {
+                potion: Some(potion),
+                ..Default::default()
+            })),
             ..Default::default()
-        })),
-        ..Default::default()
-    }))
+        }),
+    )
 }
 
 fn run(items: &mut [Option<ItemStack>], stand: &mut Brewing, ticks: usize) -> usize {
@@ -55,8 +57,8 @@ fn nether_wart_brews_awkward_potions_in_400_ticks_with_one_fuel_use() {
         potion(Item::Potion, Potion::Water),
         None,
         potion(Item::Potion, Potion::Water),
-        Some(ItemStack::new(Item::NetherWart, 2)),
-        Some(ItemStack::new(Item::BlazePowder, 1)),
+        Some(ItemStack::mint(Item::NetherWart, 2, MintReason::Test)),
+        Some(ItemStack::mint(Item::BlazePowder, 1, MintReason::Test)),
     ];
     let mut stand = Brewing::default();
     let first = tick(Block::BrewingStand.default_state(), &mut items, &mut stand);
@@ -72,7 +74,7 @@ fn nether_wart_brews_awkward_potions_in_400_ticks_with_one_fuel_use() {
     assert_eq!(items[1], None);
     assert_eq!(
         items[brewing::INGREDIENT],
-        Some(ItemStack::new(Item::NetherWart, 1))
+        Some(ItemStack::mint(Item::NetherWart, 1, MintReason::Test))
     );
     assert_eq!(stand.brew_time, 0);
     run(&mut items, &mut stand, 5);
@@ -87,37 +89,53 @@ fn a_changed_reagent_stops_the_brew_and_conversions_follow_the_recipes() {
         potion(Item::Potion, Potion::Awkward),
         None,
         None,
-        Some(ItemStack::new(Item::MagmaCream, 1)),
-        Some(ItemStack::new(Item::BlazePowder, 1)),
+        Some(ItemStack::mint(Item::MagmaCream, 1, MintReason::Test)),
+        Some(ItemStack::mint(Item::BlazePowder, 1, MintReason::Test)),
     ];
     let mut stand = Brewing::default();
     run(&mut items, &mut stand, 10);
-    items[brewing::INGREDIENT] = Some(ItemStack::new(Item::Sugar, 1));
+    items[brewing::INGREDIENT] = Some(ItemStack::mint(Item::Sugar, 1, MintReason::Test));
     run(&mut items, &mut stand, 1);
     assert_eq!(stand.brew_time, 0);
-    items[brewing::INGREDIENT] = Some(ItemStack::new(Item::MagmaCream, 1));
+    items[brewing::INGREDIENT] = Some(ItemStack::mint(Item::MagmaCream, 1, MintReason::Test));
     assert_eq!(run(&mut items, &mut stand, 401), 1);
     assert_eq!(items[0], potion(Item::Potion, Potion::FireResistance));
     assert_eq!(items[brewing::INGREDIENT], None);
 
     let fire = potion(Item::Potion, Potion::FireResistance).unwrap();
-    let gunpowder = ItemStack::new(Item::Gunpowder, 1);
+    let gunpowder = ItemStack::mint(Item::Gunpowder, 1, MintReason::Test);
     let splash = recipe_for(&fire, &gunpowder).unwrap();
     assert_eq!(
         Some(result_stack(&splash.output)),
         potion(Item::SplashPotion, Potion::FireResistance)
     );
-    let breath = ItemStack::new(Item::DragonBreath, 1);
+    let breath = ItemStack::mint(Item::DragonBreath, 1, MintReason::Test);
     let splash = potion(Item::SplashPotion, Potion::FireResistance).unwrap();
     assert_eq!(
         Some(result_stack(&recipe_for(&splash, &breath).unwrap().output)),
         potion(Item::LingeringPotion, Potion::FireResistance)
     );
     assert!(recipe_for(&fire, &breath).is_none());
-    assert!(is_reagent(&ItemStack::new(Item::NetherWart, 1)));
-    assert!(!is_reagent(&ItemStack::new(Item::Stick, 1)));
-    assert!(is_potion_input(&ItemStack::new(Item::GlassBottle, 1)));
-    assert!(is_fuel(&ItemStack::new(Item::BlazePowder, 1)));
+    assert!(is_reagent(&ItemStack::mint(
+        Item::NetherWart,
+        1,
+        MintReason::Test
+    )));
+    assert!(!is_reagent(&ItemStack::mint(
+        Item::Stick,
+        1,
+        MintReason::Test
+    )));
+    assert!(is_potion_input(&ItemStack::mint(
+        Item::GlassBottle,
+        1,
+        MintReason::Test
+    )));
+    assert!(is_fuel(&ItemStack::mint(
+        Item::BlazePowder,
+        1,
+        MintReason::Test
+    )));
 }
 
 #[tuff_core::watchdog]
@@ -127,8 +145,8 @@ fn a_dragon_breath_reagent_leaves_its_bottle() {
         potion(Item::SplashPotion, Potion::Swiftness),
         None,
         None,
-        Some(ItemStack::new(Item::DragonBreath, 2)),
-        Some(ItemStack::new(Item::BlazePowder, 1)),
+        Some(ItemStack::mint(Item::DragonBreath, 2, MintReason::Test)),
+        Some(ItemStack::mint(Item::BlazePowder, 1, MintReason::Test)),
     ];
     let mut stand = Brewing::default();
     let mut drops = Vec::new();
@@ -136,9 +154,12 @@ fn a_dragon_breath_reagent_leaves_its_bottle() {
         drops.extend(tick(Block::BrewingStand.default_state(), &mut items, &mut stand).drops);
     }
     assert_eq!(items[0], potion(Item::LingeringPotion, Potion::Swiftness));
-    assert_eq!(drops, vec![ItemStack::new(Item::GlassBottle, 1)]);
+    assert_eq!(
+        drops,
+        vec![ItemStack::mint(Item::GlassBottle, 1, MintReason::Test)]
+    );
     assert_eq!(
         items[brewing::INGREDIENT],
-        Some(ItemStack::new(Item::DragonBreath, 1))
+        Some(ItemStack::mint(Item::DragonBreath, 1, MintReason::Test))
     );
 }

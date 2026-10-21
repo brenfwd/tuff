@@ -10,6 +10,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{Attribute, EntityType, SoundEvent};
 use tuff_vanilla_data::{Item, tag};
 
@@ -23,7 +24,7 @@ use super::{MobCore, MobSounds, Species, data};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::entity::{Effect, EntityInteraction, InteractOutcome, TickContext, take};
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_world_model::BlockPos;
@@ -140,7 +141,7 @@ impl Goal for PandaSit {
     }
 
     fn stop(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
-        if let Some(stack) = mob.equipment.main_hand().cloned() {
+        if let Some(stack) = mob.equipment.main_hand().map(DupUnchecked::dup_unchecked) {
             mob.equipment.set(EquipmentSlot::Mainhand, None);
             mob.drop_item(stack, 0.0, cx);
             let seconds = if mob.panda_lazy {
@@ -651,13 +652,15 @@ impl Species for Panda {
         }
         try_to_sit(core);
         set_eat(core, 1);
-        if let Some(held) = core.equipment.main_hand().cloned()
+        if let Some(held) = core.equipment.main_hand().map(DupUnchecked::dup_unchecked)
             && !interaction.creative
         {
             core.drop_item(held, 0.0, cx);
         }
-        core.equipment
-            .set(EquipmentSlot::Mainhand, Some(ItemStack::new(stack.item, 1)));
+        core.equipment.set(
+            EquipmentSlot::Mainhand,
+            Some(ItemStack::mint(stack.item, 1, MintReason::Spawn)),
+        );
         core.equipment.set_drop_chance(
             EquipmentSlot::Mainhand,
             super::equipment::PRESERVED_DROP_CHANCE,
@@ -912,7 +915,7 @@ mod tests {
                     .iter()
                     .any(|e| matches!(e, Effect::TakeItem { item: 9, .. }))
             );
-            panda.took_item(core, ItemStack::new(Item::Bamboo, 1));
+            panda.took_item(core, ItemStack::mint(Item::Bamboo, 1, MintReason::Test));
             assert!(holding(core));
             goal.start(core, cx);
             assert_ne!(core.panda_flags & FLAG_SITTING, 0);
@@ -937,7 +940,7 @@ mod tests {
             Panda::configure(core);
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::Bamboo, 1)),
+                Some(ItemStack::mint(Item::Bamboo, 1, MintReason::Test)),
             );
             let mut goal = PandaSit::default();
             assert!(goal.can_use(core, cx));
@@ -1023,7 +1026,7 @@ mod tests {
                 player_uuid: 1,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::new(Item::Bamboo, 1)),
+                stack: Some(ItemStack::mint(Item::Bamboo, 1, MintReason::Test)),
                 off_hand: false,
                 creative: false,
                 sneaking: false,

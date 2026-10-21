@@ -7,6 +7,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, MapDecorationType, MobEffect, SoundEvent};
@@ -633,7 +634,7 @@ fn holding(mob: &MobCore) -> bool {
 
 /// Throws what it carries out of its mouth.
 fn spit_out(mob: &mut MobCore, cx: &mut TickContext) -> bool {
-    let Some(stack) = mob.equipment.main_hand().cloned() else {
+    let Some(stack) = mob.equipment.main_hand().map(DupUnchecked::dup_unchecked) else {
         return false;
     };
     mob.equipment.set(EquipmentSlot::Mainhand, None);
@@ -955,7 +956,7 @@ mod tests {
     use tuff_vanilla_data::Item;
 
     use super::*;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
 
     fn fish_interaction() -> EntityInteraction {
         EntityInteraction {
@@ -963,7 +964,7 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::new(Item::Cod, 1)),
+            stack: Some(ItemStack::mint(Item::Cod, 1, MintReason::Test)),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -1100,7 +1101,7 @@ mod tests {
         super::super::tests::with_context(|core, cx| {
             Dolphin::configure(core);
             let dolphin = Dolphin::default();
-            assert!(!dolphin.is_food(&ItemStack::new(Item::Cod, 1)));
+            assert!(!dolphin.is_food(&ItemStack::mint(Item::Cod, 1, MintReason::Test)));
             let _ = cx;
         });
     }
@@ -1170,7 +1171,7 @@ mod tests {
                     .iter()
                     .any(|e| matches!(e, Effect::TakeItem { item: 77, count: 1 }))
             );
-            dolphin.took_item(core, ItemStack::new(Item::Stick, 1));
+            dolphin.took_item(core, ItemStack::mint(Item::Stick, 1, MintReason::Test));
             assert!(holding(core));
             assert!(PlayWithItems.can_use(core, cx));
             PlayWithItems.tick(core, cx);

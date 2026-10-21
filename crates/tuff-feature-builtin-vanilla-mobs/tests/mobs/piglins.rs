@@ -74,7 +74,10 @@ async fn drop_item(region: &RegionHandle, item: Item, count: u8, at: [f64; 3]) {
     summon(
         region,
         EntityType::Item,
-        Compound::new().with("Item", ItemStack::new(item, count).to_nbt()),
+        Compound::new().with(
+            "Item",
+            ItemStack::mint(item, count, MintReason::Test).to_nbt(),
+        ),
         at,
     )
     .await;
@@ -214,7 +217,7 @@ async fn piglins_with_crossbows_shoot_players_without_gold() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
     let y = SKY as f64 + 1.0;
-    let crossbow = ItemStack::new(Item::Crossbow, 1).to_nbt();
+    let crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test).to_nbt();
     summon(
         &region,
         EntityType::Piglin,
@@ -242,7 +245,7 @@ async fn piglins_hunt_adult_hoglins_after_a_rest() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
     let y = SKY as f64 + 1.0;
-    let sword = ItemStack::new(Item::GoldenSword, 1).to_nbt();
+    let sword = ItemStack::mint(Item::GoldenSword, 1, MintReason::Test).to_nbt();
     summon(
         &region,
         EntityType::Piglin,
@@ -357,7 +360,7 @@ async fn piglins_pocket_picked_up_items_with_their_components() {
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
     let y = SKY as f64 + 1.0;
     summon(&region, EntityType::Piglin, picking_up(), [4.5, y, 4.5]).await;
-    let mut named = ItemStack::new(Item::GoldNugget, 3);
+    let mut named = ItemStack::mint(Item::GoldNugget, 3, MintReason::Test);
     named.components.custom_name = Some(Box::new(tuff_item::text::TextComponent::new("Shiny")));
     summon(
         &region,
@@ -376,8 +379,8 @@ async fn piglins_pocket_picked_up_items_with_their_components() {
         if let Some(Tag::List(list)) = nbt.get("Inventory")
             && let Some(stack) = list.first().and_then(|t| t.as_compound())
         {
-            let back = ItemStack::from_nbt(stack).expect("a saved stack");
-            assert_eq!(back.count, 3);
+            let back = ItemStack::mint_from_nbt(stack, MintReason::Test).expect("a saved stack");
+            assert_eq!(back.count(), 3);
             assert_eq!(back.components.custom_name, named.components.custom_name);
             world.shutdown().await;
             return;
@@ -462,7 +465,7 @@ async fn piglins_with_crossbows_back_away_from_close_players() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
     let y = SKY as f64 + 1.0;
-    let crossbow = ItemStack::new(Item::Crossbow, 1).to_nbt();
+    let crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test).to_nbt();
     summon(
         &region,
         EntityType::Piglin,

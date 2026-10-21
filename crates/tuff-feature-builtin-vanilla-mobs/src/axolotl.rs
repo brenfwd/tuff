@@ -22,7 +22,7 @@ use tuff_core::world::entity::{
     Effect, EntityInteraction, InteractOutcome, Notice, TickContext, take_bool, take_number,
 };
 use tuff_core::world::messages::{HandEffect, PlayerEvent};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::entity::PathType;
 
@@ -270,9 +270,10 @@ impl Axolotl {
         } else {
             return None;
         }
-        Some(HandEffect::ExchangeStack(Box::new(ItemStack::new(
+        Some(HandEffect::ExchangeStack(Box::new(ItemStack::mint(
             Item::WaterBucket,
             1,
+            MintReason::Spawn,
         ))))
     }
 }

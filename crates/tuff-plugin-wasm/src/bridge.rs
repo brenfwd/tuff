@@ -4,6 +4,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use tuff_item::item::DupUnchecked;
 
 use tuff_core::protocol::play::{self, PlayerActionStatus, Serverbound};
 use tuff_core::world::commands::text;
@@ -53,7 +54,7 @@ pub(crate) fn player(session: &PlayerSession) -> Player {
 
 fn items(session: &PlayerSession) -> Items {
     let slots = session.inventory.slots();
-    let named = |stack: &tuff_item::item::ItemStack| (stack.item.name().to_owned(), stack.count);
+    let named = |stack: &tuff_item::item::ItemStack| (stack.item.name().to_owned(), stack.count());
     Items {
         held: slots[Inventory::hotbar_slot(session.inventory.selected())]
             .as_ref()
@@ -403,7 +404,7 @@ impl PacketInterceptor for Clicks {
             }
             let held = session.inventory.slots()
                 [Inventory::hotbar_slot(session.inventory.selected())]
-            .clone();
+            .dup_unchecked();
             let Some(held) = held else {
                 return Verdict::Allow;
             };

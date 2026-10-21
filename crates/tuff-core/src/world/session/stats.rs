@@ -1,6 +1,7 @@
 //! Player statistics bookkeeping.
 
 use crate::world::stats::Stat;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{CustomStat, StatType};
 
 use tuff_vanilla_data::Item;
@@ -8,7 +9,7 @@ use tuff_vanilla_data::Item;
 use super::*;
 use crate::protocol::play;
 use crate::world::inventory::Inventory;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 impl PlayerSession {
     /// How many of `item` an inventory holds outside its crafting grid,
@@ -16,10 +17,12 @@ impl PlayerSession {
     pub fn count_in(inventory: &Inventory, item: Item) -> i32 {
         inventory.slots()[5..]
             .iter()
-            .chain(std::iter::once(&inventory.carried().cloned()))
+            .chain(std::iter::once(
+                &inventory.carried().map(DupUnchecked::dup_unchecked),
+            ))
             .flatten()
             .filter(|stack| stack.item == item)
-            .map(|stack| i32::from(stack.count))
+            .map(|stack| i32::from(stack.count()))
             .sum()
     }
 
@@ -33,13 +36,18 @@ impl PlayerSession {
         let dropped: i32 = drops
             .iter()
             .filter(|stack| stack.item == item)
-            .map(|stack| i32::from(stack.count))
+            .map(|stack| i32::from(stack.count()))
             .sum();
         let made = self.held_count(item) - before + dropped;
         if made > 0 {
             self.item_action_hooks(
                 super::hooks::ItemAction::Crafted,
-                ItemStack::new(item, made.clamp(1, i32::from(i8::MAX)) as _).view(),
+                ItemStack::mint(
+                    item,
+                    made.clamp(1, i32::from(i8::MAX)) as _,
+                    MintReason::Template,
+                )
+                .view(),
             );
             self.progress
                 .stats

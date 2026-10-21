@@ -4,7 +4,7 @@
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::DataComponentType;
 
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 use super::args::{Resources, read_identifier, read_nbt_value};
@@ -21,7 +21,8 @@ pub struct ItemInput {
 
 impl ItemInput {
     pub fn stack(&self, count: u8) -> ItemStack {
-        ItemStack::new(self.item, count).with_components(self.components.clone())
+        ItemStack::mint(self.item, count, MintReason::Command)
+            .with_components(self.components.clone())
     }
 }
 
@@ -81,7 +82,7 @@ impl ItemTest {
             Self::Tag(_, items) => items.contains(&stack.item),
             Self::HasComponent(id) => stack.components.to_nbt().contains_key(id),
             Self::ComponentEquals(id, value) => stack.components.to_nbt().get(id) == Some(value),
-            Self::Count(range) => range.contains(i32::from(stack.count)),
+            Self::Count(range) => range.contains(i32::from(stack.count())),
             Self::Damage(range) => range.contains(stack.damage() as i32),
             Self::Component(predicate) => predicate.test(stack),
             Self::Custom(id) => crate::custom::item_id(stack) == Some(id.as_str()),
@@ -455,9 +456,9 @@ mod tests {
     #[test]
     fn predicates_match_stacks() {
         let predicate = |input: &str| parse_item_predicate(&mut Reader::new(input)).unwrap();
-        let stone = ItemStack::new(Item::Stone, 5);
-        let cobblestone = ItemStack::new(Item::Cobblestone, 1);
-        let mut sword = ItemStack::new(Item::DiamondSword, 1);
+        let stone = ItemStack::mint(Item::Stone, 5, MintReason::Test);
+        let cobblestone = ItemStack::mint(Item::Cobblestone, 1, MintReason::Test);
+        let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         sword.set_damage(10);
         assert!(predicate("stone").test(&stone));
         assert!(!predicate("stone").test(&sword));
@@ -519,7 +520,7 @@ mod tests {
             .unwrap(),
         )
         .stack(4);
-        let plain = ItemStack::new(Item::Stone, 1);
+        let plain = ItemStack::mint(Item::Stone, 1, MintReason::Test);
         assert!(
             predicate("*[enchantments~[{enchantments:\"sharpness\",levels:{min:2}}]]")
                 .test(&enchanted)

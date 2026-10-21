@@ -13,7 +13,7 @@ pub fn fill_signal<'a>(slots: impl IntoIterator<Item = &'a Option<ItemStack>>) -
     for slot in slots {
         count += 1;
         if let Some(stack) = slot {
-            fullness += f32::from(stack.count) / f32::from(stack.max_stack_size().max(1));
+            fullness += f32::from(stack.count()) / f32::from(stack.max_stack_size().max(1));
         }
     }
     if count == 0 {

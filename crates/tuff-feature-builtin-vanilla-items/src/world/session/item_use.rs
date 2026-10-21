@@ -2,6 +2,7 @@
 //! fireworks and equipment swaps, and soul speed.
 
 use tuff_core::world::stats::Stat;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::StatType;
 
 use rand::Rng;
@@ -26,7 +27,7 @@ use tuff_core::world::projectile::{ArrowShot, Flight, Launch, Owner, Pickup, Sho
 use tuff_core::world::session::hooks::{HookFuture, SessionHooks, SessionTick};
 use tuff_core::world::session::*;
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_common::combat;
 use tuff_world_model::BlockPos;
 use tuff_world_model::pos::ChunkPos;
@@ -107,7 +108,11 @@ impl ItemUseExt for PlayerSession {
     /// A firework rocket used while gliding: consumed, and its boost
     /// applied to the tracked glide velocity for its flight duration.
     async fn boost_with_firework(&mut self, off_hand: bool) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = self
+            .inventory
+            .hand(off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
         if !self.mode.abilities.instabuild {
@@ -283,10 +288,14 @@ impl ItemUseExt for PlayerSession {
     /// From a stack of several, one is worn and the old piece goes to the
     /// inventory.
     async fn swap_equipment(&mut self, off_hand: bool, slot: usize) {
-        let Some(hand) = self.inventory.hand(off_hand).cloned() else {
+        let Some(hand) = self
+            .inventory
+            .hand(off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
-        let worn = self.inventory.slots()[slot].clone();
+        let worn = self.inventory.slots()[slot].dup_unchecked();
         let bound = worn.as_ref().is_some_and(|stack| {
             stack.has_enchantment_effect(|effects| effects.prevent_armor_change)
         });
@@ -302,9 +311,9 @@ impl ItemUseExt for PlayerSession {
         } else {
             Inventory::hotbar_slot(self.inventory.selected())
         };
-        if hand.count <= 1 {
+        if hand.count() <= 1 {
             let to_hand = if worn.is_none() && self.mode.abilities.instabuild {
-                Some(hand.clone())
+                Some(hand.dup_unchecked())
             } else {
                 worn
             };
@@ -312,7 +321,7 @@ impl ItemUseExt for PlayerSession {
             self.inventory.set_slot(hand_slot, to_hand);
         } else {
             self.inventory
-                .set_slot(slot, Some(hand.clone().with_count(1)));
+                .set_slot(slot, Some(hand.dup_count_unchecked(1)));
             if !self.mode.abilities.instabuild {
                 self.inventory.take_from_hand(off_hand, 1);
             }
@@ -340,17 +349,17 @@ impl ItemUseExt for PlayerSession {
                 } else {
                     Inventory::hotbar_slot(self.inventory.selected())
                 };
-                return Some((Some(slot), stack.clone()));
+                return Some((Some(slot), stack.dup_unchecked()));
             }
         }
         if let Some(slot) = self.inventory.find_matching(is_arrow) {
-            let stack = self.inventory.slots()[slot].clone()?;
+            let stack = self.inventory.slots()[slot].dup_unchecked()?;
             return Some((Some(slot), stack));
         }
         self.mode
             .abilities
             .instabuild
-            .then(|| (None, ItemStack::new(Item::Arrow, 1)))
+            .then(|| (None, ItemStack::mint(Item::Arrow, 1, MintReason::Template)))
     }
 
     /// The velocity of something this player shoots or throws along its
@@ -381,8 +390,8 @@ impl ItemUseExt for PlayerSession {
 
     async fn launch(&mut self, position: [f64; 3], shot: Shot) -> Option<i32> {
         let launched = match &shot {
-            Shot::Arrow(arrow) => Some(arrow.item.clone()),
-            Shot::Thrown { item, .. } | Shot::Firework { item, .. } => Some(item.clone()),
+            Shot::Arrow(arrow) => Some(arrow.item.dup_unchecked()),
+            Shot::Thrown { item, .. } | Shot::Firework { item, .. } => Some(item.dup_unchecked()),
             _ => None,
         };
         if let Some(stack) = launched {
@@ -423,7 +432,7 @@ impl ItemUseExt for PlayerSession {
             .inventory
             .hand(using.off_hand)
             .filter(|s| s.item == Item::Bow)
-            .cloned()
+            .map(DupUnchecked::dup_unchecked)
         else {
             return;
         };
@@ -442,21 +451,21 @@ impl ItemUseExt for PlayerSession {
         } else {
             combat::ammo_use(&bow, ammo.item, 1.0).floor().max(0.0) as u8
         };
-        if uses > ammo.count {
+        if uses > ammo.count() {
             return;
         }
         if uses > 0
             && let Some(slot) = slot
         {
-            let left = ammo.count - uses;
+            let left = ammo.count() - uses;
             self.inventory
-                .set_slot(slot, (left > 0).then(|| ammo.clone().with_count(left)));
+                .set_slot(slot, (left > 0).then(|| ammo.dup_count_unchecked(left)));
         }
         let velocity = self.shot_velocity(power * 3.0);
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.100_000_001_490_116_12, eye[2]];
-        let mut arrow = ArrowShot::new(ammo.clone().with_count(1), velocity);
-        arrow.weapon = Some(bow.clone());
+        let mut arrow = ArrowShot::new(ammo.dup_count_unchecked(1), velocity);
+        arrow.weapon = Some(bow.dup_unchecked());
         arrow.crit = power == 1.0;
         if uses == 0 {
             arrow.pickup = Some(Pickup::CreativeOnly);
@@ -549,7 +558,7 @@ impl ItemUseExt for PlayerSession {
             .inventory
             .hand(off_hand)
             .filter(|s| s.item == Item::EnderEye)
-            .cloned()
+            .map(DupUnchecked::dup_unchecked)
         else {
             return;
         };
@@ -597,7 +606,11 @@ impl ItemUseExt for PlayerSession {
 
     /// Throwing a snowball, egg or ender pearl.
     async fn throw_projectile(&mut self, off_hand: bool, item: Item, kind: EntityType) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = self
+            .inventory
+            .hand(off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
         let cooldown = stack.use_cooldown();
@@ -663,7 +676,11 @@ impl ItemUseExt for PlayerSession {
     }
 
     async fn use_fishing_rod(&mut self, off_hand: bool) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = self
+            .inventory
+            .hand(off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
         let pitch = 0.4 / (self.rng.r#gen::<f32>() * 0.4 + 0.8);
@@ -928,7 +945,10 @@ impl ItemUseExt for PlayerSession {
             .inventory
             .hand(off_hand)
             .and_then(|stack| stack.components.suspicious_stew_effects.clone());
-        let consumed = self.inventory.hand(off_hand).cloned();
+        let consumed = self
+            .inventory
+            .hand(off_hand)
+            .map(DupUnchecked::dup_unchecked);
         if let Some(stack) = &consumed {
             self.fire(tuff_core::world::advancement::trigger::Event::ConsumeItem(
                 stack,
@@ -1001,7 +1021,7 @@ impl ItemUseExt for PlayerSession {
             self.apply_consume_effect(effect).await;
         }
         if !self.mode.abilities.instabuild {
-            let before = self.inventory.hand(off_hand).map_or(0, |s| s.count);
+            let before = self.inventory.hand(off_hand).map_or(0, |s| s.count());
             self.inventory.take_from_hand(off_hand, 1);
             if before > 0
                 && let Some(remainder) = consumed.as_ref().and_then(ItemStack::use_remainder)

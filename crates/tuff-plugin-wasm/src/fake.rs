@@ -217,7 +217,7 @@ impl Fakes {
         let body = &observed.body;
         let stack = |stack: &tuff_item::item::ItemStack| WitStack {
             item: stack.item.name().to_owned(),
-            count: stack.count,
+            count: stack.count(),
         };
         let held = HOTBAR_START + body.selected_slot;
         Some(Inventory {
@@ -348,7 +348,7 @@ fn face(direction: Direction) -> Face {
 #[cfg(test)]
 mod tests {
     use tuff_core::world::player::Miner;
-    use tuff_item::item::{ItemSnapshot, ItemStack};
+    use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
     use tuff_vanilla_data::{Block, Item};
 
     use super::*;
@@ -360,11 +360,17 @@ mod tests {
         let hardness = stone.destroy_speed().unwrap();
         let miner = Miner::plain(true);
         let items = vec![
-            (36, ItemSnapshot::of(&ItemStack::new(Item::Cobblestone, 10))),
-            (39, ItemSnapshot::of(&ItemStack::new(Item::IronPickaxe, 1))),
+            (
+                36,
+                ItemSnapshot::of(&ItemStack::mint(Item::Cobblestone, 10, MintReason::Test)),
+            ),
+            (
+                39,
+                ItemSnapshot::of(&ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test)),
+            ),
             (
                 40,
-                ItemSnapshot::of(&ItemStack::new(Item::WoodenPickaxe, 1)),
+                ItemSnapshot::of(&ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test)),
             ),
         ];
         let best = best_tool(stone, hardness, &items, &miner, 0).unwrap();

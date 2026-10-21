@@ -8,7 +8,8 @@ use tuff_core::world::region_api::{RegionHooks, RegionWorld};
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{HookFuture, SessionHooks, SessionTick};
 use tuff_core::world::stats::Stat;
-use tuff_item::item::ItemStack;
+use tuff_item::item::DupUnchecked;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{SoundEvent, StatType};
 use tuff_vanilla_data::{BlockState, Item};
@@ -123,7 +124,7 @@ async fn fill_cartography(session: &mut PlayerSession) {
     if !std::mem::take(stale) {
         return;
     }
-    let [Some(map), Some(additional)] = (**inputs).clone() else {
+    let [Some(map), Some(additional)] = (**inputs).dup_unchecked() else {
         return;
     };
     let Some(id) = map.components.map_id else {
@@ -170,7 +171,7 @@ async fn check_extending(session: &mut PlayerSession) {
     let Some(result) = menu.container[0]
         .as_ref()
         .filter(|stack| post_processing(stack) == Some(Derivation::ZoomOut))
-        .cloned()
+        .map(DupUnchecked::dup_unchecked)
     else {
         return;
     };
@@ -210,7 +211,7 @@ async fn post_process(session: &mut PlayerSession) {
     let slots: Vec<usize> = (1..session.inventory.slots().len())
         .filter(|&slot| pending(&session.inventory.slots()[slot]))
         .collect();
-    let carried = pending(&session.inventory.carried().cloned());
+    let carried = pending(&session.inventory.carried().map(DupUnchecked::dup_unchecked));
     if slots.is_empty() && !carried {
         return;
     }
@@ -219,12 +220,13 @@ async fn post_process(session: &mut PlayerSession) {
         return;
     };
     for slot in slots {
-        if let Some(mut stack) = session.inventory.slots()[slot].clone() {
+        if let Some(mut stack) = session.inventory.slots()[slot].dup_unchecked() {
             process(service, &mut stack).await;
             session.inventory.set_slot(slot, Some(stack));
         }
     }
-    if carried && let Some(mut stack) = session.inventory.carried().cloned() {
+    if carried && let Some(mut stack) = session.inventory.carried().map(DupUnchecked::dup_unchecked)
+    {
         process(service, &mut stack).await;
         session.inventory.set_carried(Some(stack));
     }
@@ -275,7 +277,7 @@ async fn use_empty_map(session: &mut PlayerSession, off_hand: bool) {
     session
         .player_sound(SoundEvent::UiCartographyTableTakeResult, 1.0, 1.0)
         .await;
-    let mut map = ItemStack::new(Item::FilledMap, 1);
+    let mut map = ItemStack::mint(Item::FilledMap, 1, MintReason::Transform);
     map.components.map_id = Some(id);
     if session.inventory.hand(off_hand).is_none() {
         let slot = if off_hand {

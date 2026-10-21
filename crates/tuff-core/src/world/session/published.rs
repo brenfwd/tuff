@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::DupUnchecked;
 
 /// What viewers, the coordinator, scoreboards and the client were last
 /// told about this player, so only changes go out.
@@ -516,7 +517,10 @@ impl PlayerSession {
         self.published.last_looks = looks;
         self.published.seq += 1;
         let grounded = self.pose.on_ground && !self.is_dead() && self.ride.riding.is_none();
-        let feet = self.inventory.equipped(EquipmentSlot::Feet).cloned();
+        let feet = self
+            .inventory
+            .equipped(EquipmentSlot::Feet)
+            .map(DupUnchecked::dup_unchecked);
         let moves = relative.then(|| {
             movement
                 .into_iter()

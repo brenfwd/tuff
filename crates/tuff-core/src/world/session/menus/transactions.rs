@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::DupUnchecked;
 
 impl PlayerSession {
     /// Sends the block container slots changed since `container_before` to
@@ -27,14 +28,14 @@ impl PlayerSession {
         }
         let inventory: Vec<(usize, Option<ItemStack>)> = (0..inventory_before.slots().len())
             .filter(|slot| inventory_before.slots()[*slot] != self.inventory.slots()[*slot])
-            .map(|slot| (slot, inventory_before.slots()[slot].clone()))
+            .map(|slot| (slot, inventory_before.slots()[slot].dup_unchecked()))
             .collect();
         let Some(menu) = self.menus.menu.as_mut() else {
             return;
         };
         menu.pending = Some(Pending {
             inventory,
-            carried: inventory_before.carried().cloned(),
+            carried: inventory_before.carried().map(DupUnchecked::dup_unchecked),
             drops,
             merchant: None,
         });
@@ -182,8 +183,8 @@ impl PlayerSession {
             .filter(|(_, (before, after))| before != after)
             .map(|(slot, (before, after))| EntitySlotChange {
                 slot,
-                expected: before.clone(),
-                new: after.clone(),
+                expected: before.dup_unchecked(),
+                new: after.dup_unchecked(),
             })
             .collect();
         if changes.is_empty() {
@@ -194,12 +195,12 @@ impl PlayerSession {
         }
         let inventory: Vec<(usize, Option<ItemStack>)> = (0..inventory_before.slots().len())
             .filter(|slot| inventory_before.slots()[*slot] != self.inventory.slots()[*slot])
-            .map(|slot| (slot, inventory_before.slots()[slot].clone()))
+            .map(|slot| (slot, inventory_before.slots()[slot].dup_unchecked()))
             .collect();
         let menu = self.menus.menu.as_mut().expect("checked above");
         menu.pending = Some(Pending {
             inventory,
-            carried: inventory_before.carried().cloned(),
+            carried: inventory_before.carried().map(DupUnchecked::dup_unchecked),
             drops,
             merchant: None,
         });
@@ -244,7 +245,7 @@ impl PlayerSession {
         let mut updates = Vec::new();
         for (slot, item) in slots {
             if slot < menu.container.len() {
-                menu.container[slot] = item.clone();
+                menu.container[slot] = item.dup_unchecked();
                 updates.push((menu.next_state_id(), menu.kind.wire_slot(slot) as i16, item));
             }
         }
@@ -338,7 +339,7 @@ impl PlayerSession {
         for (slot, item) in slots {
             let index = offset + slot;
             if index < menu.container.len() {
-                menu.container[index] = item.clone();
+                menu.container[index] = item.dup_unchecked();
                 updates.push((
                     menu.next_state_id(),
                     menu.kind.wire_slot(index) as i16,
@@ -387,8 +388,8 @@ impl super::MenuState {
                     changes.push(ContainerChange {
                         pos: *pos,
                         slot,
-                        expected: before[index].clone(),
-                        new: menu.container[index].clone(),
+                        expected: before[index].dup_unchecked(),
+                        new: menu.container[index].dup_unchecked(),
                     });
                 }
             }

@@ -7,7 +7,7 @@ use tuff_world_model::BlockPos;
 use super::*;
 
 /// A container menu as the region hands it to a player.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MenuOpen {
     pub dimension: DimensionId,
     pub region: RegionHandle,
@@ -18,7 +18,7 @@ pub struct MenuOpen {
     pub stat: Option<tuff_vanilla_data::registry::CustomStat>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum MenuSource {
     /// Block containers: the block entities backing the container section
     /// in slot order, each with its slot count, their contents, and the
@@ -50,7 +50,7 @@ pub enum MenuSource {
 }
 
 /// The far half of a double chest as its region opened it for a viewer.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OpenedHalf {
     pub pos: BlockPos,
     pub region: RegionHandle,
@@ -60,7 +60,7 @@ pub struct OpenedHalf {
 
 /// One slot of an entity container a transaction changes, as
 /// [`ContainerChange`] is for blocks.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
 pub struct EntitySlotChange {
     pub slot: usize,
     pub expected: Option<ItemStack>,
@@ -69,7 +69,7 @@ pub struct EntitySlotChange {
 
 /// One slot of a block container a transaction changes: what the session
 /// expects it to hold and what it should hold afterwards.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ContainerChange {
     pub pos: BlockPos,
     pub slot: usize,

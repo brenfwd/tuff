@@ -17,7 +17,7 @@ use super::target::{self, HurtByTarget, NearestAttackablePlayer};
 use super::{MobCore, MobSounds, Species};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::entity::{TickContext, take, take_number};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -236,7 +236,7 @@ impl Species for Vex {
     fn finalize_spawn(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         core.equipment.set(
             EquipmentSlot::Mainhand,
-            Some(ItemStack::new(Item::IronSword, 1)),
+            Some(ItemStack::mint(Item::IronSword, 1, MintReason::Spawn)),
         );
         core.equipment.set_drop_chance(EquipmentSlot::Mainhand, 0.0);
         let difficulty = super::monster::LocalDifficulty::at(cx, core.base.position);

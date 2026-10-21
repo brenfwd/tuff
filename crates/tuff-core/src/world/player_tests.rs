@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::MintReason;
 
 #[tuff_core::watchdog]
 #[test]
@@ -66,7 +67,7 @@ fn destroying_plays_the_hit_sound_every_fourth_tick() {
 #[test]
 fn destroy_progress_matches_vanilla_mining_times() {
     let progress = |block: Block, tool: Option<Item>| {
-        let tool = tool.map(|item| ItemStack::new(item, 1));
+        let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Test));
         destroy_progress(
             block.default_state(),
             tool.as_ref(),
@@ -93,7 +94,7 @@ fn destroy_progress_matches_vanilla_mining_times() {
     );
     assert_eq!(progress(Block::Bedrock, Some(Item::NetheritePickaxe)), 0.0);
 
-    let shears = ItemStack::new(Item::Shears, 1);
+    let shears = ItemStack::mint(Item::Shears, 1, MintReason::Test);
     let shears = Some(&shears);
     let leaves = Block::OakLeaves.default_state();
     assert!(destroy_progress(leaves, shears, &Miner::plain(false), false) < 1.0);
@@ -103,7 +104,7 @@ fn destroy_progress_matches_vanilla_mining_times() {
 #[tuff_core::watchdog]
 #[test]
 fn efficiency_haste_and_fatigue_change_mining_speed() {
-    let pickaxe = ItemStack::new(Item::DiamondPickaxe, 1);
+    let pickaxe = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     let stone = Block::Stone.default_state();
     let plain = Miner::plain(true);
     let enchanted = Miner {
@@ -702,7 +703,7 @@ fn ladders_vines_and_open_trapdoors_over_ladders_are_climbable() {
 }
 
 fn elytra() -> ItemStack {
-    ItemStack::new(tuff_vanilla_data::Item::Elytra, 1)
+    ItemStack::mint(tuff_vanilla_data::Item::Elytra, 1, MintReason::Test)
 }
 
 #[tuff_core::watchdog]

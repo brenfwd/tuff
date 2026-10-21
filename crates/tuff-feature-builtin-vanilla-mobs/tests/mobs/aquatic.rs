@@ -353,7 +353,8 @@ async fn a_tamed_saddled_nautilus_goes_where_its_drivers_client_moves_it() {
         "equipment",
         Compound::new().with(
             "saddle",
-            tuff_item::item::ItemStack::new(Item::Saddle, 1).to_nbt(),
+            tuff_item::item::ItemStack::mint(Item::Saddle, 1, tuff_item::item::MintReason::Test)
+                .to_nbt(),
         ),
     );
     summon(&region, EntityType::Nautilus, nbt, start).await;

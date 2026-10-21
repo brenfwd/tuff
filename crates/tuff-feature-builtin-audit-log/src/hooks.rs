@@ -440,7 +440,7 @@ fn item_record(
 ) -> Record {
     let mut record = Record::new(now_ms(), who, kind, world.dimension_id(), world_pos(at));
     record.material = Some(stack.item.name().to_owned());
-    record.amount = i32::from(stack.count);
+    record.amount = i32::from(stack.count());
     record.data = Some(stack.to_nbt());
     record
 }
@@ -543,7 +543,7 @@ fn action_record(
     stack: tuff_item::item::ItemView<'_>,
 ) -> Record {
     record.material = Some(stack.item.name().to_owned());
-    record.amount = i32::from(stack.count);
+    record.amount = i32::from(stack.count());
     record.data = Some(stack.to_nbt());
     record.text = Some(action.name().to_owned());
     record
@@ -808,7 +808,12 @@ mod action_tests {
         let row = action_record(
             base,
             ItemAction::Broken,
-            tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::IronPickaxe, 1).view(),
+            tuff_item::item::ItemStack::mint(
+                tuff_vanilla_data::Item::IronPickaxe,
+                1,
+                tuff_item::item::MintReason::Test,
+            )
+            .view(),
         );
         assert_eq!(row.text.as_deref(), Some("break"));
         assert_eq!(row.material.as_deref(), Some("minecraft:iron_pickaxe"));

@@ -8,10 +8,10 @@ use tuff_core::command::CommandError;
 use tuff_core::command::args::Value;
 use tuff_core::world::drops::EntityFacts;
 use tuff_core::world::messages::{Directive, RegionRequest, SlotFill};
+use tuff_item::item::DupUnchecked;
 use tuff_item::item::ItemStack;
 use tuff_item::text::TextComponent;
 use tuff_nbt::Compound;
-use tuff_vanilla_data::Item;
 use tuff_world_model::pos::ChunkPos;
 
 use super::data::{find_entity, player_data};
@@ -66,7 +66,7 @@ async fn held_item(ctx: &mut Context<'_>, slot: &str) -> Result<ItemStack, Comma
     };
     ids.iter()
         .find_map(|id| read_slot(&data, *id, holder))
-        .map(|stack| stack.unwrap_or_else(|| ItemStack::new(Item::Air, 0)))
+        .map(|stack| stack.unwrap_or_else(ItemStack::empty))
         .ok_or_else(|| no_items(ctx))
 }
 
@@ -77,7 +77,7 @@ async fn tool(ctx: &mut Context<'_>) -> Result<ItemStack, CommandError> {
         () if literals.contains(&"offhand") => held_item(ctx, "weapon.offhand").await,
         () => match ctx.arg("tool") {
             Some(Value::ItemStack(input)) => Ok(input.stack(1)),
-            _ => Ok(ItemStack::new(Item::Air, 0)),
+            _ => Ok(ItemStack::empty()),
         },
     }
 }
@@ -156,7 +156,7 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
                     )],
                 ));
             };
-            let items = if tool.count == 0 {
+            let items = if tool.count() == 0 {
                 loot.destroyed(state, data.as_ref(), &mut rng)
             } else {
                 let mut items = loot.drops(state, Some(&tool), data.as_ref(), &mut rng);
@@ -175,7 +175,7 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
 }
 
 fn empty() -> ItemStack {
-    ItemStack::new(Item::Air, 0)
+    ItemStack::empty()
 }
 
 async fn replace_entities(
@@ -197,7 +197,10 @@ async fn replace_entities(
     let found = targets::select_entities(ctx, &selector).await?;
     for target in &found {
         for index in 0..count {
-            let stack = items.get(index).cloned().unwrap_or_else(empty);
+            let stack = items
+                .get(index)
+                .map(DupUnchecked::dup_unchecked)
+                .unwrap_or_else(empty);
             let slot = start + index as i32;
             match target {
                 Target::Player(player) => {
@@ -205,7 +208,7 @@ async fn replace_entities(
                         Directive::SetSlots {
                             ids: vec![slot],
                             name: name.clone(),
-                            stack: stack.clone(),
+                            stack: stack.dup_unchecked(),
                             mode: SlotFill::Replace,
                         }
                     })
@@ -225,7 +228,7 @@ async fn replace_entities(
                         &mut data,
                         slot,
                         Holder::Mob,
-                        (stack.count > 0).then(|| stack.clone()),
+                        (stack.count() > 0).then(|| stack.dup_unchecked()),
                     );
                     let id = entity.id;
                     let _ = region
@@ -273,12 +276,15 @@ async fn replace_block(
         if !has_slot(slot, holder, &data) {
             continue;
         }
-        let stack = items.get(index).cloned().unwrap_or_else(empty);
+        let stack = items
+            .get(index)
+            .map(DupUnchecked::dup_unchecked)
+            .unwrap_or_else(empty);
         write_slot(
             &mut data,
             slot,
             holder,
-            (stack.count > 0).then(|| stack.clone()),
+            (stack.count() > 0).then(|| stack.dup_unchecked()),
         );
         tracked.push(stack);
     }
@@ -290,7 +296,7 @@ async fn replace_block(
 fn distribute(data: &mut Compound, holder: Holder, size: i32, mut stack: ItemStack) -> bool {
     let mut changed = false;
     for slot in 0..size {
-        if stack.count == 0 {
+        if stack.count() == 0 {
             break;
         }
         let Some(current) = read_slot(data, slot, holder) else {
@@ -298,15 +304,14 @@ fn distribute(data: &mut Compound, holder: Holder, size: i32, mut stack: ItemSta
         };
         match current {
             None => {
-                write_slot(data, slot, holder, Some(stack.clone()));
+                write_slot(data, slot, holder, Some(stack.dup_unchecked()));
                 return true;
             }
             Some(mut current) if current.stacks_with(&stack) => {
-                let space = current.max_stack_size().saturating_sub(current.count);
-                let moved = stack.count.min(space);
+                let space = current.max_stack_size().saturating_sub(current.count());
+                let moved = stack.count().min(space);
                 if moved > 0 {
-                    stack.count -= moved;
-                    current.count += moved;
+                    current.transfer(&mut stack, moved);
                     write_slot(data, slot, holder, Some(current));
                     changed = true;
                 }
@@ -330,8 +335,8 @@ async fn insert_block(
         _ => 0,
     };
     for stack in items {
-        if distribute(&mut data, holder, size, stack.clone()) {
-            tracked.push(stack.clone());
+        if distribute(&mut data, holder, size, stack.dup_unchecked()) {
+            tracked.push(stack.dup_unchecked());
         }
     }
     let dimension = ctx.source.dimension;
@@ -349,16 +354,16 @@ async fn give_players(
     };
     let players = targets::select_players(ctx, &selector).await?;
     for stack in items {
-        let count = i32::from(stack.count);
-        let one = stack.clone().with_count(1);
+        let count = i32::from(stack.count());
+        let one = stack.dup_count_unchecked(1);
         let replies = targets::dispatch_wait(ctx, &players, |_| Directive::Give {
-            stack: one.clone(),
+            stack: one.dup_unchecked(),
             count,
         })
         .await;
         for reply in replies {
             if reply.affected {
-                tracked.push(stack.clone());
+                tracked.push(stack.dup_unchecked());
             }
         }
     }
@@ -387,13 +392,13 @@ async fn spawn_items(
         let velocity = [rng.gen_range(-0.1..0.1), 0.2, rng.gen_range(-0.1..0.1)];
         region
             .request(RegionRequest::SpawnItem {
-                stack: stack.clone(),
+                stack: stack.dup_unchecked(),
                 position,
                 velocity,
                 pickup_delay: 10,
             })
             .await;
-        tracked.push(stack.clone());
+        tracked.push(stack.dup_unchecked());
     }
     Ok(())
 }
@@ -423,7 +428,7 @@ impl Executor for Loot {
                 ([only], Some(table)) => TextComponent::translate(
                     "commands.drop.success.single_with_table",
                     [
-                        text(only.count),
+                        text(only.count()),
                         item_name(only.item, &only.components),
                         text(table),
                     ],
@@ -434,7 +439,7 @@ impl Executor for Loot {
                 ),
                 ([only], None) => TextComponent::translate(
                     "commands.drop.success.single",
-                    [text(only.count), item_name(only.item, &only.components)],
+                    [text(only.count()), item_name(only.item, &only.components)],
                 ),
                 (many, None) => {
                     TextComponent::translate("commands.drop.success.multiple", [text(many.len())])

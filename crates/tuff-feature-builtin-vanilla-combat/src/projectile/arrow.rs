@@ -6,6 +6,7 @@
 
 use rand::Rng;
 use tuff_core::world::block_contact;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::{BlockState, Item};
@@ -20,7 +21,7 @@ use tuff_core::world::projectile::{
     lerp_rotation, margin, rotation_of, targets_along,
 };
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_common::combat::{self, DamageContext};
 
@@ -55,7 +56,7 @@ const EVENT_POTION_PUFF: i8 = 0;
 /// What a bounced arrow keeps of its speed, reversed.
 const REBOUND_SPEED: f64 = -0.1;
 
-#[derive(Debug, Clone)]
+#[derive(tuff_item::item::DupClone, Debug)]
 pub struct Arrow {
     pub base: EntityBase,
     pub owner: Owner,
@@ -126,7 +127,7 @@ impl Arrow {
             EntityType::Arrow
         };
         let mut arrow = Self::of(kind, id, position, velocity, owner);
-        arrow.item = item.clone().with_count(1);
+        arrow.item = item.dup_count_unchecked(1);
         arrow
     }
 
@@ -167,8 +168,8 @@ impl Arrow {
         owner: Owner,
     ) -> Self {
         let mut arrow = Self::of(EntityType::Trident, id, position, velocity, owner);
-        arrow.item = item.clone().with_count(1);
-        arrow.weapon = Some(arrow.item.clone());
+        arrow.item = item.dup_count_unchecked(1);
+        arrow.weapon = Some(arrow.item.dup_unchecked());
         arrow.trident = Some(Trident {
             loyalty: tuff_vanilla_common::ranged::trident_loyalty(item),
             foil: item
@@ -217,13 +218,14 @@ impl Arrow {
             life: 0,
             in_block: None,
             sound: Self::default_sound(kind),
-            item: ItemStack::new(
+            item: ItemStack::mint(
                 match kind {
                     EntityType::SpectralArrow => Item::SpectralArrow,
                     EntityType::Trident => Item::Trident,
                     _ => Item::Arrow,
                 },
                 1,
+                MintReason::EntityDrop,
             ),
             weapon: None,
             ticks: 0,
@@ -378,7 +380,7 @@ impl Arrow {
         }
         self.sound = Self::default_sound(self.base.kind);
         self.pierced.clear();
-        if let Some(weapon) = self.weapon.clone() {
+        if let Some(weapon) = self.weapon.dup_unchecked() {
             self.hit_block_effects(&weapon, hit, v, cx);
         }
     }
@@ -507,7 +509,7 @@ impl Arrow {
             if !entity.living.is_some_and(|l| l.alive) {
                 if self.pickup == Pickup::Allowed {
                     cx.effects.push(Effect::DropItem {
-                        stack: self.item.clone(),
+                        stack: self.item.dup_unchecked(),
                         position: self.base.position,
                         velocity: [0.0; 3],
                         pickup_delay: 10,
@@ -613,7 +615,7 @@ impl Arrow {
         hit.projectile = Some(self.base.kind);
         hit.projectile_id = Some(self.base.id);
         hit.projectile_velocity = Some(self.base.velocity);
-        hit.weapon = self.weapon.clone();
+        hit.weapon = self.weapon.dup_unchecked();
         hit.position = Some(hit_source(target.position, self.base.velocity));
         hit.effects = self.hit_effects();
         hit.sticks = self.pierce == 0;
@@ -711,7 +713,7 @@ impl Arrow {
 impl RegionEntity for Arrow {
     fn ground_pickup(&mut self) -> Option<tuff_core::world::entity::GroundPickup<'_>> {
         let creative_only = self.creative_pickup();
-        let stack = self.pickup_stack().cloned();
+        let stack = self.pickup_stack().map(DupUnchecked::dup_unchecked);
         if !creative_only && stack.is_none() {
             return None;
         }
@@ -865,7 +867,7 @@ impl RegionEntity for Arrow {
                             status: EVENT_POTION_PUFF,
                         },
                     )])));
-                    self.item = ItemStack::new(Item::Arrow, 1);
+                    self.item = ItemStack::mint(Item::Arrow, 1, MintReason::EntityDrop);
                     self.changed.push(DATA_COLOR);
                 }
                 let kept = self.pickup == Pickup::Allowed
@@ -933,10 +935,14 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     }) {
         arrow.sound = sound;
     }
-    if let Some(item) = take(nbt, "item", |tag| ItemStack::from_nbt(tag.as_compound()?)) {
+    if let Some(item) = take(nbt, "item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    }) {
         arrow.item = item;
     }
-    arrow.weapon = take(nbt, "weapon", |tag| ItemStack::from_nbt(tag.as_compound()?));
+    arrow.weapon = take(nbt, "weapon", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    });
     if let Some(ticks) = take_number(nbt, "Duration") {
         arrow.glow_ticks = ticks as i32;
     }
@@ -953,7 +959,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         .unwrap_or_default();
         trident.dealt_damage = dealt_damage;
         arrow.trident = Some(trident);
-        arrow.weapon = Some(arrow.item.clone());
+        arrow.weapon = Some(arrow.item.dup_unchecked());
     }
     Some(Box::new(arrow))
 }

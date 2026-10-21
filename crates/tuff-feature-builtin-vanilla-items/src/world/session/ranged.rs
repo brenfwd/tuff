@@ -4,6 +4,8 @@
 //! through).
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::{SoundEvent, StatType};
 
@@ -12,7 +14,7 @@ use tuff_core::world::player::UsingItem;
 use tuff_core::world::projectile::{ArrowShot, Flight, Pickup, Shot};
 use tuff_core::world::session::*;
 use tuff_core::world::stats::Stat;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_common::combat;
 use tuff_vanilla_common::ranged::{self, INTANGIBLE, intangible};
 
@@ -69,17 +71,17 @@ impl RangedExt for PlayerSession {
                 } else {
                     Inventory::hotbar_slot(self.inventory.selected())
                 };
-                return Some((Some(slot), stack.clone()));
+                return Some((Some(slot), stack.dup_unchecked()));
             }
         }
         if let Some(slot) = self.inventory.find_matching(is_arrow) {
-            let stack = self.inventory.slots()[slot].clone()?;
+            let stack = self.inventory.slots()[slot].dup_unchecked()?;
             return Some((Some(slot), stack));
         }
         self.mode
             .abilities
             .instabuild
-            .then(|| (None, ItemStack::new(Item::Arrow, 1)))
+            .then(|| (None, ItemStack::mint(Item::Arrow, 1, MintReason::Template)))
     }
 
     async fn use_crossbow(&mut self, off_hand: bool) {
@@ -102,7 +104,11 @@ impl RangedExt for PlayerSession {
     }
 
     async fn tick_crossbow(&mut self, using: UsingItem) {
-        let Some(crossbow) = self.inventory.hand(using.off_hand).cloned() else {
+        let Some(crossbow) = self
+            .inventory
+            .hand(using.off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
         let charge = ranged::crossbow_charge_ticks(&crossbow) as f32;
@@ -144,7 +150,11 @@ impl RangedExt for PlayerSession {
 
     async fn shoot_crossbow(&mut self, off_hand: bool) {
         let slot = hand_slot(self, off_hand);
-        let Some(mut crossbow) = self.inventory.hand(off_hand).cloned() else {
+        let Some(mut crossbow) = self
+            .inventory
+            .hand(off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
         let projectiles = crossbow
@@ -155,7 +165,8 @@ impl RangedExt for PlayerSession {
         if projectiles.is_empty() {
             return;
         }
-        self.inventory.set_slot(slot, Some(crossbow.clone()));
+        self.inventory
+            .set_slot(slot, Some(crossbow.dup_unchecked()));
         let power = if projectiles.iter().any(|p| p.item == Item::FireworkRocket) {
             FIREWORK_POWER
         } else {
@@ -174,19 +185,19 @@ impl RangedExt for PlayerSession {
             if projectile.item == Item::FireworkRocket {
                 let position = [eye[0], eye[1] - 0.150_000_005_960_464_48, eye[2]];
                 let shot = Shot::Firework {
-                    item: projectile.clone(),
+                    item: projectile.dup_unchecked(),
                     flight: Flight::Shot(velocity),
                 };
                 self.launch(position, shot).await;
             } else {
                 let position = [eye[0], eye[1] - 0.100_000_001_490_116_12, eye[2]];
-                let mut item = projectile.clone();
+                let mut item = projectile.dup_unchecked();
                 let free = is_intangible(&item);
                 item.components.remove_other(INTANGIBLE);
-                let mut arrow = ArrowShot::new(item.with_count(1), velocity);
+                let mut arrow = ArrowShot::new(item.keep(1, BurnReason::Template), velocity);
                 arrow.crit = true;
                 arrow.sound = Some(SoundEvent::ItemCrossbowHit);
-                arrow.weapon = Some(crossbow.clone());
+                arrow.weapon = Some(crossbow.dup_unchecked());
                 arrow.pierce = ranged::piercing(&crossbow);
                 if free {
                     arrow.pickup = Some(Pickup::CreativeOnly);
@@ -255,7 +266,7 @@ impl RangedExt for PlayerSession {
             .inventory
             .hand(using.off_hand)
             .filter(|s| s.item == Item::Trident)
-            .cloned()
+            .map(DupUnchecked::dup_unchecked)
         else {
             return;
         };
@@ -284,7 +295,11 @@ impl RangedExt for PlayerSession {
             self.publish(false).await;
             return;
         }
-        let Some(thrown) = self.inventory.hand(using.off_hand).cloned() else {
+        let Some(thrown) = self
+            .inventory
+            .hand(using.off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
         if !self.mode.abilities.instabuild {
@@ -293,7 +308,7 @@ impl RangedExt for PlayerSession {
         let velocity = self.shot_velocity(TRIDENT_POWER);
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.100_000_001_490_116_12, eye[2]];
-        let mut trident = ArrowShot::new(thrown.with_count(1), velocity);
+        let mut trident = ArrowShot::new(thrown.keep(1, BurnReason::Template), velocity);
         if self.mode.abilities.instabuild {
             trident.pickup = Some(Pickup::CreativeOnly);
         }
@@ -342,7 +357,7 @@ fn load(session: &mut PlayerSession, off_hand: bool, crossbow: &ItemStack) -> bo
     };
     let count = ranged::projectile_count(crossbow);
     let mut drawn = Vec::with_capacity(count);
-    let mut left = ammo.count;
+    let mut left = ammo.count();
     for i in 0..count {
         let uses = if i > 0 || session.mode.abilities.instabuild {
             0
@@ -353,23 +368,23 @@ fn load(session: &mut PlayerSession, off_hand: bool, crossbow: &ItemStack) -> bo
             continue;
         }
         if uses == 0 {
-            drawn.push(intangible(ammo.clone()));
+            drawn.push(intangible(ammo.dup_unchecked()));
         } else {
             left -= uses;
-            drawn.push(ammo.clone().with_count(uses));
+            drawn.push(ammo.dup_count_unchecked(uses));
         }
     }
     if drawn.is_empty() {
         return false;
     }
-    if left != ammo.count
+    if left != ammo.count()
         && let Some(slot) = slot
     {
         session
             .inventory
-            .set_slot(slot, (left > 0).then(|| ammo.clone().with_count(left)));
+            .set_slot(slot, (left > 0).then(|| ammo.dup_count_unchecked(left)));
     }
-    let mut loaded = crossbow.clone();
+    let mut loaded = crossbow.dup_unchecked();
     loaded.components.charged_projectiles = Some(drawn);
     session
         .inventory

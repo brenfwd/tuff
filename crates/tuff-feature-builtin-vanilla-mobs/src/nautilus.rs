@@ -29,7 +29,7 @@ use tuff_core::world::entity::{
     Culprit, Effect, EntityHit, EntityInteraction, InteractOutcome, RiderInput, TickContext,
 };
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 const SWIM_SPEED: f64 = 1.0;
 const DRY_OUT_MAX: i16 = 300;
@@ -92,7 +92,11 @@ const NAUTILUS_FEED_HEAL: f32 = 2.0;
 
 fn food_effect(stack: &ItemStack) -> HandEffect {
     if tuff_datapack::tags::is(tag::item::key::NAUTILUS_BUCKET_FOOD, stack.item) {
-        HandEffect::ExchangeStack(Box::new(ItemStack::new(Item::WaterBucket, 1)))
+        HandEffect::ExchangeStack(Box::new(ItemStack::mint(
+            Item::WaterBucket,
+            1,
+            MintReason::Spawn,
+        )))
     } else {
         HandEffect::Consume(1)
     }
@@ -899,7 +903,7 @@ mod tests {
             Nautilus::configure(core);
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Saddle,
-                Some(ItemStack::new(Item::Saddle, 1)),
+                Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test)),
             );
             core.body.in_water = true;
             let mut dash = Dash::default();
@@ -943,7 +947,7 @@ mod tests {
                 player_uuid: 9,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::new(Item::Pufferfish, 1)),
+                stack: Some(ItemStack::mint(Item::Pufferfish, 1, MintReason::Test)),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -968,7 +972,7 @@ mod tests {
             player_uuid: 9,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::new(item, 1)),
+            stack: Some(ItemStack::mint(item, 1, MintReason::Test)),
             off_hand: false,
             creative: false,
             sneaking,
@@ -1003,11 +1007,20 @@ mod tests {
                     armor: MountArmor::Nautilus,
                 }
             );
-            nautilus.inventory_mut().unwrap()[0] = Some(ItemStack::new(Item::Saddle, 1));
+            nautilus.inventory_mut().unwrap()[0] =
+                Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
             nautilus.tick(core, cx);
             assert!(saddled(core), "a saddle placed in the screen is worn");
-            assert!(MountArmor::Nautilus.fits(&ItemStack::new(Item::CopperNautilusArmor, 1)));
-            assert!(!MountArmor::Nautilus.fits(&ItemStack::new(Item::Saddle, 1)));
+            assert!(MountArmor::Nautilus.fits(&ItemStack::mint(
+                Item::CopperNautilusArmor,
+                1,
+                MintReason::Test
+            )));
+            assert!(!MountArmor::Nautilus.fits(&ItemStack::mint(
+                Item::Saddle,
+                1,
+                MintReason::Test
+            )));
         });
     }
 
@@ -1023,7 +1036,7 @@ mod tests {
                 }
                 nautilus.interact(core, &click(Item::Pufferfish, false), cx);
             }
-            let saddle = ItemStack::new(Item::Saddle, 1);
+            let saddle = ItemStack::mint(Item::Saddle, 1, MintReason::Test);
             assert!(nautilus.mount_refused(core, Some(&saddle)));
             assert!(!nautilus.mount_refused(core, None));
             let outcome = nautilus.interact(core, &click(Item::Saddle, false), cx);

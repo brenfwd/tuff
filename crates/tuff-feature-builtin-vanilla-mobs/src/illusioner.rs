@@ -25,7 +25,7 @@ use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::effects::ActiveEffect;
 use tuff_core::world::effects::PotionHit;
 use tuff_core::world::entity::{Effect, TickContext};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 const MIRROR_CASTING: i32 = 20;
 const MIRROR_INTERVAL: i32 = 340;
@@ -130,8 +130,10 @@ impl Species for Illusioner {
     }
 
     fn finalize_spawn(&mut self, core: &mut MobCore, _cx: &mut TickContext) {
-        core.equipment
-            .set(EquipmentSlot::Mainhand, Some(ItemStack::new(Item::Bow, 1)));
+        core.equipment.set(
+            EquipmentSlot::Mainhand,
+            Some(ItemStack::mint(Item::Bow, 1, MintReason::Spawn)),
+        );
     }
 
     fn metadata(&self, core: &MobCore) -> Vec<(u8, MetadataValue)> {

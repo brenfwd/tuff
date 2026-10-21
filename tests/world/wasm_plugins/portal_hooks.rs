@@ -6,7 +6,7 @@ use crate::protocol::play::PlayerActionStatus;
 use crate::world::contact::PLUGIN_PORTAL_COOLDOWN;
 use crate::world::inventory::Inventory;
 use crate::world::messages::{PlayerEvent, PlayerHandle, RegionRequest};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_plugin_wasm::portal::{self, Target, Teleport};
 use tuff_plugin_wasm::wit::bindings::types::{Rotation, Uuid};
 use tuff_vanilla_data::{Block, Item};
@@ -105,7 +105,8 @@ async fn a_click_filter_can_name_the_clicked_block() {
     let world = start(dir.path()).await;
     let mut client = Client::new(&world);
     let slot = Inventory::hotbar_slot(client.session.inventory.selected());
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Stick, 1));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test));
     let click = |pos: BlockPos| Serverbound::UseItemOn {
         hand: 0,
         position: pos,
@@ -140,7 +141,8 @@ async fn a_click_filter_can_name_the_clicked_block() {
         Verdict::Cancel
     );
     assert_eq!(announced(&world).await, ["clicked".to_owned()]);
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Stone, 1));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Stone, 1, MintReason::Test));
     assert_eq!(
         bridge::Clicks
             .intercept(&mut client.session, &click(lamp))
@@ -242,7 +244,7 @@ async fn an_item_in_a_watched_gateway_is_reported_and_can_be_teleported() {
     set_blocks(&region, &[(gate, Block::EndGateway.default_state())]).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [4.5, 81.5, 4.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -408,7 +410,7 @@ async fn inside_events_reach_only_the_plugin_that_watches_the_block() {
     .await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [4.5, 81.5, 4.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -437,7 +439,7 @@ async fn an_entity_resting_in_a_watched_block_is_reported_once() {
     .await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [4.5, 80.0, 4.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -514,7 +516,7 @@ async fn a_plugin_give_lands_in_the_inventory() {
         .session
         .on_event(PlayerEvent::PluginInventory(vec![
             tuff_core::world::session::plugin_inventory::InventoryOp::Give {
-                stack: ItemStack::new(Item::Stone, 1),
+                stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
                 count: 70,
             },
         ]))
@@ -526,7 +528,7 @@ async fn a_plugin_give_lands_in_the_inventory() {
         .iter()
         .flatten()
         .filter(|stack| stack.item == Item::Stone)
-        .map(|stack| u32::from(stack.count))
+        .map(|stack| u32::from(stack.count()))
         .sum();
     assert_eq!(total, 70);
     world.shutdown().await;
@@ -546,13 +548,13 @@ async fn plugin_inventory_ops_take_clear_set_and_keep() {
             .iter()
             .flatten()
             .filter(|stack| stack.item == Item::Stone)
-            .map(|stack| u32::from(stack.count))
+            .map(|stack| u32::from(stack.count()))
             .sum()
     };
     client
         .session
         .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::Give {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             count: 70,
         }]))
         .await;
@@ -571,7 +573,7 @@ async fn plugin_inventory_ops_take_clear_set_and_keep() {
         .session
         .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::SetSlot {
             slot: 5,
-            stack: Some(ItemStack::new(Item::DiamondHelmet, 1)),
+            stack: Some(ItemStack::mint(Item::DiamondHelmet, 1, MintReason::Test)),
         }]))
         .await;
     assert!(client.session.inventory.slots()[5].is_some());
@@ -606,7 +608,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
             .iter()
             .flatten()
             .filter(|stack| stack.item == item)
-            .map(|stack| u32::from(stack.count))
+            .map(|stack| u32::from(stack.count()))
             .sum()
     };
     let exchange = || {
@@ -617,7 +619,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
                 all_or_nothing: true,
             },
             InventoryOp::Give {
-                stack: ItemStack::new(Item::Elytra, 1),
+                stack: ItemStack::mint(Item::Elytra, 1, MintReason::Test),
                 count: 1,
             },
         ])
@@ -625,7 +627,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
     client
         .session
         .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::Give {
-            stack: ItemStack::new(Item::Diamond, 1),
+            stack: ItemStack::mint(Item::Diamond, 1, MintReason::Test),
             count: 4,
         }]))
         .await;
@@ -635,7 +637,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
     client
         .session
         .on_event(PlayerEvent::PluginInventory(vec![InventoryOp::Give {
-            stack: ItemStack::new(Item::Diamond, 1),
+            stack: ItemStack::mint(Item::Diamond, 1, MintReason::Test),
             count: 6,
         }]))
         .await;

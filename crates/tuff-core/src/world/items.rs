@@ -1,5 +1,6 @@
 //! Dropped item entities and their vanilla movement rules.
 
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::BlockState;
 use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::registry::EntityType;
@@ -39,7 +40,7 @@ const MERGE_PERIOD_MOVING: u32 = 2;
 const MERGE_PERIOD_RESTING: u32 = 40;
 const MERGE_REACH: f64 = 0.5;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ItemEntity {
     pub base: EntityBase,
     pub stack: ItemStack,
@@ -93,7 +94,9 @@ pub enum BorderMerge {
 pub const THROWER: &str = "Thrower";
 
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
-    let stack = take(nbt, "Item", |tag| ItemStack::from_nbt(tag.as_compound()?))?;
+    let stack = take(nbt, "Item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    })?;
     let short = |value: f64| (value as i16).max(0) as u32;
     let signed = |value: f64| i32::from(value as i16);
     Some(Box::new(ItemEntity {
@@ -142,7 +145,7 @@ impl ItemEntity {
             && self.age != INFINITE_LIFETIME
             && self.age < DESPAWN_AGE
             && self.reserved.is_none()
-            && self.stack.count < self.stack.max_stack_size()
+            && self.stack.count() < self.stack.max_stack_size()
     }
 
     /// Makes it never age and never despawn.
@@ -179,7 +182,7 @@ impl ItemEntity {
     /// Whether the two stacks fit in one, with the same owner.
     pub fn merges_with(&self, other: &ItemEntity) -> bool {
         self.base.extra.get("Owner") == other.base.extra.get("Owner")
-            && u32::from(self.stack.count) + u32::from(other.stack.count)
+            && u32::from(self.stack.count()) + u32::from(other.stack.count())
                 <= u32::from(other.stack.max_stack_size())
             && self.stack.stacks_with(&other.stack)
     }
@@ -187,7 +190,7 @@ impl ItemEntity {
     /// Whether this one absorbs `other` rather than the reverse: the
     /// bigger stack wins, and ties go to `other`.
     pub fn absorbs(&self, other: &ItemEntity) -> bool {
-        other.stack.count < self.stack.count
+        other.stack.count() < self.stack.count()
     }
 
     /// Takes what fits of `from`'s items (never past 64), keeping the
@@ -195,9 +198,8 @@ impl ItemEntity {
     /// rest.
     pub fn absorb(&mut self, from: &mut ItemEntity) {
         let cap = self.stack.max_stack_size().min(64);
-        let moved = cap.saturating_sub(self.stack.count).min(from.stack.count);
-        self.stack.count += moved;
-        from.stack.count -= moved;
+        let room = cap.saturating_sub(self.stack.count());
+        self.stack.transfer(&mut from.stack, room);
         self.pickup_delay = self.pickup_delay.max(from.pickup_delay);
         self.age = self.age.min(from.age);
     }
@@ -420,7 +422,7 @@ impl RegionEntity for ItemEntity {
             .flatten()
             .collect();
         if let Some(bundle) = self.stack.components.bundle_contents.take() {
-            spilled.extend(bundle.items().iter().cloned());
+            spilled.extend(bundle.items().iter().map(DupUnchecked::dup_unchecked));
         }
         spilled
     }
@@ -500,6 +502,8 @@ pub fn hold_in_cobweb(base: &mut EntityBase, start: [f64; 3]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::BurnReason;
+    use tuff_item::item::MintReason;
     use tuff_nbt::Tag;
     use tuff_vanilla_data::{Block, Item};
 
@@ -521,11 +525,11 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_destroyed_shulker_box_gives_up_its_contents() {
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
         shulker.components.container = Some(vec![
             None,
-            Some(ItemStack::new(Item::Stone, 3)),
-            Some(ItemStack::new(Item::Dirt, 1)),
+            Some(ItemStack::mint(Item::Stone, 3, MintReason::Test)),
+            Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test)),
         ]);
         let mut entity = ItemEntity::new(1, 1, shulker, [0.5, 65.0, 0.5], [0.0; 3], 0);
         let spilled = entity.spilled_contents();
@@ -547,7 +551,14 @@ mod tests {
     }
 
     fn item(position: [f64; 3], velocity: [f64; 3]) -> ItemEntity {
-        ItemEntity::new(1, 1, ItemStack::new(Item::Dirt, 1), position, velocity, 10)
+        ItemEntity::new(
+            1,
+            1,
+            ItemStack::mint(Item::Dirt, 1, MintReason::Test),
+            position,
+            velocity,
+            10,
+        )
     }
 
     fn in_water(current: [f64; 3]) -> Immersion {
@@ -807,7 +818,7 @@ mod tests {
         let mut ingot = ItemEntity::new(
             2,
             2,
-            ItemStack::new(Item::NetheriteIngot, 1),
+            ItemStack::mint(Item::NetheriteIngot, 1, MintReason::Test),
             [0.5, 64.2, 0.5],
             [0.0; 3],
             10,
@@ -865,8 +876,17 @@ mod tests {
     }
 
     fn stack_of(item: Item, count: u8) -> ItemEntity {
-        let mut entity = ItemEntity::new(1, 1, ItemStack::new(item, count), [0.5; 3], [0.0; 3], 0);
-        entity.stack.count = count;
+        let mut entity = ItemEntity::new(
+            1,
+            1,
+            ItemStack::mint(item, count, MintReason::Test),
+            [0.5; 3],
+            [0.0; 3],
+            0,
+        );
+        entity
+            .stack
+            .resize(count, MintReason::Test, BurnReason::Test);
         entity
     }
 
@@ -904,7 +924,7 @@ mod tests {
             "ties go to the other"
         );
         big.absorb(&mut small);
-        assert_eq!((big.stack.count, small.stack.count), (14, 0));
+        assert_eq!((big.stack.count(), small.stack.count()), (14, 0));
         assert_eq!((big.age, big.pickup_delay), (20, 30));
     }
 

@@ -5,8 +5,8 @@
 use rand::Rng;
 use tuff_core::world::entity::Culprit;
 use tuff_core::world::projectile::{self, Flight, Launch, Owner, Shot};
-use tuff_item::item::ItemStack;
 use tuff_item::item::decor::{FireworkExplosion, Fireworks};
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::item::{DyeColor, FireworkShape};
 use tuff_vanilla_data::registry::Activity;
 use tuff_vanilla_data::registry::SoundEvent;
@@ -35,7 +35,7 @@ fn has_no_blocks_above(core: &MobCore, target: BlockPos, cx: &TickContext) -> bo
 fn launch_firework(core: &MobCore, cx: &mut TickContext) {
     let dyes = DyeColor::ALL;
     let color = dyes[cx.rng.gen_range(0..dyes.len())].firework_color();
-    let mut rocket = ItemStack::new(Item::FireworkRocket, 1);
+    let mut rocket = ItemStack::mint(Item::FireworkRocket, 1, MintReason::Spawn);
     rocket.components.fireworks = Some(Box::new(Fireworks {
         flight_duration: cx.rng.gen_range(0..3),
         explosions: vec![FireworkExplosion {

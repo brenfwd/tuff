@@ -62,8 +62,10 @@ pub(crate) fn arm_zombified(core: &mut MobCore, cx: &mut TickContext) {
     } else {
         Item::GoldenSword
     };
-    core.equipment
-        .set(EquipmentSlot::Mainhand, Some(ItemStack::new(weapon, 1)));
+    core.equipment.set(
+        EquipmentSlot::Mainhand,
+        Some(ItemStack::mint(weapon, 1, MintReason::Spawn)),
+    );
 }
 
 impl Species for ZombifiedPiglin {

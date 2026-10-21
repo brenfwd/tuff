@@ -24,7 +24,7 @@ use tuff_core::world::entity::{
     EntityInteraction, InteractOutcome, TickContext, take, take_number,
 };
 use tuff_core::world::messages::{HandEffect, PlayerEvent};
-use tuff_item::item::{ItemStack, PotionContents};
+use tuff_item::item::{ItemStack, MintReason, PotionContents};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -241,7 +241,7 @@ fn finish_drinking(mob: &mut MobCore, cx: &mut TickContext) {
 }
 
 fn invisibility_potion() -> ItemStack {
-    let mut stack = ItemStack::new(Item::Potion, 1);
+    let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Spawn);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Invisibility),
         ..Default::default()
@@ -250,7 +250,7 @@ fn invisibility_potion() -> ItemStack {
 }
 
 fn milk() -> ItemStack {
-    ItemStack::new(Item::MilkBucket, 1)
+    ItemStack::mint(Item::MilkBucket, 1, MintReason::Spawn)
 }
 
 fn invisible(mob: &MobCore) -> bool {

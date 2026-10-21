@@ -83,7 +83,7 @@ pub struct SeenPlayer {
 }
 
 /// What a dispenser did with an item a hook fired.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum DispenseOutcome {
     /// Used one of the item in place (the plain dispense sound).
     Dispensed,
@@ -242,7 +242,7 @@ impl ContainerHolder {
 }
 
 /// One slot of a container before and after a change.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct SlotEdit {
     pub slot: usize,
     pub old: Option<ItemStack>,
@@ -252,7 +252,7 @@ pub struct SlotEdit {
 /// Container slots that just changed together (one click, one hopper
 /// move), as [`RegionHooks::container_changed`] reports them, with the
 /// cause in effect (the clicking player, `Block(Hopper)` for a hopper).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ContainerEdit {
     pub holder: ContainerHolder,
     pub slots: Vec<SlotEdit>,
@@ -271,7 +271,7 @@ pub enum ItemTaker {
 
 /// A dropped item entity picked up, as [`RegionHooks::item_picked_up`]
 /// reports it.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ItemPickup {
     pub taker: ItemTaker,
     pub stack: ItemStack,
@@ -308,7 +308,7 @@ impl dyn RegionWorld + '_ {
 }
 
 /// What `RegionWorld::insert_item` did with the stack.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Insert {
     /// Nothing there takes items; the stack comes back untouched.
     Nothing(ItemStack),
@@ -551,7 +551,7 @@ pub trait RegionWorld: GrowthLevel {
             .handle
             .send(crate::world::messages::PlayerEvent::DispenserEquip {
                 slot: equippable.slot,
-                stack: stack.clone().with_count(1),
+                stack: stack.dup_count_unchecked(1),
             });
         Some(DispenseOutcome::Dispensed)
     }

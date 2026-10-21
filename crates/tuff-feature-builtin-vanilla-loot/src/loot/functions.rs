@@ -132,7 +132,7 @@ fn modifier_functions(modifier: &Value) -> Vec<LootFunction> {
 
 pub(super) fn item_stacks(tags: &[Tag]) -> Vec<ItemStack> {
     tags.iter()
-        .filter_map(|tag| ItemStack::from_nbt(tag.as_compound()?))
+        .filter_map(|tag| ItemStack::mint_from_nbt(tag.as_compound()?, MintReason::Loot))
         .collect()
 }
 
@@ -277,7 +277,7 @@ fn set_instrument(stack: &mut ItemStack, params: &Value, rng: &mut impl Rng) {
 fn filtered(stack: ItemStack, params: &Value, context: &Context, rng: &mut impl Rng) -> ItemStack {
     let mut probe = None;
     if stack.components.map_id.is_none() && crate::exploration::pending(&stack).is_some() {
-        let mut charted = stack.clone();
+        let mut charted = stack.dup_unchecked();
         charted.components.map_id = Some(0);
         probe = Some(charted);
     }
@@ -315,7 +315,7 @@ pub(super) fn apply(
                 });
             }
         }
-        "minecraft:discard" => stack = ItemStack::new(Item::Air, 0),
+        "minecraft:discard" => stack = ItemStack::empty(),
         "minecraft:filtered" => stack = filtered(stack, params, context, rng),
         "minecraft:set_instrument" => set_instrument(&mut stack, params, rng),
         "minecraft:set_attributes" => set_attributes(&mut stack, params, rng),
@@ -583,7 +583,7 @@ pub(super) fn apply(
             ) {
                 let mut stacks = Vec::new();
                 roll_table(&table, context, rng, &mut stacks);
-                stacks.retain(|s| s.count > 0);
+                stacks.retain(|s| s.count() > 0);
                 patch(&mut stack, |nbt| {
                     nbt.insert(component, stacks_to_component(component, &stacks));
                 });
@@ -595,7 +595,7 @@ pub(super) fn apply(
                 let mut nbt = stack.components.to_nbt();
                 let mut stacks = component_stacks(component, &nbt);
                 modify_stacks(&functions, &mut stacks, context, rng);
-                stacks.retain(|s| s.count > 0);
+                stacks.retain(|s| s.count() > 0);
                 nbt.insert(component, stacks_to_component(component, &stacks));
                 stack.components = Components::from_nbt(&nbt);
             }

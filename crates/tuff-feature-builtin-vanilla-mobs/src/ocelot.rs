@@ -204,6 +204,7 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 mod tests {
     use super::*;
     use crate::tests::with_context;
+    use tuff_item::item::MintReason;
 
     fn interaction(item: Option<Item>) -> EntityInteraction {
         EntityInteraction {
@@ -211,7 +212,7 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::new(item, 1)),
+            stack: item.map(|item| ItemStack::mint(item, 1, MintReason::Test)),
             off_hand: false,
             creative: false,
             sneaking: false,

@@ -51,7 +51,7 @@ pub struct MenuState {
 impl Default for MenuState {
     fn default() -> Self {
         Self {
-            ender_items: vec![None; ENDER_CHEST_SLOTS],
+            ender_items: (0..ENDER_CHEST_SLOTS).map(|_| None).collect(),
             menu: None,
             window_counter: 0,
             txn_counter: 0,

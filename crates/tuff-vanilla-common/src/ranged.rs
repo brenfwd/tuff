@@ -3,6 +3,7 @@
 //! trident's Loyalty, Riptide and Channeling; and the shot directions of a
 //! multishot volley.
 
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::registry::SoundEvent;
 
 use tuff_item::enchantment::{
@@ -252,7 +253,7 @@ pub const INTANGIBLE: &str = "minecraft:intangible_projectile";
 
 /// A free copy of `stack` for a crossbow to load.
 pub fn intangible(stack: ItemStack) -> ItemStack {
-    let mut stack = stack.with_count(1);
+    let mut stack = stack.keep(1, BurnReason::Template);
     stack
         .components
         .other
@@ -277,10 +278,11 @@ fn rotate(v: [f64; 3], axis: [f64; 3], angle: f64) -> [f64; 3] {
 mod tests {
     use super::*;
     use tuff_item::item::Enchantments;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     fn enchanted(item: Item, enchantments: &[(&str, i32)]) -> ItemStack {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         stack.components.enchantments = Some(Enchantments::new(
             enchantments
                 .iter()
@@ -292,7 +294,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn quick_charge_shortens_loading_and_changes_its_sound() {
-        let plain = ItemStack::new(Item::Crossbow, 1);
+        let plain = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
         assert_eq!(crossbow_charge_ticks(&plain), 25);
         assert_eq!(
             charging_sounds(&plain).start,
@@ -318,7 +320,10 @@ mod tests {
         assert_eq!(projectile_spread(&multishot), 10.0);
         assert_eq!(volley_angles(3, 10.0), vec![0.0, -10.0, 10.0]);
         assert_eq!(volley_angles(1, 0.0), vec![0.0]);
-        assert_eq!(projectile_count(&ItemStack::new(Item::Crossbow, 1)), 1);
+        assert_eq!(
+            projectile_count(&ItemStack::mint(Item::Crossbow, 1, MintReason::Test)),
+            1
+        );
     }
 
     #[tuff_core::watchdog]
@@ -332,7 +337,10 @@ mod tests {
         let riptide = enchanted(Item::Trident, &[("riptide", 3)]);
         assert_eq!(spin_attack_strength(&riptide), 3.0);
         assert_eq!(trident_sound(&riptide), SoundEvent::ItemTridentRiptide3);
-        assert_eq!(spin_attack_strength(&ItemStack::new(Item::Trident, 1)), 0.0);
+        assert_eq!(
+            spin_attack_strength(&ItemStack::mint(Item::Trident, 1, MintReason::Test)),
+            0.0
+        );
         assert!(channeling(&enchanted(Item::Trident, &[("channeling", 1)])));
     }
 

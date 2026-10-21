@@ -393,7 +393,11 @@ impl Species for Wither {
             cx.rng.r#gen::<f64>() * 0.2 - 0.1,
         ];
         cx.effects.push(Effect::DropExtendedItem {
-            stack: tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::NetherStar, 1),
+            stack: tuff_item::item::ItemStack::mint(
+                tuff_vanilla_data::Item::NetherStar,
+                1,
+                tuff_item::item::MintReason::Spawn,
+            ),
             position: [x, y, z],
             velocity,
             pickup_delay: tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY,

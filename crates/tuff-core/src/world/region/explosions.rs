@@ -544,10 +544,9 @@ fn collect_drop(drops: &mut Vec<(BlockPos, ItemStack)>, pos: BlockPos, mut stack
     for (_, collected) in drops.iter_mut() {
         if collected.stacks_with(&stack) {
             let limit = MAX_MERGED.min(collected.max_stack_size());
-            let moved = stack.count.min(limit.saturating_sub(collected.count));
-            collected.count += moved;
-            stack.count -= moved;
-            if stack.count == 0 {
+            let room = limit.saturating_sub(collected.count());
+            collected.transfer(&mut stack, room);
+            if stack.count() == 0 {
                 return;
             }
         }

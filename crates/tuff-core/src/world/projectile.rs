@@ -509,7 +509,7 @@ pub fn firework_lifetime(stack: &ItemStack, rng: &mut impl Rng) -> i32 {
 }
 
 /// An arrow, spectral arrow or trident about to be shot.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ArrowShot {
     /// The arrow or trident item; a pickup gives it back.
     pub item: ItemStack,
@@ -568,7 +568,7 @@ pub enum Flight {
 }
 
 /// What kind of projectile a [`Launch`] makes, with what only it needs.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Shot {
     Arrow(ArrowShot),
     /// A thrown item: snowball, egg, ender pearl, potion or experience
@@ -628,7 +628,7 @@ impl Shot {
 
 /// A new projectile: its entity id, where it starts, who launched it and
 /// what it is.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Launch {
     pub id: i32,
     pub position: [f64; 3],
@@ -659,6 +659,7 @@ pub fn launch(launch: Launch, cx: &mut TickContext) -> bool {
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
+    use tuff_item::item::MintReason;
 
     use super::*;
 
@@ -684,7 +685,8 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn arrow_items_fly_as_their_own_entity_types() {
-        let kind = |item| ArrowShot::new(ItemStack::new(item, 1), [0.0; 3]).kind();
+        let kind =
+            |item| ArrowShot::new(ItemStack::mint(item, 1, MintReason::Test), [0.0; 3]).kind();
         assert_eq!(kind(Item::Arrow), EntityType::Arrow);
         assert_eq!(kind(Item::TippedArrow), EntityType::Arrow);
         assert_eq!(kind(Item::SpectralArrow), EntityType::SpectralArrow);

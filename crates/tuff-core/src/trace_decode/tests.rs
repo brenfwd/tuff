@@ -8,7 +8,7 @@ use crate::protocol::configuration as cfg;
 use crate::protocol::pack;
 use crate::protocol::play::*;
 use crate::world::scoreboard::{NumberFormat, RenderType, Team};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_wire::PacketWriter;
 use tuff_world_model::BlockPos;
 
@@ -466,8 +466,8 @@ fn player_state_packets_round_trip() {
 #[tuff_core::watchdog]
 #[test]
 fn metadata_attributes_and_equipment_round_trip() {
-    let stack = ItemStack::new(Item::DiamondSword, 1);
-    let mut damaged = ItemStack::new(Item::IronPickaxe, 1);
+    let stack = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
+    let mut damaged = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     damaged.set_damage(5);
     has(
         &play(&SetEntityData {
@@ -543,12 +543,12 @@ fn metadata_attributes_and_equipment_round_trip() {
 #[tuff_core::watchdog]
 #[test]
 fn container_packets_round_trip() {
-    let stack = ItemStack::new(Item::Stone, 3);
+    let stack = ItemStack::mint(Item::Stone, 3, MintReason::Test);
     has(
         &play(&ContainerSetContent {
             window_id: 1,
             state_id: 2,
-            slots: &[Some(stack.clone()), None],
+            slots: &[Some(stack.dup_unchecked()), None],
             carried: None,
         }),
         &["slots: [minecraft:stone x3, empty], carried: empty"],
@@ -608,7 +608,7 @@ fn container_packets_round_trip() {
             components: Default::default(),
         },
         buy_b: None,
-        sell: ItemStack::new(Item::Bread, 4),
+        sell: ItemStack::mint(Item::Bread, 4, MintReason::Test),
         uses: 0,
         max_uses: 12,
         reward_exp: true,
@@ -1071,7 +1071,7 @@ fn chat_and_scoreboard_packets_round_trip() {
         &play(&SelectAdvancementsTab(Some("minecraft:story/root"))),
         &["story/root"],
     );
-    let icon = ItemStack::new(Item::GrassBlock, 1);
+    let icon = ItemStack::mint(Item::GrassBlock, 1, MintReason::Test);
     has(
         &play(&UpdateAdvancements {
             reset: true,

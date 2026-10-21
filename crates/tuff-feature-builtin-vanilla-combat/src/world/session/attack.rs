@@ -3,6 +3,7 @@
 
 use rand::Rng;
 use tuff_core::world::stats::Stat;
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{CustomStat, StatType};
 
 use tuff_vanilla_data::Item;
@@ -195,7 +196,7 @@ impl CombatExt for PlayerSession {
             self.smash_attack(fall_distance, position, target).await;
             self.wind_burst(victim, fall_distance).await;
         }
-        let weapon = self.inventory.hand(false).cloned();
+        let weapon = self.inventory.hand(false).map(DupUnchecked::dup_unchecked);
         match handle {
             Some(handle) => {
                 handle.send(PlayerEvent::Attacked(Attack {
@@ -247,7 +248,7 @@ impl CombatExt for PlayerSession {
         if self.is_dead() || self.mode.game_mode == GameMode::Spectator {
             return;
         }
-        let Some(stack) = self.inventory.hand(false).cloned() else {
+        let Some(stack) = self.inventory.hand(false).map(DupUnchecked::dup_unchecked) else {
             return;
         };
         let Some(piercing) = stack.piercing_weapon() else {
@@ -301,7 +302,7 @@ impl CombatExt for PlayerSession {
             })
             .map(|(id, kind, _, position)| (id, kind, position))
             .collect();
-        let weapon = Some(stack.clone());
+        let weapon = Some(stack.dup_unchecked());
         let mut hit_something = false;
         let dismountable = |victim: EntityType| {
             piercing.dismounts
@@ -334,7 +335,7 @@ impl CombatExt for PlayerSession {
                 attacker: self.conn.handle.clone(),
                 attacker_name: self.profile.name.clone(),
                 attacker_uuid: self.profile.id,
-                weapon: weapon.clone(),
+                weapon: weapon.dup_unchecked(),
                 attacker_position: self.pose.position,
                 attacker_yaw: self.pose.yaw,
                 damage,
@@ -373,7 +374,7 @@ impl CombatExt for PlayerSession {
                 attacker_pitch: self.pose.pitch,
                 damage,
                 knockback,
-                weapon: weapon.clone(),
+                weapon: weapon.dup_unchecked(),
                 critical: false,
                 magic: false,
                 sweep: false,
@@ -447,7 +448,7 @@ impl CombatExt for PlayerSession {
     }
 
     async fn wind_burst(&mut self, victim: EntityType, fall_distance: f64) {
-        let Some(weapon) = self.inventory.hand(false).cloned() else {
+        let Some(weapon) = self.inventory.hand(false).map(DupUnchecked::dup_unchecked) else {
             return;
         };
         let context =
@@ -567,7 +568,10 @@ impl CombatExt for PlayerSession {
             player_uuid: self.profile.id,
             position: self.pose.position,
             location,
-            stack: self.inventory.hand(off_hand).cloned(),
+            stack: self
+                .inventory
+                .hand(off_hand)
+                .map(DupUnchecked::dup_unchecked),
             off_hand,
             creative: self.mode.abilities.instabuild,
             sneaking,
@@ -660,7 +664,7 @@ impl CombatExt for PlayerSession {
                 attacker_pitch: self.pose.pitch,
                 damage,
                 knockback: combat::SWEEP_KNOCKBACK,
-                weapon: weapon.cloned(),
+                weapon: weapon.map(DupUnchecked::dup_unchecked),
                 critical: false,
                 magic: false,
                 sweep: true,
@@ -674,7 +678,7 @@ impl CombatExt for PlayerSession {
                 attacker: self.conn.handle.clone(),
                 attacker_name: self.profile.name.clone(),
                 attacker_uuid: self.profile.id,
-                weapon: weapon.cloned(),
+                weapon: weapon.map(DupUnchecked::dup_unchecked),
                 attacker_position: self.pose.position,
                 attacker_yaw: self.pose.yaw,
                 damage,
@@ -775,7 +779,7 @@ impl CombatExt for PlayerSession {
                     ),
                     projectile: None,
                     position: Some(attack.attacker_position),
-                    weapon: attack.weapon.clone(),
+                    weapon: attack.weapon.dup_unchecked(),
                     direct: true,
                 },
                 attack.damage,
@@ -840,7 +844,7 @@ impl CombatExt for PlayerSession {
                 }));
             }
             attack.attacker.send(PlayerEvent::AttackLanded {
-                weapon: attack.weapon.clone(),
+                weapon: attack.weapon.dup_unchecked(),
                 target: self.id,
                 target_position: self.pose.position,
                 knockback: attack.knockback > 0.0,

@@ -404,7 +404,7 @@ async fn sheep_are_sheared_and_dyed_and_cows_milked() {
         })
         .await;
 
-    let mut tag = ItemStack::new(Item::NameTag, 1);
+    let mut tag = ItemStack::mint(Item::NameTag, 1, MintReason::Test);
     tag.components.custom_name = Some(Box::new(tuff_item::text::TextComponent::new("Dolly")));
     region
         .request(RegionRequest::InteractEntity {
@@ -1250,7 +1250,7 @@ async fn magma_hurts_mobs_unless_fire_immune_or_frost_walking() {
     }
     place_blocks(&world, &region, blocks).await;
     let frail = || Compound::new().with("Health", 1.0f32).with("NoAI", true);
-    let mut boots = ItemStack::new(Item::LeatherBoots, 1);
+    let mut boots = ItemStack::mint(Item::LeatherBoots, 1, MintReason::Test);
     boots.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:frost_walker".to_owned(),
         1,
@@ -1305,7 +1305,7 @@ async fn a_mob_in_frost_walker_boots_freezes_the_water_beside_it() {
         }
     }
     place_blocks(&world, &region, blocks).await;
-    let mut boots = ItemStack::new(Item::LeatherBoots, 1);
+    let mut boots = ItemStack::mint(Item::LeatherBoots, 1, MintReason::Test);
     boots.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:frost_walker".to_owned(),
         1,

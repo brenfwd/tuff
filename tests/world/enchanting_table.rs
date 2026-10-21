@@ -7,7 +7,7 @@ use tuff_core::world::menu::{MenuKind, enchantment};
 use tuff_core::world::messages::{MenuOpen, MenuSource};
 use tuff_core::world::player::Experience;
 use tuff_core::world::session::{PlayerSession, Station};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 async fn open_table(world: &TestWorld, session: &mut PlayerSession, bookcases: i32) -> i32 {
     let region = world.region(ChunkPos::new(0, 0).region()).await;
@@ -32,7 +32,7 @@ fn put(session: &mut PlayerSession, item: Option<ItemStack>, lapis: u8) {
     let menu = session.menus.menu.as_mut().unwrap();
     menu.container[enchantment::ITEM] = item;
     menu.container[enchantment::LAPIS] =
-        (lapis > 0).then(|| ItemStack::new(Item::LapisLazuli, lapis));
+        (lapis > 0).then(|| ItemStack::mint(Item::LapisLazuli, lapis, MintReason::Test));
     session.refresh_station();
 }
 
@@ -53,7 +53,7 @@ async fn a_button_charges_levels_and_lapis_and_enchants_the_item() {
     let window = open_table(&world, &mut session, 15).await;
     put(
         &mut session,
-        Some(ItemStack::new(Item::DiamondSword, 1)),
+        Some(ItemStack::mint(Item::DiamondSword, 1, MintReason::Test)),
         10,
     );
     let offered = costs(&session);
@@ -68,7 +68,7 @@ async fn a_button_charges_levels_and_lapis_and_enchants_the_item() {
     let container = session.menu_container().unwrap();
     let sword = container[enchantment::ITEM].as_ref().unwrap();
     assert!(sword.components.enchantments.is_some());
-    assert_eq!(container[enchantment::LAPIS].as_ref().unwrap().count, 7);
+    assert_eq!(container[enchantment::LAPIS].as_ref().unwrap().count(), 7);
     assert_eq!(session.body.experience.level, 27);
     assert_ne!(session.body.experience.seed, 4242);
     world.shutdown().await;
@@ -82,7 +82,11 @@ async fn a_button_does_nothing_without_enough_levels_or_lapis() {
     let (mut session, _out) = session_with_outbound(&world, 1);
     session.body.experience = Experience::new(2, 0.0, 0, 99);
     let window = open_table(&world, &mut session, 15).await;
-    put(&mut session, Some(ItemStack::new(Item::DiamondSword, 1)), 3);
+    put(
+        &mut session,
+        Some(ItemStack::mint(Item::DiamondSword, 1, MintReason::Test)),
+        3,
+    );
     for button in [0, 1, 2] {
         session
             .handle_packet(Serverbound::ContainerButtonClick {
@@ -113,7 +117,11 @@ async fn offers_clear_when_the_item_is_removed() {
     let (mut session, _out) = session_with_outbound(&world, 1);
     session.body.experience = Experience::new(5, 0.0, 0, 7);
     open_table(&world, &mut session, 8).await;
-    put(&mut session, Some(ItemStack::new(Item::IronPickaxe, 1)), 0);
+    put(
+        &mut session,
+        Some(ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test)),
+        0,
+    );
     assert!(costs(&session)[0] > 0);
     put(&mut session, None, 0);
     assert_eq!(costs(&session), [0; 3]);

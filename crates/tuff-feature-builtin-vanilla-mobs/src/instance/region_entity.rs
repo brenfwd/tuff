@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::DupUnchecked;
 
 impl<S: Species> RegionEntity for Mob<S> {
     fn base(&self) -> &EntityBase {
@@ -245,7 +246,7 @@ impl<S: Species> RegionEntity for Mob<S> {
             projectile: None,
             projectile_id: None,
             position: Some(attack.attacker_position),
-            weapon: attack.weapon.clone(),
+            weapon: attack.weapon.dup_unchecked(),
             aim: Some(crate::Aim {
                 eye: [
                     attack.attacker_position[0],
@@ -371,7 +372,12 @@ impl<S: Species> RegionEntity for Mob<S> {
     }
 
     fn main_hand_item(&self) -> Option<Option<ItemStack>> {
-        Some(self.core.equipment.main_hand().cloned())
+        Some(
+            self.core
+                .equipment
+                .main_hand()
+                .map(DupUnchecked::dup_unchecked),
+        )
     }
 
     fn set_main_hand_item(&mut self, stack: Option<ItemStack>) {

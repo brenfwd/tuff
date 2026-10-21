@@ -178,7 +178,7 @@ async fn broken_ice_leaves_water_over_ground_unless_silk_touched_or_creative() {
     )
     .await;
     assert_eq!(melted, Some(water));
-    let mut silk = ItemStack::new(Item::IronPickaxe, 1);
+    let mut silk = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     silk.components.enchantments =
         Some(Enchantments::new([("minecraft:silk_touch".to_owned(), 1)]));
     let kept = break_ice(

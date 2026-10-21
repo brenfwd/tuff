@@ -6,6 +6,7 @@
 //! container snapshot plus the inventory the session owns, so the same code
 //! serves the survival inventory window, block containers and ender chests.
 
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::Menu as MenuType;
@@ -17,8 +18,8 @@ use crate::world::crafting::RecipeSet;
 use crate::world::inventory::Inventory;
 use crate::world::loom::{is_loom_dye, is_loom_pattern_item};
 use crate::world::trading::{self, MerchantOffer};
-use tuff_item::item::ItemStack;
 use tuff_item::item::bundle::{self, fits_inside_container_item};
+use tuff_item::item::{BurnReason, ItemStack, MintReason};
 
 pub const OUTSIDE: i16 = -999;
 /// Main inventory plus hotbar, the section every container menu ends with.
@@ -527,7 +528,7 @@ impl MenuKind {
                 0 => vec![(1, 37, true)],
                 _ if view.get(0).is_none()
                     && self.may_place(recipes, 0, stack)
-                    && stack.count == 1 =>
+                    && stack.count() == 1 =>
                 {
                     vec![(0, 1, false)]
                 }
@@ -602,7 +603,8 @@ impl MenuKind {
                 0..=4 => vec![(5, 41, true)],
                 _ if recipes.is_brewing_fuel(stack) => {
                     let fuel_takes = view.get(brewing::FUEL).is_none_or(|fuel| {
-                        fuel.stacks_with(stack) && fuel.count < self.max_stack(brewing::FUEL, fuel)
+                        fuel.stacks_with(stack)
+                            && fuel.count() < self.max_stack(brewing::FUEL, fuel)
                     });
                     if fuel_takes {
                         vec![(brewing::FUEL, brewing::FUEL + 1, false)]
@@ -630,7 +632,7 @@ impl MenuKind {
                 let accepts = |slot: usize| {
                     self.may_place(recipes, slot, stack)
                         && view.get(slot).is_none_or(|held| {
-                            held.stacks_with(stack) && held.count < self.max_stack(slot, held)
+                            held.stacks_with(stack) && held.count() < self.max_stack(slot, held)
                         })
                 };
                 let main = n + 27;
@@ -717,13 +719,12 @@ impl View<'_> {
     fn take(&mut self, slot: usize, count: u8) -> Option<ItemStack> {
         let entry = self.get_mut(slot);
         let stack = entry.as_mut()?;
-        let taken = count.min(stack.count);
+        let taken = count.min(stack.count());
         if taken == 0 {
             return None;
         }
-        if stack.count > taken {
-            stack.count -= taken;
-            Some(stack.clone().with_count(taken))
+        if stack.count() > taken {
+            Some(stack.take(taken))
         } else {
             entry.take()
         }
@@ -756,7 +757,7 @@ impl View<'_> {
         if !self.may_pickup(slot) {
             return None;
         }
-        let count = self.get(slot).map_or(0, |s| s.count);
+        let count = self.get(slot).map_or(0, |s| s.count());
         if !self.allow_modification(slot) && max < count {
             return None;
         }
@@ -771,20 +772,22 @@ impl View<'_> {
         }
         let limit = self.max_stack(slot, &stack);
         let existing = self.get_mut(slot);
-        let current = existing.as_ref().map_or(0, |s| s.count);
-        let transferable = amount.min(stack.count).min(limit.saturating_sub(current));
+        let current = existing.as_ref().map_or(0, |s| s.count());
+        let transferable = amount.min(stack.count()).min(limit.saturating_sub(current));
         match existing {
-            None => {
-                *existing = Some(stack.clone().with_count(transferable));
-                stack.count -= transferable;
+            None if transferable > 0 => {
+                *existing = Some(stack.take(transferable));
             }
-            Some(target) if target.stacks_with(&stack) => {
-                target.count += transferable;
-                stack.count -= transferable;
+            Some(target) if target.stacks_with(&stack) && transferable > 0 => {
+                let moved = stack.take(transferable);
+                let limit = target.count() + transferable;
+                if let Some(back) = target.absorb(moved, limit) {
+                    stack.absorb(back, u8::MAX);
+                }
             }
-            Some(_) => {}
+            _ => {}
         }
-        (stack.count > 0).then_some(stack)
+        (stack.count() > 0).then_some(stack)
     }
 
     /// Whether `stack` could go into `slot` regardless of how much room it
@@ -793,7 +796,7 @@ impl View<'_> {
         match self.get(slot) {
             None => true,
             Some(existing) => {
-                existing.stacks_with(stack) && existing.count <= self.max_stack(slot, stack)
+                existing.stacks_with(stack) && existing.count() <= self.max_stack(slot, stack)
             }
         }
     }
@@ -817,7 +820,7 @@ impl View<'_> {
         };
         if stack.max_stack_size() > 1 {
             for slot in order() {
-                if stack.count == 0 {
+                if stack.count() == 0 {
                     break;
                 }
                 let limit = self.max_stack(slot, stack);
@@ -827,26 +830,23 @@ impl View<'_> {
                 if !target.stacks_with(stack) {
                     continue;
                 }
-                let total = target.count as u16 + stack.count as u16;
-                if total <= limit as u16 {
-                    target.count = total as u8;
-                    stack.count = 0;
-                    changed = true;
-                } else if target.count < limit {
-                    stack.count -= limit - target.count;
-                    target.count = limit;
+                if target.count() < limit {
+                    let room = limit - target.count();
+                    let moved = stack.take(room);
+                    if let Some(back) = target.absorb(moved, limit) {
+                        stack.absorb(back, u8::MAX);
+                    }
                     changed = true;
                 }
             }
         }
-        if stack.count > 0 {
+        if stack.count() > 0 {
             for slot in order() {
                 if self.get(slot).is_some() || !self.may_place(slot, stack) {
                     continue;
                 }
-                let moved = stack.count.min(self.max_stack(slot, stack));
-                *self.get_mut(slot) = Some(stack.clone().with_count(moved));
-                stack.count -= moved;
+                let moved = stack.count().min(self.max_stack(slot, stack));
+                *self.get_mut(slot) = Some(stack.take(moved));
                 changed = true;
                 break;
             }
@@ -857,13 +857,13 @@ impl View<'_> {
     /// Shift-click: returns a copy of what the slot held before, or `None`
     /// if nothing could move.
     fn quick_move(&mut self, slot: usize) -> Option<ItemStack> {
-        let mut stack = self.get(slot)?.clone();
-        let clicked = stack.clone();
+        let mut stack = self.get(slot)?.dup_unchecked();
+        let clicked = stack.dup_unchecked();
         let targets = self.kind.quick_move_targets(slot, &stack, self);
         let mut moved = false;
         for (start, end, backwards) in targets {
             moved |= self.move_into(&mut stack, start, end, backwards);
-            if stack.count == 0 {
+            if stack.count() == 0 {
                 break;
             }
         }
@@ -873,11 +873,11 @@ impl View<'_> {
         if self.is_result(slot) {
             *self.get_mut(slot) = None;
             self.taken(slot);
-            if stack.count > 0 {
+            if stack.count() > 0 {
                 self.drops.push(stack);
             }
         } else {
-            *self.get_mut(slot) = (stack.count > 0).then_some(stack);
+            *self.get_mut(slot) = (stack.count() > 0).then_some(stack);
         }
         Some(clicked)
     }
@@ -939,14 +939,15 @@ pub fn click(
             (mode::SWAP, Some(index)) => swap_with_hotbar(&mut view, index, button),
             (mode::CLONE, Some(index)) if creative && view.inventory.carried().is_none() => {
                 if let Some(stack) = view.get(index) {
-                    let cloned = stack.clone().with_count(stack.max_stack_size());
+                    let cloned =
+                        ItemStack::mint_like(stack, stack.max_stack_size(), MintReason::Creative);
                     view.inventory.set_carried(Some(cloned));
                 }
             }
             (mode::THROW, Some(index)) if view.inventory.carried().is_none() => {
                 let amount = match button {
                     0 => 1,
-                    _ => view.get(index).map_or(0, |s| s.count),
+                    _ => view.get(index).map_or(0, |s| s.count()),
                 };
                 while let Some(stack) = view.try_remove(index, amount, u8::MAX) {
                     let item = stack.item;
@@ -965,16 +966,15 @@ pub fn click(
     let left = button == 0;
     let Some(index) = index else {
         if slot == OUTSIDE
-            && let Some(mut carried) = view.inventory.carried().cloned()
+            && let Some(mut carried) = view.inventory.carried().map(DupUnchecked::dup_unchecked)
         {
             if left {
                 view.inventory.set_carried(None);
                 view.drops.push(carried);
             } else {
-                let one = carried.clone().with_count(1);
-                carried.count -= 1;
+                let one = carried.take(1);
                 view.inventory
-                    .set_carried((carried.count > 0).then_some(carried));
+                    .set_carried((carried.count() > 0).then_some(carried));
                 view.drops.push(one);
             }
         }
@@ -1008,10 +1008,15 @@ pub enum BundleSound {
 /// A bundle on the cursor clicking a slot: the slot's stack goes in (left)
 /// or one stack comes out into an empty slot (right).
 fn bundle_on_slot(view: &mut View<'_>, index: usize, left: bool) -> bool {
-    let Some(mut bundle) = view.inventory.carried().filter(|c| c.is_bundle()).cloned() else {
+    let Some(mut bundle) = view
+        .inventory
+        .carried()
+        .filter(|c| c.is_bundle())
+        .map(DupUnchecked::dup_unchecked)
+    else {
         return false;
     };
-    let other = view.get(index).cloned();
+    let other = view.get(index).map(DupUnchecked::dup_unchecked);
     let handled = match (left, other) {
         (true, Some(other)) => {
             let inserted = bundle.edit_bundle(|contents| {
@@ -1020,7 +1025,7 @@ fn bundle_on_slot(view: &mut View<'_>, index: usize, left: bool) -> bool {
                     return 0;
                 }
                 let room = room.min(u8::MAX as u64) as u8;
-                let Some(mut taken) = view.try_remove(index, other.count, room) else {
+                let Some(mut taken) = view.try_remove(index, other.count(), room) else {
                     return 0;
                 };
                 view.taken(index);
@@ -1038,7 +1043,7 @@ fn bundle_on_slot(view: &mut View<'_>, index: usize, left: bool) -> bool {
                 let Some(removed) = contents.remove_one() else {
                     return;
                 };
-                let amount = removed.count;
+                let amount = removed.count();
                 match view.safe_insert(index, removed, amount) {
                     Some(mut rest) => {
                         contents.try_insert(&mut rest);
@@ -1060,10 +1065,14 @@ fn bundle_on_slot(view: &mut View<'_>, index: usize, left: bool) -> bool {
 /// (left) or one stack comes out onto the cursor (right). Other clicks
 /// only clear the bundle's selection and carry on as usual.
 fn stack_on_bundle(view: &mut View<'_>, index: usize, left: bool) -> bool {
-    let Some(mut bundle) = view.get(index).filter(|s| s.is_bundle()).cloned() else {
+    let Some(mut bundle) = view
+        .get(index)
+        .filter(|s| s.is_bundle())
+        .map(DupUnchecked::dup_unchecked)
+    else {
         return false;
     };
-    let carried = view.inventory.carried().cloned();
+    let carried = view.inventory.carried().map(DupUnchecked::dup_unchecked);
     match (left, carried) {
         (false, None) => {
             if view.allow_modification(index) {
@@ -1083,7 +1092,7 @@ fn stack_on_bundle(view: &mut View<'_>, index: usize, left: bool) -> bool {
                 BundleSound::InsertFail
             });
             view.inventory
-                .set_carried((carried.count > 0).then_some(carried));
+                .set_carried((carried.count() > 0).then_some(carried));
         }
         _ => {
             if let Some(contents) = &mut bundle.components.bundle_contents {
@@ -1101,11 +1110,11 @@ fn pickup(view: &mut View<'_>, index: usize, left: bool) {
     if bundle_on_slot(view, index, left) || stack_on_bundle(view, index, left) {
         return;
     }
-    let clicked = view.get(index).cloned();
-    let carried = view.inventory.carried().cloned();
+    let clicked = view.get(index).map(DupUnchecked::dup_unchecked);
+    let carried = view.inventory.carried().map(DupUnchecked::dup_unchecked);
     match (clicked, carried) {
         (None, Some(carried)) => {
-            let amount = if left { carried.count } else { 1 };
+            let amount = if left { carried.count() } else { 1 };
             let rest = view.safe_insert(index, carried, amount);
             view.inventory.set_carried(rest);
         }
@@ -1113,9 +1122,9 @@ fn pickup(view: &mut View<'_>, index: usize, left: bool) {
         (Some(_), _) if !view.may_pickup(index) => {}
         (Some(clicked), None) => {
             let amount = if left {
-                clicked.count
+                clicked.count()
             } else {
-                clicked.count.div_ceil(2)
+                clicked.count().div_ceil(2)
             };
             if let Some(taken) = view.try_remove(index, amount, u8::MAX) {
                 view.inventory.set_carried(Some(taken));
@@ -1125,17 +1134,17 @@ fn pickup(view: &mut View<'_>, index: usize, left: bool) {
         (Some(clicked), Some(mut carried)) => {
             if view.may_place(index, &carried) {
                 if clicked.stacks_with(&carried) {
-                    let amount = if left { carried.count } else { 1 };
+                    let amount = if left { carried.count() } else { 1 };
                     let rest = view.safe_insert(index, carried, amount);
                     view.inventory.set_carried(rest);
-                } else if carried.count <= view.max_stack(index, &carried) {
+                } else if carried.count() <= view.max_stack(index, &carried) {
                     *view.get_mut(index) = Some(carried);
                     view.inventory.set_carried(Some(clicked));
                 }
             } else if clicked.stacks_with(&carried) {
-                let room = carried.max_stack_size().saturating_sub(carried.count);
-                if let Some(taken) = view.try_remove(index, clicked.count, room) {
-                    carried.count += taken.count;
+                let room = carried.max_stack_size().saturating_sub(carried.count());
+                if let Some(taken) = view.try_remove(index, clicked.count(), room) {
+                    carried.join_or_drop(taken, &mut view.drops);
                     view.inventory.set_carried(Some(carried));
                     view.taken(index);
                 }
@@ -1153,8 +1162,8 @@ fn swap_with_hotbar(view: &mut View<'_>, index: usize, button: i8) {
     if view.kind.inventory_slot(index) == Some(source_slot) {
         return;
     }
-    let source = view.inventory.slots()[source_slot].clone();
-    let target = view.get(index).cloned();
+    let source = view.inventory.slots()[source_slot].dup_unchecked();
+    let target = view.get(index).map(DupUnchecked::dup_unchecked);
     match (source, target) {
         (None, None) => {}
         (None, Some(target)) => {
@@ -1167,11 +1176,10 @@ fn swap_with_hotbar(view: &mut View<'_>, index: usize, button: i8) {
         (Some(source), None) => {
             if view.may_place(index, &source) {
                 let limit = view.max_stack(index, &source);
-                if source.count > limit {
-                    let mut rest = source.clone();
-                    rest.count -= limit;
-                    *view.inventory.slot_mut(source_slot) = Some(rest);
-                    *view.get_mut(index) = Some(source.with_count(limit));
+                if source.count() > limit {
+                    let (placed, rest) = source.split(limit);
+                    *view.inventory.slot_mut(source_slot) = rest;
+                    *view.get_mut(index) = Some(placed);
                 } else {
                     *view.inventory.slot_mut(source_slot) = None;
                     *view.get_mut(index) = Some(source);
@@ -1181,11 +1189,10 @@ fn swap_with_hotbar(view: &mut View<'_>, index: usize, button: i8) {
         (Some(source), Some(target)) => {
             if view.may_pickup(index) && view.may_place(index, &source) {
                 let limit = view.max_stack(index, &source);
-                if source.count > limit {
-                    let mut rest = source.clone();
-                    rest.count -= limit;
-                    *view.inventory.slot_mut(source_slot) = Some(rest);
-                    *view.get_mut(index) = Some(source.with_count(limit));
+                if source.count() > limit {
+                    let (placed, rest) = source.split(limit);
+                    *view.inventory.slot_mut(source_slot) = rest;
+                    *view.get_mut(index) = Some(placed);
                     if let Some(left) = view.inventory.add(target) {
                         view.drops.push(left);
                     }
@@ -1202,7 +1209,7 @@ fn pickup_all(view: &mut View<'_>, index: usize, button: i8) {
     if view.kind == MenuKind::Merchant {
         return;
     }
-    let Some(mut carried) = view.inventory.carried().cloned() else {
+    let Some(mut carried) = view.inventory.carried().map(DupUnchecked::dup_unchecked) else {
         return;
     };
     if view.get(index).is_some() && view.may_pickup(index) {
@@ -1216,7 +1223,7 @@ fn pickup_all(view: &mut View<'_>, index: usize, button: i8) {
     };
     for pass in 0..2 {
         for &slot in &order {
-            if carried.count >= limit {
+            if carried.count() >= limit {
                 break;
             }
             let Some(stack) = view.get(slot) else {
@@ -1228,12 +1235,12 @@ fn pickup_all(view: &mut View<'_>, index: usize, button: i8) {
             {
                 continue;
             }
-            if pass == 0 && stack.count == stack.max_stack_size() {
+            if pass == 0 && stack.count() == stack.max_stack_size() {
                 continue;
             }
-            let count = stack.count;
-            if let Some(taken) = view.try_remove(slot, count, limit - carried.count) {
-                carried.count += taken.count;
+            let count = stack.count();
+            if let Some(taken) = view.try_remove(slot, count, limit - carried.count()) {
+                carried.join_or_drop(taken, &mut view.drops);
             }
         }
     }
@@ -1249,7 +1256,7 @@ fn drag_step(
 ) {
     let header = button & 3;
     let kind = ((button >> 2) & 3) as u8;
-    let Some(carried) = view.inventory.carried().cloned() else {
+    let Some(carried) = view.inventory.carried().map(DupUnchecked::dup_unchecked) else {
         *drag = None;
         return;
     };
@@ -1268,7 +1275,7 @@ fn drag_step(
             };
             if view.quick_replaceable(slot, &carried)
                 && view.may_place(slot, &carried)
-                && (current.kind == 2 || carried.count as usize > current.slots.len())
+                && (current.kind == 2 || carried.count() as usize > current.slots.len())
                 && !current.slots.contains(&slot)
             {
                 current.slots.push(slot);
@@ -1290,28 +1297,45 @@ fn finish_drag(view: &mut View<'_>, drag: Drag, carried: ItemStack) {
     if drag.slots.is_empty() {
         return;
     }
-    let mut remaining = carried.count;
+    let mut carried = carried;
+    let total = carried.count();
     let slots = drag.slots.len() as u8;
     for slot in drag.slots {
         if !(view.quick_replaceable(slot, &carried)
             && view.may_place(slot, &carried)
-            && (drag.kind == 2 || carried.count >= slots))
+            && (drag.kind == 2 || total >= slots))
         {
             continue;
         }
-        let existing = view.get(slot).map_or(0, |s| s.count);
+        let existing = view.get(slot).map_or(0, |s| s.count());
         let limit = view.max_stack(slot, &carried);
         let per_slot = match drag.kind {
-            0 => carried.count / slots,
+            0 => total / slots,
             1 => 1,
             _ => limit,
         };
-        let new_count = per_slot.saturating_add(existing).min(limit);
-        remaining = remaining.saturating_sub(new_count - existing);
-        *view.get_mut(slot) = Some(carried.clone().with_count(new_count));
+        let added = per_slot.saturating_add(existing).min(limit) - existing;
+        let part = if drag.kind == 2 {
+            carried.shrink(added, BurnReason::Creative);
+            ItemStack::mint_like(&carried, added, MintReason::Creative)
+        } else {
+            carried.take(added)
+        };
+        if part.count() == 0 {
+            continue;
+        }
+        let entry = view.get_mut(slot);
+        let spilled = match entry {
+            Some(existing) => existing.join(part).err(),
+            None => {
+                *entry = Some(part);
+                None
+            }
+        };
+        view.drops.extend(spilled);
     }
     view.inventory
-        .set_carried((remaining > 0).then(|| carried.with_count(remaining)));
+        .set_carried((carried.count() > 0).then_some(carried));
 }
 
 /// Whether `stack` carries enchantments a grindstone could remove.

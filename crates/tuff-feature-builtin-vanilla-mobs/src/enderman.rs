@@ -655,7 +655,11 @@ fn carried_drops(
     rng: &mut rand::rngs::StdRng,
 ) -> Vec<tuff_item::item::ItemStack> {
     let tool = tuff_item::item::enchanting::enchant_from_provider(
-        tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::DiamondAxe, 1),
+        tuff_item::item::ItemStack::mint(
+            tuff_vanilla_data::Item::DiamondAxe,
+            1,
+            tuff_item::item::MintReason::Spawn,
+        ),
         "minecraft:enderman_loot_drop",
         0.0,
         rng,

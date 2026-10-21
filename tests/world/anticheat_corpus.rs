@@ -267,11 +267,12 @@ async fn replay_special(only: &str) {
                         tuff_vanilla_data::item::EquipmentSlot::Chest,
                     )
                     .unwrap(),
-                    Some(ItemStack::new(Item::Elytra, 1)),
+                    Some(ItemStack::mint(Item::Elytra, 1, MintReason::Test)),
                 );
-                w.session
-                    .inventory
-                    .set_hand(false, Some(ItemStack::new(Item::FireworkRocket, 64)));
+                w.session.inventory.set_hand(
+                    false,
+                    Some(ItemStack::mint(Item::FireworkRocket, 64, MintReason::Test)),
+                );
                 return Setup {
                     rockets: rocket_ticks(lane),
                     start: lane.start(),

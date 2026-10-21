@@ -1,9 +1,10 @@
+use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 
 use super::PlayerSession;
 use crate::world::inventory::Inventory;
-use tuff_item::item::ItemStack;
 use tuff_item::item::decor::{Filterable, MAX_BOOK_PAGES, WrittenBook};
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Tag;
 
 const MAX_PAGE_CHARS: usize = 1024;
@@ -16,7 +17,11 @@ impl PlayerSession {
     /// Opening a signed book expands the selectors, scores and nbt in its
     /// pages once; a page that grows too large leaves the book as it was.
     pub async fn resolve_held_book(&mut self, off_hand: bool) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = self
+            .inventory
+            .hand(off_hand)
+            .map(DupUnchecked::dup_unchecked)
+        else {
             return;
         };
         let Some(book) = stack
@@ -96,7 +101,7 @@ impl PlayerSession {
         let Some(stack) = current.filter(|s| s.item == Item::WritableBook) else {
             return;
         };
-        let mut stack = stack.clone();
+        let mut stack = stack.dup_unchecked();
         let filtered = self.filter_book(&pages, title.as_deref()).await;
         let author = self.profile.name.clone();
         match title {
@@ -116,7 +121,8 @@ impl PlayerSession {
                 );
             }
             Some(title) => {
-                let mut signed = ItemStack::new(Item::WrittenBook, stack.count);
+                let mut signed =
+                    ItemStack::mint(Item::WrittenBook, stack.count(), MintReason::Transform);
                 signed.components.written_book = Some(Box::new(WrittenBook {
                     title: Filterable {
                         filtered: filtered.title.filter(|f| *f != title),

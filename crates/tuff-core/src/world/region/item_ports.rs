@@ -2,6 +2,7 @@
 //! them from, blocks that features register an item port for.
 
 use std::sync::Arc;
+use tuff_item::item::DupUnchecked;
 
 use super::RegionActor;
 use crate::world::block_entity::ContainerKind;
@@ -59,7 +60,7 @@ impl RegionActor {
             let Some(one) = self
                 .block_entity(pos)
                 .and_then(|entity| entity.items[slot].as_ref())
-                .map(|stack| stack.clone().with_count(1))
+                .map(|stack| stack.dup_count_unchecked(1))
             else {
                 continue;
             };
@@ -109,11 +110,11 @@ impl RegionActor {
         let Some(stack) = entity.items[slot].as_mut() else {
             return;
         };
-        stack.count -= 1;
-        if stack.count == 0 {
+        stack.set_count_unchecked(stack.count() - 1);
+        if stack.count() == 0 {
             entity.items[slot] = None;
         }
-        let value = entity.items[slot].clone();
+        let value = entity.items[slot].dup_unchecked();
         self.broadcast_slots(pos, vec![(slot, value)]);
     }
 }

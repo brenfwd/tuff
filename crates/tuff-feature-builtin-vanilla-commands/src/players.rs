@@ -176,7 +176,7 @@ impl Executor for Give {
                 ctx,
                 &players,
                 |_| Directive::Give {
-                    stack: stack.clone(),
+                    stack: stack.dup_unchecked(),
                     count,
                 },
                 messages,
