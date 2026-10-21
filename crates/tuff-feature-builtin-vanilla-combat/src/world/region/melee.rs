@@ -58,8 +58,13 @@ impl RegionHooks for CombatRegionHooks {
                     world.rng(),
                 );
                 let id = world.shared().next_entity_id();
-                let mut arrow =
-                    Arrow::from_item(stack, id, origin, velocity, projectile::Owner::default());
+                let mut arrow = Arrow::from_item(
+                    ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
+                    id,
+                    origin,
+                    velocity,
+                    projectile::Owner::default(),
+                );
                 arrow.pickup = Pickup::Allowed;
                 world.add_entity(Box::new(arrow));
                 Some(DispenseOutcome::Launched { sound: None })
@@ -78,7 +83,7 @@ impl RegionHooks for CombatRegionHooks {
                     id,
                     position,
                     velocity,
-                    stack,
+                    ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
                     projectile::Owner::default(),
                     world.rng(),
                 );
@@ -113,7 +118,7 @@ impl RegionHooks for CombatRegionHooks {
                     id,
                     origin,
                     velocity,
-                    stack.dup_unchecked(),
+                    ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
                     projectile::Owner::default(),
                 );
                 world.add_entity(Box::new(thrown));

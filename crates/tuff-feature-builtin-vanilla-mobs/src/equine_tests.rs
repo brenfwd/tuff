@@ -26,7 +26,11 @@ fn click(item: Item) -> EntityInteraction {
         player_uuid: 77,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: Some(ItemStack::mint(item, 1, MintReason::Test)),
+        stack: Some(tuff_item::item::ItemSnapshot::describe(
+            item,
+            1,
+            Default::default(),
+        )),
         off_hand: false,
         creative: false,
         sneaking: false,
@@ -203,7 +207,7 @@ fn an_untamed_horse_rears_at_an_offered_item_instead_of_taking_a_rider() {
         let mut horse = load_entity(base, &mut Compound::new());
         assert!(!horse.mount_refused_by(None), "an empty hand mounts it");
         let stick = click(Item::Stick);
-        assert!(horse.mount_refused_by(stick.stack.as_ref()));
+        assert!(horse.mount_refused_by(stick.stack.as_deref()));
         assert_eq!(horse.interact(&stick, cx), Some(HandEffect::None));
         let horse = horse.downcast_ref::<Mob<Horse>>().unwrap();
         assert!(horse.species.equine.is_standing());
@@ -265,11 +269,11 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
     super::super::tests::with_context(|_, cx| {
         let mut horse = tamed(EntityType::Horse, Compound::new());
         let saddle = click(Item::Saddle);
-        assert!(horse.mount_refused_by(saddle.stack.as_ref()));
+        assert!(horse.mount_refused_by(saddle.stack.as_deref()));
         assert_eq!(horse.interact(&saddle, cx), Some(HandEffect::Consume(1)));
         assert!(horse.rideable_by_input());
         let armor = click(Item::IronHorseArmor);
-        assert!(horse.mount_refused_by(armor.stack.as_ref()));
+        assert!(horse.mount_refused_by(armor.stack.as_deref()));
         assert_eq!(horse.interact(&armor, cx), Some(HandEffect::Consume(1)));
         let slots = horse.container().unwrap();
         assert_eq!(
@@ -279,12 +283,12 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
             Some(Item::IronHorseArmor)
         );
         assert!(
-            !horse.mount_refused_by(click(Item::Stick).stack.as_ref()),
+            !horse.mount_refused_by(click(Item::Stick).stack.as_deref()),
             "anything else mounts a tamed horse"
         );
         let mut donkey = tamed(EntityType::Donkey, Compound::new());
         assert!(
-            !donkey.mount_refused_by(armor.stack.as_ref()),
+            !donkey.mount_refused_by(armor.stack.as_deref()),
             "donkeys wear no armor"
         );
         assert_eq!(donkey.interact(&armor, cx), None);

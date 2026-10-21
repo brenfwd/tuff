@@ -161,7 +161,7 @@ pub enum Effect {
     /// filled through `took_item` with what the container actually gave.
     CopperGolemTake {
         pos: BlockPos,
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
     },
     /// Runs a feature's own work on the region.
     Run(crate::world::region_api::RegionTask),

@@ -119,7 +119,7 @@ async fn a_fast_trident_snaps_pointed_dripstone() {
     )
     .await;
     let mut trident = Arrow::trident(
-        &ItemStack::mint(Item::Trident, 1, MintReason::Test),
+        ItemStack::mint(Item::Trident, 1, MintReason::Test),
         b.world.shared.next_entity_id(),
         [83.5, f64::from(FLOOR_Y) + 1.3, 86.5],
         [2.5, 0.0, 0.0],

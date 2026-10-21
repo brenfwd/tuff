@@ -663,11 +663,15 @@ impl Species for HappyGhast {
         if core.is_baby() {
             return None;
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if is_harness(stack) && !harnessed(core) {
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Body,
-                Some(stack.dup_count_unchecked(1)),
+                Some(tuff_item::item::ItemStack::mint_like(
+                    stack,
+                    1,
+                    tuff_item::item::MintReason::Transform,
+                )),
             );
             core.sound(SoundEvent::EntityHappyGhastEquip, 1.0, 1.0, cx);
             return Some(HandEffect::Consume(1));
@@ -818,10 +822,10 @@ mod tests {
             player_uuid: 7,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(tuff_item::item::ItemStack::mint(
+            stack: Some(tuff_item::item::ItemSnapshot::describe(
                 stack,
                 1,
-                tuff_item::item::MintReason::Test,
+                Default::default(),
             )),
             off_hand: false,
             creative: false,

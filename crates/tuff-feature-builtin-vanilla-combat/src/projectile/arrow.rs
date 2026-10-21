@@ -114,7 +114,7 @@ impl Arrow {
     /// The arrow entity an arrow item flies as: spectral arrows are their
     /// own type; plain and tipped ones are arrows.
     pub fn from_item(
-        item: &ItemStack,
+        item: ItemStack,
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
@@ -126,16 +126,16 @@ impl Arrow {
             EntityType::Arrow
         };
         let mut arrow = Self::of(kind, id, position, velocity, owner);
-        arrow.item = item.dup_count_unchecked(1);
+        arrow.item = item.keep(1, tuff_item::item::BurnReason::Template);
         arrow
     }
 
     /// The arrow or trident `shot` describes.
     pub fn shot(id: i32, position: [f64; 3], owner: Owner, shot: ArrowShot) -> Self {
         let mut arrow = if shot.kind() == EntityType::Trident {
-            Self::trident(&shot.item, id, position, shot.velocity, owner)
+            Self::trident(shot.item, id, position, shot.velocity, owner)
         } else {
-            Self::from_item(&shot.item, id, position, shot.velocity, owner)
+            Self::from_item(shot.item, id, position, shot.velocity, owner)
         };
         if let Some(pickup) = shot.pickup {
             arrow.pickup = pickup;
@@ -160,32 +160,39 @@ impl Arrow {
 
     /// A trident `item` thrown along `velocity`.
     pub fn trident(
-        item: &ItemStack,
+        item: ItemStack,
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
         owner: Owner,
     ) -> Self {
         let mut arrow = Self::of(EntityType::Trident, id, position, velocity, owner);
-        arrow.item = item.dup_count_unchecked(1);
+        arrow.trident = Some(trident_state(&item));
+        arrow.item = item.keep(1, tuff_item::item::BurnReason::Template);
         arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));
-        arrow.trident = Some(Trident {
-            loyalty: tuff_vanilla_common::ranged::trident_loyalty(item),
-            foil: item
-                .components
-                .enchantments
-                .as_ref()
-                .is_some_and(|e| !e.entries().is_empty())
-                || item
-                    .components
-                    .other
-                    .get("minecraft:enchantment_glint_override")
-                    .is_some(),
-            ..Default::default()
-        });
         arrow
     }
+}
 
+/// The loyalty and glint a thrown trident `item` flies with.
+fn trident_state(item: &ItemStack) -> Trident {
+    Trident {
+        loyalty: tuff_vanilla_common::ranged::trident_loyalty(item),
+        foil: item
+            .components
+            .enchantments
+            .as_ref()
+            .is_some_and(|e| !e.entries().is_empty())
+            || item
+                .components
+                .other
+                .get("minecraft:enchantment_glint_override")
+                .is_some(),
+        ..Default::default()
+    }
+}
+
+impl Arrow {
     fn default_sound(kind: EntityType) -> SoundEvent {
         if kind == EntityType::Trident {
             SoundEvent::ItemTridentHitGround
@@ -508,7 +515,7 @@ impl Arrow {
             if !entity.living.is_some_and(|l| l.alive) {
                 if self.pickup == Pickup::Allowed {
                     cx.effects.push(Effect::DropItem {
-                        stack: self.item.dup_unchecked(),
+                        stack: std::mem::replace(&mut self.item, ItemStack::empty()),
                         position: self.base.position,
                         velocity: [0.0; 3],
                         pickup_delay: 10,
@@ -951,15 +958,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     }
     if arrow.base.kind == EntityType::Trident {
         let dealt_damage = take_bool(nbt, "DealtDamage").unwrap_or(false);
-        let mut trident = Arrow::trident(
-            &arrow.item,
-            arrow.base.id,
-            arrow.base.position,
-            arrow.base.velocity,
-            Owner::default(),
-        )
-        .trident
-        .unwrap_or_default();
+        let mut trident = trident_state(&arrow.item);
         trident.dealt_damage = dealt_damage;
         arrow.trident = Some(trident);
         arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));

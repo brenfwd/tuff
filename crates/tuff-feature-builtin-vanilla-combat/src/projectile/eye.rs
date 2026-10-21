@@ -158,7 +158,7 @@ impl RegionEntity for EyeOfEnder {
                 cx.rng.r#gen::<f64>() * 0.2 - 0.1,
             ];
             cx.effects.push(Effect::DropItem {
-                stack: self.item.dup_unchecked(),
+                stack: std::mem::replace(&mut self.item, ItemStack::empty()),
                 position: next,
                 velocity,
                 pickup_delay: 0,

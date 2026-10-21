@@ -992,7 +992,13 @@ impl Tick<'_> {
         let id = self.world.shared().next_entity_id();
         let delay = self.world.rng().gen_range(60..=120);
         let uuid = self.world.rng().r#gen();
-        let mut entity = OminousItemSpawner::new(id, uuid, at, stack.dup_unchecked(), delay);
+        let mut entity = OminousItemSpawner::new(
+            id,
+            uuid,
+            at,
+            ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Loot),
+            delay,
+        );
         entity.base.position = at;
         self.world.add_entity(Box::new(entity));
         let rng = self.world.rng();

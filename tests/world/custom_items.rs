@@ -64,7 +64,7 @@ impl CustomItemBehavior for Recorder {
     ) -> InteractOutcome {
         let id = interaction
             .stack
-            .as_ref()
+            .as_deref()
             .and_then(tuff_core::custom::item_id)
             .unwrap_or("none");
         self.log
@@ -322,7 +322,7 @@ async fn entity_clicks_hide_the_base_and_reach_the_behaviour() {
     world.ticks(2).await;
     let creeper = mobs(&region, EntityType::Creeper).await[0].id;
     let mut click = interaction(&player, None);
-    click.stack = Some(stack(&world, WAND, 1));
+    click.stack = Some(tuff_item::item::ItemSnapshot::of(&stack(&world, WAND, 1)));
     region
         .request(RegionRequest::InteractEntity {
             player: player.clone(),

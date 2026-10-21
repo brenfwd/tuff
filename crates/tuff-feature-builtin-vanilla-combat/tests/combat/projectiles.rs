@@ -434,7 +434,7 @@ async fn rocket_bursts_hurt_what_the_next_region_holds() {
         world.shared.next_entity_id(),
         [510.5, f64::from(SKY) + 1.5, 8.5],
         [0.0, 0.0, 0.0],
-        &starry_rocket(),
+        starry_rocket(),
         owner(&viewer),
         &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1),
     );
@@ -535,7 +535,7 @@ async fn boosting_rockets_follow_their_glider_over_a_region_border() {
         world.shared.next_entity_id(),
         glider.id,
         at(505.5),
-        &ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test),
+        ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test),
         owner(&glider),
         40,
     );

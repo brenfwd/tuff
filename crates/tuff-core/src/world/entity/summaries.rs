@@ -514,14 +514,14 @@ pub struct AttackOutcome {
 }
 
 /// A player's right click on an entity.
-#[derive(tuff_item::item::DupClone, Debug)]
+#[derive(Clone, Debug)]
 pub struct EntityInteraction {
     pub player: PlayerId,
     pub player_uuid: u128,
     pub position: [f64; 3],
     /// Where on the entity the player clicked, relative to its position.
     pub location: [f64; 3],
-    pub stack: Option<ItemStack>,
+    pub stack: Option<tuff_item::item::ItemSnapshot>,
     pub off_hand: bool,
     pub creative: bool,
     pub sneaking: bool,

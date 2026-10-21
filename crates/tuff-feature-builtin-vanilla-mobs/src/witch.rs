@@ -4,7 +4,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::{EquipmentSlot, ModifierOperation};
 use tuff_vanilla_data::registry::{Attribute, EntityType, MobEffect, Potion, SoundEvent};
@@ -326,28 +325,25 @@ impl Witch {
         self.drinking = false;
         core.signal = 0;
         core.changed(DRINKING);
-        let drunk = core
-            .equipment
-            .get(EquipmentSlot::Mainhand)
-            .map(DupUnchecked::dup_unchecked);
-        core.equipment.set(EquipmentSlot::Mainhand, None);
-        if let Some(stack) = drunk
-            && stack.item == Item::Potion
-            && let Some(contents) = &stack.components.potion_contents
-        {
-            let scale = stack.item.potion_duration_scale();
-            for effect in effects::potion_effects(contents, scale) {
-                if effect.effect.is_instantaneous() {
-                    // Only instant effect witches ever drink is Healing.
-                    if let Some(effects::EffectAction::Heal(amount)) =
-                        effects::instant_action(effect.effect, effect.amplifier, 1.0)
-                    {
-                        core.heal(amount);
+        if let Some(stack) = core.equipment.take(EquipmentSlot::Mainhand) {
+            if stack.item == Item::Potion
+                && let Some(contents) = &stack.components.potion_contents
+            {
+                let scale = stack.item.potion_duration_scale();
+                for effect in effects::potion_effects(contents, scale) {
+                    if effect.effect.is_instantaneous() {
+                        // Only instant effect witches ever drink is Healing.
+                        if let Some(effects::EffectAction::Heal(amount)) =
+                            effects::instant_action(effect.effect, effect.amplifier, 1.0)
+                        {
+                            core.heal(amount);
+                        }
+                    } else {
+                        core.effects.add(effect);
                     }
-                } else {
-                    core.effects.add(effect);
                 }
             }
+            stack.burn(tuff_item::item::BurnReason::Consumed);
         }
         core.set_modifier(Attribute::MovementSpeed, DRINKING_SPEED_ID, None);
     }

@@ -9,7 +9,6 @@
 //! zombified piglin nearby hold a grudge against the attacker.
 
 use rand::Rng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -855,10 +854,9 @@ impl Piglin {
     /// Holds `stack` in its off hand (dropping what was there) and
     /// admires it.
     fn hold_and_admire(&mut self, core: &mut MobCore, stack: ItemStack, cx: &mut TickContext) {
-        if let Some(held) = offhand_copy(core) {
+        if let Some(held) = core.equipment.replace(EquipmentSlot::Offhand, Some(stack)) {
             core.drop_item(held, 0.0, cx);
         }
-        core.equipment.set(EquipmentSlot::Offhand, Some(stack));
         core.equipment.set_drop_chance(
             EquipmentSlot::Offhand,
             super::equipment::PRESERVED_DROP_CHANCE,
@@ -871,14 +869,14 @@ impl Piglin {
     /// The admiring is over: gold is traded for its barter, anything
     /// else it loves is worn or pocketed.
     fn finish_admiring(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        let Some(held) = offhand_copy(core) else {
+        let Some(held) = core.equipment.take(EquipmentSlot::Offhand) else {
             return;
         };
-        core.equipment.set(EquipmentSlot::Offhand, None);
         if held.item == Item::GoldIngot {
             if core.is_baby() {
                 self.equip_or_store(core, held, cx);
             } else {
+                held.burn(tuff_item::item::BurnReason::TradePayment);
                 self.barter(core, cx);
             }
         } else {
@@ -1119,7 +1117,7 @@ impl Species for Piglin {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item != Item::GoldIngot
             || core.piglin.admire > 0
             || core.is_baby()
@@ -1142,9 +1140,10 @@ impl Species for Piglin {
         core.piglin.celebrate = None;
         if core.piglin.admire > 0 {
             core.piglin.admire = 0;
-            if let Some(held) = offhand_copy(core) {
-                core.equipment.set(EquipmentSlot::Offhand, None);
-                if held.item != Item::GoldIngot {
+            if let Some(held) = core.equipment.take(EquipmentSlot::Offhand) {
+                if held.item == Item::GoldIngot {
+                    held.burn(tuff_item::item::BurnReason::Consumed);
+                } else {
                     self.equip_or_store(core, held, cx);
                 }
             }
@@ -1487,9 +1486,3 @@ pub use zombified::*;
 #[cfg(test)]
 #[path = "piglin_tests.rs"]
 pub(crate) mod tests;
-
-fn offhand_copy(core: &MobCore) -> Option<ItemStack> {
-    core.equipment
-        .get(EquipmentSlot::Offhand)
-        .map(DupUnchecked::dup_unchecked)
-}

@@ -10,7 +10,11 @@ fn click(item: Item) -> EntityInteraction {
         player_uuid: 1,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: Some(ItemStack::mint(item, 1, MintReason::Test)),
+        stack: Some(tuff_item::item::ItemSnapshot::describe(
+            item,
+            1,
+            Default::default(),
+        )),
         off_hand: false,
         creative: false,
         sneaking: false,

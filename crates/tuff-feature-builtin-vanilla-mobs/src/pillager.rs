@@ -3,7 +3,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -189,14 +188,12 @@ fn enchant_spawn_crossbow(core: &mut MobCore, rng: &mut StdRng) {
     if rng.gen_range(0..SPAWN_CROSSBOW_ENCHANT_ODDS) != 0 {
         return;
     }
-    let Some(weapon) = core
+    if core
         .equipment
         .get(EquipmentSlot::Mainhand)
-        .map(DupUnchecked::dup_unchecked)
-    else {
-        return;
-    };
-    if weapon.item == Item::Crossbow {
+        .is_some_and(|weapon| weapon.item == Item::Crossbow)
+        && let Some(weapon) = core.equipment.take(EquipmentSlot::Mainhand)
+    {
         let enchanted = tuff_item::item::enchanting::enchant_from_provider(
             weapon,
             "minecraft:pillager_spawn_crossbow",

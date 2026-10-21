@@ -305,7 +305,7 @@ impl<const HUSK: bool> Species for Camel<HUSK> {
         if HUSK {
             core.persistence_required = true;
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         super::equine::saddle_up(core, stack, Some(Self::SOUNDS.saddle), cx)
     }
 

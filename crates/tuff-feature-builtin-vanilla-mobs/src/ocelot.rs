@@ -165,7 +165,7 @@ impl Species for Ocelot {
         if self.trusting {
             return None;
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if !ocelot_food(stack.item) {
             return None;
         }
@@ -204,7 +204,6 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 mod tests {
     use super::*;
     use crate::tests::with_context;
-    use tuff_item::item::MintReason;
 
     fn interaction(item: Option<Item>) -> EntityInteraction {
         EntityInteraction {
@@ -212,7 +211,8 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::mint(item, 1, MintReason::Test)),
+            stack: item
+                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
             off_hand: false,
             creative: false,
             sneaking: false,

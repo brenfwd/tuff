@@ -337,7 +337,7 @@ impl Species for Wolf {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref();
+        let stack = interaction.stack.as_deref();
         let owned = core.is_owner(interaction.player_uuid);
         if core.tame.as_ref().is_some_and(|t| t.is_tamed()) {
             if owned
@@ -482,7 +482,6 @@ mod tests {
     use super::*;
     use crate::tests::with_context;
     use tuff_core::protocol::play::MetadataValue;
-    use tuff_item::item::DupUnchecked;
 
     fn interaction(owner: u128, item: Option<tuff_vanilla_data::Item>) -> EntityInteraction {
         EntityInteraction {
@@ -490,7 +489,8 @@ mod tests {
             player_uuid: owner,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::mint(item, 1, MintReason::Test)),
+            stack: item
+                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -691,13 +691,10 @@ mod tests {
             assert!(matches!(worn, Some(HandEffect::Consume(1))));
             assert!(core.equipment.get(EquipmentSlot::Body).is_some());
 
-            let mut armor = core
-                .equipment
-                .get(EquipmentSlot::Body)
-                .map(DupUnchecked::dup_unchecked)
-                .unwrap();
-            armor.set_damage(40);
-            core.equipment.set(EquipmentSlot::Body, Some(armor));
+            core.equipment
+                .get_mut(EquipmentSlot::Body)
+                .unwrap()
+                .set_damage(40);
             core.set_sitting(false);
             let scute = Some(Item::ArmadilloScute);
             assert!(

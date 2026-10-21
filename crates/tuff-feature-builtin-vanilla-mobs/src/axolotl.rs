@@ -462,7 +462,7 @@ impl Species for Axolotl {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if stack.item == Item::TropicalFishBucket && self.is_food(stack) {
             return self.feed(core, interaction, cx);
         }

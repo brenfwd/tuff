@@ -138,6 +138,13 @@ impl Equipment {
         taken
     }
 
+    /// Takes up to `n` items out of `slot`, emptying it when none are left.
+    pub fn take_some(&mut self, slot: EquipmentSlot, n: u8) -> Option<ItemStack> {
+        let taken = ItemStack::take_from(&mut self.items[index(slot)?], n);
+        self.changed |= taken.is_some();
+        taken
+    }
+
     /// Takes the item out of `slot`.
     pub fn take(&mut self, slot: EquipmentSlot) -> Option<ItemStack> {
         let i = index(slot)?;
@@ -310,8 +317,14 @@ pub fn dispense_equip(
     {
         return None;
     }
-    core.equipment
-        .set(equippable.slot, Some(stack.dup_count_unchecked(1)));
+    core.equipment.set(
+        equippable.slot,
+        Some(ItemStack::mint_like(
+            stack,
+            1,
+            tuff_item::item::MintReason::Transform,
+        )),
+    );
     core.equipment
         .set_drop_chance(equippable.slot, PRESERVED_DROP_CHANCE);
     core.persistence_required = true;

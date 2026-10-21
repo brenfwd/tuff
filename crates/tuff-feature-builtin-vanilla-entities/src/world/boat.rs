@@ -1133,7 +1133,7 @@ mod tests {
         assert!(nbt.is_empty(), "the loader takes its keys");
         let items = boat.container().unwrap();
         assert_eq!(items.len(), CHEST_SLOTS);
-        assert_eq!(items[26], Some(stack.dup_unchecked()));
+        assert_eq!(items[26], Some(stack.test_copy()));
         assert_eq!(items.iter().flatten().count(), 1, "slot 27 is out of range");
         let mut out = Compound::new();
         boat.save(&mut out);

@@ -8,9 +8,13 @@ pub(super) type ContainerView<'a> = tuff_item::item::SlotsCow<'a>;
 /// sound and animation, and again when the dwell ends for the transfer.
 #[derive(Debug)]
 pub(super) enum Outcome {
-    Take { stack: ItemStack },
+    Take {
+        stack: tuff_item::item::ItemSnapshot,
+    },
     TakeFail,
-    Deposit { stack: ItemStack },
+    Deposit {
+        stack: tuff_item::item::ItemSnapshot,
+    },
     DepositFail,
 }
 
@@ -246,7 +250,8 @@ impl TransportItems {
         if Self::picking_up(mob) {
             match items.iter().flatten().next() {
                 Some(stack) => {
-                    let stack = stack.dup_count_unchecked(stack.count().min(TAKE_MAX));
+                    let stack = tuff_item::item::ItemSnapshot::of(stack)
+                        .with_count(stack.count().min(TAKE_MAX));
                     Outcome::Take { stack }
                 }
                 None => Outcome::TakeFail,
@@ -260,7 +265,7 @@ impl TransportItems {
             let matches = empty || items.iter().flatten().any(|s| s.item == held.item);
             if matches {
                 Outcome::Deposit {
-                    stack: held.dup_unchecked(),
+                    stack: tuff_item::item::ItemSnapshot::of(held),
                 }
             } else {
                 Outcome::DepositFail
@@ -325,25 +330,19 @@ impl TransportItems {
                 self.visited.clear();
             }
             Outcome::Deposit { stack } => {
-                let mut view = (cx.container)(target)
-                    .unwrap_or_default()
-                    .into_owned_unchecked();
-                let (left, _) = tuff_core::world::block_entity::golem_place(
-                    &mut view,
-                    stack.dup_unchecked(),
-                    &mut Vec::new(),
-                );
-                let placed = stack.count() - left.as_ref().map_or(0, |l| l.count());
-                if placed > 0 {
+                let view = (cx.container)(target).unwrap_or_default();
+                let placed = tuff_core::world::block_entity::golem_room(&view, &stack);
+                if placed > 0
+                    && let Some(given) = mob.equipment.take_some(EquipmentSlot::Mainhand, placed)
+                {
                     cx.effects.push(Effect::CopperGolemDeposit {
                         pos: target,
-                        stack: stack.dup_count_unchecked(placed),
+                        stack: given,
                     });
                 }
-                if left.is_none() {
+                if mob.equipment.get(EquipmentSlot::Mainhand).is_none() {
                     self.visited.clear();
                 }
-                mob.equipment.set(EquipmentSlot::Mainhand, left);
             }
             Outcome::TakeFail | Outcome::DepositFail => {}
         }

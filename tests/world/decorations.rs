@@ -466,7 +466,7 @@ async fn a_framed_map_marks_its_frame_and_reaches_players_nearby() {
     let mut stack =
         tuff_item::item::ItemStack::mint(Item::FilledMap, 1, tuff_item::item::MintReason::Test);
     stack.components.map_id = Some(map);
-    put.stack = Some(stack);
+    put.stack = Some(tuff_item::item::ItemSnapshot::of(&stack));
     interact_with(&s.region, &s.player, &mut s.events, id, put).await;
     s.world
         .publish_players("minecraft:overworld", &[(&s.player, [6.0, 70.0, 8.0])]);

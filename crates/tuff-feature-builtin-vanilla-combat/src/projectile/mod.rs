@@ -41,11 +41,11 @@ fn launch(launch: Launch, rng: &mut StdRng) -> Option<Box<dyn RegionEntity>> {
         )),
         Shot::Firework { item, flight } => Box::new(match flight {
             Flight::Shot(velocity) => {
-                firework::FireworkRocket::shot(id, position, velocity, &item, owner, rng)
+                firework::FireworkRocket::shot(id, position, velocity, item, owner, rng)
             }
-            Flight::Launched => firework::FireworkRocket::launched(id, position, &item, owner, rng),
+            Flight::Launched => firework::FireworkRocket::launched(id, position, item, owner, rng),
             Flight::Attached { player, lifetime } => {
-                firework::FireworkRocket::attached(id, player, position, &item, owner, lifetime)
+                firework::FireworkRocket::attached(id, player, position, item, owner, lifetime)
             }
         }),
         Shot::WindCharge { kind, velocity } => Box::new(if kind == EntityType::BreezeWindCharge {

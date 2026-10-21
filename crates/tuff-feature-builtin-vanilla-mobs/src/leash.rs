@@ -579,7 +579,7 @@ pub fn interact(
     let (position, category) = (base.position, sound_category_of(entity));
     let own = entity.leash().cloned();
     let player_anchor = Anchor::Entity(interaction.player_uuid);
-    let item = interaction.stack.as_ref().map(|s| s.item);
+    let item = interaction.stack.as_deref().map(|s| s.item);
     if interaction.sneaking && profile.is_some() && alive && !baby {
         let around = center(holder.bounds);
         let ids = leashed_to(world, player_anchor, around);

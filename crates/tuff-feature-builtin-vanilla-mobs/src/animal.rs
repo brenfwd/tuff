@@ -322,7 +322,7 @@ pub fn interact<S: Species>(
     interaction: &EntityInteraction,
     cx: &mut TickContext,
 ) -> InteractOutcome {
-    let stack = interaction.stack.as_ref()?;
+    let stack = interaction.stack.as_deref()?;
     let core = &mut mob.core;
     if stack.item == Item::GoldenDandelion
         && core.is_baby()

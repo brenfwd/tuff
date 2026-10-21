@@ -298,7 +298,7 @@ impl RegionEntity for Minecart {
         if !self.is_furnace() {
             return None;
         }
-        let fuel = interaction.stack.as_ref().is_some_and(|stack| {
+        let fuel = interaction.stack.as_deref().is_some_and(|stack| {
             tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::FURNACE_MINECART_FUEL,
                 stack.item,

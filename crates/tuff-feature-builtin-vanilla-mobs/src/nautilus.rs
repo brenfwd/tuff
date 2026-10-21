@@ -627,7 +627,7 @@ impl Species for Nautilus {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if core.is_baby() {
             return None;
         }
@@ -947,7 +947,11 @@ mod tests {
                 player_uuid: 9,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::mint(Item::Pufferfish, 1, MintReason::Test)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Pufferfish,
+                    1,
+                    Default::default(),
+                )),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -972,7 +976,11 @@ mod tests {
             player_uuid: 9,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::mint(item, 1, MintReason::Test)),
+            stack: Some(tuff_item::item::ItemSnapshot::describe(
+                item,
+                1,
+                Default::default(),
+            )),
             off_hand: false,
             creative: false,
             sneaking,

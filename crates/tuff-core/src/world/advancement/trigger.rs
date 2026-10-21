@@ -89,7 +89,7 @@ pub enum Event<'a> {
     FishingRodHooked {
         rod: &'a ItemStack,
         entity: &'a EntityFacts,
-        items: &'a [ItemStack],
+        items: &'a [tuff_item::item::ItemSnapshot],
     },
     SummonedEntity(&'a EntityFacts),
     UsedTotem(&'a ItemStack),

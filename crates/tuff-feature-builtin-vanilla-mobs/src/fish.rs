@@ -131,7 +131,7 @@ pub(crate) fn bucket_interact(
     extra: impl FnOnce(&mut Compound),
     cx: &mut TickContext,
 ) -> InteractOutcome {
-    let stack = interaction.stack.as_ref()?;
+    let stack = interaction.stack.as_deref()?;
     if stack.item != Item::WaterBucket || !core.is_alive() {
         return None;
     }

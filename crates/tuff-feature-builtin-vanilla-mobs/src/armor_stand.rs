@@ -5,7 +5,6 @@
 use crate::{Damage, MobCore, MobSounds, Species, data};
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::entity::Size;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -217,12 +216,12 @@ impl ArmorStand {
         if !current && self.bit(slot, PUT_ITEM_BIT) {
             return None;
         }
-        let held = interaction.stack.as_ref();
+        let held = interaction.stack.as_deref();
         if interaction.creative
             && !current
             && let Some(held) = held
         {
-            let one = held.dup_count_unchecked(1);
+            let one = ItemStack::mint_like(held, 1, MintReason::Creative);
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
             return Some(HandEffect::None);
@@ -233,7 +232,7 @@ impl ArmorStand {
             if current {
                 return None;
             }
-            let one = held.dup_count_unchecked(1);
+            let one = ItemStack::mint_like(held, 1, MintReason::Transform);
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
             return Some(HandEffect::Consume(1));
@@ -241,9 +240,10 @@ impl ArmorStand {
         if let Some(held) = held {
             self.equip_sound(core, held, cx);
         }
-        let current = core
-            .equipment
-            .replace(slot, held.map(DupUnchecked::dup_unchecked));
+        let current = core.equipment.replace(
+            slot,
+            held.map(|held| ItemStack::mint_like(held, held.count(), MintReason::Transform)),
+        );
         Some(HandEffect::Replace(current.map(Box::new)))
     }
 
@@ -458,7 +458,7 @@ impl Species for ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let held = interaction.stack.as_ref();
+        let held = interaction.stack.as_deref();
         if self.marker || held.is_some_and(|s| s.item == Item::NameTag) {
             return None;
         }
@@ -502,8 +502,10 @@ impl Species for ArmorStand {
         {
             return None;
         }
-        core.equipment
-            .set(equippable.slot, Some(stack.dup_count_unchecked(1)));
+        core.equipment.set(
+            equippable.slot,
+            Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
+        );
         core.sound(equippable.equip_sound, 1.0, 1.0, cx);
         Some(DispenseOutcome::Dispensed)
     }
