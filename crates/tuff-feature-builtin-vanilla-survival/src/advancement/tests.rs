@@ -359,9 +359,13 @@ fn crafted_recipes_meet_recipe_crafted_criteria() {
         ItemStack::mint(Item::ArcherPotterySherd, 1, MintReason::Test),
     ];
     let pot = |ingredients: &[ItemStack]| {
+        let ingredients: Vec<_> = ingredients
+            .iter()
+            .map(tuff_item::item::ItemSnapshot::of)
+            .collect();
         met(&Event::RecipeCrafted {
             recipe: "minecraft:decorated_pot",
-            ingredients,
+            ingredients: &ingredients,
         })
         .iter()
         .any(|(name, _)| *name == "minecraft:adventure/craft_decorated_pot_using_only_sherds")

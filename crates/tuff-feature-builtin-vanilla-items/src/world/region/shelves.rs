@@ -6,7 +6,6 @@ use tuff_core::world::block_entity::{read_items, write_items};
 use tuff_core::world::game_event::{Context, GameEvent, Source};
 use tuff_core::world::messages::{ActionOutcome, HandEffect, Place, PlayerEvent};
 use tuff_core::world::region_api::RegionWorld;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_common::placement;
 use tuff_vanilla_common::side_chain;
@@ -83,7 +82,7 @@ pub trait Shelves: RegionWorld {
             .held
             .filter(|item| item_tags::BOOKSHELF_BOOKS.contains(item));
         if let Some(item) = book.filter(|_| !occupied) {
-            let stack = ItemStack::mint(item, 1, MintReason::CrossActor)
+            let stack = ItemStack::mint(item, 1, MintReason::Transform)
                 .with_components(place.components.clone());
             let sound = if is_enchanted(&stack) {
                 SoundEvent::BlockChiseledBookshelfInsertEnchanted
@@ -177,16 +176,17 @@ pub trait Shelves: RegionWorld {
     ) -> Option<ActionOutcome> {
         let pos = place.target;
         let held = place.held.map(|item| {
-            ItemStack::mint(item, place.held_count, MintReason::CrossActor)
+            ItemStack::mint(item, place.held_count, MintReason::Transform)
                 .with_components(place.components.clone())
         });
         let mut items = read_items(self.raw_block_entity(pos)?, SHELF_SLOTS);
-        let removed = std::mem::replace(&mut items[slot], held.dup_unchecked());
-        let sound = match (&removed, &held) {
-            (Some(_), None) => SoundEvent::BlockShelfTakeItem,
-            (Some(_), Some(_)) => SoundEvent::BlockShelfSingleSwap,
-            (None, Some(_)) => SoundEvent::BlockShelfPlaceItem,
-            (None, None) => return None,
+        let holding = held.is_some();
+        let removed = std::mem::replace(&mut items[slot], held);
+        let sound = match (&removed, holding) {
+            (Some(_), false) => SoundEvent::BlockShelfTakeItem,
+            (Some(_), true) => SoundEvent::BlockShelfSingleSwap,
+            (None, true) => SoundEvent::BlockShelfPlaceItem,
+            (None, false) => return None,
         };
         self.store_shelf(pos, &items);
         self.play_sound(sound, pos, 1.0, 1.0, None);
@@ -207,7 +207,14 @@ pub trait Shelves: RegionWorld {
     fn swap_hotbar(&mut self, place: &Place, pos: BlockPos) -> Option<ActionOutcome> {
         let chain = side_chain::connected(&|at| self.block(at), pos);
         let count = chain.len() as i32;
-        let mut hotbar = place.hotbar.dup_unchecked();
+        let mut hotbar: Vec<Option<ItemStack>> = place
+            .hotbar
+            .iter()
+            .map(|slot| {
+                slot.as_ref()
+                    .map(|s| ItemStack::mint_like(s, s.count(), MintReason::Transform))
+            })
+            .collect();
         hotbar.resize_with(HOTBAR as usize, || None);
         let mut changed = Vec::new();
         for (index, part) in chain.iter().enumerate() {
@@ -240,6 +247,7 @@ pub trait Shelves: RegionWorld {
             );
         }
         if changed.is_empty() {
+            burn_all(hotbar);
             return Some(ActionOutcome::Interacted {
                 off_hand: place.off_hand,
             });
@@ -251,6 +259,7 @@ pub trait Shelves: RegionWorld {
             .into_iter()
             .map(|index| (index, hotbar[index].take()))
             .collect();
+        burn_all(hotbar);
         Some(ActionOutcome::HotbarSwapped {
             slots,
             single: false,
@@ -271,6 +280,12 @@ fn interact_vibrations(stack: &ItemStack) -> bool {
 }
 
 impl<T: RegionWorld + ?Sized> Shelves for T {}
+
+fn burn_all(slots: Vec<Option<ItemStack>>) {
+    for stack in slots.into_iter().flatten() {
+        stack.burn(tuff_item::item::BurnReason::Transform);
+    }
+}
 
 #[cfg(test)]
 mod tests {

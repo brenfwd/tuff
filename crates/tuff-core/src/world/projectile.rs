@@ -605,7 +605,7 @@ pub enum Shot {
     /// A fishing bobber cast from a rod along a yaw and pitch.
     Bobber {
         rotation: (f32, f32),
-        rod: ItemStack,
+        rod: tuff_item::item::ItemSnapshot,
         luck: f32,
     },
 }

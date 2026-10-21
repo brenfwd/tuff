@@ -398,7 +398,8 @@ impl PlayerSession {
                     self.inventory
                         .slots()
                         .get(Inventory::hotbar_slot(i))
-                        .and_then(DupUnchecked::dup_unchecked)
+                        .and_then(Option::as_ref)
+                        .map(tuff_item::item::ItemSnapshot::of)
                 })
                 .collect(),
             selected: self.inventory.selected(),

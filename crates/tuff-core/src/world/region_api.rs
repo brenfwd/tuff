@@ -826,6 +826,30 @@ pub trait RegionWorld: GrowthLevel {
         false
     }
 
+    /// Changes the slots of the block container at `pos` in place and
+    /// shows its viewers the ones that changed, unless a transaction
+    /// holds it; false if nothing could be edited.
+    fn edit_container(
+        &mut self,
+        _pos: BlockPos,
+        _edit: &mut dyn FnMut(&mut [Option<ItemStack>]),
+    ) -> bool {
+        false
+    }
+
+    /// Changes slot `slot` of the block container at `pos` in place and
+    /// shows its viewers, unless a transaction holds it; false if nothing
+    /// could be edited. The change is reported to container observers
+    /// under the current cause.
+    fn edit_container_slot(
+        &mut self,
+        _pos: BlockPos,
+        _slot: usize,
+        _edit: &mut dyn FnMut(&mut Option<ItemStack>),
+    ) -> bool {
+        false
+    }
+
     /// The container slots of the entity `uuid` in this region (a chest
     /// boat, a minecart).
     fn entity_container_items(

@@ -264,7 +264,10 @@ impl PlayerSession {
     /// Recipes crafted in a result slot, with the stacks they used.
     pub fn crafted_recipes(
         &mut self,
-        crafted: &[(tuff_vanilla_data::Frozen<str>, Vec<ItemStack>)],
+        crafted: &[(
+            tuff_vanilla_data::Frozen<str>,
+            Vec<tuff_item::item::ItemSnapshot>,
+        )],
     ) {
         self.award_recipes(crafted.iter().map(|(recipe, _)| &**recipe));
         for (recipe, ingredients) in crafted {

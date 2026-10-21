@@ -1,13 +1,11 @@
 //! Crafters: a rising edge of power schedules a craft four ticks later.
 
-use tuff_item::item::BurnReason;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::{Block, BlockState, Frozen};
 
 use tuff_core::world::PLAYER_HALF_WIDTH;
 use tuff_core::world::block_entity::{
-    BlockEntityTicker, CRAFTER_SLOTS, ContainerKind, State, TickOutcome, TickView,
+    BlockEntityTicker, ContainerKind, State, TickOutcome, TickView,
 };
 use tuff_core::world::item_port::Porter;
 use tuff_core::world::messages::{AdvancementEvent, PlayerEvent};
@@ -115,30 +113,24 @@ pub(crate) fn craft(world: &mut dyn RegionWorld, pos: BlockPos) {
     if world.container_kind(pos) != Some(ContainerKind::Crafter) {
         return;
     }
-    let Some(items) = world.container_items(pos) else {
+    let recipes = world.shared().recipes();
+    let mut ingredients: Vec<tuff_item::item::ItemSnapshot> = Vec::new();
+    let mut crafted = None;
+    let edited = world.edit_container(pos, &mut |items| {
+        ingredients = items
+            .iter()
+            .flatten()
+            .map(tuff_item::item::ItemSnapshot::of)
+            .collect();
+        crafted = recipes.crafter_craft(items);
+    });
+    if !edited {
         return;
-    };
-    let before = items
-        .iter()
-        .map(DupUnchecked::dup_unchecked)
-        .collect::<Vec<_>>();
-    let mut grid = before.dup_unchecked();
-    let ingredients: Vec<ItemStack> = before
-        .iter()
-        .flatten()
-        .map(DupUnchecked::dup_unchecked)
-        .collect();
-    let Some(crafted) = world.shared().recipes().crafter_craft(&mut grid) else {
+    }
+    let Some(crafted) = crafted else {
         world.level_event(LEVEL_EVENT_FAIL, pos, 0);
         return;
     };
-    let changed: Vec<(usize, Option<ItemStack>)> = (0..CRAFTER_SLOTS)
-        .filter(|slot| before[*slot] != grid[*slot])
-        .map(|slot| (slot, grid[slot].dup_unchecked()))
-        .collect();
-    if !changed.is_empty() && !world.set_container_items(pos, changed) {
-        return;
-    }
     if let Some(State::Crafter(crafter)) = world.block_entity_state_mut(pos) {
         crafter.crafting_ticks = CRAFTING_TICKS;
     }
@@ -158,7 +150,7 @@ fn dispense(
     pos: BlockPos,
     direction: Facing,
     stack: ItemStack,
-    (recipe, ingredients): (&Frozen<str>, &[ItemStack]),
+    (recipe, ingredients): (&Frozen<str>, &[tuff_item::item::ItemSnapshot]),
 ) {
     let target = step(pos, direction);
     let face = Some(direction.opposite());
@@ -170,15 +162,20 @@ fn dispense(
                 .is_some_and(|stack| stack.count() > stack.max_stack_size());
         let by = Porter::Dropper(pos);
         if one_at_a_time {
-            while let Some(stack) = remaining.take() {
-                let one = stack.dup_count_unchecked(1);
-                if !matches!(world.insert_item(target, face, one, by), Insert::Stored) {
-                    remaining = Some(stack);
-                    break;
+            while let Some(mut stack) = remaining.take() {
+                let one = stack.take(1);
+                match world.insert_item(target, face, one, by) {
+                    Insert::Stored => {}
+                    Insert::Nothing(back) | Insert::Refused(back) => {
+                        if let Err(back) = stack.join(back) {
+                            drop_out(world, pos, direction, back);
+                        }
+                        remaining = Some(stack);
+                        break;
+                    }
                 }
-                if stack.count() > 1 {
-                    let left = stack.count() - 1;
-                    remaining = Some(stack.keep(left, BurnReason::CraftingInput));
+                if !stack.is_empty() {
+                    remaining = Some(stack);
                 }
             }
         } else if let Some(stack) = remaining.take() {
@@ -202,7 +199,7 @@ fn report_crafted(
     world: &dyn RegionWorld,
     pos: BlockPos,
     recipe: &Frozen<str>,
-    ingredients: &[ItemStack],
+    ingredients: &[tuff_item::item::ItemSnapshot],
 ) {
     let [cx, cy, cz] = pos.center();
     for player in world.present_players() {
@@ -217,10 +214,7 @@ fn report_crafted(
             player.handle.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::CrafterRecipeCrafted {
                     recipe: recipe.clone(),
-                    ingredients: ingredients
-                        .iter()
-                        .map(DupUnchecked::dup_unchecked)
-                        .collect::<Vec<_>>(),
+                    ingredients: ingredients.to_vec(),
                 },
             )));
         }
