@@ -811,7 +811,7 @@ impl RegionWorld for RegionActor {
         self.entity_container_items_by_uuid(uuid)
     }
 
-    fn entity_held_items(&self, uuid: u128) -> Option<Vec<Option<ItemStack>>> {
+    fn entity_held_items(&self, uuid: u128) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         self.entity_held_items_by_uuid(uuid)
     }
 

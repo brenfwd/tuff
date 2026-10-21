@@ -10,7 +10,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::registry::{Attribute, EntityType, SoundEvent};
 use tuff_vanilla_data::{Item, tag};
 
@@ -141,8 +140,7 @@ impl Goal for PandaSit {
     }
 
     fn stop(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
-        if let Some(stack) = mob.equipment.main_hand().map(DupUnchecked::dup_unchecked) {
-            mob.equipment.set(EquipmentSlot::Mainhand, None);
+        if let Some(stack) = mob.equipment.take(EquipmentSlot::Mainhand) {
             mob.drop_item(stack, 0.0, cx);
             let seconds = if mob.panda_lazy {
                 cx.rng.gen_range(0..50)
@@ -652,15 +650,16 @@ impl Species for Panda {
         }
         try_to_sit(core);
         set_eat(core, 1);
-        if let Some(held) = core.equipment.main_hand().map(DupUnchecked::dup_unchecked)
-            && !interaction.creative
-        {
-            core.drop_item(held, 0.0, cx);
-        }
-        core.equipment.set(
+        if let Some(held) = core.equipment.replace(
             EquipmentSlot::Mainhand,
             Some(ItemStack::mint(stack.item, 1, MintReason::Spawn)),
-        );
+        ) {
+            if interaction.creative {
+                held.burn(tuff_item::item::BurnReason::Creative);
+            } else {
+                core.drop_item(held, 0.0, cx);
+            }
+        }
         core.equipment.set_drop_chance(
             EquipmentSlot::Mainhand,
             super::equipment::PRESERVED_DROP_CHANCE,

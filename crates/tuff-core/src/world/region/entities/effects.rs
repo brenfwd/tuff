@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::DupUnchecked;
 
 impl RegionActor {
     /// Applies what an entity's tick or an action on it did to the world.
@@ -399,7 +398,7 @@ impl RegionActor {
                         source: None,
                         direct: hit.projectile.map(at),
                     },
-                    weapon: hit.weapon.dup_unchecked(),
+                    weapon: hit.weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
                     dealt: hit.amount,
                     taken: outcome.health_lost,
                 },

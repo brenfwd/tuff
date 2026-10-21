@@ -12,7 +12,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::{Block, Item, tag};
@@ -355,7 +354,7 @@ impl Allay {
                 player,
                 event: Box::new(
                     tuff_core::world::messages::AdvancementEvent::AllayDropItemOnBlock {
-                        item: one.dup_unchecked(),
+                        item: tuff_item::item::ItemSnapshot::of(&one),
                         location: tuff_core::world::predicate::LocationFacts {
                             position: [deposit.point[0], deposit.point[1] - 2.1, deposit.point[2]],
                             ..Default::default()
@@ -368,7 +367,7 @@ impl Allay {
                 player,
                 event: Box::new(
                     tuff_core::world::messages::AdvancementEvent::AllayDropItemOnBlock {
-                        item: one.dup_unchecked(),
+                        item: tuff_item::item::ItemSnapshot::of(&one),
                         location: tuff_core::world::predicate::LocationFacts {
                             position: [deposit.point[0], deposit.point[1] - 1.0, deposit.point[2]],
                             ..Default::default()
@@ -717,19 +716,16 @@ impl Species for Allay {
         {
             return None;
         }
-        match (
-            core.equipment.main_hand().map(DupUnchecked::dup_unchecked),
-            stack,
-        ) {
-            (None, Some(stack)) => {
+        match (core.equipment.main_hand().is_some(), stack) {
+            (false, Some(stack)) => {
                 core.equipment
                     .set(EquipmentSlot::Mainhand, Some(stack.dup_count_unchecked(1)));
                 core.sound(SoundEvent::EntityAllayItemGiven, 2.0, 1.0, cx);
                 self.liked_player = Some(interaction.player_uuid);
                 Some(HandEffect::Consume(1))
             }
-            (Some(held), None) if !interaction.off_hand => {
-                core.equipment.set(EquipmentSlot::Mainhand, None);
+            (true, None) if !interaction.off_hand => {
+                let held = core.equipment.take(EquipmentSlot::Mainhand)?;
                 core.sound(SoundEvent::EntityAllayItemTaken, 2.0, 1.0, cx);
                 core.swing(cx);
                 if let Some(kept) = self.inventory.take() {
@@ -771,10 +767,12 @@ impl Species for Allay {
         if let Some(stack) = self.inventory.take() {
             core.drop_item(stack, 0.0, cx);
         }
-        if let Some(held) = core.equipment.main_hand().map(DupUnchecked::dup_unchecked)
-            && !super::equipment::prevents_drop(&held)
+        if core
+            .equipment
+            .main_hand()
+            .is_some_and(|held| !super::equipment::prevents_drop(held))
+            && let Some(held) = core.equipment.take(EquipmentSlot::Mainhand)
         {
-            core.equipment.set(EquipmentSlot::Mainhand, None);
             core.drop_item(held, 0.0, cx);
         }
     }

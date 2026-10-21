@@ -5,7 +5,6 @@
 //! 100-tick check.
 
 use tuff_item::item::BurnReason;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::damage_type::{self, DamageType};
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -192,13 +191,21 @@ impl ItemFrame {
     }
 
     pub fn set_item(&mut self, item: Option<ItemStack>) {
+        if let Some(old) = self.replace_item(item) {
+            old.burn(BurnReason::Template);
+        }
+    }
+
+    /// Puts `item` (one of it) in the frame and hands back what it held.
+    pub fn replace_item(&mut self, item: Option<ItemStack>) -> Option<ItemStack> {
         let item = item.map(|stack| stack.keep(1, BurnReason::Template));
         let had_map = self.has_map();
-        self.item = item;
+        let old = std::mem::replace(&mut self.item, item);
         self.changed.push(DATA_ITEM);
         if had_map != self.has_map() {
             self.place();
         }
+        old
     }
 
     pub fn set_rotation(&mut self, rotation: u8) {
@@ -448,16 +455,23 @@ impl RegionEntity for ItemFrame {
         &mut self.base
     }
 
-    fn held_items(&self) -> Option<Vec<Option<ItemStack>>> {
-        Some(vec![self.item.dup_unchecked()])
+    fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
+        Some(vec![self.item.as_ref().map(ItemStack::view)])
     }
 
     fn set_held_items(&mut self, slots: Vec<(usize, Option<ItemStack>)>) -> bool {
-        let Some((_, item)) = slots.into_iter().find(|(slot, _)| *slot == 0) else {
-            return false;
-        };
-        self.set_item(item);
-        true
+        let mut found = false;
+        for (slot, item) in slots {
+            if slot == 0 && !found {
+                found = true;
+                if let Some(old) = self.replace_item(item) {
+                    old.burn(BurnReason::Plugin);
+                }
+            } else if let Some(unused) = item {
+                unused.burn(BurnReason::Plugin);
+            }
+        }
+        found
     }
 
     fn save(&self, out: &mut Compound) {

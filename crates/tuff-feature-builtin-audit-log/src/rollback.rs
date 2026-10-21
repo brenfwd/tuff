@@ -375,7 +375,12 @@ fn undo_containers(
             let pot =
                 undo.entity.is_none() && world.container_items(pos).is_none() && is_pot(world, pos);
             let items = match undo.entity {
-                Some(uuid) if held => world.entity_held_items(uuid),
+                Some(uuid) if held => world.entity_held_items(uuid).map(|items| {
+                    items
+                        .into_iter()
+                        .map(|item| item.map(|item| item.get().dup_unchecked()))
+                        .collect()
+                }),
                 Some(uuid) => world.entity_container_items(uuid).map(dup_slice_unchecked),
                 None if pot => Some(vec![pot_item(world, pos)]),
                 None => world.container_items(pos).map(dup_slice_unchecked),

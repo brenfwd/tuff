@@ -206,7 +206,10 @@ impl RegionActor {
         self.ents.entities.get(&id)?.entity.container()
     }
 
-    pub(super) fn entity_held_items_by_uuid(&self, uuid: u128) -> Option<Vec<Option<ItemStack>>> {
+    pub(super) fn entity_held_items_by_uuid(
+        &self,
+        uuid: u128,
+    ) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         let id = self.entity_by_uuid(uuid)?;
         self.ents.entities.get(&id)?.entity.held_items()
     }
@@ -224,7 +227,12 @@ impl RegionActor {
         let Some(entity) = self.ents.entities.get_mut(&id).map(|t| &mut t.entity) else {
             return false;
         };
-        let Some(before) = entity.held_items() else {
+        let Some(before) = entity.held_items().map(|items| {
+            items
+                .into_iter()
+                .map(|item| item.map(ItemSnapshot::of))
+                .collect::<Vec<_>>()
+        }) else {
             return false;
         };
         if !entity.set_held_items(slots) {
@@ -235,8 +243,12 @@ impl RegionActor {
             .into_iter()
             .zip(after)
             .enumerate()
-            .filter(|(_, (old, new))| old != new)
-            .map(|(slot, (old, new))| SlotEdit::of(slot, old.as_ref(), new.as_ref()))
+            .filter(|(_, (old, new))| old.as_deref() != new.map(|new| new.get()))
+            .map(|(slot, (old, new))| SlotEdit {
+                slot,
+                old,
+                new: new.map(ItemSnapshot::of),
+            })
             .collect();
         if let Some(holder) = holder {
             self.report_container_edit(holder, edits);

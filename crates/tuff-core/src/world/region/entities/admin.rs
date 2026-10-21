@@ -114,9 +114,11 @@ impl RegionActor {
         let Some(stack) = held else {
             return Some(EnchantAnswer::Itemless);
         };
-        Some(match enchant_stack(&stack, enchantment, level) {
+        Some(match enchant_stack(stack.get(), enchantment, level) {
             Ok(updated) => {
-                tracked.entity.set_main_hand_item(Some(updated));
+                if let Some(old) = tracked.entity.replace_main_hand_item(Some(updated)) {
+                    old.burn(tuff_item::item::BurnReason::Transform);
+                }
                 EnchantAnswer::Done
             }
             Err(answer) => answer,

@@ -895,16 +895,20 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// What it wears and holds in each slot it has, by equipment slot id,
     /// for viewers.
-    fn equipment(&self) -> Vec<(u8, Option<ItemStack>)> {
+    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> {
         Vec::new()
     }
 
     /// What it holds in its main hand; `None` when it has no hands.
-    fn main_hand_item(&self) -> Option<Option<ItemStack>> {
+    fn main_hand_item(&self) -> Option<Option<tuff_item::item::ItemView<'_>>> {
         None
     }
 
-    fn set_main_hand_item(&mut self, _stack: Option<ItemStack>) {}
+    /// Puts `stack` in its main hand and hands back what was there (or
+    /// `stack` itself when it has no hands).
+    fn replace_main_hand_item(&mut self, stack: Option<ItemStack>) -> Option<ItemStack> {
+        stack
+    }
 
     /// Whether its equipment changed since last asked.
     fn take_equipment_changed(&mut self) -> bool {
@@ -1029,12 +1033,12 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// What the entity holds on display or wears, indexed by the slot
     /// numbers its held-item edits report (an item frame, an armor stand).
-    fn held_items(&self) -> Option<Vec<Option<ItemStack>>> {
+    fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         None
     }
 
-    /// Sets held slots as [`Self::held_items`] indexes them; false if
-    /// none was valid.
+    /// Sets held slots as [`Self::held_items`] indexes them, burning what
+    /// they held (only features set them); false if none was valid.
     fn set_held_items(&mut self, _slots: Vec<(usize, Option<ItemStack>)>) -> bool {
         false
     }

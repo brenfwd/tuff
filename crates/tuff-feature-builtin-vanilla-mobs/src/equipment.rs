@@ -3,12 +3,11 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 
 use tuff_core::protocol::play::equipment_slot;
 use tuff_core::world::entity::take;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, ItemView};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_common::combat::Equipped;
 
@@ -71,26 +70,56 @@ impl Equipment {
     }
 
     /// Every slot's item, by slot number (`EquipmentSlot as usize`).
-    pub fn by_number(&self) -> Vec<Option<ItemStack>> {
+    pub fn by_number(&self) -> Vec<Option<&ItemStack>> {
         let len = SLOTS
             .iter()
             .map(|(s, ..)| *s as usize)
             .max()
             .map_or(0, |m| m + 1);
-        let mut out: Vec<Option<ItemStack>> = (0..len).map(|_| None).collect();
+        let mut out: Vec<Option<&ItemStack>> = vec![None; len];
         for (slot, ..) in &SLOTS {
-            out[*slot as usize] = self.get(*slot).map(DupUnchecked::dup_unchecked);
+            out[*slot as usize] = self.get(*slot);
         }
         out
     }
 
-    /// Sets the slot with this number; false if there is none.
-    pub fn set_number(&mut self, number: usize, stack: Option<ItemStack>) -> bool {
+    /// Puts `stack` in the slot with this number and hands back what it
+    /// held; `Err` gives `stack` back if there is no such slot.
+    pub fn replace_number(
+        &mut self,
+        number: usize,
+        stack: Option<ItemStack>,
+    ) -> Result<Option<ItemStack>, Option<ItemStack>> {
         let Some((slot, ..)) = SLOTS.iter().find(|(s, ..)| *s as usize == number) else {
-            return false;
+            return Err(stack);
         };
-        self.set(*slot, stack);
-        true
+        Ok(self.replace(*slot, stack))
+    }
+
+    /// Puts `stack` in `slot` and hands back what it held (or `stack`
+    /// itself for a slot mobs do not have).
+    #[must_use]
+    pub fn replace(&mut self, slot: EquipmentSlot, stack: Option<ItemStack>) -> Option<ItemStack> {
+        let Some(i) = index(slot) else {
+            return stack;
+        };
+        self.changed = true;
+        std::mem::replace(&mut self.items[i], stack)
+    }
+
+    /// The item in `slot` to change in place; marks the equipment changed.
+    pub fn get_mut(&mut self, slot: EquipmentSlot) -> Option<&mut ItemStack> {
+        let item = self.items[index(slot)?].as_mut()?;
+        self.changed = true;
+        Some(item)
+    }
+
+    /// Takes the item out of `slot`.
+    pub fn take(&mut self, slot: EquipmentSlot) -> Option<ItemStack> {
+        let i = index(slot)?;
+        let taken = self.items[i].take();
+        self.changed |= taken.is_some();
+        taken
     }
 
     pub fn set(&mut self, slot: EquipmentSlot, stack: Option<ItemStack>) {
@@ -126,11 +155,11 @@ impl Equipment {
     }
 
     /// Every slot by protocol id, empty ones included.
-    pub fn visible(&self) -> Vec<(u8, Option<ItemStack>)> {
+    pub fn visible(&self) -> Vec<(u8, Option<ItemView<'_>>)> {
         SLOTS
             .iter()
             .zip(&self.items)
-            .map(|((_, _, id), stack)| (*id, stack.dup_unchecked()))
+            .map(|((_, _, id), stack)| (*id, stack.as_ref().map(ItemStack::view)))
             .collect()
     }
 
@@ -279,12 +308,13 @@ mod tests {
     fn slots_are_read_and_set_by_number() {
         let mut equipment = Equipment::default();
         let head = EquipmentSlot::Head as usize;
-        assert!(equipment.set_number(head, Some(ItemStack::mint(Item::Bow, 1, MintReason::Test))));
-        assert!(!equipment.set_number(99, None));
-        assert_eq!(
-            equipment.by_number()[head].as_ref().map(|s| s.item),
-            Some(Item::Bow)
-        );
+        let bow = ItemStack::mint(Item::Bow, 1, MintReason::Test);
+        assert!(matches!(
+            equipment.replace_number(head, Some(bow)),
+            Ok(None)
+        ));
+        assert!(equipment.replace_number(99, None).is_err());
+        assert_eq!(equipment.by_number()[head].map(|s| s.item), Some(Item::Bow));
         assert!(equipment.take_changed());
     }
 

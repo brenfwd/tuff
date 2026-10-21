@@ -37,30 +37,44 @@ impl RegionActor {
             return;
         }
         let loot = self.shared.block_loot();
-        let mut explore = None;
         let tracked = self.ents.entities.get_mut(&target).expect("checked above");
         if let Some((table, seed)) = tracked.entity.take_loot_table() {
             if !spectator {
                 player.send(super::containers::loot_generated(table.clone()));
             }
             let slots = tracked.entity.container().map_or(0, <[_]>::len);
+            let [x, y, z] = tracked.entity.base().position;
+            let origin = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
             let items = if seed == 0 {
                 loot.container_loot(&table, slots, &mut self.rng)
             } else {
                 loot.container_loot(&table, slots, &mut StdRng::seed_from_u64(seed as u64))
             };
-            if let (Some(items), Some(container)) = (items, tracked.entity.container_mut()) {
-                for (slot, stack) in container
-                    .iter_mut()
-                    .zip(items.iter().map(DupUnchecked::dup_unchecked))
+            if let Some(items) = items {
+                self.explore_loot(
+                    super::exploring::ExploreTarget::Entity(target),
+                    origin,
+                    &items,
+                );
+                if let Some(container) = self
+                    .ents
+                    .entities
+                    .get_mut(&target)
+                    .and_then(|tracked| tracked.entity.container_mut())
                 {
-                    *slot = stack;
+                    let mut items = items.into_iter();
+                    for (slot, stack) in container.iter_mut().zip(&mut items) {
+                        if let Some(old) = std::mem::replace(slot, stack) {
+                            old.burn(tuff_item::item::BurnReason::Loot);
+                        }
+                    }
+                    for extra in items.flatten() {
+                        extra.burn(tuff_item::item::BurnReason::Loot);
+                    }
                 }
-                let [x, y, z] = tracked.entity.base().position;
-                let origin = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
-                explore = Some((origin, items));
             }
         }
+        let tracked = self.ents.entities.get(&target).expect("checked above");
         let base = tracked.entity.base();
         let title = base
             .custom_name
@@ -78,13 +92,6 @@ impl RegionActor {
             .map(DupUnchecked::dup_unchecked)
             .collect::<Vec<_>>();
         let kind = tracked.entity.container_menu();
-        if let Some((origin, items)) = explore {
-            self.explore_loot(
-                super::exploring::ExploreTarget::Entity(target),
-                origin,
-                &items,
-            );
-        }
         if !spectator {
             let viewers = self.menus.entity_viewers.entry(target).or_default();
             if !viewers.iter().any(|v| v.id == player.id) {
@@ -470,18 +477,22 @@ impl RegionActor {
                 continue;
             }
             for slot in kind.slots_for_face(face) {
-                let Some(one) = self
+                let extractable = self
                     .block_entity(part)
                     .and_then(|block| block.items[slot].as_ref())
-                    .filter(|stack| kind.can_extract(slot, stack, face))
-                    .map(|stack| stack.dup_count_unchecked(1))
-                else {
-                    continue;
-                };
-                if self.insert_into_entity(entity, one).is_some() {
+                    .is_some_and(|stack| kind.can_extract(slot, stack, face));
+                if !extractable {
                     continue;
                 }
-                self.take_one(part, slot);
+                let Some(one) = self.take_one_out(part, slot) else {
+                    continue;
+                };
+                let shown = self.observes_containers().then(|| ItemSnapshot::of(&one));
+                if let Some(back) = self.insert_into_entity(entity, one) {
+                    self.return_one(part, slot, back);
+                    continue;
+                }
+                self.took_one(part, slot, shown.as_deref());
                 return true;
             }
         }

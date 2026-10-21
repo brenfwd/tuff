@@ -831,7 +831,7 @@ pub trait RegionWorld: GrowthLevel {
     /// The held or worn slots of the entity `uuid` in this region (an
     /// item frame's item, an armor stand's equipment), indexed as its
     /// held-item edits report them.
-    fn entity_held_items(&self, _uuid: u128) -> Option<Vec<Option<ItemStack>>> {
+    fn entity_held_items(&self, _uuid: u128) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         None
     }
 

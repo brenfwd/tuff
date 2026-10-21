@@ -4,7 +4,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
-use tuff_item::item::DupUnchecked;
 
 use rand::Rng;
 use rand::rngs::StdRng;
@@ -672,7 +671,7 @@ impl RegionActor {
             player.send(PlayerEvent::Advancement(Box::new(
                 crate::world::messages::AdvancementEvent::BeeNestDestroyed {
                     block: state,
-                    item: tool_stack.dup_unchecked(),
+                    item: tool_stack.as_ref().map(tuff_item::item::ItemSnapshot::of),
                     bees,
                 },
             )));
