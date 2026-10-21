@@ -8,7 +8,6 @@
 use rand::Rng;
 use rand::rngs::StdRng;
 use tuff_item::item::BurnReason;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::{EquipmentSlot, ModifierOperation};
 use tuff_vanilla_data::registry::{Attribute, EntityType, SoundEvent};
 use tuff_vanilla_data::sulfur_cube::{
@@ -231,7 +230,7 @@ pub struct SulfurCube {
     max_fuse: i32,
     from_bucket: bool,
     /// The body item whose archetypes are applied.
-    applied: Option<ItemStack>,
+    applied: Option<tuff_item::item::ItemSnapshot>,
     effects: Effects,
     tick_count: i32,
     /// Redstone powered it last tick; it primes at the start of this one.
@@ -296,10 +295,10 @@ impl SulfurCube {
     /// Follows a change of the swallowed block: its archetypes' modifiers
     /// and effects, and the goals it only has while empty.
     fn sync_body(&mut self, core: &mut MobCore) {
-        let current = body(core).map(DupUnchecked::dup_unchecked);
-        if current == self.applied {
+        if body(core) == self.applied.as_deref() {
             return;
         }
+        let current = body(core).map(tuff_item::item::ItemSnapshot::of);
         if current.is_some() {
             core.goals = GoalSelector::default();
             core.set_speed(0.0);
@@ -359,13 +358,13 @@ impl SulfurCube {
         if core.is_baby() {
             return false;
         }
-        if let Some(held) = body(core).map(DupUnchecked::dup_unchecked) {
-            if held.item == stack.item {
-                return false;
-            }
+        if body(core).is_some_and(|held| held.item == stack.item) {
+            return false;
+        }
+        if let Some(held) = core.equipment.take(EquipmentSlot::Body) {
             self.drop_at_top(core, held, cx);
         }
-        self.hold(core, stack.dup_count_unchecked(1));
+        self.hold(core, ItemStack::mint_like(stack, 1, MintReason::Transform));
         core.persistence_required = true;
         core.sound(SoundEvent::EntitySulfurCubeAbsorb, 1.0, 1.0, cx);
         true
@@ -386,10 +385,9 @@ impl SulfurCube {
 
     /// Spits the block out; the cube leaves loose items alone for a while.
     fn eject(&mut self, core: &mut MobCore, category: i32, cx: &mut TickContext) -> bool {
-        let Some(held) = body(core).map(DupUnchecked::dup_unchecked) else {
+        let Some(held) = core.equipment.take(EquipmentSlot::Body) else {
             return false;
         };
-        core.equipment.set(EquipmentSlot::Body, None);
         self.sync_body(core);
         self.drop_at_top(core, held, cx);
         core.sound_as(SoundEvent::EntitySulfurCubeEject, category, 1.0, 1.0, cx);
@@ -696,7 +694,7 @@ impl SulfurCube {
             bucket
                 .components
                 .other
-                .insert(CONTENT, Tag::Compound(held.dup_count_unchecked(1).to_nbt()));
+                .insert(CONTENT, Tag::Compound(tuff_item::item::ItemSnapshot::of(held).with_count(1).to_nbt()));
         }
         bucket
     }

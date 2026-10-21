@@ -3,7 +3,6 @@
 //! and becomes four tamed skeleton horses ridden by helmeted skeletons.
 
 use rand::Rng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::EntityType;
@@ -193,12 +192,7 @@ fn skeleton(
     }
     let special = difficulty.special_multiplier();
     for slot in [EquipmentSlot::Mainhand, EquipmentSlot::Head] {
-        let Some(mut stack) = mob
-            .core
-            .equipment
-            .get(slot)
-            .map(DupUnchecked::dup_unchecked)
-        else {
+        let Some(mut stack) = mob.core.equipment.take(slot) else {
             continue;
         };
         stack.components.enchantments = None;

@@ -730,6 +730,26 @@ pub fn write_items(nbt: &mut Compound, items: &[Option<ItemStack>]) {
 /// slot, which takes everything left. Returns what is left (`None` when
 /// all went in)
 /// and whether the walk reached an empty slot.
+/// How many of `stack` [`golem_place`] would put into `items`.
+pub fn golem_room(items: &[Option<ItemStack>], stack: &ItemStack) -> u8 {
+    let mut room = 0u8;
+    for item in items {
+        match item {
+            None => return stack.count(),
+            Some(existing) if existing.stacks_with(stack) => {
+                room = room.saturating_add(
+                    existing.max_stack_size().saturating_sub(existing.count()),
+                );
+                if room >= stack.count() {
+                    return stack.count();
+                }
+            }
+            Some(_) => {}
+        }
+    }
+    room
+}
+
 pub fn golem_place(
     items: &mut [Option<ItemStack>],
     stack: ItemStack,

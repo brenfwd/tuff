@@ -2,7 +2,6 @@
 //! tick and `location_changed` when it changes block or gear.
 
 use std::collections::BTreeSet;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::ItemSnapshot;
 
 use tuff_core::world::entity::TickContext;
@@ -158,18 +157,15 @@ impl<S: Species> Mob<S> {
                     self.hurt_by(&Damage::of(kind), amount, cx);
                 }
                 Action::ItemDamage(amount) => {
-                    if let Some(mut stack) = self
+                    let rng = &mut *cx.rng;
+                    if self
                         .core
                         .equipment
-                        .get(slot)
-                        .map(DupUnchecked::dup_unchecked)
+                        .get_mut(slot)
+                        .is_some_and(|stack| stack.hurt(amount, rng) == tuff_item::item::Hurt::Broken)
+                        && let Some(broken) = self.core.equipment.take(slot)
                     {
-                        let rng = &mut *cx.rng;
-                        if stack.hurt(amount, rng) == tuff_item::item::Hurt::Broken {
-                            self.core.equipment.set(slot, None);
-                        } else {
-                            self.core.equipment.set(slot, Some(stack));
-                        }
+                        broken.burn(tuff_item::item::BurnReason::Broken);
                     }
                 }
                 Action::MobEffect {

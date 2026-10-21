@@ -4,7 +4,6 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
-use tuff_item::item::DupUnchecked;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::SoundEvent;
 
@@ -83,12 +82,12 @@ impl MobCore {
         ];
         let special = difficulty.special_multiplier();
         for (slot, chance) in SLOTS {
-            let Some(stack) = self.equipment.get(slot).map(DupUnchecked::dup_unchecked) else {
-                continue;
-            };
-            if rng.r#gen::<f32>() >= chance * special {
+            if self.equipment.get(slot).is_none() || rng.r#gen::<f32>() >= chance * special {
                 continue;
             }
+            let Some(stack) = self.equipment.take(slot) else {
+                continue;
+            };
             let stack = tuff_item::item::enchanting::enchant_from_provider(
                 stack,
                 "minecraft:mob_spawn_equipment",
@@ -137,20 +136,16 @@ impl MobCore {
         if !self.is_alive() || !self.sun_burn_tick(cx) {
             return;
         }
-        if let Some(helmet) = self
-            .equipment
-            .get(EquipmentSlot::Head)
-            .map(DupUnchecked::dup_unchecked)
-        {
+        if let Some(helmet) = self.equipment.get(EquipmentSlot::Head) {
             if helmet.is_damageable() {
                 let wear = cx.rng.gen_range(0..2);
-                let mut helmet = helmet;
                 let damage = helmet.damage() + wear;
                 if helmet.max_damage().is_some_and(|max| damage >= max) {
-                    self.equipment.set(EquipmentSlot::Head, None);
-                } else {
+                    if let Some(helmet) = self.equipment.take(EquipmentSlot::Head) {
+                        helmet.burn(tuff_item::item::BurnReason::Broken);
+                    }
+                } else if let Some(helmet) = self.equipment.get_mut(EquipmentSlot::Head) {
                     helmet.set_damage(damage);
-                    self.equipment.set(EquipmentSlot::Head, Some(helmet));
                 }
             }
             return;

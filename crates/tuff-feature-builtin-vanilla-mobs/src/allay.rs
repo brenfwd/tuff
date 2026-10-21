@@ -723,7 +723,7 @@ impl Species for Allay {
         match (core.equipment.main_hand().is_some(), stack) {
             (false, Some(stack)) => {
                 core.equipment
-                    .set(EquipmentSlot::Mainhand, Some(stack.dup_count_unchecked(1)));
+                    .set(EquipmentSlot::Mainhand, Some(ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform)));
                 core.sound(SoundEvent::EntityAllayItemGiven, 2.0, 1.0, cx);
                 self.liked_player = Some(interaction.player_uuid);
                 Some(HandEffect::Consume(1))

@@ -22,7 +22,7 @@ const HELD_DROP_CHANCE: f32 = 0.085;
 pub struct State {
     player: i32,
     seen_item: Option<Item>,
-    display: Vec<ItemStack>,
+    display: Vec<tuff_item::item::ItemSnapshot>,
     cycle: i32,
     index: usize,
     look_ticks: i32,
@@ -30,14 +30,18 @@ pub struct State {
 }
 
 fn clear_held(core: &mut MobCore) {
-    core.equipment.set(EquipmentSlot::Mainhand, None);
+    if let Some(shown) = core.equipment.take(EquipmentSlot::Mainhand) {
+        shown.burn(tuff_item::item::BurnReason::Template);
+    }
     core.equipment
         .set_drop_chance(EquipmentSlot::Mainhand, HELD_DROP_CHANCE);
 }
 
 fn hold(core: &mut MobCore, stack: &ItemStack) {
-    core.equipment
-        .set(EquipmentSlot::Mainhand, Some(stack.dup_unchecked()));
+    let shown = ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Template);
+    if let Some(old) = core.equipment.replace(EquipmentSlot::Mainhand, Some(shown)) {
+        old.burn(tuff_item::item::BurnReason::Template);
+    }
     core.equipment.set_drop_chance(EquipmentSlot::Mainhand, 0.0);
 }
 
@@ -60,13 +64,13 @@ impl Villager {
         }
     }
 
-    fn wanted_by_offers(&self, held: Item) -> Vec<ItemStack> {
+    fn wanted_by_offers(&self, held: Item) -> Vec<tuff_item::item::ItemSnapshot> {
         self.offers
             .iter()
             .flatten()
             .filter(|o| !o.is_out_of_stock())
             .filter(|o| o.buy.item == held || o.buy_b.as_ref().is_some_and(|b| b.item == held))
-            .map(|o| o.sell.dup_unchecked())
+            .map(|o| o.sell.clone())
             .collect()
     }
 

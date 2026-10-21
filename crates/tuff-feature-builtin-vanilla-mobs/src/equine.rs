@@ -178,7 +178,7 @@ pub fn saddle_up(
         return None;
     }
     core.equipment
-        .set(EquipmentSlot::Saddle, Some(stack.dup_count_unchecked(1)));
+        .set(EquipmentSlot::Saddle, Some(ItemStack::mint_like(stack, 1, MintReason::Transform)));
     core.sound(sound.unwrap_or(eq.equip_sound), 1.0, 1.0, cx);
     Some(HandEffect::Consume(1))
 }
@@ -202,7 +202,7 @@ pub fn try_equip(
         return None;
     }
     core.equipment
-        .set(eq.slot, Some(stack.dup_count_unchecked(1)));
+        .set(eq.slot, Some(ItemStack::mint_like(stack, 1, MintReason::Transform)));
     core.sound(eq.equip_sound, 1.0, 1.0, cx);
     Some(HandEffect::Consume(1))
 }
@@ -568,7 +568,7 @@ impl Equine {
     }
 
     fn equip(&mut self, core: &mut MobCore, slot: EquipmentSlot, stack: &ItemStack) {
-        core.equipment.set(slot, Some(stack.dup_count_unchecked(1)));
+        core.equipment.set(slot, Some(ItemStack::mint_like(stack, 1, MintReason::Transform)));
         core.equipment
             .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
         core.persistence_required = true;

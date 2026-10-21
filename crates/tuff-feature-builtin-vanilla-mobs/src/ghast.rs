@@ -667,7 +667,7 @@ impl Species for HappyGhast {
         if is_harness(stack) && !harnessed(core) {
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Body,
-                Some(stack.dup_count_unchecked(1)),
+                Some(tuff_item::item::ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform)),
             );
             core.sound(SoundEvent::EntityHappyGhastEquip, 1.0, 1.0, cx);
             return Some(HandEffect::Consume(1));
