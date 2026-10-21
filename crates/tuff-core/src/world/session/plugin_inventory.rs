@@ -2,7 +2,6 @@
 
 use super::*;
 use tuff_item::item::BurnReason;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::ItemStack;
 
 /// A per-player override of the `keep_inventory` rule, set by a feature.
@@ -71,29 +70,10 @@ impl PlayerSession {
                     if remaining == 0 {
                         break;
                     }
-                    let Some(stack) = self.inventory.slots()[slot].dup_unchecked() else {
-                        continue;
-                    };
-                    if stack.item != item {
-                        continue;
-                    }
-                    let take = remaining.min(u32::from(stack.count()));
-                    remaining -= take;
-                    let left = u32::from(stack.count()) - take;
-                    self.inventory.set_slot(
-                        slot,
-                        (left > 0).then(|| stack.keep(left as u8, BurnReason::Plugin)),
-                    );
+                    burn_some(self.inventory.slot_mut(slot), item, &mut remaining);
                 }
-                if remaining > 0
-                    && carried_hit
-                    && let Some(stack) = self.inventory.carried().map(DupUnchecked::dup_unchecked)
-                {
-                    let take = remaining.min(u32::from(stack.count()));
-                    let left = u32::from(stack.count()) - take;
-                    self.inventory.set_carried(
-                        (left > 0).then(|| stack.keep(left as u8, BurnReason::Plugin)),
-                    );
+                if remaining > 0 && carried_hit {
+                    burn_some(self.inventory.carried_mut(), item, &mut remaining);
                 }
                 self.send_inventory();
                 self.items_taken_hooks(item, count, count.min(held) - remaining);
@@ -120,5 +100,17 @@ impl PlayerSession {
             InventoryOp::Give { .. } => {}
         }
         true
+    }
+}
+
+fn burn_some(held: &mut Option<ItemStack>, item: tuff_vanilla_data::Item, remaining: &mut u32) {
+    let Some(stack) = held.as_mut().filter(|stack| stack.item == item) else {
+        return;
+    };
+    let take = (*remaining).min(u32::from(stack.count()));
+    *remaining -= take;
+    stack.take(take as u8).burn(BurnReason::Plugin);
+    if stack.count() == 0 {
+        *held = None;
     }
 }

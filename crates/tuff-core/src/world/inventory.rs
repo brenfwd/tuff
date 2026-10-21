@@ -89,6 +89,10 @@ impl Inventory {
         self.carried = stack;
     }
 
+    pub fn carried_mut(&mut self) -> &mut Option<ItemStack> {
+        &mut self.carried
+    }
+
     pub fn slot_mut(&mut self, slot: usize) -> &mut Option<ItemStack> {
         &mut self.slots[slot]
     }
@@ -355,18 +359,24 @@ impl Inventory {
 
     /// How many of `stack` `add` would take, without adding them.
     pub fn room_for(&self, stack: &ItemStack) -> u8 {
+        self.total_room_for(stack).min(u32::from(stack.count())) as u8
+    }
+
+    /// How many items like `stack` `add` could take in total.
+    pub fn total_room_for(&self, stack: &ItemStack) -> u32 {
         let limit = stack.max_stack_size();
         let mut room = 0u32;
         for slot in [OFFHAND].into_iter().chain(HOTBAR).chain(MAIN) {
             room += match &self.slots[slot] {
-                None => u32::from(limit),
+                None if slot != OFFHAND => u32::from(limit),
+                None => 0,
                 Some(s) if s.stacks_with(stack) => {
                     u32::from(limit.min(s.max_stack_size()).saturating_sub(s.count()))
                 }
                 Some(_) => 0,
             };
         }
-        room.min(u32::from(stack.count())) as u8
+        room
     }
 
     /// Merges `stack` into each slot of `targets` accepted by `accepts`,

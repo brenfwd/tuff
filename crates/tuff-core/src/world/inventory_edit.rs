@@ -6,8 +6,8 @@
 
 use crate::world::inventory::{Inventory, SLOTS};
 use tuff_item::item::BurnReason;
-use tuff_item::item::DupUnchecked;
 use tuff_item::item::ItemStack;
+use tuff_item::item::MintReason;
 
 /// Slots an edit looks at: armor, main, hotbar and off hand (never the
 /// crafting grid or the cursor).
@@ -46,19 +46,16 @@ fn take(inventory: &mut Inventory, one: &ItemStack, count: u32) -> bool {
         if remaining == 0 {
             break;
         }
-        let Some(stack) = inventory.slots()[slot].dup_unchecked() else {
+        let held = inventory.slot_mut(slot);
+        let Some(stack) = held.as_mut().filter(|stack| stack.stacks_with(one)) else {
             continue;
         };
-        if !stack.stacks_with(one) {
-            continue;
-        }
         let taken = remaining.min(u32::from(stack.count()));
         remaining -= taken;
-        let left = u32::from(stack.count()) - taken;
-        inventory.set_slot(
-            slot,
-            (left > 0).then(|| stack.keep(left as u8, BurnReason::Command)),
-        );
+        stack.take(taken as u8).burn(BurnReason::Command);
+        if stack.count() == 0 {
+            *held = None;
+        }
     }
     true
 }
@@ -67,24 +64,24 @@ fn give(inventory: &mut Inventory, one: &ItemStack, count: u32) -> bool {
     if count == 0 {
         return false;
     }
-    let mut trial = inventory.clone();
+    if inventory.total_room_for(one) < count {
+        return false;
+    }
     let chunk = u32::from(one.max_stack_size().max(1));
     let mut remaining = count;
     while remaining > 0 {
         let part = remaining.min(chunk);
         remaining -= part;
-        if trial.add(one.dup_count_unchecked(part as u8)).is_some() {
-            return false;
+        if let Some(left) = inventory.add(ItemStack::mint_like(one, part as u8, MintReason::Command)) {
+            left.burn(BurnReason::Command);
         }
     }
-    *inventory = trial;
     true
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     #[tuff_core::watchdog]
