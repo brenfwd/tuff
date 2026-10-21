@@ -608,7 +608,7 @@ fn container_packets_round_trip() {
             components: Default::default(),
         },
         buy_b: None,
-        sell: ItemStack::mint(Item::Bread, 4, MintReason::Test),
+        sell: tuff_item::item::ItemSnapshot::describe(Item::Bread, 4, Default::default()),
         uses: 0,
         max_uses: 12,
         reward_exp: true,

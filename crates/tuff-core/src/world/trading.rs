@@ -18,7 +18,7 @@ pub struct TradeRequest {
 }
 
 /// What a trading screen shows: the offers and the merchant's progress.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MerchantView {
     pub merchant: i32,
     pub offers: Vec<MerchantOffer>,
@@ -103,11 +103,11 @@ impl ItemCost {
 }
 
 /// One trade a merchant offers.
-#[derive(tuff_item::item::DupClone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MerchantOffer {
     pub buy: ItemCost,
     pub buy_b: Option<ItemCost>,
-    pub sell: ItemStack,
+    pub sell: tuff_item::item::ItemSnapshot,
     pub uses: i32,
     pub max_uses: i32,
     pub reward_exp: bool,
@@ -126,7 +126,7 @@ impl MerchantOffer {
         Self {
             buy,
             buy_b,
-            sell,
+            sell: sell.into_template(),
             uses: 0,
             max_uses: DEFAULT_MAX_USES,
             reward_exp: true,
@@ -219,7 +219,7 @@ impl MerchantOffer {
         Some(Self {
             buy: ItemCost::from_nbt(nbt.get_compound("buy")?)?,
             buy_b: nbt.get_compound("buyB").and_then(ItemCost::from_nbt),
-            sell: ItemStack::from_storage(nbt.get_compound("sell")?)?,
+            sell: ItemStack::from_storage(nbt.get_compound("sell")?)?.into_template(),
             uses: int("uses", 0),
             max_uses: int("maxUses", DEFAULT_MAX_USES),
             reward_exp: nbt

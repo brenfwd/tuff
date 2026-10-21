@@ -78,7 +78,7 @@ pub trait BlockLoot: Send + Sync {
     }
 
     /// Starts finishing a rolled stack that needs a search (an explorer
-    /// map) from `origin`; the answer is the finished stack, or `None`
+    /// map) from `origin`; the answer is its map, or `None`
     /// when there is nothing to find. `None` here when the stack needs no
     /// finishing.
     fn explore(
@@ -87,7 +87,7 @@ pub trait BlockLoot: Send + Sync {
         _dimension: crate::world::dimension::DimensionId,
         _origin: tuff_world_model::BlockPos,
         _stack: &ItemStack,
-    ) -> Option<tokio::sync::oneshot::Receiver<Option<ItemStack>>> {
+    ) -> Option<crate::world::exploration::Answer> {
         None
     }
 

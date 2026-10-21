@@ -859,7 +859,7 @@ mod explorer {
         let mut stack = ItemStack::mint(Item::WoodlandMansionMap, 1, MintReason::Test);
         mark(&mut stack, &spec("#minecraft:on_woodland_mansion_maps"));
         assert!(pending(&stack).is_some());
-        made.apply(&mut stack);
+        made.apply(&mut stack.components);
         assert_eq!(stack.components.map_id, Some(made.id));
 
         let missing = maps
