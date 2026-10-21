@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
 const dist = join(root, "dist");
-const SITE = "https://brenfwd.github.io/tuff/";
+const SITE = "https://tuff.bforward.me/";
 const template = readFileSync(join(dist, "index.html"), "utf8");
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 

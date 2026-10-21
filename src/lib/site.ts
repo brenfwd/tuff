@@ -1,4 +1,4 @@
-export const SITE_URL = "https://brenfwd.github.io/tuff/";
+export const SITE_URL = "https://tuff.bforward.me/";
 export const REPO_URL = "https://github.com/brenfwd/tuff";
 export const SITE_NAME = "tuff";
 export const TAGLINE = "A Minecraft Java Edition server written in Rust";

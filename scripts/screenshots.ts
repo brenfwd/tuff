@@ -7,7 +7,7 @@ const out = process.argv[2] ?? "shots";
 mkdirSync(out, { recursive: true });
 const port = 4789;
 const server = spawn("bunx", ["vite", "preview", "--port", String(port), "--strictPort"], { stdio: "ignore" });
-const base = `http://localhost:${port}/tuff/`;
+const base = `http://localhost:${port}/`;
 for (let i = 0; i < 50; i++) {
   try {
     await fetch(base);
