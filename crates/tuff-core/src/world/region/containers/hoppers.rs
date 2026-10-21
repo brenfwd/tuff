@@ -1,6 +1,4 @@
 use super::*;
-use tuff_item::item::BurnReason;
-use tuff_item::item::MintReason;
 
 impl RegionActor {
     /// The container block at `pos` as a hopper sees it: its kind and the
@@ -219,17 +217,19 @@ impl RegionActor {
             face,
             by,
         };
-        let probe = ItemStack::mint_like(&stack, 1, MintReason::Template);
-        let offered = port.offer(self, &at, &probe);
-        probe.burn(BurnReason::Template);
-        if !offered {
-            return Insert::Refused(stack);
-        }
-        let (stored, rest) = stack.split(1);
-        stored.burn(BurnReason::Plugin);
-        match rest {
-            None => Insert::Stored,
-            Some(rest) => Insert::Refused(rest),
+        let (one, rest) = stack.split(1);
+        match (port.offer(self, &at, one), rest) {
+            (Ok(()), None) => Insert::Stored,
+            (Ok(()), Some(rest)) => Insert::Refused(rest),
+            (Err(one), None) => Insert::Refused(one),
+            (Err(one), Some(mut rest)) => match rest.join(one) {
+                Ok(()) => Insert::Refused(rest),
+                Err(one) => {
+                    debug_assert!(false, "a refused item no longer fits its stack: {one:?}");
+                    self.spawn_item_at(one, target.center(), [0.0; 3], 0);
+                    Insert::Refused(rest)
+                }
+            },
         }
     }
 

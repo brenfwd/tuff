@@ -306,7 +306,13 @@ impl<const HUSK: bool> Species for Camel<HUSK> {
             core.persistence_required = true;
         }
         let stack = interaction.stack.as_deref()?;
-        super::equine::saddle_up(core, stack, Some(Self::SOUNDS.saddle), cx)
+        super::equine::saddle_up(
+            core,
+            stack,
+            &interaction.hand,
+            Some(Self::SOUNDS.saddle),
+            cx,
+        )
     }
 
     fn configure(core: &mut MobCore) {
@@ -490,6 +496,7 @@ mod tests {
                 position: [0.0; 3],
                 location: [0.0; 3],
                 stack: None,
+                hand: Default::default(),
                 off_hand: false,
                 creative: false,
                 sneaking: false,

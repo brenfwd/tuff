@@ -1197,7 +1197,16 @@ impl PlayerSession {
         self.conn.events.close();
         while let Ok(event) = self.conn.events.try_recv() {
             let stacks = match event {
-                PlayerEvent::ItemGranted { stack, .. } => vec![stack],
+                PlayerEvent::ItemGranted { stack, .. }
+                | PlayerEvent::HandReturned {
+                    stack,
+                    creative: false,
+                    ..
+                } => vec![stack],
+                PlayerEvent::HandReturned { stack, .. } => {
+                    stack.burn(tuff_item::item::BurnReason::Creative);
+                    Vec::new()
+                }
                 PlayerEvent::Transaction { pool, .. }
                 | PlayerEvent::EntityTransaction { pool, .. } => pool,
                 PlayerEvent::TransactionPrepared {

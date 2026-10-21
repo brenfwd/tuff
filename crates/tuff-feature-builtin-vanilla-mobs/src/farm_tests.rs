@@ -152,6 +152,15 @@ fn interaction(item: Item) -> EntityInteraction {
             5,
             Default::default(),
         )),
+        hand: tuff_core::world::entity::HandOffer::new(
+            (Some(tuff_item::item::ItemSnapshot::describe(
+                item,
+                5,
+                Default::default(),
+            )))
+            .as_deref()
+            .map(tuff_item::item::ItemStack::test_copy),
+        ),
         off_hand: false,
         creative: false,
         sneaking: false,

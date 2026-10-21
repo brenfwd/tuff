@@ -412,6 +412,11 @@ async fn sheep_are_sheared_and_dyed_and_cows_milked() {
             target: sheep[1].id,
             interaction: EntityInteraction {
                 stack: Some(tuff_item::item::ItemSnapshot::of(&tag)),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::of(&tag)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 ..interaction(&viewer, None)
             },
         })

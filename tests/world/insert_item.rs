@@ -19,11 +19,17 @@ const Z: i32 = 88;
 struct Port;
 
 impl ItemPort for Port {
-    fn offer(&self, _: &mut dyn RegionWorld, _: &PortAccess, _: &ItemStack) -> bool {
-        true
+    fn offer(
+        &self,
+        _: &mut dyn RegionWorld,
+        _: &PortAccess,
+        stack: ItemStack,
+    ) -> Result<(), ItemStack> {
+        stack.burn(tuff_item::item::BurnReason::Test);
+        Ok(())
     }
 
-    fn peek(&self, _: &dyn RegionWorld, _: &PortAccess) -> Option<ItemStack> {
+    fn peek(&self, _: &dyn RegionWorld, _: &PortAccess) -> Option<tuff_item::item::ItemSnapshot> {
         None
     }
 

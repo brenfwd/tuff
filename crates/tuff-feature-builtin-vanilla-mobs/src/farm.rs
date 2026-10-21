@@ -553,7 +553,13 @@ impl Species for Pig {
         cx: &mut TickContext,
     ) -> tuff_core::world::entity::InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        super::equine::saddle_up(core, stack, Some(SoundEvent::EntityPigSaddle), cx)
+        super::equine::saddle_up(
+            core,
+            stack,
+            &interaction.hand,
+            Some(SoundEvent::EntityPigSaddle),
+            cx,
+        )
     }
 
     fn metadata(&self, core: &MobCore) -> Vec<(u8, MetadataValue)> {

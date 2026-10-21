@@ -44,6 +44,7 @@ pub(crate) fn defers_event(event: &PlayerEvent) -> bool {
             | PlayerEvent::ShoulderGranted { .. }
             | PlayerEvent::ItemUsedOnBlock { .. }
             | PlayerEvent::EntityInteracted { .. }
+            | PlayerEvent::HandReturned { .. }
             | PlayerEvent::Hurt { .. }
             | PlayerEvent::EntityHurt(_)
             | PlayerEvent::Attacked(_)

@@ -59,12 +59,16 @@ impl RegionActor {
             let Some(one) = self.take_one_out(pos, slot) else {
                 continue;
             };
-            if port.offer(self, &at, &one) {
-                self.took_one(pos, slot, Some(&one));
-                one.burn(tuff_item::item::BurnReason::Plugin);
-                return Some(true);
+            let shown = self
+                .observes_containers()
+                .then(|| tuff_item::item::ItemSnapshot::of(&one));
+            match port.offer(self, &at, one) {
+                Ok(()) => {
+                    self.took_one(pos, slot, shown.as_deref());
+                    return Some(true);
+                }
+                Err(one) => self.return_one(pos, slot, one),
             }
-            self.return_one(pos, slot, one);
         }
         Some(false)
     }
@@ -73,17 +77,28 @@ impl RegionActor {
     /// port shows if it has room. `None` when `above` has no port.
     pub(super) fn hopper_pull_port(&mut self, pos: BlockPos, above: BlockPos) -> Option<bool> {
         let (port, at) = self.port_at(above, Facing::Down, Porter::Hopper(pos))?;
-        let Some(record) = port.peek(self, &at) else {
+        let Some(shown) = port.peek(self, &at) else {
             return Some(false);
         };
-        if self
-            .insert_into(ContainerKind::Hopper, &[pos], None, record, None)
-            .is_some()
-        {
+        let recipes = self.shared.recipes();
+        let room = self.block_entity(pos).map_or(0, |hopper| {
+            crate::world::block_entity::insert_room(
+                &recipes,
+                ContainerKind::Hopper,
+                &hopper.items,
+                None,
+                &shown,
+                shown.count(),
+                0,
+            )
+        });
+        if room < shown.count() {
             return Some(false);
         }
-        if let Some(shown) = port.take(self, &at) {
-            shown.burn(tuff_item::item::BurnReason::Template);
+        if let Some(taken) = port.take(self, &at)
+            && let Some(rest) = self.insert_into(ContainerKind::Hopper, &[pos], None, taken, None)
+        {
+            self.spawn_item_at(rest, pos.center(), [0.0; 3], 0);
         }
         Some(true)
     }
@@ -92,14 +107,16 @@ impl RegionActor {
     /// `None` when `above` has no port.
     pub(super) fn cart_pull_port(&mut self, id: i32, above: BlockPos) -> Option<bool> {
         let (port, at) = self.port_at(above, Facing::Down, Porter::Cart(id))?;
-        let Some(record) = port.peek(self, &at) else {
+        let Some(shown) = port.peek(self, &at) else {
             return Some(false);
         };
-        if self.insert_into_entity(id, record).is_some() {
+        if self.entity_insert_room(id, &shown) < shown.count() {
             return Some(false);
         }
-        if let Some(shown) = port.take(self, &at) {
-            shown.burn(tuff_item::item::BurnReason::Template);
+        if let Some(taken) = port.take(self, &at)
+            && let Some(rest) = self.insert_into_entity(id, taken)
+        {
+            self.spawn_item_at(rest, above.center(), [0.0; 3], 0);
         }
         Some(true)
     }

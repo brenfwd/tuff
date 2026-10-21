@@ -265,16 +265,12 @@ impl tuff_core::world::item_port::ItemPort for JukeboxPort {
         &self,
         world: &mut dyn RegionWorld,
         at: &tuff_core::world::item_port::PortAccess,
-        stack: &ItemStack,
-    ) -> bool {
-        accepts(world, at.pos, stack)
-            && insert(
-                world,
-                at.pos,
-                ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Transform),
-            )
-            .map_err(|refused| refused.burn(tuff_item::item::BurnReason::Template))
-            .is_ok()
+        stack: ItemStack,
+    ) -> Result<(), ItemStack> {
+        if !accepts(world, at.pos, &stack) {
+            return Err(stack);
+        }
+        insert(world, at.pos, stack)
     }
 
     fn replace(
@@ -290,14 +286,15 @@ impl tuff_core::world::item_port::ItemPort for JukeboxPort {
         &self,
         world: &dyn RegionWorld,
         at: &tuff_core::world::item_port::PortAccess,
-    ) -> Option<ItemStack> {
+    ) -> Option<tuff_item::item::ItemSnapshot> {
         if !world.owns(at.pos) {
             return None;
         }
         world
             .raw_block_entity(at.pos)?
             .get_compound(RECORD)
-            .and_then(ItemStack::from_storage)
+            .and_then(ItemStack::picture_from_nbt)
+            .map(|record| tuff_item::item::ItemSnapshot::of(&record))
     }
 
     fn take(

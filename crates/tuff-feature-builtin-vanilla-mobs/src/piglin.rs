@@ -1126,9 +1126,9 @@ impl Species for Piglin {
         {
             return None;
         }
-        let gold = ItemStack::mint(Item::GoldIngot, 1, MintReason::Transform);
+        let gold = interaction.hand.take(1)?;
         self.hold_and_admire(core, gold, cx);
-        Some(HandEffect::Consume(1))
+        Some(HandEffect::None)
     }
 
     fn after_hurt(&mut self, core: &mut MobCore, damage: &Damage, cx: &mut TickContext) {

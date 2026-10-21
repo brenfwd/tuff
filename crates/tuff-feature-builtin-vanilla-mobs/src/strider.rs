@@ -346,7 +346,13 @@ impl Species for Strider {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        super::equine::saddle_up(core, stack, Some(SoundEvent::EntityStriderSaddle), cx)
+        super::equine::saddle_up(
+            core,
+            stack,
+            &interaction.hand,
+            Some(SoundEvent::EntityStriderSaddle),
+            cx,
+        )
     }
 }
 

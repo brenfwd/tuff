@@ -158,7 +158,7 @@ async fn an_allay_gathers_matching_items_and_brings_them_to_the_player_who_gave_
         Item::Cobblestone,
     )
     .await;
-    assert_eq!(given, Some(HandEffect::Consume(1)));
+    assert_eq!(given, Some(HandEffect::None));
     let nbt = entity_nbt(&region, allay).await.unwrap();
     assert_eq!(
         memory(&memories(&nbt), "minecraft:liked_player").and_then(Tag::as_uuid),

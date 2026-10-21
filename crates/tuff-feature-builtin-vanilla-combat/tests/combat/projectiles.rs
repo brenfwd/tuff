@@ -92,6 +92,21 @@ async fn piercing_arrows_bounce_off_what_they_fail_to_hurt() {
         arrows, 1,
         "the piercing arrow is gone, only its bounce flies"
     );
+    let id = bounced.id;
+    let carried = region
+        .ask(move |world| {
+            world
+                .entity(id)
+                .and_then(|tracked| tracked.entity.downcast_ref::<Arrow>())
+                .map(|arrow| (arrow.item.item, arrow.item.count()))
+        })
+        .await
+        .flatten();
+    assert_eq!(
+        carried,
+        Some((tuff_vanilla_data::Item::Arrow, 1)),
+        "the bounce carries the arrow's own item"
+    );
     world.shutdown().await;
 }
 

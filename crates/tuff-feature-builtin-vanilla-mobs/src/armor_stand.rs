@@ -221,7 +221,8 @@ impl ArmorStand {
             && !current
             && let Some(held) = held
         {
-            let one = ItemStack::mint_like(held, 1, MintReason::Creative);
+            let _ = held;
+            let one = interaction.hand.take(1)?;
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
             return Some(HandEffect::None);
@@ -232,19 +233,24 @@ impl ArmorStand {
             if current {
                 return None;
             }
-            let one = ItemStack::mint_like(held, 1, MintReason::Transform);
+            let one = interaction.hand.take(1)?;
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
-        if let Some(held) = held {
-            self.equip_sound(core, held, cx);
+        let given = match held {
+            Some(_) => Some(interaction.hand.take_all()?),
+            None => None,
+        };
+        if let Some(given) = &given {
+            self.equip_sound(core, given, cx);
         }
-        let current = core.equipment.replace(
-            slot,
-            held.map(|held| ItemStack::mint_like(held, held.count(), MintReason::Transform)),
-        );
-        Some(HandEffect::Replace(current.map(Box::new)))
+        if let Some(current) = core.equipment.replace(slot, given)
+            && let Some(left) = interaction.hand.give_back(current)
+        {
+            core.drop_item(left, 0.0, cx);
+        }
+        Some(HandEffect::None)
     }
 
     fn pop(&self, core: &MobCore, at: BlockPos, stack: ItemStack, cx: &mut TickContext) {

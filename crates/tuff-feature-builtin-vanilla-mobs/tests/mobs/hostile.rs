@@ -1773,10 +1773,7 @@ async fn piglins_barter_gold_and_spare_players_in_gold() {
     world.ticks(5).await;
     let piglin = mobs(&region, EntityType::Piglin).await[0].id;
     let effect = interact(&region, &player, &mut events, piglin, Item::GoldIngot).await;
-    assert!(matches!(
-        effect,
-        crate::world::messages::HandEffect::Consume(1)
-    ));
+    assert!(matches!(effect, crate::world::messages::HandEffect::None));
     wait_for(&world, &region, 200, |found| {
         found.iter().any(|s| s.kind == EntityType::Item)
     })

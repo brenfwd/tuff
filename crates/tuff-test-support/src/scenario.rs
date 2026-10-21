@@ -105,6 +105,9 @@ pub fn interaction(player: &PlayerHandle, item: Option<Item>) -> EntityInteracti
         location: [0.0; 3],
         stack: item
             .map(|item| tuff_item::item::ItemSnapshot::describe(item, 16, Default::default())),
+        hand: tuff_core::world::entity::HandOffer::new(item.map(|item| {
+            tuff_item::item::ItemStack::mint(item, 16, tuff_item::item::MintReason::Test)
+        })),
         off_hand: false,
         creative: false,
         sneaking: false,

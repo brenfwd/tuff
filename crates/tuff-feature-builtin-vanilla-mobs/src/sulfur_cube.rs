@@ -354,17 +354,26 @@ impl SulfurCube {
 
     /// Swallows one of `stack`, spitting out a different block it held;
     /// false for a baby or the block it already holds.
-    fn equip(&mut self, core: &mut MobCore, stack: &ItemStack, cx: &mut TickContext) -> bool {
+    fn equip(
+        &mut self,
+        core: &mut MobCore,
+        item: Item,
+        one: impl FnOnce() -> Option<ItemStack>,
+        cx: &mut TickContext,
+    ) -> bool {
         if core.is_baby() {
             return false;
         }
-        if body(core).is_some_and(|held| held.item == stack.item) {
+        if body(core).is_some_and(|held| held.item == item) {
             return false;
         }
+        let Some(one) = one() else {
+            return false;
+        };
         if let Some(held) = core.equipment.take(EquipmentSlot::Body) {
             self.drop_at_top(core, held, cx);
         }
-        self.hold(core, ItemStack::mint_like(stack, 1, MintReason::Transform));
+        self.hold(core, one);
         core.persistence_required = true;
         core.sound(SoundEvent::EntitySulfurCubeAbsorb, 1.0, 1.0, cx);
         true
@@ -840,7 +849,7 @@ impl Species for SulfurCube {
             return Some(HandEffect::Damage(1));
         }
         if swallowable(stack.item) {
-            if !self.equip(core, stack, cx) {
+            if !self.equip(core, stack.item, || interaction.hand.take(1), cx) {
                 return None;
             }
             cx.effects.push(Effect::GameEvent {
@@ -848,7 +857,7 @@ impl Species for SulfurCube {
                 position: core.base.position,
                 source: Some(interaction.player),
             });
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         if stack.item == Item::Bucket {
             let bucket = self.bucket(core);
@@ -883,7 +892,14 @@ impl Species for SulfurCube {
             self.prime(core, false, cx);
             return Some(DispenseOutcome::Worn(1));
         }
-        if !swallowable(stack.item) || !self.equip(core, stack, cx) {
+        if !swallowable(stack.item)
+            || !self.equip(
+                core,
+                stack.item,
+                || Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
+                cx,
+            )
+        {
             return None;
         }
         Some(DispenseOutcome::Dispensed)
@@ -1294,11 +1310,15 @@ mod tests {
         super::super::tests::with_context(|_, cx| {
             let tnt = ItemStack::mint(Item::Tnt, 1, MintReason::Test);
             assert!(
-                !mob.species.equip(&mut mob.core, &tnt, cx),
+                !mob.species
+                    .equip(&mut mob.core, Item::Tnt, || Some(tnt), cx),
                 "it holds TNT already"
             );
             let magma = ItemStack::mint(Item::MagmaBlock, 1, MintReason::Test);
-            assert!(mob.species.equip(&mut mob.core, &magma, cx));
+            assert!(
+                mob.species
+                    .equip(&mut mob.core, Item::MagmaBlock, || Some(magma), cx)
+            );
             assert!(
                 cx.effects.iter().any(
                     |e| matches!(e, Effect::DropItem { stack, .. } if stack.item == Item::Tnt)

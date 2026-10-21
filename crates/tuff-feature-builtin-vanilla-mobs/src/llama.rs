@@ -932,6 +932,15 @@ mod tests {
                     1,
                     Default::default(),
                 )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::Chest,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -947,7 +956,24 @@ mod tests {
                     1,
                     Default::default(),
                 )),
-                ..chest.clone()
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::RedCarpet,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
+                player: chest.player,
+                player_uuid: chest.player_uuid,
+                position: chest.position,
+                location: chest.location,
+                off_hand: chest.off_hand,
+                creative: chest.creative,
+                sneaking: chest.sneaking,
+                riding: chest.riding,
+                hero: chest.hero,
             };
             assert!(llama.mount_refused_by(carpet.stack.as_deref()));
             assert!(llama.interact(&carpet, cx).is_some());
@@ -957,6 +983,15 @@ mod tests {
                     1,
                     Default::default(),
                 )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::Saddle,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 ..chest
             };
             assert!(
