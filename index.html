@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tuff - a fast Minecraft server in Rust with WebAssembly plugins</title>
+    <meta name="description" content="tuff is a high-performance Minecraft Java Edition 26.3 server written in Rust. The vanilla game runs as built-in features on an inert core, and external plugins are sandboxed WebAssembly modules." />
+    <link rel="canonical" href="https://brenfwd.github.io/tuff/" />
+    <meta name="theme-color" content="#fafaf9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c0a09" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="/tuff/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/tuff/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/tuff/apple-touch-icon.png" />
+    <link rel="manifest" href="/tuff/site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="tuff" />
+    <meta property="og:title" content="tuff - a fast Minecraft server in Rust with WebAssembly plugins" />
+    <meta property="og:description" content="A drop-in survival server for Minecraft Java 26.3, with sandboxed WebAssembly plugins. 11.5x the vanilla tick rate on the village benchmark." />
+    <meta property="og:url" content="https://brenfwd.github.io/tuff/" />
+    <meta property="og:image" content="https://brenfwd.github.io/tuff/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="tuff: a Minecraft Java Edition server written in Rust" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="tuff - a fast Minecraft server in Rust with WebAssembly plugins" />
+    <meta name="twitter:description" content="A drop-in survival server for Minecraft Java 26.3, with sandboxed WebAssembly plugins." />
+    <meta name="twitter:image" content="https://brenfwd.github.io/tuff/og.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "tuff",
+        "description": "A Minecraft Java Edition server written in Rust, for game version 26.3, with sandboxed WebAssembly plugins.",
+        "applicationCategory": "GameServer",
+        "applicationSubCategory": "Minecraft server",
+        "operatingSystem": "Linux, macOS",
+        "softwareVersion": "0.1.0-alpha.1",
+        "programmingLanguage": "Rust",
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+        "url": "https://brenfwd.github.io/tuff/",
+        "codeRepository": "https://github.com/brenfwd/tuff",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          document.documentElement.dataset.theme = t;
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"><!--prerender--></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

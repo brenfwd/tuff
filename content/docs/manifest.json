@@ -1,0 +1,108 @@
+{
+  "ref": "main",
+  "commit": "381e176d6b346e02501b7adc5a31ebb1e8d6b4d8",
+  "pages": [
+    {
+      "slug": "introduction",
+      "title": "Introduction",
+      "group": "Getting started",
+      "description": "What tuff is and what the first public alpha supports."
+    },
+    {
+      "slug": "installing",
+      "title": "Installing",
+      "group": "Getting started",
+      "description": "Requirements, build cost, cross-building, Docker and updating."
+    },
+    {
+      "slug": "running",
+      "title": "Running",
+      "group": "Getting started",
+      "description": "Starting the server, offline mode, proxies and restarting."
+    },
+    {
+      "slug": "settings",
+      "title": "Settings",
+      "group": "Operating",
+      "description": "Every server setting, dimensions, mob caps and crowd mode."
+    },
+    {
+      "slug": "features",
+      "title": "Built-in features",
+      "group": "Operating",
+      "description": "The vanilla game as built-in features, optional features and the custom content pack."
+    },
+    {
+      "slug": "pre-generating",
+      "title": "Pre-generating chunks",
+      "group": "Operating",
+      "description": "Generating terrain ahead of players."
+    },
+    {
+      "slug": "admin-panel",
+      "title": "Web admin panel",
+      "group": "Operating",
+      "description": "The browser-based admin panel and how to log in."
+    },
+    {
+      "slug": "anti-cheat",
+      "title": "Anti-cheat and anti-xray",
+      "group": "Operating",
+      "description": "Packet checks, enforcement settings and anti-xray."
+    },
+    {
+      "slug": "data-packs",
+      "title": "Data packs",
+      "group": "Operating",
+      "description": "Loading data packs."
+    },
+    {
+      "slug": "plugins",
+      "title": "WebAssembly plugins",
+      "group": "Plugins",
+      "description": "Sandboxed runtime plugins: managing, grants, writing one in Rust and the ABI."
+    },
+    {
+      "slug": "performance",
+      "title": "Performance",
+      "group": "Reference",
+      "description": "Side-by-side benchmarks against vanilla and how to reproduce them."
+    },
+    {
+      "slug": "tests",
+      "title": "Tests",
+      "group": "Reference",
+      "description": "Running the test suite and the opt-in real-client tests."
+    },
+    {
+      "slug": "license",
+      "title": "License",
+      "group": "Reference",
+      "description": "AGPL server, MIT plugin SDK, and what that means in practice."
+    },
+    {
+      "slug": "guides/chase-side-by-side",
+      "title": "/chase side-by-side compare",
+      "group": "Guides",
+      "description": "## What /chase does"
+    },
+    {
+      "slug": "guides/debug-overlays",
+      "title": "Vanilla debug overlays against tuff",
+      "group": "Guides",
+      "description": "How to switch on the vanilla client's debug overlays and use them to look at a tuff server. Background and the full flag catalog:..."
+    },
+    {
+      "slug": "guides/sqlite-queries",
+      "title": "Querying a server file with SQL",
+      "group": "Guides",
+      "description": "A tuff server file (world.mcserver) is an SQLite database. Chunks, entity chunks and points of interest are stored as (dimension, x, z, data) rows in..."
+    },
+    {
+      "slug": "guides/vanilla-dev-features",
+      "title": "Vanilla dev-only and debug features",
+      "group": "Guides",
+      "description": "Catalog of the debugging, developer and diagnostic features built into the vanilla 26.3 server and client jars, how to switch each on with a stock jar,..."
+    }
+  ]
+}
