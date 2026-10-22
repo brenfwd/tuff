@@ -15,9 +15,23 @@ const BOOST_COOLDOWN: u32 = 32;
 const HOVER_TICKS: u32 = 3;
 const GLIDE_RATIO: f64 = 6.0;
 const HANDOVER_HEIGHT: f64 = 2.0;
+const HANDOVER_RADIUS: f64 = 12.0;
+const TOUCHDOWN_RADIUS: f64 = 24.0;
+/// The nose stays a little up for the first ticks of a touchdown, while
+/// lift left over from the approach may still rise (which a level or
+/// lowered look cannot), then drops to put the glider down.
+const FLARE_PITCH: f32 = -1.0;
+const FLARE_TICKS: u32 = 20;
+const TOUCHDOWN_PITCH: f32 = 4.0;
+/// Ground speed (blocks per tick) below which a landed glide has slid to a
+/// stop and walking may take over.
+const SETTLED_SPEED: f64 = 0.1;
 /// Upward speed (blocks per tick) above which the nose stays up, so a
 /// climb never shows a level or downward look.
 const RISING: f64 = 0.02;
+/// Degrees a glide turns at most per tick, so passing over the goal never
+/// spins the bot around.
+const MAX_TURN: f32 = 30.0;
 const STALL_TICKS: u32 = 400;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -51,6 +65,11 @@ pub struct Flight {
     cooldown: u32,
     ticks: u32,
     airborne: u32,
+    /// The last yaw steered to, which turns toward the next at most
+    /// [`MAX_TURN`] degrees a tick.
+    yaw: Option<f32>,
+    /// Ticks spent low near the goal, coming down.
+    touchdown: u32,
 }
 
 /// The yaw (degrees) that faces from `from` toward `to` on the xz plane.
@@ -93,7 +112,21 @@ impl Flight {
             cooldown: 0,
             ticks: 0,
             airborne: 0,
+            yaw: None,
+            touchdown: 0,
         }
+    }
+
+    fn turn_toward(&mut self, want: f32) -> f32 {
+        let yaw = match self.yaw {
+            Some(last) => {
+                let delta = (want - last + 540.0).rem_euclid(360.0) - 180.0;
+                (last + delta.clamp(-MAX_TURN, MAX_TURN) + 540.0).rem_euclid(360.0) - 180.0
+            }
+            None => want,
+        };
+        self.yaw = Some(yaw);
+        yaw
     }
 
     fn yaw_from(&self, pos: [f64; 3]) -> f32 {
@@ -123,7 +156,14 @@ impl Flight {
         }
         if body.on_ground {
             self.airborne = 0;
-            if far < 6.0 && self.ticks > 1 {
+            if far < TOUCHDOWN_RADIUS && self.ticks > 1 {
+                if body.velocity[0].hypot(body.velocity[2]) > SETTLED_SPEED {
+                    return Flying::Steer {
+                        yaw: self.yaw.unwrap_or_else(|| yaw_toward(body.pos, goal)),
+                        pitch: 0.0,
+                        boost: false,
+                    };
+                }
                 return Flying::Land;
             }
             if !glider {
@@ -136,12 +176,29 @@ impl Flight {
         }
         self.airborne += 1;
         if !body.gliding {
+            if self.touchdown > 0 {
+                return Flying::Steer {
+                    yaw: self.yaw.unwrap_or_else(|| yaw_toward(body.pos, goal)),
+                    pitch: FLARE_PITCH,
+                    boost: false,
+                };
+            }
             return Flying::Takeoff { jump: false };
         }
-        if body.pos[1] - goal_ground <= HANDOVER_HEIGHT && far < 12.0 {
-            return Flying::Land;
+        let yaw = self.turn_toward(yaw_toward(body.pos, goal));
+        if body.pos[1] - goal_ground <= HANDOVER_HEIGHT && far < HANDOVER_RADIUS {
+            self.touchdown += 1;
+            let pitch = if self.touchdown > FLARE_TICKS {
+                TOUCHDOWN_PITCH
+            } else {
+                FLARE_PITCH
+            };
+            return Flying::Steer {
+                yaw,
+                pitch,
+                boost: false,
+            };
         }
-        let yaw = yaw_toward(body.pos, goal);
         let fallback = body.pos[1] - CLEARANCE;
         let top = highest_ahead(body.pos, goal, LOOKAHEAD, fallback, ground);
         let descend_from = goal_ground + 1.0 + far / GLIDE_RATIO;
@@ -341,7 +398,10 @@ mod tests {
             sim.steps += 1;
             last = flight.tick(&sim.body, true, ground);
             match &last {
-                Flying::Takeoff { .. } => sim.body.gliding = true,
+                Flying::Takeoff { .. } => {
+                    sim.body.gliding = true;
+                    sim.body.on_ground = false;
+                }
                 Flying::Steer { yaw, pitch, boost } => {
                     if *boost {
                         sim.used += 1;
@@ -361,7 +421,10 @@ mod tests {
                     )
                     .map_or(0.0, f64::from);
                     if sim.body.pos[1] <= g {
-                        return (sim, Flying::Failed("crashed".into()));
+                        sim.body.pos[1] = g;
+                        sim.body.velocity = [0.0; 3];
+                        sim.body.on_ground = true;
+                        sim.body.gliding = false;
                     }
                 }
                 _ => return (sim, last),
@@ -416,6 +479,90 @@ mod tests {
         assert!((sim.body.pos[2] - 200.0).abs() < 14.0, "{:?}", sim.body.pos);
         assert!(sim.body.pos[1] - 64.0 <= 3.0, "{:?}", sim.body.pos);
         assert!(sim.used <= 6);
+    }
+
+    #[test]
+    fn a_glide_low_near_the_goal_flares_then_noses_down_instead_of_handing_over_in_the_air() {
+        let mut g = |_: i32, _: i32| Some(150);
+        let mut flight = Flight::new((0, 200), 0);
+        let body = Body {
+            pos: [0.5, 151.9, 195.0],
+            velocity: [0.0, -0.1, 1.0],
+            on_ground: false,
+            gliding: true,
+        };
+        let pitches: Vec<f32> = (0..=FLARE_TICKS)
+            .map(|_| match flight.tick(&body, true, &mut g) {
+                Flying::Steer {
+                    pitch,
+                    boost: false,
+                    ..
+                } => pitch,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert!(pitches[..FLARE_TICKS as usize].iter().all(|p| *p < 0.0));
+        assert_eq!(pitches[FLARE_TICKS as usize], TOUCHDOWN_PITCH);
+    }
+
+    #[test]
+    fn passing_over_the_goal_turns_at_most_max_turn_a_tick() {
+        let mut g = |_: i32, _: i32| Some(150);
+        let mut flight = Flight::new((0, 200), 0);
+        let mut last: Option<f32> = None;
+        for z in [198.0, 199.5, 200.6, 202.0] {
+            let body = Body {
+                pos: [0.5, 151.5, z],
+                velocity: [0.0, -0.1, 1.0],
+                on_ground: false,
+                gliding: true,
+            };
+            let Flying::Steer { yaw, .. } = flight.tick(&body, true, &mut g) else {
+                panic!("not steering");
+            };
+            if let Some(before) = last {
+                let turn = ((yaw - before + 540.0).rem_euclid(360.0) - 180.0).abs();
+                assert!(turn <= MAX_TURN + 1e-3, "{before} -> {yaw}");
+            }
+            last = Some(yaw);
+        }
+    }
+
+    #[test]
+    fn a_touchdown_never_jumps_to_glide_again() {
+        let mut g = |_: i32, _: i32| Some(150);
+        let mut flight = Flight::new((0, 200), 0);
+        let mut body = Body {
+            pos: [0.5, 151.5, 198.0],
+            velocity: [0.0, -0.1, 1.0],
+            on_ground: false,
+            gliding: true,
+        };
+        flight.tick(&body, true, &mut g);
+        body.gliding = false;
+        assert!(matches!(
+            flight.tick(&body, true, &mut g),
+            Flying::Steer { boost: false, .. }
+        ));
+    }
+
+    #[test]
+    fn a_landed_glide_slides_to_a_stop_before_walking_takes_over() {
+        let mut g = |_: i32, _: i32| Some(150);
+        let mut flight = Flight::new((0, 200), 0);
+        let mut body = Body {
+            pos: [0.5, 150.0, 205.0],
+            velocity: [0.0, 0.0, 0.6],
+            on_ground: true,
+            gliding: false,
+        };
+        flight.tick(&body, true, &mut g);
+        assert!(matches!(
+            flight.tick(&body, true, &mut g),
+            Flying::Steer { boost: false, .. }
+        ));
+        body.velocity = [0.0; 3];
+        assert_eq!(flight.tick(&body, true, &mut g), Flying::Land);
     }
 
     #[test]
