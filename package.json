@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "sync-docs": "bun scripts/sync-docs.ts",
-    "gen": "bun scripts/build-docs.ts && bun scripts/og-image.ts",
-    "build": "bun scripts/build-docs.ts && vite build && bun scripts/prerender.ts",
-    "dev": "bun scripts/build-docs.ts && vite",
+    "gen": "bun scripts/build-docs.ts && bun scripts/og-image.ts && bun scripts/og-blog.ts",
+    "build": "bun scripts/build-docs.ts && bun scripts/og-blog.ts && vite build && bun scripts/prerender.ts",
+    "build:drafts": "BLOG_DRAFTS=1 bun run build",
+    "dev": "BLOG_DRAFTS=1 bun scripts/build-docs.ts && BLOG_DRAFTS=1 bun scripts/og-blog.ts && vite",
     "preview": "vite preview"
   },
   "dependencies": {

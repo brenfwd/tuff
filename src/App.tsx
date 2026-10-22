@@ -7,6 +7,7 @@ import { SearchProvider } from "./components/SearchContext";
 import Home from "./pages/Home";
 
 const Docs = lazy(() => import("./pages/Docs"));
+const Blog = lazy(() => import("./pages/Blog"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function ScrollToTop() {
@@ -31,6 +32,8 @@ export default function App() {
             <Route path="/" component={Home} />
             <Route path="/docs" component={Docs} />
             <Route path="/docs/*" component={Docs} />
+            <Route path="/blog" component={Blog} />
+            <Route path="/blog/*" component={Blog} />
             <Route component={NotFound} />
           </Switch>
         </Suspense>

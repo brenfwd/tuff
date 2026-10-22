@@ -1,9 +1,10 @@
-// Screenshots the built site. Usage: bun scripts/screenshots.ts <out-dir>
+// Screenshots the built site. Usage: bun scripts/screenshots.ts <out-dir> [blog]
 import { chromium, type Page } from "playwright-core";
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 
 const out = process.argv[2] ?? "shots";
+const blogOnly = process.argv[3] === "blog";
 mkdirSync(out, { recursive: true });
 const port = 4789;
 const server = spawn("bunx", ["vite", "preview", "--port", String(port), "--strictPort"], { stdio: "ignore" });
@@ -34,7 +35,23 @@ const sizes = [
   ["375", 375, 740],
 ] as const;
 const overflow: string[] = [];
-for (const theme of ["dark", "light"] as const) {
+if (blogOnly) {
+  const { posts } = JSON.parse(await Bun.file("src/generated/blog/index.json").text());
+  for (const theme of ["dark", "light"] as const)
+    for (const [name, width, height] of [["desktop", 1440, 900], ["375", 375, 740]] as const) {
+      const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: theme, isMobile: name !== "desktop", hasTouch: name !== "desktop" });
+      const page = await ctx.newPage();
+      for (const [label, path] of [["blog-index", "blog/"], ...(posts[0] ? [["blog-post", `blog/${posts[0].slug}/`]] : [])]) {
+        await page.goto(base + path);
+        await page.waitForTimeout(900);
+        const sw = await page.evaluate(() => document.documentElement.scrollWidth);
+        if (sw > width) overflow.push(`${label}-${name}-${theme}: scrollWidth ${sw} > ${width}`);
+        await page.screenshot({ path: `${out}/${label}-${name}-${theme}.png`, fullPage: true });
+      }
+      await ctx.close();
+    }
+}
+for (const theme of blogOnly ? [] : (["dark", "light"] as const)) {
   for (const [name, width, height] of sizes) {
     if (theme === "light" && name === "375") continue;
     const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, colorScheme: theme, hasTouch: name !== "desktop", isMobile: name !== "desktop" });

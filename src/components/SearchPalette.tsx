@@ -4,9 +4,13 @@ import MiniSearch from "minisearch";
 import { navigate } from "../lib/hash";
 import { searchOptions } from "../lib/searchOptions";
 import nav from "../generated/nav.json";
+import blogIndex from "../generated/blog/index.json";
+import type { BlogIndex } from "../lib/blog";
+
+const blog = blogIndex as BlogIndex;
 import { ArrowRight, CloseIcon, DocIcon, HashIcon, SearchIcon } from "./Icons";
 
-type Hit = { id: string; page: string; pageTitle: string; anchor: string; heading: string; group: string; snippet: string; terms: string[] };
+type Hit = { id: string; route: string; page: string; pageTitle: string; anchor: string; heading: string; group: string; snippet: string; terms: string[] };
 
 let indexPromise: Promise<MiniSearch> | null = null;
 const loadIndex = () =>
@@ -76,7 +80,7 @@ export default function SearchPalette({ open, onOpenChange }: { open: boolean; o
     >
       <div className="flex items-center gap-3 border-b border-line px-4">
         <SearchIcon className="h-5 w-5 shrink-0 text-fg-subtle" />
-        <Command.Input value={query} onValueChange={setQuery} placeholder="Search the docs..." className="h-14 w-full bg-transparent text-base text-fg outline-none placeholder:text-fg-subtle" />
+        <Command.Input value={query} onValueChange={setQuery} placeholder="Search the docs and blog..." className="h-14 w-full bg-transparent text-base text-fg outline-none placeholder:text-fg-subtle" />
         <button type="button" onClick={() => onOpenChange(false)} className="grid h-9 shrink-0 place-items-center rounded-lg px-2 text-xs text-fg-muted hover:bg-bg-sunken" aria-label="Close search">
           <kbd className="hidden font-mono sm:inline">Esc</kbd>
           <CloseIcon className="h-5 w-5 sm:hidden" />
@@ -96,10 +100,21 @@ export default function SearchPalette({ open, onOpenChange }: { open: boolean; o
               ))}
             </Command.Group>
           ))}
+        {!query.trim() && blog.posts.length > 0 && (
+          <Command.Group heading="Blog">
+            {blog.posts.slice(0, 5).map((p) => (
+              <Command.Item key={p.slug} value={`blog/${p.slug}`} onSelect={() => go(`/blog/${p.slug}`)} className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5">
+                <DocIcon className="h-4 w-4 shrink-0 text-fg-subtle" />
+                <span className="flex-1 truncate text-sm font-medium">{p.title}</span>
+                <ArrowRight className="cmdk-arrow h-4 w-4 text-fg-subtle opacity-0" />
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
         {grouped.map(([page, items]) => (
           <Command.Group key={page} heading={page}>
             {items.map((h) => (
-              <Command.Item key={h.id} value={h.id} onSelect={() => go(`/docs/${h.page}${h.anchor ? `?h=${h.anchor}` : ""}`)} className="group flex cursor-pointer items-start gap-3 rounded-xl px-3 py-2.5">
+              <Command.Item key={h.id} value={h.id} onSelect={() => go(`${h.route}${h.anchor ? `?h=${h.anchor}` : ""}`)} className="group flex cursor-pointer items-start gap-3 rounded-xl px-3 py-2.5">
                 {h.anchor ? <HashIcon className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" /> : <DocIcon className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" />}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-fg">{highlight(h.heading, h.terms)}</span>

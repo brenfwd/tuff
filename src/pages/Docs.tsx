@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import nav from "../generated/nav.json";
-import { navigate, useHashSection } from "../lib/hash";
+import { useHashSection } from "../lib/hash";
+import { onArticleClick, useActiveHeading } from "../lib/article";
 import { useSeo } from "../lib/useSeo";
 import { ArrowLeft, ArrowRight, CloseIcon, MenuIcon } from "../components/Icons";
 import { REPO_URL } from "../lib/site";
@@ -40,23 +41,6 @@ function Sidebar({ slug, onNavigate }: { slug: string; onNavigate?: () => void }
       ))}
     </nav>
   );
-}
-
-function useActiveHeading(ids: string[]) {
-  const [active, setActive] = useState<string | null>(null);
-  useEffect(() => {
-    if (!ids.length) return;
-    const els = ids.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
-    const onScroll = () => {
-      let current: string | null = null;
-      for (const el of els) if (el.getBoundingClientRect().top < 120) current = el.id;
-      setActive(current ?? ids[0]);
-    };
-    onScroll();
-    addEventListener("scroll", onScroll, { passive: true });
-    return () => removeEventListener("scroll", onScroll);
-  }, [ids]);
-  return active;
 }
 
 export default function Docs() {
@@ -101,26 +85,6 @@ export default function Docs() {
   }, [drawer]);
 
   const active = useActiveHeading(doc?.toc.map((t) => t.id) ?? []);
-
-  const onArticleClick = (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const copy = target.closest<HTMLButtonElement>(".copy-btn");
-    if (copy) {
-      const code = copy.closest(".code-block")?.querySelector("pre")?.innerText ?? "";
-      navigator.clipboard?.writeText(code).then(() => {
-        copy.textContent = "Copied";
-        setTimeout(() => (copy.textContent = "Copy"), 1500);
-      });
-      return;
-    }
-    const a = target.closest<HTMLAnchorElement>("a[href^='#']");
-    const href = a?.getAttribute("href");
-    if (a && href && !href.startsWith("#/")) {
-      e.preventDefault();
-      navigate(`/docs/${slug}?h=${href.slice(1)}`, { replace: true });
-      document.getElementById(href.slice(1))?.scrollIntoView();
-    }
-  };
 
   const tocLink = (id: string) => `#/docs/${slug}?h=${id}`;
 
@@ -182,7 +146,7 @@ export default function Docs() {
                   </ul>
                 </details>
               )}
-              <div ref={article} className="doc-prose mt-8" onClick={onArticleClick} dangerouslySetInnerHTML={{ __html: doc.html }} />
+              <div ref={article} className="doc-prose mt-8" onClick={onArticleClick(`/docs/${slug}`)} dangerouslySetInnerHTML={{ __html: doc.html }} />
 
               <nav aria-label="Previous and next pages" className="mt-16 grid gap-4 border-t border-line pt-8 sm:grid-cols-2">
                 {doc.prev ? (

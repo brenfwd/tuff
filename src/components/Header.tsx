@@ -20,6 +20,7 @@ const nav = [
   { href: "/docs/introduction", label: "Docs", match: "/docs" },
   { href: "/docs/plugins", label: "Plugins", match: "/docs/plugins" },
   { href: "/docs/performance", label: "Performance", match: "/docs/performance" },
+  { href: "/blog", label: "Blog", match: "/blog" },
 ];
 
 export function Header() {
@@ -44,7 +45,7 @@ export function Header() {
     return () => removeEventListener("keydown", onKey);
   }, [menu]);
 
-  const active = (m: string) => (m === "/docs" ? path.startsWith("/docs") && !nav.slice(1).some((n) => path === n.match) : path === m);
+  const active = (m: string) => (m === "/docs" ? path.startsWith("/docs") && !nav.slice(1).some((n) => path === n.match) : m === "/blog" ? path.startsWith("/blog") : path === m);
 
   return (
     <header className={`glass sticky top-0 z-40 border-b transition-colors ${scrolled || menu ? "border-line" : "border-transparent"}`}>
@@ -72,7 +73,7 @@ export function Header() {
             aria-label="Search documentation"
           >
             <SearchIcon className="h-4 w-4 shrink-0" />
-            <span className="hidden sm:inline">Search docs...</span>
+            <span className="hidden sm:inline">Search...</span>
             <kbd className="ml-auto hidden rounded-md border border-line bg-bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-subtle sm:inline">
               {isMac ? "⌘" : "Ctrl"} K
             </kbd>

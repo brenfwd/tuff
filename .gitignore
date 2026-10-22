@@ -2,3 +2,4 @@ node_modules/
 dist/
 src/generated/
 public/search-index.json
+public/blog/

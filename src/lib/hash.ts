@@ -7,7 +7,8 @@ const subscribe = (cb: () => void) => {
 
 const raw = () => location.hash.replace(/^#/, "") || "/";
 export const currentPath = () => raw().split("?")[0] || "/";
-export const currentSection = () => new URLSearchParams(raw().split("?")[1] ?? "").get("h");
+export const currentParam = (name: string) => new URLSearchParams(raw().split("?")[1] ?? "").get(name);
+export const currentSection = () => currentParam("h");
 
 export function navigate(to: string, opts?: { replace?: boolean }) {
   const url = `${location.pathname}${location.search}#${to}`;
@@ -24,4 +25,8 @@ export function useHashLocation(): [string, (to: string, opts?: { replace?: bool
 
 export function useHashSection() {
   return useSyncExternalStore(subscribe, currentSection, () => null);
+}
+
+export function useHashParam(name: string) {
+  return useSyncExternalStore(subscribe, () => currentParam(name), () => null);
 }

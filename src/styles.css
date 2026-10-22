@@ -362,6 +362,55 @@ body {
 [data-theme="dark"] .shiki span {
   color: var(--shiki-dark);
 }
+.shiki .line.diff {
+  display: inline-block;
+  min-width: calc(100% + 2rem);
+  margin: 0 -1rem;
+  padding: 0 1rem 0 0.75rem;
+  border-left: 0.25rem solid transparent;
+}
+.shiki .line.diff.add {
+  background: var(--diff-add-bg);
+  border-left-color: var(--diff-add-edge);
+}
+.shiki .line.diff.remove {
+  background: var(--diff-remove-bg);
+  border-left-color: var(--diff-remove-edge);
+}
+.shiki .line.diff.meta {
+  background: var(--diff-meta-bg);
+}
+:root {
+  --diff-add-bg: rgba(26, 127, 55, 0.12);
+  --diff-add-edge: #1a7f37;
+  --diff-remove-bg: rgba(207, 34, 46, 0.1);
+  --diff-remove-edge: #cf222e;
+  --diff-meta-bg: rgba(47, 111, 191, 0.08);
+}
+:root[data-theme="dark"] {
+  --diff-add-bg: rgba(87, 171, 90, 0.16);
+  --diff-add-edge: #57ab5a;
+  --diff-remove-bg: rgba(229, 83, 75, 0.15);
+  --diff-remove-edge: #e5534b;
+  --diff-meta-bg: rgba(79, 143, 224, 0.12);
+}
+
+/* Blog prose: same reading style as the docs, a touch larger */
+.blog-prose {
+  font-size: 1.0625rem;
+  line-height: 1.8;
+}
+.blog-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.8rem;
+  border: 1px solid var(--line);
+}
+.blog-prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2.5em 0;
+}
 
 [cmdk-item][data-selected="true"] {
   background: var(--bg-sunken);
