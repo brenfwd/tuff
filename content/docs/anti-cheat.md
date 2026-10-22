@@ -2,7 +2,7 @@
 title: Anti-cheat and anti-xray
 description: Packet checks, enforcement settings and anti-xray.
 group: Operating
-source: README.md
+source: docs/anti-cheat.md
 ---
 
 The anti-cheat plugin checks player packets: movement, reach, rates, item

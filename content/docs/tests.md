@@ -2,7 +2,7 @@
 title: Tests
 description: Running the test suite and the opt-in real-client tests.
 group: Reference
-source: README.md
+source: docs/tests.md
 ---
 
 cargo t

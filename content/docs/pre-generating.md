@@ -2,7 +2,7 @@
 title: Pre-generating chunks
 description: Generating terrain ahead of players.
 group: Operating
-source: README.md
+source: docs/pre-generating.md
 ---
 
 `/tuff chunk generate <x> <z> <radius> circle|square [--force-regenerate]`

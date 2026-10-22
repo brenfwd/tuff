@@ -2,7 +2,7 @@
 title: Installing
 description: Requirements, build cost, cross-building, Docker and updating.
 group: Getting started
-source: README.md
+source: docs/installing.md
 ---
 
 Clone the repository and run the install script from the checkout:

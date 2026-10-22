@@ -2,7 +2,7 @@
 title: Performance
 description: Side-by-side benchmarks against vanilla and how to reproduce them.
 group: Reference
-source: README.md
+source: docs/performance.md
 ---
 
 Measured side by side on a 16-vCPU Linux VM (Intel i9-13900HK host):

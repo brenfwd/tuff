@@ -2,7 +2,7 @@
 title: License
 description: AGPL server, MIT plugin SDK, and what that means in practice.
 group: Reference
-source: README.md
+source: docs/license.md
 ---
 
 tuff is split between two licenses:

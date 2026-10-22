@@ -2,7 +2,7 @@
 title: Web admin panel
 description: The browser-based admin panel and how to log in.
 group: Operating
-source: README.md
+source: docs/admin-panel.md
 ---
 
 The panel is served under `/admin` on the HTTP server and is off by

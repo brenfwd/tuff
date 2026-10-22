@@ -2,7 +2,7 @@
 title: Running
 description: Starting the server, offline mode, proxies and restarting.
 group: Getting started
-source: README.md
+source: docs/running.md
 ---
 
 cargo run --release -- --offline -Dtuff.allowPublicOffline=true

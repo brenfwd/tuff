@@ -2,7 +2,7 @@
 title: Built-in features
 description: The vanilla game as built-in features, optional features and the custom content pack.
 group: Operating
-source: README.md
+source: docs/features.md
 ---
 
 The vanilla game is 16 built-in features loaded on an inert core: `worldgen`,

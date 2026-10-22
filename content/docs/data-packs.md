@@ -2,7 +2,7 @@
 title: Data packs
 description: Loading data packs.
 group: Operating
-source: README.md
+source: docs/data-packs.md
 ---
 
 A world loads its own data packs from `datapacks/`. Functions, tags,

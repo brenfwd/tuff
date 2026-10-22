@@ -2,7 +2,7 @@
 title: Settings
 description: Every server setting, dimensions, mob caps and crowd mode.
 group: Operating
-source: README.md
+source: docs/settings.md
 ---
 
 Server settings outside `server.properties` are `tuff.*` keys, including

@@ -2,7 +2,7 @@
 title: WebAssembly plugins
 description: Sandboxed runtime plugins: managing, grants, writing one in Rust and the ABI.
 group: Plugins
-source: README.md
+source: docs/plugins.md
 ---
 
 External plugins are WebAssembly modules that the server loads, unloads

@@ -2,7 +2,7 @@
 title: Introduction
 description: What tuff is and what the first public alpha supports.
 group: Getting started
-source: README.md
+source: docs/introduction.md
 ---
 
 A Minecraft Java Edition server written in Rust, for game version 26.3.
