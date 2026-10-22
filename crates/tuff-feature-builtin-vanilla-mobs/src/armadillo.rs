@@ -376,7 +376,7 @@ impl Species for Armadillo {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
         if stack.item != Item::Brush || core.is_baby() {

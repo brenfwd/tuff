@@ -796,21 +796,6 @@ impl PlayerSession {
                 ))]);
                 self.broadcast_entity(swing, false).await;
             }
-            ActionOutcome::HotbarSwapped { slots, single } => {
-                let creative = self.mode.abilities.instabuild;
-                for (index, stack) in slots {
-                    if single && creative && stack.is_none() {
-                        continue;
-                    }
-                    self.inventory.set_slot(
-                        crate::world::inventory::Inventory::hotbar_slot(index),
-                        stack,
-                    );
-                }
-                self.send_inventory();
-                let swing = packets([framed(&play::SwingAnimation::whack(self.id, 0))]);
-                self.broadcast_entity(swing, false).await;
-            }
             ActionOutcome::Interacted { off_hand } => {
                 self.send_inventory();
                 let swing = packets([framed(&play::SwingAnimation::whack(

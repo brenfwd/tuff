@@ -1086,7 +1086,7 @@ macro_rules! equine_species {
         fn dispensed_on(
             &mut self,
             core: &mut MobCore,
-            stack: &ItemStack,
+            stack: &tuff_core::world::region_api::Fired,
             _cx: &mut TickContext,
         ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
             let columns = self.chest_columns();

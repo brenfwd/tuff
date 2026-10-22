@@ -805,7 +805,7 @@ impl Species for TraderLlama {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         self.0.dispensed_on(core, stack, cx)

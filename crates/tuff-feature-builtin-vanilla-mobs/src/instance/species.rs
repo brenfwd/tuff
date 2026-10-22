@@ -95,7 +95,7 @@ pub trait Species: Sized + Send + Debug + 'static {
     fn dispensed_on(
         &mut self,
         _core: &mut MobCore,
-        _stack: &ItemStack,
+        _stack: &tuff_core::world::region_api::Fired,
         _cx: &mut TickContext,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         None

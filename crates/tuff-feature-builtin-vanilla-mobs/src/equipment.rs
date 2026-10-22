@@ -311,7 +311,7 @@ impl Equipment {
 /// empty slot the item belongs in.
 pub fn dispense_equip(
     core: &mut super::MobCore,
-    stack: &ItemStack,
+    stack: &tuff_core::world::region_api::Fired,
     cx: &mut tuff_core::world::entity::TickContext,
 ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
     let equippable = stack.equippable()?;
@@ -323,14 +323,7 @@ pub fn dispense_equip(
     {
         return None;
     }
-    core.equipment.set(
-        equippable.slot,
-        Some(ItemStack::mint_like(
-            stack,
-            1,
-            tuff_item::item::MintReason::Transform,
-        )),
-    );
+    core.equipment.set(equippable.slot, Some(stack.take()?));
     core.equipment
         .set_drop_chance(equippable.slot, PRESERVED_DROP_CHANCE);
     core.persistence_required = true;

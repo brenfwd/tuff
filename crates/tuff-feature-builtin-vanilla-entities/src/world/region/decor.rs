@@ -14,7 +14,7 @@ use tuff_core::world::game_event::{Context as GameContext, GameEvent};
 use tuff_core::world::messages::{ActionOutcome, Place};
 use tuff_core::world::region_api::{DispenseOutcome, RegionHooks, RegionWorld};
 use tuff_core::world::{PLAYER_HALF_WIDTH, PLAYER_HEIGHT, physics};
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::Components;
 use tuff_nbt::Tag;
 use tuff_world_model::pos::ChunkPos;
 use tuff_world_model::{BlockPos, Face};
@@ -326,7 +326,7 @@ impl RegionHooks for DecorHooks {
         pos: BlockPos,
         facing: Facing,
         _origin: [f64; 3],
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<DispenseOutcome> {
         if stack.item != Item::ArmorStand {
             return None;

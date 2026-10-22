@@ -13,7 +13,7 @@ use crate::world::interaction;
 use tuff_core::protocol::play;
 use tuff_core::world::game_event::{Context as GameContext, GameEvent};
 use tuff_core::world::growth::{BONEMEAL_EVENT, GrowthLevel};
-use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
+use tuff_core::world::region_api::{DispenseOutcome, Fired, RegionWorld};
 use tuff_core::world::{framed, packets};
 use tuff_item::item::{ItemStack, MintReason, PotionContents};
 use tuff_vanilla_common::placement;
@@ -31,7 +31,7 @@ pub fn dispense(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     facing: Facing,
-    stack: &ItemStack,
+    stack: &Fired,
 ) -> Option<DispenseOutcome> {
     let target = placement::step(pos, facing);
     let item = stack.item;
@@ -124,7 +124,7 @@ pub fn dispense(
 fn swallow(
     world: &mut dyn RegionWorld,
     target: BlockPos,
-    stack: &ItemStack,
+    stack: &Fired,
 ) -> Option<DispenseOutcome> {
     if !tuff_datapack::tags::is(tag::item::key::SULFUR_CUBE_SWALLOWABLE, stack.item) {
         return None;
@@ -327,7 +327,7 @@ fn ignite(
     world: &mut dyn RegionWorld,
     target: BlockPos,
     facing: Facing,
-    stack: &ItemStack,
+    stack: &Fired,
 ) -> DispenseOutcome {
     if let Some(outcome) = world.dispense_on_entity_in(target, stack) {
         return outcome;

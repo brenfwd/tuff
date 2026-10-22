@@ -45,7 +45,7 @@ impl RegionHooks for CombatRegionHooks {
         pos: BlockPos,
         facing: Facing,
         origin: [f64; 3],
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<DispenseOutcome> {
         let (sx, sy, sz) = facing.step();
         let step = [f64::from(sx), f64::from(sy), f64::from(sz)];
@@ -59,7 +59,7 @@ impl RegionHooks for CombatRegionHooks {
                 );
                 let id = world.shared().next_entity_id();
                 let mut arrow = Arrow::from_item(
-                    ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
+                    stack.take()?,
                     id,
                     origin,
                     velocity,
@@ -83,7 +83,7 @@ impl RegionHooks for CombatRegionHooks {
                     id,
                     position,
                     velocity,
-                    ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
+                    stack.take()?,
                     projectile::Owner::default(),
                     world.rng(),
                 );
@@ -118,7 +118,7 @@ impl RegionHooks for CombatRegionHooks {
                     id,
                     origin,
                     velocity,
-                    ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
+                    stack.take()?,
                     projectile::Owner::default(),
                 );
                 world.add_entity(Box::new(thrown));

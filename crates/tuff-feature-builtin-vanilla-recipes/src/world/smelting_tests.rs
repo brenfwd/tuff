@@ -34,7 +34,10 @@ fn place_food(
     campfire: &mut Campfire,
     stack: &ItemStack,
 ) -> Option<usize> {
-    smelting::place_food(vanilla_set(), items, campfire, stack)
+    let one = ItemStack::mint_like(stack, 1, MintReason::Test);
+    smelting::place_food(vanilla_set(), items, campfire, one)
+        .map_err(|refused| refused.burn(tuff_item::item::BurnReason::Test))
+        .ok()
 }
 
 fn can_cook(kind: ContainerKind, item: Item) -> bool {

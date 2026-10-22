@@ -495,7 +495,7 @@ impl Species for ArmorStand {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
         let equippable = stack.equippable()?;
@@ -508,10 +508,7 @@ impl Species for ArmorStand {
         {
             return None;
         }
-        core.equipment.set(
-            equippable.slot,
-            Some(ItemStack::mint_like(stack, 1, MintReason::Transform)),
-        );
+        core.equipment.set(equippable.slot, Some(stack.take()?));
         core.sound(equippable.equip_sound, 1.0, 1.0, cx);
         Some(DispenseOutcome::Dispensed)
     }

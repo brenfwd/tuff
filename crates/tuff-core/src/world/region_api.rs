@@ -82,6 +82,9 @@ pub struct SeenPlayer {
     pub looks: crate::world::messages::PlayerLooks,
 }
 
+mod fired;
+pub use fired::Fired;
+
 /// What a dispenser did with an item a hook fired.
 #[derive(Debug, PartialEq)]
 pub enum DispenseOutcome {
@@ -519,15 +522,11 @@ pub trait RegionWorld: GrowthLevel {
     fn shear_entity_in(&mut self, pos: BlockPos) -> bool;
     /// Offers `stack` (a dispenser's) to each entity in the block at
     /// `pos` until one uses it.
-    fn dispense_on_entity_in(
-        &mut self,
-        pos: BlockPos,
-        stack: &ItemStack,
-    ) -> Option<DispenseOutcome>;
+    fn dispense_on_entity_in(&mut self, pos: BlockPos, stack: &Fired) -> Option<DispenseOutcome>;
     /// Puts one of `stack` (a dispenser's wearable) on an entity, else on a
     /// player with that armor slot free, standing in the block at `pos`;
     /// `None` if nobody there takes it.
-    fn dispense_equip_in(&mut self, pos: BlockPos, stack: &ItemStack) -> Option<DispenseOutcome> {
+    fn dispense_equip_in(&mut self, pos: BlockPos, stack: &Fired) -> Option<DispenseOutcome> {
         use tuff_vanilla_data::item::EquipmentSlot;
         if let Some(outcome) = self.dispense_on_entity_in(pos, stack) {
             return Some(outcome);
@@ -557,12 +556,21 @@ pub trait RegionWorld: GrowthLevel {
                 && z - half < z0 + 1.0
                 && p.armor[index].is_none()
         })?;
-        player
-            .handle
-            .send(crate::world::messages::PlayerEvent::DispenserEquip {
-                slot: equippable.slot,
-                stack: ItemStack::mint_like(stack, 1, tuff_item::item::MintReason::Transform),
-            });
+        let one = stack.take()?;
+        if let Err(refused) =
+            player
+                .handle
+                .try_send(crate::world::messages::PlayerEvent::DispenserEquip {
+                    slot: equippable.slot,
+                    stack: one,
+                })
+        {
+            if let crate::world::messages::PlayerEvent::DispenserEquip { stack: one, .. } = *refused
+            {
+                stack.give_back(one);
+            }
+            return None;
+        }
         Some(DispenseOutcome::Dispensed)
     }
     /// Takes an entity out of the region (no death, no drops), burning
@@ -993,7 +1001,7 @@ pub trait RegionHooks: Send + Sync {
         _pos: BlockPos,
         _facing: tuff_vanilla_data::block::Facing,
         _origin: [f64; 3],
-        _stack: &ItemStack,
+        _stack: &Fired,
     ) -> Option<DispenseOutcome> {
         None
     }

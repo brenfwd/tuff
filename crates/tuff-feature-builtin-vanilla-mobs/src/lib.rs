@@ -519,7 +519,7 @@ impl tuff_core::world::region_api::RegionHooks for MobRegionHooks {
         pos: tuff_world_model::BlockPos,
         facing: tuff_vanilla_data::block::Facing,
         _origin: [f64; 3],
-        stack: &tuff_item::item::ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         let target = tuff_vanilla_common::placement::step(pos, facing);
         hive::dispensed_at(world, target, stack.item)

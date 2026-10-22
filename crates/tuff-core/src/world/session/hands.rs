@@ -300,10 +300,11 @@ impl PlayerSession {
                     && !self.under_spawn_protection(target)
                     && self.dimension().block_within_border(target) =>
             {
-                let place = self.place_request(
+                let mut place = self.place_request(
                     off_hand, target, face, cursor, sequence, held, item, interact,
                 );
-                region.request(RegionRequest::Place(place)).await;
+                place.offer = self.place_offer(&region, off_hand, target, held).await;
+                self.send_place(&region, RegionRequest::Place(place)).await;
             }
             _ => {
                 self.send_inventory();
@@ -342,7 +343,8 @@ impl PlayerSession {
             Some(item),
             false,
         );
-        region.request(RegionRequest::PlaceOnWater(place)).await;
+        self.send_place(&region, RegionRequest::PlaceOnWater(place))
+            .await;
         true
     }
 
@@ -395,20 +397,12 @@ impl PlayerSession {
                 .hand(true)
                 .is_some_and(|stack| stack.item.blocks_attacks().is_some())
                 && !self.pose.sneaking,
-            hotbar: (0..9)
-                .map(|i| {
-                    self.inventory
-                        .slots()
-                        .get(Inventory::hotbar_slot(i))
-                        .and_then(Option::as_ref)
-                        .map(tuff_item::item::ItemSnapshot::of)
-                })
-                .collect(),
-            selected: self.inventory.selected(),
             may_build: self.mode.abilities.may_build,
             game_master: self.mode.game_mode == GameMode::Creative
                 && self.mode.permission >= PermissionLevel::Gamemasters,
             context: None,
+            offer: Default::default(),
+            hand_slot: self.inventory.hand_slot(off_hand),
         }
     }
 

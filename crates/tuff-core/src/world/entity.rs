@@ -937,10 +937,11 @@ pub trait RegionEntity: Any + Send + Debug {
     }
 
     /// A dispenser fires `stack` at it (equipping, a brush, a chest);
-    /// `None` when it has no use for the item.
+    /// `None` when it has no use for the item. An item it keeps is taken
+    /// from `stack`.
     fn dispensed_on(
         &mut self,
-        _stack: &ItemStack,
+        _stack: &crate::world::region_api::Fired,
         _context: &mut TickContext,
     ) -> Option<crate::world::region_api::DispenseOutcome> {
         None

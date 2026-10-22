@@ -51,13 +51,6 @@ pub enum ActionOutcome {
         item: Item,
         ticks: u32,
     },
-    /// Items moved between the hotbar and a block: each `(hotbar index, new
-    /// stack)` is set. A creative player's hand keeps its stack when
-    /// `single` and the slot was emptied.
-    HotbarSwapped {
-        slots: Vec<(usize, Option<ItemStack>)>,
-        single: bool,
-    },
     /// Resend these block states so the client undoes its prediction.
     Rejected(Packets),
 }
@@ -193,6 +186,114 @@ pub enum BreakMode {
     },
 }
 
+/// Stacks a block click moved out of the player's inventory, by inventory
+/// slot, so the clicked block can keep them (a lectern's book, a shelf's
+/// swap). What is left, and what the block hands back for a slot, returns
+/// to the player ahead of the click's answer.
+#[derive(Debug, Default)]
+pub struct PlaceOffer {
+    stacks: std::cell::RefCell<Vec<(usize, ItemStack)>>,
+    /// The player has infinite materials: a block keeping one item of the
+    /// hand keeps a creative copy and the hand keeps its stack.
+    pub creative: bool,
+}
+
+/// A copy of a click (a chest half asking its partner) offers nothing:
+/// the stacks stay with the original.
+impl Clone for PlaceOffer {
+    fn clone(&self) -> Self {
+        debug_assert!(
+            self.stacks.borrow().is_empty(),
+            "copied a block click that offers stacks"
+        );
+        Self {
+            stacks: std::cell::RefCell::default(),
+            creative: self.creative,
+        }
+    }
+}
+
+impl PlaceOffer {
+    pub fn new(creative: bool, stacks: Vec<(usize, ItemStack)>) -> Self {
+        Self {
+            stacks: std::cell::RefCell::new(stacks),
+            creative,
+        }
+    }
+
+    /// Takes one item offered from `slot` for a block to keep: a creative
+    /// copy for a creative player. `None` if nothing is offered there.
+    pub fn keep_one(&self, slot: usize) -> Option<ItemStack> {
+        let mut stacks = self.stacks.borrow_mut();
+        let index = stacks
+            .iter()
+            .position(|(at, stack)| *at == slot && !stack.is_empty())?;
+        let stack = &mut stacks[index].1;
+        if self.creative {
+            return Some(ItemStack::mint_like(
+                &*stack,
+                1,
+                tuff_item::item::MintReason::Creative,
+            ));
+        }
+        if stack.count() > 1 {
+            return Some(stack.take(1));
+        }
+        Some(stacks.swap_remove(index).1)
+    }
+
+    /// Returns an item [`Self::keep_one`] gave out that the block did not
+    /// keep after all; a creative copy is burned.
+    pub fn unkeep(&self, slot: usize, stack: ItemStack) {
+        if self.creative {
+            stack.burn(tuff_item::item::BurnReason::Creative);
+        } else {
+            self.give(slot, stack);
+        }
+    }
+
+    /// Takes the whole stack offered from `slot` for a block to keep: a
+    /// creative copy for a creative player.
+    pub fn keep_all(&self, slot: usize) -> Option<ItemStack> {
+        if !self.creative {
+            return self.take_all(slot);
+        }
+        let stacks = self.stacks.borrow();
+        let (_, stack) = stacks
+            .iter()
+            .find(|(at, stack)| *at == slot && !stack.is_empty())?;
+        Some(ItemStack::mint_like(
+            stack,
+            stack.count(),
+            tuff_item::item::MintReason::Creative,
+        ))
+    }
+
+    /// Takes the whole stack offered from `slot`.
+    pub fn take_all(&self, slot: usize) -> Option<ItemStack> {
+        let mut stacks = self.stacks.borrow_mut();
+        let index = stacks
+            .iter()
+            .position(|(at, stack)| *at == slot && !stack.is_empty())?;
+        Some(stacks.swap_remove(index).1)
+    }
+
+    /// Hands `stack` to the player's inventory `slot` (or wherever it fits).
+    pub fn give(&self, slot: usize, stack: ItemStack) {
+        self.stacks.borrow_mut().push((slot, stack));
+    }
+
+    /// Everything going back to the player, by inventory slot.
+    pub fn into_stacks(self) -> Vec<(usize, ItemStack)> {
+        self.stacks.into_inner()
+    }
+
+    /// Takes everything going back to the player, by inventory slot.
+    pub fn drain(&self) -> Vec<(usize, ItemStack)> {
+        std::mem::take(&mut *self.stacks.borrow_mut())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Place {
     pub player: PlayerHandle,
@@ -229,10 +330,6 @@ pub struct Place {
     /// The off hand holds a shield, so a main-hand tool does not transform
     /// blocks (the player means to block).
     pub off_hand_blocks: bool,
-    /// The nine hotbar stacks, for blocks that swap them.
-    pub hotbar: Vec<Option<tuff_item::item::ItemSnapshot>>,
-    /// Which hotbar slot the main hand holds.
-    pub selected: usize,
     /// Whether the player may change blocks (not in adventure or
     /// spectator mode).
     pub may_build: bool,
@@ -242,4 +339,8 @@ pub struct Place {
     /// Filled in by the target's region, which decides where the block
     /// goes; that may lie in a neighbouring region.
     pub context: Option<placement::Context>,
+    /// Stacks moved out of the player's inventory for the clicked block.
+    pub offer: PlaceOffer,
+    /// The inventory slot of the hand used.
+    pub hand_slot: usize,
 }

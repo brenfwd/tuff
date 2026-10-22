@@ -1039,10 +1039,8 @@ impl RegionActor {
             crate::world::raycast::FluidMode::SourceOnly,
             &level,
         ) else {
-            place.player.send(PlayerEvent::ActionResult {
-                sequence: place.sequence,
-                outcome: ActionOutcome::Rejected(self.corrections(&[])),
-            });
+            let outcome = ActionOutcome::Rejected(self.corrections(&[]));
+            self.answer_place(&place, outcome);
             return;
         };
         place.target = BlockPos::new(hit.pos.x, hit.pos.y + 1, hit.pos.z);
@@ -1070,11 +1068,9 @@ impl RegionActor {
     }
 
     pub(super) fn place(&mut self, mut place: Place) {
-        let reject = |region: &Self, place: &Place, at: &[BlockPos]| {
-            place.player.send(PlayerEvent::ActionResult {
-                sequence: place.sequence,
-                outcome: ActionOutcome::Rejected(region.corrections(at)),
-            });
+        let reject = |region: &mut Self, place: &Place, at: &[BlockPos]| {
+            let outcome = ActionOutcome::Rejected(region.corrections(at));
+            region.answer_place(place, outcome);
         };
         let context = match place.context.clone() {
             Some(context) => context,
@@ -1090,10 +1086,7 @@ impl RegionActor {
                 {
                     let used = !matches!(outcome, ActionOutcome::Rejected(_));
                     self.report_item_used_on_block(&place, &outcome);
-                    place.player.send(PlayerEvent::ActionResult {
-                        sequence: place.sequence,
-                        outcome,
-                    });
+                    self.answer_place(&place, outcome);
                     if used {
                         self.player_used_block(place.player.id, place.target, target_state);
                         self.report_block_use(&place, !place.off_hand);
@@ -1115,10 +1108,7 @@ impl RegionActor {
                     && let Some(outcome) = behavior.0.use_on_block(self, &place, target_state)
                 {
                     let used = !matches!(outcome, ActionOutcome::Rejected(_));
-                    place.player.send(PlayerEvent::ActionResult {
-                        sequence: place.sequence,
-                        outcome,
-                    });
+                    self.answer_place(&place, outcome);
                     if used {
                         self.report_block_use(&place, false);
                     }
@@ -1135,10 +1125,7 @@ impl RegionActor {
                     }
                     let used = !matches!(outcome, ActionOutcome::Rejected(_));
                     self.report_item_used_on_block(&place, &outcome);
-                    place.player.send(PlayerEvent::ActionResult {
-                        sequence: place.sequence,
-                        outcome,
-                    });
+                    self.answer_place(&place, outcome);
                     if used {
                         self.report_block_use(&place, false);
                     }
@@ -1179,12 +1166,18 @@ impl RegionActor {
                 if region != self.pos {
                     let at = context.pos;
                     place.context = Some(context);
-                    match self.border.neighbors.get(&region) {
-                        Some(neighbor)
-                            if neighbor.internal(RegionInternal::Place(place.clone())) => {}
-                        _ => reject(self, &place, &[place.target, at]),
-                    }
-                    return;
+                    let refused = match self.border.neighbors.get(&region) {
+                        Some(neighbor) => match neighbor.try_internal(RegionInternal::Place(place))
+                        {
+                            Ok(()) => return,
+                            Err(refused) => match *refused {
+                                RegionInternal::Place(place) => place,
+                                _ => return,
+                            },
+                        },
+                        None => place,
+                    };
+                    return reject(self, &refused, &[refused.target, at]);
                 }
                 context
             }
@@ -1285,12 +1278,37 @@ impl RegionActor {
                 })),
             }
         };
+        self.answer_place(&place, outcome);
+        self.report_block_use(&place, false);
+        self.player_block_action(place.player.id, at, state, BlockAction::Placed);
+    }
+
+    /// Answers a block click, handing the stacks it offered and did not
+    /// keep back to the player first.
+    pub(crate) fn answer_place(&mut self, place: &Place, outcome: ActionOutcome) {
+        self.return_offer(place);
         place.player.send(PlayerEvent::ActionResult {
             sequence: place.sequence,
             outcome,
         });
-        self.report_block_use(&place, false);
-        self.player_block_action(place.player.id, at, state, BlockAction::Placed);
+    }
+
+    /// Hands what is left of a block click's offer back to the player, or
+    /// drops it where the player stood if the player is gone.
+    pub(crate) fn return_offer(&mut self, place: &Place) {
+        for (slot, stack) in place.offer.drain() {
+            if stack.is_empty() {
+                continue;
+            }
+            if let Err(refused) = place.player.try_send(PlayerEvent::HandReturned {
+                slot,
+                stack,
+                creative: false,
+            }) && let PlayerEvent::HandReturned { stack, .. } = *refused
+            {
+                self.spawn_item_at(stack, place.position, [0.0; 3], 0);
+            }
+        }
     }
 
     /// Tells the player its right click on `place.target` did something,

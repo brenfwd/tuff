@@ -18,7 +18,7 @@ fn use_on(player: &PlayerHandle, target: BlockPos, item: Option<Item>, sequence:
     let mut click = place(player, target, item.unwrap_or(Item::Stick), sequence);
     click.item = None;
     click.held = item;
-    click
+    offering(click)
 }
 
 struct Setup {
@@ -153,7 +153,7 @@ async fn decorated_pots_take_one_matching_item_per_click() {
             matches!(
                 result,
                 ActionOutcome::Used {
-                    effect: HandEffect::Consume(1),
+                    effect: HandEffect::None,
                     ..
                 }
             ),

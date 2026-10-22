@@ -419,12 +419,12 @@ async fn rockets_used_on_a_block_launch_from_it() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
     region
-        .request(RegionRequest::Place(place(
+        .request(RegionRequest::Place(offering(place(
             &player,
             BlockPos::new(7, SKY, 7),
             Item::FireworkRocket,
             1,
-        )))
+        ))))
         .await;
     let found = wait_for(&world, &region, 5, |found| {
         found.iter().any(|s| s.kind == EntityType::FireworkRocket)

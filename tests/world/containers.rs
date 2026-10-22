@@ -1074,12 +1074,17 @@ async fn joining_viewers_receive_block_entities_in_the_chunk_packet() {
     assert_eq!(campfire_items(&listed), Some(0));
 
     region
-        .request(RegionRequest::Place(place(&alice, campfire, Item::Beef, 1)))
+        .request(RegionRequest::Place(offering(place(
+            &alice,
+            campfire,
+            Item::Beef,
+            1,
+        ))))
         .await;
     expect(&mut alice_events, |event| match event {
         PlayerEvent::ActionResult {
             sequence: 1,
-            outcome: ActionOutcome::Placed { .. },
+            outcome: ActionOutcome::Used { .. },
         } => Some(()),
         _ => None,
     })
@@ -1122,7 +1127,12 @@ async fn campfires_cook_food_placed_on_them() {
     })
     .await;
     region
-        .request(RegionRequest::Place(place(&alice, block, Item::Beef, 2)))
+        .request(RegionRequest::Place(offering(place(
+            &alice,
+            block,
+            Item::Beef,
+            2,
+        ))))
         .await;
     let data_id = tuff_vanilla_data::packet::play::Clientbound::BlockEntityData.id();
     expect(&mut alice_events, |event| match event {
@@ -1135,7 +1145,7 @@ async fn campfires_cook_food_placed_on_them() {
     expect(&mut alice_events, |event| match event {
         PlayerEvent::ActionResult {
             sequence: 2,
-            outcome: ActionOutcome::Placed {
+            outcome: ActionOutcome::Used {
                 item: Item::Beef, ..
             },
         } => Some(()),

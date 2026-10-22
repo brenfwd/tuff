@@ -14,9 +14,11 @@ pub use tokio::sync::{mpsc, oneshot, watch};
 pub use tuff_vanilla_data::{Block, Item};
 
 pub mod admin_client;
+mod clicks;
 pub mod placeholder;
 mod saves;
 pub mod scenario;
+pub use clicks::{offering, place};
 pub use scenario::*;
 
 pub use placeholder::Overworld;
@@ -1044,46 +1046,6 @@ pub fn decode_stored(
 ) -> Result<Decoded<tuff_core::world::block_entity::BlockEntity>, tuff_storage::error::ChunkNbtError>
 {
     chunk_nbt::decode(root, pos, ChunkShape::OVERWORLD)
-}
-
-/// Uses `item` on the top of `target`, standing south of it looking down.
-pub fn place(player: &PlayerHandle, target: BlockPos, item: Item, sequence: i32) -> Place {
-    Place {
-        player: player.clone(),
-        eye: [
-            target.x as f64 + 0.5,
-            target.y as f64 + 2.62,
-            target.z as f64 + 1.5,
-        ],
-        target,
-        face: tuff_world_model::Face::Up,
-        cursor: [0.5, 1.0, 0.5],
-        yaw: 0.0,
-        pitch: 60.0,
-        sneaking: false,
-        item: item.block().map(|_| item),
-        held: Some(item),
-        components: Default::default(),
-        held_count: 1,
-        off_hand: false,
-        off_hand_item: None,
-        sequence,
-        interact: true,
-        can_eat: true,
-        name: "Tester".to_owned(),
-        uuid: u128::from(player.id as u32),
-        position: [
-            target.x as f64 + 0.5,
-            target.y as f64 + 1.0,
-            target.z as f64 + 1.5,
-        ],
-        off_hand_blocks: false,
-        hotbar: Vec::new(),
-        selected: 0,
-        may_build: true,
-        game_master: false,
-        context: None,
-    }
 }
 
 pub fn update(player: &PlayerHandle, seq: u64, position: [f64; 3]) -> RegionRequest {
