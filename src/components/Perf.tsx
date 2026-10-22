@@ -7,7 +7,7 @@ export const metrics: Metric[] = [
   { bench: "Village", label: "Ticks per second, sim 32", unit: "ticks/s", tuff: 386, vanilla: 91.6, better: "higher", ratio: "4.2x" },
   { bench: "Village", label: "Ticks per second, sim 10", unit: "ticks/s", tuff: 1019, vanilla: 529, better: "higher", ratio: "1.9x" },
   { bench: "Village", label: "p99 tick, sim 32", unit: "ms", tuff: 4.52, vanilla: 12.75, better: "lower", ratio: "2.8x lower" },
-  { bench: "Stress", label: "TPS, sim 10", unit: "TPS", tuff: 20.0, vanilla: 2.12, better: "higher", ratio: "9.4x" },
+  { bench: "Stress", label: "TPS, sim 10 (tuff at the 20 TPS cap)", unit: "TPS", tuff: 20.0, vanilla: 2.12, better: "higher", ratio: "at cap" },
   { bench: "Stress", label: "TPS, sim 32", unit: "TPS", tuff: 14.2, vanilla: 1.92, better: "higher", ratio: "7.4x" },
   { bench: "Stress", label: "Mean tick, sim 10", unit: "ms", tuff: 47.7, vanilla: 191.9, better: "lower", ratio: "4.0x lower" },
 ];
