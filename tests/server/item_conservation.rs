@@ -176,3 +176,42 @@ async fn a_crash_between_the_player_write_and_the_chunk_write_keeps_the_item_cou
     assert_eq!(diamonds_after_restart(crashed.path()).await, 5);
     assert_eq!(diamonds_after_restart(dir.path()).await, 5);
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_drop_whose_check_fails_is_refused_and_keeps_the_item_count() {
+    use tuff::protocol::play::{PlayerActionStatus, Serverbound};
+    use tuff_core::world::conservation::Transfer;
+
+    let dir = TempDir::new();
+    let server = started(dir.path()).await;
+    let bot = join(&server, "Steve").await;
+    server
+        .handle
+        .run_command("item replace entity Steve hotbar.0 with diamond 5")
+        .await
+        .unwrap();
+    assert_eq!(diamonds(&server).await, 5);
+    saved(&server).await;
+    let shared = server.handle.world_shared().await.unwrap();
+    shared.conservation.fail_next(Transfer::Drop);
+    bot.send(Serverbound::PlayerAction {
+        status: PlayerActionStatus::DropAllItems,
+        position: tuff_world_model::BlockPos::new(0, 0, 0),
+        face: 0,
+        sequence: 0,
+    });
+    let kicked = tokio::time::timeout(Duration::from_secs(30), bot.wait_for(|_| false)).await;
+    assert!(
+        matches!(kicked, Ok(Err(_))),
+        "the player whose drop was refused is disconnected"
+    );
+    let items = said(&server.handle, "execute if entity @e[type=minecraft:item]").await;
+    assert!(
+        items.contains("fail"),
+        "no item entity was spawned: {items}"
+    );
+    stop(server, bot).await;
+
+    assert_eq!(diamonds_after_restart(dir.path()).await, 5);
+}

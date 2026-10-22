@@ -248,6 +248,8 @@ pub struct Effects {
     /// Runtime dimensions discarded during the call, to clean up after
     /// its teleports.
     pub discards: Vec<tuff_core::world::dimension::DimensionId>,
+    /// Refused stash moves, for the audit log.
+    pub violations: Vec<crate::stash::StashViolation>,
 }
 
 impl Effects {

@@ -25,6 +25,14 @@ pub struct Stashes {
     held: HashMap<u64, Vec<ItemStack>>,
     quarantined: bool,
     fail_next: bool,
+    violations: Vec<StashViolation>,
+}
+
+/// A refused stash move, for the audit log.
+#[derive(Debug, PartialEq)]
+pub struct StashViolation {
+    pub operation: &'static str,
+    pub detail: String,
 }
 
 fn total(stacks: &[ItemStack]) -> u64 {
@@ -70,7 +78,7 @@ impl Stashes {
     }
 
     /// Whether a move may start; an injected failure is a violation.
-    fn may_move(&mut self, operation: &str) -> bool {
+    fn may_move(&mut self, operation: &'static str) -> bool {
         if self.quarantined {
             return false;
         }
@@ -81,9 +89,18 @@ impl Stashes {
         true
     }
 
-    fn violated(&mut self, operation: &str, detail: std::fmt::Arguments<'_>) {
+    fn violated(&mut self, operation: &'static str, detail: std::fmt::Arguments<'_>) {
         tuff_item::item::conservation::violation(operation, detail);
+        self.violations.push(StashViolation {
+            operation,
+            detail: detail.to_string(),
+        });
         self.quarantined = true;
+    }
+
+    /// The violations found since the last call, for the audit log.
+    pub fn take_violations(&mut self) -> Vec<StashViolation> {
+        std::mem::take(&mut self.violations)
     }
 
     /// Moves everything in `source` onto `target`, checked; `None` for
@@ -296,5 +313,9 @@ mod tests {
         assert!(stashes.split(a, None, 4).is_none());
         assert!(stashes.remove(a).is_none(), "nothing leaves a frozen stash");
         assert_eq!(counts(&stashes, a), vec![(Item::Stone, 10)]);
+        let violations = stashes.take_violations();
+        assert_eq!(violations.len(), 1, "one row for the audit log");
+        assert_eq!(violations[0].operation, "plugin stash split");
+        assert!(stashes.take_violations().is_empty());
     }
 }

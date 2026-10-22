@@ -507,23 +507,7 @@ impl RegionHooks for ItemHooks {
             || Who::cause("#server"),
             |player_id| player(world, player_id),
         );
-        let mut record = Record::new(
-            now_ms(),
-            who,
-            Kind::Custom,
-            world.dimension_id(),
-            block_pos(violation.pos),
-        );
-        record.material = Some("tuff:item_conservation".to_owned());
-        record.text = Some(format!(
-            "{} refused: {}",
-            violation.operation, violation.detail
-        ));
-        if let Some(item) = &violation.item {
-            record.amount = i32::from(item.count());
-            record.data = Some(item.to_nbt());
-        }
-        log.log(record);
+        log.log(violation_record(who, world.dimension_id(), violation));
     }
 
     fn entity_died(&self, world: &mut dyn RegionWorld, death: &EntityDeath) {
@@ -538,6 +522,25 @@ impl RegionHooks for ItemHooks {
             .unwrap_or_else(|| Who::cause(death.damage));
         log.log(kill_record(who, world.dimension_id(), death));
     }
+}
+
+/// The `tuff:item_conservation` row for a refused item operation.
+pub fn violation_record(
+    who: Who,
+    world: DimensionId,
+    violation: &tuff_core::world::conservation::ItemViolation,
+) -> Record {
+    let mut record = Record::new(now_ms(), who, Kind::Custom, world, block_pos(violation.pos));
+    record.material = Some("tuff:item_conservation".to_owned());
+    record.text = Some(format!(
+        "{} refused: {}",
+        violation.operation, violation.detail
+    ));
+    if let Some(item) = &violation.item {
+        record.amount = i32::from(item.count());
+        record.data = Some(item.to_nbt());
+    }
+    record
 }
 
 /// The row for a death: the victim's type, where, and its saved form

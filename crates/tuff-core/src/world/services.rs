@@ -27,6 +27,24 @@ pub trait MapFrames: Send + Sync {
     fn unframed(&self, id: u32, pos: BlockPos, entity_id: i32);
 }
 
+/// Who caused an item violation found outside a region.
+#[derive(Clone, Copy, Debug)]
+pub enum ViolationCulprit<'a> {
+    Player { uuid: u128, name: &'a str },
+    Plugin(&'a str),
+}
+
+/// What a service that records item violations is told of the ones found
+/// outside a region (regions tell their hooks).
+pub trait ItemViolations: Send + Sync {
+    fn violation(
+        &self,
+        culprit: ViolationCulprit<'_>,
+        dimension: DimensionId,
+        violation: &super::conservation::ItemViolation,
+    );
+}
+
 /// One feature's running part of a world.
 pub trait WorldService: Any + Send + Sync {
     /// Starts the service's actors; the world's shared state now exists.
@@ -46,6 +64,11 @@ pub trait WorldService: Any + Send + Sync {
 
     /// The map frame sink this service offers, if it keeps maps.
     fn map_frames(&self) -> Option<&dyn MapFrames> {
+        None
+    }
+
+    /// The item violation recorder this service offers.
+    fn item_violations(&self) -> Option<&dyn ItemViolations> {
         None
     }
 
@@ -76,6 +99,23 @@ impl Services {
 
     pub fn map_frames(&self) -> Option<&dyn MapFrames> {
         self.0.iter().find_map(|service| service.map_frames())
+    }
+
+    /// Tells every recorder of item violations about one found outside a
+    /// region.
+    pub fn item_violation(
+        &self,
+        culprit: ViolationCulprit<'_>,
+        dimension: DimensionId,
+        violation: &super::conservation::ItemViolation,
+    ) {
+        for recorder in self
+            .0
+            .iter()
+            .filter_map(|service| service.item_violations())
+        {
+            recorder.violation(culprit, dimension, violation);
+        }
     }
 
     pub fn feature_host(&self) -> Option<Arc<dyn super::features::FeatureHost>> {

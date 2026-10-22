@@ -59,6 +59,7 @@ impl Sandbox {
     pub(super) fn finish(&mut self) -> Effects {
         let state = self.state();
         state.caller = None;
+        state.effects.violations = state.stashes.take_violations();
         std::mem::take(&mut state.effects)
     }
 

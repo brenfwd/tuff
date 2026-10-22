@@ -989,9 +989,16 @@ impl PlayerSession {
         ];
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.3, eye[2]];
-        let mut item = self.thrown_item(stack, position, velocity);
         let region = ChunkPos::of_position(position).region();
-        let back = match self.region(region).await {
+        let handle = self.region(region).await;
+        if let Some(handle) = &handle
+            && !self.may_drop_into(handle, &stack, position)
+        {
+            self.keep_unspawned(stack);
+            return;
+        }
+        let mut item = self.thrown_item(stack, position, velocity);
+        let back = match handle {
             Some(handle) => match handle.try_request(RegionRequest::SpawnEntity(item)).await {
                 Ok(()) => Vec::new(),
                 Err(request) => match *request {
@@ -1011,8 +1018,8 @@ impl PlayerSession {
     /// while it or this player is quarantined, so nothing reaches state
     /// that will not be saved. An injected failure is a violation: the
     /// player and the region are quarantined and the player is kicked.
-    fn may_drop_into(&mut self, to: &RegionHandle) -> bool {
-        use crate::world::conservation::{Subject, Transfer};
+    fn may_drop_into(&mut self, to: &RegionHandle, stack: &ItemStack, position: [f64; 3]) -> bool {
+        use crate::world::conservation::{ItemViolation, Subject, Transfer};
         let conservation = &self.shared.conservation;
         let region = Subject::Region(to.dimension, to.pos);
         if conservation.quarantined(Subject::Player(self.id)) || conservation.quarantined(region) {
@@ -1021,9 +1028,24 @@ impl PlayerSession {
         if !conservation.take_injected(Transfer::Drop) {
             return true;
         }
+        let violation = ItemViolation {
+            operation: Transfer::Drop.operation(),
+            player: Some(self.id),
+            pos: BlockPos::containing(position),
+            item: Some(tuff_item::item::ItemSnapshot::of(stack)),
+            detail: "the transfer check was made to fail".to_owned(),
+        };
         tuff_item::item::conservation::violation(
-            Transfer::Drop.operation(),
-            format_args!("player {:?}: the transfer check was made to fail", self.id),
+            violation.operation,
+            format_args!("player {:?}: {}", self.id, violation.detail),
+        );
+        self.shared.services.item_violation(
+            crate::world::services::ViolationCulprit::Player {
+                uuid: self.profile.id,
+                name: &self.profile.name,
+            },
+            to.dimension,
+            &violation,
         );
         conservation.quarantine(region);
         conservation.quarantine(Subject::Player(self.id));
@@ -1081,7 +1103,7 @@ impl PlayerSession {
     ) {
         let region = ChunkPos::of_position(position).region();
         let back = match self.region(region).await {
-            Some(handle) if !self.may_drop_into(&handle) => Some(stack),
+            Some(handle) if !self.may_drop_into(&handle, &stack, position) => Some(stack),
             Some(handle) => {
                 let request = RegionRequest::SpawnItem {
                     stack,
