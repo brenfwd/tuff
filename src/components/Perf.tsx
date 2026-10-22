@@ -4,25 +4,27 @@ import { useReveal } from "../lib/motion";
 type Metric = { bench: "Village" | "Stress"; label: string; unit: string; tuff: number; vanilla: number; better: "higher" | "lower"; ratio: string };
 
 export const metrics: Metric[] = [
-  { bench: "Village", label: "Ticks per second", unit: "ticks/s", tuff: 1026, vanilla: 89.6, better: "higher", ratio: "11.5x" },
-  { bench: "Village", label: "p99 tick", unit: "ms", tuff: 2.13, vanilla: 12.9, better: "lower", ratio: "6.1x lower" },
-  { bench: "Village", label: "Server memory", unit: "MiB", tuff: 1379, vanilla: 8966, better: "lower", ratio: "6.5x lower" },
-  { bench: "Stress", label: "TPS", unit: "TPS", tuff: 20.35, vanilla: 2.15, better: "higher", ratio: "9.5x" },
-  { bench: "Stress", label: "Mean tick", unit: "ms", tuff: 48.2, vanilla: 190, better: "lower", ratio: "3.9x lower" },
-  { bench: "Stress", label: "Server memory", unit: "MiB", tuff: 2514, vanilla: 9005, better: "lower", ratio: "3.6x lower" },
+  { bench: "Village", label: "Ticks per second, sim 32", unit: "ticks/s", tuff: 386, vanilla: 91.6, better: "higher", ratio: "4.2x" },
+  { bench: "Village", label: "Ticks per second, sim 10", unit: "ticks/s", tuff: 1019, vanilla: 529, better: "higher", ratio: "1.9x" },
+  { bench: "Village", label: "p99 tick, sim 32", unit: "ms", tuff: 4.52, vanilla: 12.75, better: "lower", ratio: "2.8x lower" },
+  { bench: "Stress", label: "TPS, sim 10", unit: "TPS", tuff: 20.0, vanilla: 2.12, better: "higher", ratio: "9.4x" },
+  { bench: "Stress", label: "TPS, sim 32", unit: "TPS", tuff: 14.2, vanilla: 1.92, better: "higher", ratio: "7.4x" },
+  { bench: "Stress", label: "Mean tick, sim 10", unit: "ms", tuff: 47.7, vanilla: 191.9, better: "lower", ratio: "4.0x lower" },
 ];
 
 const table = [
-  ["Village, 10-day sprint (1 player, 32-chunk view)", "ticks per second", "1026", "89.6", "11.5x"],
-  ["Village", "mean tick (ms)", "0.97", "11.15", "11.5x lower"],
-  ["Village", "p99 tick (ms)", "2.13", "12.9", "6.1x lower"],
-  ["Village", "server memory (MiB)", "1379", "8966", "6.5x lower"],
-  ["Village", "CPU cores used", "2.70", "1.02", ""],
-  ["Stress, 50 players mixed (12 flying, 12 mining, 26 walking; ~1250 entities; view 10)", "TPS", "20.35", "2.15", "9.5x (tuff at the 20 TPS cap)"],
-  ["Stress", "mean tick (ms)", "48.2", "190", "3.9x lower"],
-  ["Stress", "p99 tick (ms)", "102", "253", "2.5x lower"],
-  ["Stress", "server memory (MiB)", "2514", "9005", "3.6x lower"],
-  ["Stress", "CPU cores used", "15.35", "3.90", ""],
+  ["Village, sim 32 (1 player, 32-chunk view, 2-day sprint)", "ticks per second", "386", "91.6", "4.2x"],
+  ["Village, sim 32", "mean / p99 tick (ms)", "2.58 / 4.52", "10.9 / 12.8", ""],
+  ["Village, sim 32", "CPU cores used", "4.8", "1.0", ""],
+  ["Village, sim 10", "ticks per second", "1019", "529", "1.9x"],
+  ["Village, sim 10", "mean / p99 tick (ms)", "0.97 / 2.23", "1.88 / 3.17", ""],
+  ["Village, sim 10", "CPU cores used", "2.8", "1.1", ""],
+  ["Stress, sim 10 (50 players: 12 flying, 12 mining, 26 walking; 1250 mobs)", "TPS", "20.0", "2.1", "tuff at the 20 TPS cap"],
+  ["Stress, sim 10", "mean / p99 tick (ms)", "48 / 106", "192 / 254", ""],
+  ["Stress, sim 10", "CPU cores used", "15.4", "4.0", ""],
+  ["Stress, sim 32", "TPS", "14.2", "1.9", "7.4x"],
+  ["Stress, sim 32", "mean / p99 tick (ms)", "70 / 180", "196 / 241", ""],
+  ["Stress, sim 32", "CPU cores used", "14.8", "3.5", ""],
 ];
 
 const fmt = (n: number) => n.toLocaleString("en-US");

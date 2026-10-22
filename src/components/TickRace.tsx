@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { prefersReducedMotion } from "../lib/motion";
 
-const RATES = { tuff: 1026, vanilla: 89.6 };
+const RATES = { tuff: 386, vanilla: 91.6 };
 const DAY = 24000;
 
 /** Counts ticks at the measured village-benchmark rates while the panel is on screen. */
@@ -73,7 +73,7 @@ export function TickRace() {
         })}
       </div>
       <p className="mt-6 border-t border-line pt-4 text-xs leading-5 text-fg-subtle">
-        Village benchmark, 10-day sprint, 1 player, 32-chunk view. A Minecraft day is 24,000 ticks, so tuff simulates about 2.6 days a minute where vanilla manages about 0.22.
+        Village benchmark, 2-day sprint, 1 player, view and simulation distance 32 for both servers; tuff on about 4.8 cores, vanilla on 1. A Minecraft day is 24,000 ticks, so tuff simulates about 0.97 days a minute where vanilla manages about 0.23.
       </p>
     </div>
   );

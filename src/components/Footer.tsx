@@ -5,7 +5,7 @@ import { REPO_URL } from "../lib/site";
 export function Footer() {
   const cols = [
     { title: "Get started", links: [["/docs/introduction", "Introduction"], ["/docs/installing", "Installing"], ["/docs/running", "Running"], ["/docs/settings", "Settings"]] },
-    { title: "Build", links: [["/docs/plugins", "WebAssembly plugins"], ["/docs/features", "Built-in features"], ["/docs/data-packs", "Data packs"]] },
+    { title: "Build", links: [["/docs/plugins", "WebAssembly plugins"], ["/docs/features", "Built-in features"], ["/docs/data-packs", "Data packs"], ["/docs/performance", "Performance"]] },
     { title: "Project", links: [["/blog", "Blog"], [REPO_URL, "Source code"], [`${REPO_URL}/issues`, "Issues"], [`${REPO_URL}/blob/main/CONTRIBUTING.md`, "Contributing"], ["/docs/license", "License"]] },
   ];
   return (

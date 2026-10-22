@@ -37,7 +37,7 @@ svg.cubes{position:absolute;right:40px;bottom:30px}
 <div class="wrap"><div class="brand">${favicon.replace("<svg ", '<svg width="64" height="64" ')}tuff</div>
 <h1>The Minecraft server,<br><span>rebuilt in Rust.</span></h1>
 <p>A drop-in survival server for Java Edition 26.3 with sandboxed WebAssembly plugins.</p>
-${SHOW_PERFORMANCE ? `<div class="stats"><div class="stat"><b>11.5x</b> vanilla tick rate</div><div class="stat"><b>6.5x</b> less memory</div><div class="stat"><b>20.35</b> TPS at 50 players</div></div>` : ""}</div>
+${SHOW_PERFORMANCE ? `<div class="stats"><div class="stat"><b>4.2x</b> vanilla tick rate (sim 32)</div><div class="stat"><b>20</b> TPS at 50 players</div></div>` : ""}</div>
 </body></html>`;
 
 const browser = await chromium.launch();

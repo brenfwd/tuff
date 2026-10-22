@@ -5,30 +5,35 @@ group: Reference
 source: README.md
 ---
 
-Measured side by side on a 16-vCPU Linux machine: tuff built with the
-`release-opt` profile, vanilla 26.3 on its bundled OpenJDK 25 with
-`-Xms8G -Xmx8G` and Aikar's G1 flags. Both servers were warmed up first:
-the stress run ran 120 s before a 60 s measured window, and the village run
-did a discarded 1-day sprint before the measured 10-day sprint. Three
-alternating runs per server; medians shown.
+Measured side by side on a 16-vCPU Linux VM (Intel i9-13900HK host):
+tuff built with the `release-opt` profile, vanilla 26.3 on its bundled
+OpenJDK 25 with `-Xms8G -Xmx8G` and Aikar's G1 flags. Both servers used the
+same seed, view and simulation distance, players and durations, with worlds
+on disk. Each run started on a quiet machine after a warm-up (village: a
+discarded 1-day sprint before a measured 2-day sprint; stress: 120 s before
+a 60 s window). Five interleaved runs per server; medians shown.
 
-| Benchmark | Metric | tuff | Vanilla | Ratio |
+| Benchmark | Sim distance | Metric | tuff | Vanilla |
 | --- | --- | --- | --- | --- |
-| Village, 10-day sprint (1 player, 32-chunk view) | ticks per second | 1026 | 89.6 | 11.5x |
-| Village | mean tick (ms) | 0.97 | 11.15 | 11.5x lower |
-| Village | p99 tick (ms) | 2.13 | 12.9 | 6.1x lower |
-| Village | server memory (MiB) | 1379 | 8966 | 6.5x lower |
-| Village | CPU cores used | 2.70 | 1.02 | |
-| Stress, 50 players mixed (12 flying, 12 mining, 26 walking; ~1250 entities; view 10) | TPS | 20.35 | 2.15 | 9.5x (tuff at the 20 TPS cap) |
-| Stress | mean tick (ms) | 48.2 | 190 | 3.9x lower |
-| Stress | p99 tick (ms) | 102 | 253 | 2.5x lower |
-| Stress | server memory (MiB) | 2514 | 9005 | 3.6x lower |
-| Stress | CPU cores used | 15.35 | 3.90 | |
+| Village (1 player, 32-chunk view) | 32 | ticks per second | 386 | 91.6 |
+| | 32 | mean / p99 tick (ms) | 2.58 / 4.52 | 10.9 / 12.8 |
+| | 32 | CPU cores used | 4.8 | 1.0 |
+| | 10 | ticks per second | 1019 | 529 |
+| | 10 | mean / p99 tick (ms) | 0.97 / 2.23 | 1.88 / 3.17 |
+| | 10 | CPU cores used | 2.8 | 1.1 |
+| Stress (50 players: 12 flying, 12 mining, 26 walking; 1250 mobs) | 10 | TPS | 20.0 (cap) | 2.1 |
+| | 10 | mean / p99 tick (ms) | 48 / 106 | 192 / 254 |
+| | 10 | CPU cores used | 15.4 | 4.0 |
+| | 32 | TPS | 14.2 | 1.9 |
+| | 32 | mean / p99 tick (ms) | 70 / 180 | 196 / 241 |
+| | 32 | CPU cores used | 14.8 | 3.5 |
 
-tuff parallelises ticking across cores, so it uses more CPU; in the stress
-run it is near saturation on 16 cores, so the mean-tick ratio is a fairer
-capacity comparison than TPS. Vanilla's memory is high partly because its
-8 GB heap is pre-touched.
+tuff's lead comes from spreading the tick across cores, not from doing less
+work per core: on the village at simulation distance 32 it runs 4.2x the
+tick rate using about 4.8 cores against vanilla's 1, and per core it is
+slightly slower. Memory is not compared: vanilla's RSS is dominated by its
+pre-allocated 8 GB heap. The village run also ends with fewer entities on
+tuff (about 540 vs 810), so mob behaviour is not yet an exact match.
 
 To reproduce, run `cargo bench --bench village -- --server both` or
 `cargo bench --bench stress -- --server both` (`--server` also takes

@@ -96,9 +96,9 @@ function Hero() {
 function Stats() {
   const ref = useReveal<HTMLDivElement>();
   const stats = [
-    ["11.5x", "the vanilla tick rate", "Village benchmark, 10-day sprint"],
-    ["6.5x", "less server memory", "Village benchmark, 1379 vs 8966 MiB"],
-    ["20.35", "TPS with 50 players", "Stress run, vanilla held 2.15"],
+    ["4.2x", "the vanilla tick rate", "Village bench, sim distance 32, ~4.8 cores vs 1"],
+    ["1.9x", "at sim distance 10", "Village bench, 1019 vs 529 ticks/s"],
+    ["20", "TPS with 50 players", "Stress run, sim 10; vanilla held 2.1"],
     ["1.13+", "worlds load and upgrade", "Data version 1519 or newer"],
   ];
   return (
@@ -232,8 +232,8 @@ function Performance() {
     <Section
       id="performance"
       eyebrow="Performance"
-      title={<>More ticks. <span className="text-fg-muted">Less memory.</span></>}
-      intro="Measured side by side on a 16-vCPU Linux machine: tuff built with the release-opt profile against vanilla 26.3 on its bundled OpenJDK 25 with an 8 GB heap and Aikar's G1 flags. Both servers were warmed up first. Three alternating runs per server; medians shown."
+      title={<>More ticks. <span className="text-fg-muted">More cores.</span></>}
+      intro="Measured side by side on a 16-vCPU Linux VM (Intel i9-13900HK host): tuff built with the release-opt profile against vanilla 26.3 on its bundled OpenJDK 25 with an 8 GB heap and Aikar's G1 flags. Same seed, view and simulation distance, players and durations for both; worlds on disk; warmed up first. Five interleaved runs per server on a quiet machine; medians shown."
       cubes={[
         { side: "left", top: "30%", size: 110, rate: 210, axis: [0.6, 1, 0.2] },
         { side: "right", top: "82%", size: 58, rate: 320, axis: [1, 0.4, 0.5], mobile: true },
@@ -246,8 +246,8 @@ function Performance() {
         </div>
       </div>
       <div className="reveal mt-8 grid grid-cols-[minmax(0,1fr)] gap-4 text-sm leading-6 text-fg-muted md:grid-cols-2">
-        <p className="card p-5"><strong className="text-fg">tuff parallelises ticking across cores, so it uses more CPU:</strong> 2.70 cores against 1.02 in the village run, and 15.35 against 3.90 in the stress run, where it is near saturation on 16 cores. That makes the mean-tick ratio a fairer capacity comparison than TPS.</p>
-        <p className="card p-5"><strong className="text-fg">Vanilla's memory is high partly because its 8 GB heap is pre-touched.</strong> Reproduce the runs with <code className="font-mono text-[0.85em] text-fg">cargo bench --bench village -- --server both</code> or the <code className="font-mono text-[0.85em] text-fg">stress</code> bench.</p>
+        <p className="card p-5"><strong className="text-fg">The lead comes from parallelism, not from doing less work:</strong> at simulation distance 32 tuff runs 4.2x the village tick rate using about 4.8 cores against vanilla's 1, and per core it is slightly slower. In the stress run it uses 15 of 16 cores. The village run also ends with fewer entities on tuff (about 540 vs 810).</p>
+        <p className="card p-5"><strong className="text-fg">Memory is not compared:</strong> vanilla's resident memory is dominated by its pre-allocated 8 GB heap. Reproduce the runs with <code className="font-mono text-[0.85em] text-fg">cargo bench --bench village -- --server both</code> or the <code className="font-mono text-[0.85em] text-fg">stress</code> bench.</p>
       </div>
     </Section>
   );

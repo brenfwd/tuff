@@ -234,6 +234,11 @@ backend that emits a core module can target it.
   65,536 changes.
 - Block events: a player broke or placed a block (payload: `x y z
   dimension state`). They arrive after the change and cannot cancel it.
+- Items: a plugin holds items only in host-owned stashes (`stash-new`,
+  `stash-mint`, `stash-split`, `stash-merge`, `stash-burn`) and moves them
+  with `give-stash` and `take-into-stash`, so it can make, move and use up
+  items but never copy one. Up to 1024 stashes at once; a stash still
+  holding items when the plugin unloads or faults is used up.
 - Messages to another loaded plugin, delivered after the call to its
   `tuff_message` with the sender's id, followed at most 8 deep when
   handlers answer each other.
