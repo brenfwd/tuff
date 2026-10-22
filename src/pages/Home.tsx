@@ -133,7 +133,7 @@ function Architecture() {
         { side: "left", top: "70%", size: 64, rate: 300, axis: [1, 0.3, 0.6], mobile: true },
       ]}
     >
-      <div className="grid gap-5 lg:grid-cols-[1fr_1fr] lg:gap-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-8">
         <div className="space-y-3">
           {[
             { tag: "Layer 3", title: "Runtime plugins", body: "Sandboxed .wasm modules on the pure-Rust wasmi interpreter. Hot load, unload and reload. Nothing is allowed until the owner grants it.", accent: true },
@@ -209,7 +209,7 @@ function Features() {
         { side: "right", top: "6%", size: 40, rate: 380, axis: [1, 1, 0], offset: 4 },
       ]}
     >
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {features.map((f, i) => (
           <li key={f.title} className="reveal" style={{ ["--delay" as string]: `${(i % 3) * 90}ms` }}>
             <Link href={f.href} className="card card-hover group flex h-full flex-col p-6">
@@ -239,13 +239,13 @@ function Performance() {
         { side: "right", top: "82%", size: 58, rate: 320, axis: [1, 0.4, 0.5], mobile: true },
       ]}
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <PerfChart />
         <div className="reveal space-y-4" style={{ ["--delay" as string]: "150ms" }}>
           <TickRace />
         </div>
       </div>
-      <div className="reveal mt-8 grid gap-4 text-sm leading-6 text-fg-muted md:grid-cols-2">
+      <div className="reveal mt-8 grid grid-cols-[minmax(0,1fr)] gap-4 text-sm leading-6 text-fg-muted md:grid-cols-2">
         <p className="card p-5"><strong className="text-fg">tuff parallelises ticking across cores, so it uses more CPU:</strong> 2.70 cores against 1.02 in the village run, and 15.35 against 3.90 in the stress run, where it is near saturation on 16 cores. That makes the mean-tick ratio a fairer capacity comparison than TPS.</p>
         <p className="card p-5"><strong className="text-fg">Vanilla's memory is high partly because its 8 GB heap is pre-touched.</strong> Reproduce the runs with <code className="font-mono text-[0.85em] text-fg">cargo bench --bench village -- --server both</code> or the <code className="font-mono text-[0.85em] text-fg">stress</code> bench.</p>
       </div>
@@ -308,7 +308,7 @@ function Plugins() {
       tone="sunken"
       cubes={[{ side: "left", top: "15%", size: 84, rate: 260, axis: [0.4, 1, 0.6], mobile: true }, { side: "right", top: "75%", size: 100, rate: 190, axis: [1, 0.5, 0.2] }]}
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-10">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-10">
         <div className="reveal overflow-hidden rounded-2xl border border-[#2b2724] bg-[#12100f] shadow-2xl shadow-black/30">
           <div className="flex items-center gap-2 border-b border-[#2b2724] px-4 py-3">
             <span className="h-3 w-3 rounded-full bg-[#3a3532]" /><span className="h-3 w-3 rounded-full bg-[#3a3532]" /><span className="h-3 w-3 rounded-full bg-[#3a3532]" />
@@ -353,9 +353,9 @@ function GetStarted() {
       intro="Linux and macOS are supported. Windows is best effort: build and run under WSL or Docker. A release build took about 6.5 minutes on a 16-vCPU machine."
       cubes={[{ side: "right", top: "20%", size: 76, rate: 280, axis: [0.7, 1, 0.3], mobile: true }]}
     >
-      <ol className="grid gap-4 lg:grid-cols-3">
+      <ol className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
         {steps.map((s, i) => (
-          <li key={s.n} className="reveal card flex flex-col p-6" style={{ ["--delay" as string]: `${i * 110}ms` }}>
+          <li key={s.n} className="reveal card flex min-w-0 flex-col p-6" style={{ ["--delay" as string]: `${i * 110}ms` }}>
             <span className="font-mono text-sm font-semibold text-ember-text">{s.n}</span>
             <h3 className="mt-3 font-display text-xl font-semibold">{s.title}</h3>
             <p className="mt-2 flex-1 text-[0.95rem] leading-7 text-fg-muted">{s.body}</p>
