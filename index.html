@@ -55,8 +55,13 @@
         } catch (e) {
           document.documentElement.dataset.theme = "dark";
         }
+        document.documentElement.classList.add("js");
       })();
     </script>
+    <style>
+      @keyframes snapshot-fallback { to { visibility: visible; } }
+      html.js main[data-snapshot] { visibility: hidden; animation: snapshot-fallback 0s 4s forwards; }
+    </style>
   </head>
   <body>
     <div id="root"><!--prerender--></div>

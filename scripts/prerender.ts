@@ -62,7 +62,7 @@ function write(path: string, content: string) {
 
 const docNav = `<nav aria-label="Documentation"><ul>${nav.map((p) => `<li><a href="${SITE}docs/${p.slug}/">${esc(p.title)}</a></li>`).join("")}</ul></nav>`;
 
-const home = `<main style="max-width:72rem;margin:0 auto;padding:4rem 1rem;font-family:system-ui,sans-serif">
+const home = `<main data-snapshot style="max-width:72rem;margin:0 auto;padding:4rem 1rem;font-family:system-ui,sans-serif">
 <h1>tuff: the Minecraft server, rebuilt in Rust</h1>
 <p>tuff is a drop-in survival server for Minecraft Java Edition 26.3. The vanilla game runs as built-in features on an inert core, and external plugins are sandboxed WebAssembly modules.</p>
 <p><a href="${SITE}docs/introduction/">Get started</a> | <a href="${SITE}blog/">Blog</a> | <a href="https://github.com/brenfwd/tuff">GitHub</a></p>
@@ -82,7 +82,7 @@ writeFileSync(join(dist, "404.html"), template.replace("<!--prerender-->", ""));
 
 for (const d of docs) {
   const url = `${SITE}docs/${d.slug}/`;
-  const body = `<main style="max-width:46rem;margin:0 auto;padding:3rem 1rem;font-family:system-ui,sans-serif"><article><p>${esc(d.group)}</p><h1>${esc(d.title)}</h1><p>${esc(d.description)}</p>${d.html}</article>${docNav}</main>`;
+  const body = `<main data-snapshot style="max-width:46rem;margin:0 auto;padding:3rem 1rem;font-family:system-ui,sans-serif"><article><p>${esc(d.group)}</p><h1>${esc(d.title)}</h1><p>${esc(d.description)}</p>${d.html}</article>${docNav}</main>`;
   write(`docs/${d.slug}/index.html`, page({ title: `${d.title} - tuff docs`, description: d.description, url, body }));
 }
 
@@ -123,7 +123,7 @@ const postLd = (p: Post) => ({
   isPartOf: { "@type": "Blog", "@id": `${BLOG_URL}#blog` },
 });
 
-const indexBody = `<main style="${blogStyle}"><nav aria-label="Breadcrumb"><a href="${SITE}">Home</a></nav><h1>Blog</h1><p>${esc(BLOG_DESCRIPTION)}</p>
+const indexBody = `<main data-snapshot style="${blogStyle}"><nav aria-label="Breadcrumb"><a href="${SITE}">Home</a></nav><h1>Blog</h1><p>${esc(BLOG_DESCRIPTION)}</p>
 <p>Subscribe: <a href="${BLOG_URL}rss.xml">RSS</a> | <a href="${BLOG_URL}atom.xml">Atom</a> | <a href="${BLOG_URL}feed.json">JSON Feed</a></p>
 ${posts.length ? posts.map((p) => `<article><h2><a href="${postUrl(p.slug)}">${esc(p.title)}</a></h2><p>${time(p.date)} | ${esc(p.author)} | ${p.readingMinutes} min read</p><p>${esc(p.description)}</p>${p.tags.length ? `<ul>${p.tags.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</article>`).join("\n") : "<p>No posts yet.</p>"}</main>`;
 
@@ -156,7 +156,7 @@ write(
 for (const p of posts) {
   const url = postUrl(p.slug);
   const neighbours = [p.prev && `<a rel="prev" href="${postUrl(p.prev.slug)}">Previous: ${esc(p.prev.title)}</a>`, p.next && `<a rel="next" href="${postUrl(p.next.slug)}">Next: ${esc(p.next.title)}</a>`].filter(Boolean);
-  const body = `<main style="${blogStyle}">${blogNav}<article itemscope itemtype="https://schema.org/BlogPosting">
+  const body = `<main data-snapshot style="${blogStyle}">${blogNav}<article itemscope itemtype="https://schema.org/BlogPosting">
 <header><h1 itemprop="headline">${esc(p.title)}</h1><p itemprop="description">${esc(p.description)}</p>
 <p>By <span itemprop="author">${esc(p.author)}</span>${p.ai ? '<sup><a href="#ai-note" aria-label="AI assistance note">*</a></sup>' : ""} | Published ${time(p.date).replace("<time", '<time itemprop="datePublished"')}${sameDay(p.date, p.updated) ? "" : ` | Updated ${time(p.updated).replace("<time", '<time itemprop="dateModified"')}`} | ${p.readingMinutes} min read</p>
 ${p.tags.length ? `<ul aria-label="Tags">${p.tags.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</header>
