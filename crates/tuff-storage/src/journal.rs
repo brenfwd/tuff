@@ -104,9 +104,20 @@ pub trait JournalStore: Send + Sync {
 
 /// A journal kept as files in a directory: `epoch-<n>.log` per epoch and
 /// `committed`.
+///
+/// Appends are group-committed: a record is written, then one sync covers
+/// every record written before it, so concurrent appenders share syncs.
 pub struct DirStore {
     dir: PathBuf,
-    files: Mutex<HashMap<u64, File>>,
+    files: Mutex<Appended>,
+    synced: Mutex<u64>,
+}
+
+#[derive(Default)]
+struct Appended {
+    files: HashMap<u64, File>,
+    /// Records written so far; each append's sequence number.
+    written: u64,
 }
 
 impl DirStore {
@@ -114,7 +125,31 @@ impl DirStore {
         Self {
             dir,
             files: Mutex::default(),
+            synced: Mutex::new(0),
         }
+    }
+
+    /// Syncs the epoch files until record `seq` is durable, sharing the
+    /// sync with any appender that already covered it.
+    fn sync_through(&self, seq: u64) -> io::Result<()> {
+        let mut synced = locked(&self.synced);
+        if *synced >= seq {
+            return Ok(());
+        }
+        let (target, files) = {
+            let appended = locked(&self.files);
+            let files = appended
+                .files
+                .values()
+                .map(File::try_clone)
+                .collect::<io::Result<Vec<_>>>()?;
+            (appended.written, files)
+        };
+        for file in &files {
+            file.sync_data()?;
+        }
+        *synced = target;
+        Ok(())
     }
 }
 
@@ -132,8 +167,8 @@ impl JournalStore for DirStore {
     }
 
     fn append(&self, epoch: u64, record: &[u8]) -> io::Result<()> {
-        let mut files = locked(&self.files);
-        let file = match files.entry(epoch) {
+        let mut appended = locked(&self.files);
+        let file = match appended.files.entry(epoch) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
                 fs::create_dir_all(&self.dir)?;
@@ -146,7 +181,10 @@ impl JournalStore for DirStore {
             }
         };
         file.write_all(record)?;
-        file.sync_data()
+        appended.written += 1;
+        let seq = appended.written;
+        drop(appended);
+        self.sync_through(seq)
     }
 
     fn records(&self, epoch: u64) -> io::Result<Vec<u8>> {
@@ -154,7 +192,7 @@ impl JournalStore for DirStore {
     }
 
     fn remove(&self, epoch: u64) -> io::Result<()> {
-        locked(&self.files).remove(&epoch);
+        locked(&self.files).files.remove(&epoch);
         match fs::remove_file(epoch_path(&self.dir, epoch)) {
             Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
             _ => Ok(()),
@@ -314,18 +352,27 @@ impl SaveJournal {
             .is_none_or(|entry| !entry.seen.contains(key))
     }
 
+    /// Journals `key`'s previous contents without holding the state lock
+    /// over the I/O, so tickets and other keys never wait on a sync. Two
+    /// racing first writes of one key both journal it; the earlier record
+    /// holds the older contents and rollback applies it last.
     fn append(&self, epoch: u64, key: &Key, image: Option<&[u8]>) -> io::Result<()> {
-        let record = encode_record(key, image);
-        let mut state = locked(&self.state);
-        let entry = state.epochs.entry(epoch).or_default();
-        if entry.seen.contains(key) {
+        if !self.needs_image(epoch, key) {
             return Ok(());
         }
-        entry.recorded = true;
+        let record = encode_record(key, image);
+        locked(&self.state)
+            .epochs
+            .entry(epoch)
+            .or_default()
+            .recorded = true;
         self.store.append(epoch, &record)?;
-        if let Some(entry) = state.epochs.get_mut(&epoch) {
-            entry.seen.insert(key.clone());
-        }
+        locked(&self.state)
+            .epochs
+            .entry(epoch)
+            .or_default()
+            .seen
+            .insert(key.clone());
         Ok(())
     }
 
