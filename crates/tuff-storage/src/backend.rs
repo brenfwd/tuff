@@ -44,6 +44,18 @@ pub trait WorldLock: Send + Sync {}
 
 /// Chunk and entity blobs of one 32x32-chunk region. One store is owned by
 /// one region actor, so implementations need no internal locking.
+/// One chunk's upcoming writes, for [`RegionStore::prepare_writes`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PreparedWrite {
+    pub pos: ChunkPos,
+    /// The save epoch the writes belong to (their ticket's), or `None`
+    /// for writes without a ticket, which join the open epoch.
+    pub epoch: Option<u64>,
+    pub chunk: bool,
+    pub entities: bool,
+    pub pois: bool,
+}
+
 pub trait RegionStore: Send {
     fn read_chunk(&mut self, pos: ChunkPos) -> io::Result<Option<Vec<u8>>>;
     fn write_chunk(&mut self, pos: ChunkPos, blob: &[u8]) -> io::Result<()>;
@@ -64,6 +76,12 @@ pub trait RegionStore: Send {
     }
     /// `None` removes the chunk's point of interest record.
     fn write_pois(&mut self, _pos: ChunkPos, _blob: Option<&[u8]>) -> io::Result<()> {
+        Ok(())
+    }
+    /// Announces a batch of writes about to follow, so a journaling store
+    /// can record what they replace with one sync instead of one per
+    /// write. Only an optimisation: the writes stay safe without it.
+    fn prepare_writes(&mut self, _writes: &[PreparedWrite]) -> io::Result<()> {
         Ok(())
     }
     /// Makes everything written so far durable.

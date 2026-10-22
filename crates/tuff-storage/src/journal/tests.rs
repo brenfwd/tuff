@@ -276,3 +276,41 @@ fn rolling_back_two_unfinished_saves_restores_the_older_contents() {
     assert_eq!(blob(&reopened).as_deref(), Some("old"));
     assert_eq!(reopened.journal().open_epoch(), 4);
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn prepared_writes_are_journaled_once_and_roll_back_after_a_crash() {
+    let dir = TestDir::new();
+    saved_once(&dir);
+    {
+        let backend = open(&dir);
+        let barrier = backend.journal().barrier();
+        let ticket = barrier.ticket();
+        let epoch = ticket.epoch();
+        barrier.seal();
+        let bytes = backend
+            .blob_codec()
+            .write_root(Compound::new().with("v", "new"))
+            .unwrap();
+        let mut store = backend.open_region(OVERWORLD, region()).unwrap();
+        store
+            .prepare_writes(&[PreparedWrite {
+                pos: chunk(),
+                epoch: Some(epoch),
+                chunk: true,
+                entities: false,
+                pois: false,
+            }])
+            .unwrap();
+        let journaled =
+            || parse_records(&fs::read(epoch_path(&journal_dir(&dir), epoch)).unwrap()).len();
+        assert_eq!(journaled(), 1);
+        ticket.scope(|| store.write_chunk(chunk(), &bytes).unwrap());
+        store.flush().unwrap();
+        assert_eq!(journaled(), 1, "the write found its image journaled");
+        assert_eq!(blob(&backend).as_deref(), Some("new"));
+        std::mem::forget(ticket);
+    }
+    let reopened = open(&dir);
+    assert_eq!(blob(&reopened).as_deref(), Some("old"));
+}

@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use tuff_nbt::{Compound, Compression, NamedTag, NbtLimits, Tag};
 use tuff_world_model::pos::{ChunkPos, FileRegionPos};
 
-use crate::backend::{BlobCodec, Documents, RegionStore, WorldBackend, WorldLock};
+use crate::backend::{BlobCodec, Documents, PreparedWrite, RegionStore, WorldBackend, WorldLock};
 use crate::config::ConfigStore;
 use crate::document::{Document, DocumentId};
 
@@ -97,6 +97,14 @@ pub trait JournalStore: Send + Sync {
     /// Epochs with records, oldest first.
     fn epochs(&self) -> io::Result<Vec<u64>>;
     fn append(&self, epoch: u64, record: &[u8]) -> io::Result<()>;
+    /// Like [`Self::append`], but durable only after [`Self::sync`].
+    fn append_unsynced(&self, epoch: u64, record: &[u8]) -> io::Result<()> {
+        self.append(epoch, record)
+    }
+    /// Makes every record appended so far durable.
+    fn sync(&self) -> io::Result<()> {
+        Ok(())
+    }
     /// An epoch's records, concatenated in the order they were appended.
     fn records(&self, epoch: u64) -> io::Result<Vec<u8>>;
     fn remove(&self, epoch: u64) -> io::Result<()>;
@@ -104,9 +112,20 @@ pub trait JournalStore: Send + Sync {
 
 /// A journal kept as files in a directory: `epoch-<n>.log` per epoch and
 /// `committed`.
+///
+/// Appends are group-committed: a record is written, then one sync covers
+/// every record written before it, so concurrent appenders share syncs.
 pub struct DirStore {
     dir: PathBuf,
-    files: Mutex<HashMap<u64, File>>,
+    files: Mutex<Appended>,
+    synced: Mutex<u64>,
+}
+
+#[derive(Default)]
+struct Appended {
+    files: HashMap<u64, File>,
+    /// Records written so far; each append's sequence number.
+    written: u64,
 }
 
 impl DirStore {
@@ -114,7 +133,31 @@ impl DirStore {
         Self {
             dir,
             files: Mutex::default(),
+            synced: Mutex::new(0),
         }
+    }
+
+    /// Syncs the epoch files until record `seq` is durable, sharing the
+    /// sync with any appender that already covered it.
+    fn sync_through(&self, seq: u64) -> io::Result<()> {
+        let mut synced = locked(&self.synced);
+        if *synced >= seq {
+            return Ok(());
+        }
+        let (target, files) = {
+            let appended = locked(&self.files);
+            let files = appended
+                .files
+                .values()
+                .map(File::try_clone)
+                .collect::<io::Result<Vec<_>>>()?;
+            (appended.written, files)
+        };
+        for file in &files {
+            file.sync_data()?;
+        }
+        *synced = target;
+        Ok(())
     }
 }
 
@@ -132,8 +175,38 @@ impl JournalStore for DirStore {
     }
 
     fn append(&self, epoch: u64, record: &[u8]) -> io::Result<()> {
-        let mut files = locked(&self.files);
-        let file = match files.entry(epoch) {
+        let seq = self.write_record(epoch, record)?;
+        self.sync_through(seq)
+    }
+
+    fn append_unsynced(&self, epoch: u64, record: &[u8]) -> io::Result<()> {
+        self.write_record(epoch, record).map(drop)
+    }
+
+    fn sync(&self) -> io::Result<()> {
+        let written = locked(&self.files).written;
+        self.sync_through(written)
+    }
+
+    fn records(&self, epoch: u64) -> io::Result<Vec<u8>> {
+        fs::read(epoch_path(&self.dir, epoch))
+    }
+
+    fn remove(&self, epoch: u64) -> io::Result<()> {
+        locked(&self.files).files.remove(&epoch);
+        match fs::remove_file(epoch_path(&self.dir, epoch)) {
+            Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl DirStore {
+    /// Writes `record` to its epoch file; its sequence number for
+    /// [`Self::sync_through`].
+    fn write_record(&self, epoch: u64, record: &[u8]) -> io::Result<u64> {
+        let mut appended = locked(&self.files);
+        let file = match appended.files.entry(epoch) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
                 fs::create_dir_all(&self.dir)?;
@@ -146,19 +219,8 @@ impl JournalStore for DirStore {
             }
         };
         file.write_all(record)?;
-        file.sync_data()
-    }
-
-    fn records(&self, epoch: u64) -> io::Result<Vec<u8>> {
-        fs::read(epoch_path(&self.dir, epoch))
-    }
-
-    fn remove(&self, epoch: u64) -> io::Result<()> {
-        locked(&self.files).remove(&epoch);
-        match fs::remove_file(epoch_path(&self.dir, epoch)) {
-            Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
-            _ => Ok(()),
-        }
+        appended.written += 1;
+        Ok(appended.written)
     }
 }
 
@@ -314,17 +376,56 @@ impl SaveJournal {
             .is_none_or(|entry| !entry.seen.contains(key))
     }
 
+    /// Journals `key`'s previous contents without holding the state lock
+    /// over the I/O, so tickets and other keys never wait on a sync. Two
+    /// racing first writes of one key both journal it; the earlier record
+    /// holds the older contents and rollback applies it last.
     fn append(&self, epoch: u64, key: &Key, image: Option<&[u8]>) -> io::Result<()> {
-        let record = encode_record(key, image);
-        let mut state = locked(&self.state);
-        let entry = state.epochs.entry(epoch).or_default();
-        if entry.seen.contains(key) {
+        if !self.needs_image(epoch, key) {
             return Ok(());
         }
-        entry.recorded = true;
+        let record = encode_record(key, image);
+        locked(&self.state)
+            .epochs
+            .entry(epoch)
+            .or_default()
+            .recorded = true;
         self.store.append(epoch, &record)?;
-        if let Some(entry) = state.epochs.get_mut(&epoch) {
-            entry.seen.insert(key.clone());
+        locked(&self.state)
+            .epochs
+            .entry(epoch)
+            .or_default()
+            .seen
+            .insert(key.clone());
+        Ok(())
+    }
+
+    /// Journals the previous contents of every key in `images` that still
+    /// needs it, with one sync for all of them. The keys count as journaled
+    /// only once the sync returned, so a racing writer of one of them
+    /// journals it itself.
+    fn prepare(&self, images: Vec<(u64, Key, Option<Vec<u8>>)>) -> io::Result<()> {
+        let mut recorded = Vec::with_capacity(images.len());
+        for (epoch, key, image) in images {
+            if !self.needs_image(epoch, &key) {
+                continue;
+            }
+            locked(&self.state)
+                .epochs
+                .entry(epoch)
+                .or_default()
+                .recorded = true;
+            self.store
+                .append_unsynced(epoch, &encode_record(&key, image.as_deref()))?;
+            recorded.push((epoch, key));
+        }
+        if recorded.is_empty() {
+            return Ok(());
+        }
+        self.store.sync()?;
+        let mut state = locked(&self.state);
+        for (epoch, key) in recorded {
+            state.epochs.entry(epoch).or_default().seen.insert(key);
         }
         Ok(())
     }
@@ -976,6 +1077,32 @@ impl RegionStore for JournaledRegion {
 
     fn write_pois(&mut self, pos: ChunkPos, blob: Option<&[u8]>) -> io::Result<()> {
         self.blob_write(BlobKind::Pois, pos, |store| store.write_pois(pos, blob))
+    }
+
+    fn prepare_writes(&mut self, writes: &[PreparedWrite]) -> io::Result<()> {
+        let mut images = Vec::new();
+        let open = self.journal.open_epoch();
+        for write in writes {
+            let epoch = write.epoch.unwrap_or(open);
+            let kinds = [
+                (write.chunk, BlobKind::Chunk),
+                (write.entities, BlobKind::Entities),
+                (write.pois, BlobKind::Pois),
+            ];
+            for (_, kind) in kinds.into_iter().filter(|(wanted, _)| *wanted) {
+                let key = self.key(kind, write.pos);
+                if !self.journal.needs_image(epoch, &key) {
+                    continue;
+                }
+                let image = match kind {
+                    BlobKind::Chunk => self.inner.read_chunk(write.pos),
+                    BlobKind::Entities => self.inner.read_entities(write.pos),
+                    BlobKind::Pois => self.inner.read_pois(write.pos),
+                }?;
+                images.push((epoch, key, image));
+            }
+        }
+        self.journal.prepare(images)
     }
 
     fn flush(&mut self) -> io::Result<()> {

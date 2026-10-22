@@ -227,6 +227,8 @@ impl ChunkIo {
                 counts: IoCounts::default(),
                 save_latency_max: std::time::Duration::ZERO,
             }),
+            delayed: Vec::new(),
+            delayed_until: None,
             gate: Gate {
                 state,
                 hold: None,
@@ -614,7 +616,14 @@ struct Actor {
     failures: watch::Sender<u64>,
     metrics: Option<Meter>,
     gate: Gate,
+    /// Write-only batches held for [`WRITE_COALESCE`], so the writes of
+    /// many regions start together and share their journal syncs.
+    delayed: Vec<Batch>,
+    delayed_until: Option<tokio::time::Instant>,
 }
+
+/// How long write-only batches wait to be started together.
+const WRITE_COALESCE: Duration = Duration::from_millis(50);
 
 impl Actor {
     /// Serves until every handle is gone and nothing is pending. Storage
@@ -650,23 +659,30 @@ impl Actor {
         report.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             let deadline = self.gate.hold.as_ref().map(|hold| hold.deadline);
+            let delayed_until = self.delayed_until;
             tokio::select! {
                 message = messages.recv(), if *open => match message {
-                    Some(Message::Batch(batch)) => self.accept(batch),
-                    Some(Message::Gate(request)) => self.on_gate(request),
+                    Some(Message::Batch(batch)) => self.delay_or_accept(batch),
+                    Some(Message::Gate(request)) => {
+                        self.start_delayed();
+                        self.on_gate(request)
+                    }
                     Some(Message::Shrink(reply)) => {
                         let _ = reply.send(self.shrink());
                     }
                     Some(Message::Scratch { dimension, on, reply }) => {
+                        self.start_delayed();
                         let _ = reply.send(self.set_scratch(dimension, on));
                     }
                     #[cfg(test)]
                     Some(Message::Panic) => panic!("chunk storage test panic"),
                     None => {
                         *open = false;
+                        self.start_delayed();
                         self.release(None, None);
                     }
                 },
+                _ = sleep_until(delayed_until) => self.start_delayed(),
                 Some(finished) = done.recv() => self.finished(finished),
                 Some(id) = events.recv() => self.documents_paused(id),
                 _ = sleep_until(deadline) => {
@@ -819,6 +835,27 @@ impl Actor {
             let kept = self.scratch.remove(&dimension).is_some();
             self.voided.insert(dimension);
             kept
+        }
+    }
+
+    /// Holds a write-only batch to start with others; any other batch
+    /// first starts the held ones, so a read never overtakes a write.
+    fn delay_or_accept(&mut self, batch: Batch) {
+        let write_only = !batch.ops.is_empty() && batch.ops.iter().all(IoOp::writes);
+        if write_only && !self.gate.paused && !self.voided.contains(&batch.dimension) {
+            self.delayed_until
+                .get_or_insert_with(|| tokio::time::Instant::now() + WRITE_COALESCE);
+            self.delayed.push(batch);
+            return;
+        }
+        self.start_delayed();
+        self.accept(batch);
+    }
+
+    fn start_delayed(&mut self) {
+        self.delayed_until = None;
+        for batch in std::mem::take(&mut self.delayed) {
+            self.accept(batch);
         }
     }
 
@@ -1065,6 +1102,30 @@ fn run_io(
             }
         },
     };
+    let prepared: Vec<tuff_storage::backend::PreparedWrite> = ops
+        .iter()
+        .filter_map(|(_, op)| match op {
+            IoOp::Write {
+                pos,
+                blocks,
+                entities,
+                pois,
+                ticket,
+            } => Some(tuff_storage::backend::PreparedWrite {
+                pos: *pos,
+                epoch: ticket.as_ref().map(|ticket| ticket.epoch()),
+                chunk: blocks.is_some(),
+                entities: !matches!(entities, EntityWrite::Keep),
+                pois: !matches!(pois, EntityWrite::Keep),
+            }),
+            _ => None,
+        })
+        .collect();
+    if !prepared.is_empty()
+        && let Err(err) = store.prepare_writes(&prepared)
+    {
+        log::warn!("cannot journal region {region:?} ahead of its writes: {err}");
+    }
     for (index, op) in ops {
         let result = match op {
             IoOp::Read(pos) => {
