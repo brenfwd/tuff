@@ -10,7 +10,7 @@ const font = (pkg: string, file: string) => readFileSync(join(root, "node_module
 const display = font("space-grotesk", "space-grotesk-latin-wght-normal.woff2");
 const sans = font("inter", "inter-latin-wght-normal.woff2");
 const mono = font("jetbrains-mono", "jetbrains-mono-latin-wght-normal.woff2");
-const favicon = readFileSync(join(pub, "favicon.svg"), "utf8");
+const favicon = readFileSync(join(pub, "app-icon.svg"), "utf8");
 
 const cube = (x: number, y: number, s: number, o: number) =>
   `<g transform="translate(${x} ${y}) scale(${s})" opacity="${o}"><path d="M16 2 29 9.5 16 17 3 9.5Z" fill="#3a3530"/><path d="M3 9.5 16 17v13L3 22.5Z" fill="#1d1a18"/><path d="M29 9.5 16 17v13l13-7.5Z" fill="#282421"/></g>`;

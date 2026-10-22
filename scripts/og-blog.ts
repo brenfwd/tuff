@@ -12,7 +12,7 @@ const outDir = join(root, "public", "blog", "og");
 const cacheDir = join(root, "node_modules", ".cache");
 const cacheFile = join(cacheDir, "og-blog.json");
 const index: BlogIndex = JSON.parse(readFileSync(join(root, "src", "generated", "blog", "index.json"), "utf8"));
-const TEMPLATE_VERSION = "2";
+const TEMPLATE_VERSION = "3";
 
 const font = (pkg: string, file: string) => readFileSync(join(root, "node_modules", "@fontsource-variable", pkg, "files", file)).toString("base64");
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -34,7 +34,7 @@ if (todo.length) {
   const display = font("space-grotesk", "space-grotesk-latin-wght-normal.woff2");
   const sans = font("inter", "inter-latin-wght-normal.woff2");
   const mono = font("jetbrains-mono", "jetbrains-mono-latin-wght-normal.woff2");
-  const favicon = readFileSync(join(root, "public", "favicon.svg"), "utf8");
+  const favicon = readFileSync(join(root, "public", "app-icon.svg"), "utf8");
   const html = (p: PostMeta) => `<!doctype html><html><head><style>
 @font-face{font-family:D;src:url(data:font/woff2;base64,${display})}
 @font-face{font-family:S;src:url(data:font/woff2;base64,${sans})}
