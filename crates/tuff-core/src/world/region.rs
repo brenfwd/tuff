@@ -556,6 +556,12 @@ impl RegionActor {
             };
             self.on_internal(message);
         }
+        self.drain_requests();
+    }
+
+    /// Applies the requests already queued, so a save snapshot taken next
+    /// includes what a session sent before its own barrier snapshot.
+    fn drain_requests(&mut self) {
         for _ in 0..self.requests.len() {
             let Ok(request) = self.requests.try_recv() else {
                 break;

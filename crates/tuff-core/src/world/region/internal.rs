@@ -177,6 +177,7 @@ impl RegionActor {
                 snapshotted,
                 epoch,
             } => {
+                self.drain_requests();
                 if self.shared.saves().saves() {
                     let dirty: Vec<ChunkPos> = self
                         .columns
