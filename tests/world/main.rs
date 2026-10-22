@@ -104,6 +104,7 @@ mod insert_item;
 mod interactions;
 mod intercept;
 mod item_conservation;
+mod item_fuzz;
 mod item_loss;
 mod item_merging;
 mod item_perf;
