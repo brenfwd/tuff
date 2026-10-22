@@ -357,7 +357,7 @@ impl Species for Sniffer {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        sniffer_food(stack.item)
+        sniffer_food(stack.item())
     }
 
     fn offspring(&self, _partner: &Self, _rng: &mut StdRng) -> Self {
@@ -502,7 +502,7 @@ mod tests {
             let eggs = cx
                 .effects
                 .iter()
-                .filter(|e| matches!(e, Effect::DropItem { stack, .. } if stack.item == Item::SnifferEgg))
+                .filter(|e| matches!(e, Effect::DropItem { stack, .. } if stack.item() == Item::SnifferEgg))
                 .count();
             assert_eq!(eggs, 1);
             assert!(!a.core.love.as_ref().unwrap().is_in_love());

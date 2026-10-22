@@ -167,7 +167,7 @@ fn count(slots: &[Option<ItemStack>]) -> u32 {
     slots
         .iter()
         .flatten()
-        .filter(|stack| stack.item == Item::Diamond)
+        .filter(|stack| stack.item() == Item::Diamond)
         .map(|stack| u32::from(stack.count()))
         .sum()
 }

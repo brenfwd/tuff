@@ -54,10 +54,10 @@ impl RegionHooks for VehicleHooks {
         _origin: [f64; 3],
         stack: &tuff_core::world::region_api::Fired,
     ) -> Option<DispenseOutcome> {
-        if let Some(kind) = stack.item.boat() {
+        if let Some(kind) = stack.item().boat() {
             return Some(dispense_boat(world, pos, facing, kind, stack));
         }
-        let kind = minecart::of_minecart_item(stack.item)?;
+        let kind = minecart::of_minecart_item(stack.item())?;
         Some(dispense_minecart(world, pos, facing, kind, stack))
     }
 }

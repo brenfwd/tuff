@@ -396,7 +396,7 @@ impl PlayerSession {
         let source = stash
             .and_then(|stash| {
                 stash.0.iter().rev().find(|stashed| {
-                    stashed.item == stack.item && *client_view(stashed) == stack.components
+                    stashed.item() == stack.item() && *client_view(stashed) == stack.components
                 })
             })
             .cloned()
@@ -502,7 +502,7 @@ mod tests {
             tuff_item::item::NetworkComponent::ClientData(expected.clone())
         );
         let hashed = HashedSlot {
-            item: stack.item.id(),
+            item: stack.item().id(),
             count: 1,
             added: added.iter().map(|c| (c.kind().id(), c.hash())).collect(),
             removed: Vec::new(),
@@ -559,7 +559,7 @@ mod tests {
 
         let stack = charm.stack(1);
         let hashed = |removed: Vec<u32>| HashedSlot {
-            item: stack.item.id(),
+            item: stack.item().id(),
             count: 1,
             added: stack
                 .components

@@ -26,7 +26,7 @@ pub async fn use_bottle(session: &mut PlayerSession, off_hand: bool) {
     const REACH: f64 = 2.0;
     if session.is_dead()
         || session.mode.game_mode == GameMode::Spectator
-        || session.inventory.hand(off_hand).map(|s| s.item) != Some(Item::GlassBottle)
+        || session.inventory.hand(off_hand).map(|s| s.item()) != Some(Item::GlassBottle)
         || session.on_cooldown(Item::GlassBottle)
     {
         return;

@@ -225,7 +225,7 @@ impl ItemFrame {
             .filter(|stack| {
                 tuff_datapack::tags::is(
                     tuff_vanilla_data::tag::item::key::CLONABLE_MAPS,
-                    stack.item,
+                    stack.item(),
                 )
             })
             .and_then(|stack| stack.components.map_id)
@@ -793,7 +793,7 @@ mod tests {
         assert_eq!(loaded.block_pos, BlockPos::new(3, 70, -4));
         assert_eq!(loaded.facing, Facing::Up);
         assert_eq!(loaded.rotation(), 5);
-        assert_eq!(loaded.item().map(|s| s.item), Some(Item::Compass));
+        assert_eq!(loaded.item().map(|s| s.item()), Some(Item::Compass));
         assert_eq!(loaded.base.position, frame.base.position);
         assert_eq!(loaded.base.pitch, -90.0);
     }

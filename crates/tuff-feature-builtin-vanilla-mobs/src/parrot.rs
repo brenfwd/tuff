@@ -217,7 +217,7 @@ impl Species for Parrot {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        parrot_food(stack.item)
+        parrot_food(stack.item())
     }
 
     fn interact(
@@ -229,11 +229,11 @@ impl Species for Parrot {
         let stack = interaction.stack.as_deref();
         let tamed = core.tame.as_ref().is_some_and(|t| t.is_tamed());
         if let Some(stack) = stack {
-            if !tamed && parrot_food(stack.item) {
+            if !tamed && parrot_food(stack.item()) {
                 core.try_tame(interaction.player_uuid, TAME_CHANCE, cx);
                 return Some(HandEffect::Consume(1));
             }
-            if poisonous(stack.item) {
+            if poisonous(stack.item()) {
                 core.effects
                     .add(ActiveEffect::timed(MobEffect::Poison, POISON_TICKS, 0));
                 core.hurt_later(f32::MAX, &damage_type::GENERIC);

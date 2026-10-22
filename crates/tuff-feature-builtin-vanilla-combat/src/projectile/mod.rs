@@ -287,7 +287,7 @@ mod launch_tests {
         assert_eq!(arrow.damage, 4.5);
         assert_eq!(arrow.pierce, 2);
         assert_eq!(arrow.base.fire, 100);
-        assert_eq!(arrow.weapon.as_ref().map(|w| w.item), Some(Item::Bow));
+        assert_eq!(arrow.weapon.as_ref().map(|w| w.item()), Some(Item::Bow));
         assert_eq!(arrow.sound, SoundEvent::ItemCrossbowHit);
         assert_eq!(arrow.effects.len(), 1);
         assert_eq!(arrow.owner.uuid, Some(42));
@@ -323,6 +323,6 @@ mod launch_tests {
         let entity = launch(Shot::Arrow(ArrowShot::new(trident, [0.0, 0.0, 2.5])));
         let arrow = entity.downcast_ref::<arrow::Arrow>().unwrap();
         assert!(arrow.trident.is_some());
-        assert_eq!(arrow.weapon.as_ref().map(|w| w.item), Some(Item::Trident));
+        assert_eq!(arrow.weapon.as_ref().map(|w| w.item()), Some(Item::Trident));
     }
 }

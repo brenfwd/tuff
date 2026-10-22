@@ -23,7 +23,7 @@ impl ItemInput {
     /// The item a template pictures.
     pub fn from_template(template: &ItemSnapshot) -> Self {
         Self {
-            item: template.item,
+            item: template.item(),
             components: ComponentsSnapshot::of(&template.components),
         }
     }
@@ -90,8 +90,8 @@ impl ItemPredicate {
 impl ItemTest {
     fn test(&self, stack: &ItemStack) -> bool {
         match self {
-            Self::Item(item) => stack.item == *item,
-            Self::Tag(_, items) => items.contains(&stack.item),
+            Self::Item(item) => stack.item() == *item,
+            Self::Tag(_, items) => items.contains(&stack.item()),
             Self::HasComponent(id) => stack.components.to_nbt().contains_key(id),
             Self::ComponentEquals(id, value) => stack.components.to_nbt().get(id) == Some(value),
             Self::Count(range) => range.contains(i32::from(stack.count())),

@@ -44,7 +44,7 @@ async fn cube(region: &RegionHandle) -> i32 {
 fn body_item(nbt: &Compound) -> Option<String> {
     let body = nbt.get("equipment")?.as_compound()?.get("body")?;
     ItemStack::mint_from_nbt(body.as_compound()?, MintReason::Test)
-        .map(|s| s.item.name().to_owned())
+        .map(|s| s.item().name().to_owned())
 }
 
 fn number(nbt: &Compound, key: &str) -> f64 {
@@ -306,14 +306,14 @@ async fn an_empty_bucket_scoops_up_a_cube_with_its_block_and_lets_it_out_again()
     let HandEffect::ExchangeStack(bucket) = effect else {
         panic!("not scooped: {effect:?}");
     };
-    assert_eq!(bucket.item, Item::SulfurCubeBucket);
+    assert_eq!(bucket.item(), Item::SulfurCubeBucket);
     let content = bucket
         .components
         .other
         .get_compound("minecraft:sulfur_cube_content")
         .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
         .expect("the bucket keeps the block");
-    assert_eq!(content.item, Item::Tnt);
+    assert_eq!(content.item(), Item::Tnt);
     wait_for(&world, &region, 5, |found| {
         !found.iter().any(|s| s.kind == EntityType::SulfurCube)
     })

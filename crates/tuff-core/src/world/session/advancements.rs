@@ -244,7 +244,7 @@ impl PlayerSession {
         let stack = self
             .inventory
             .hand(off_hand)
-            .filter(|stack| stack.item == item)
+            .filter(|stack| stack.item() == item)
             .map(tuff_item::item::ItemSnapshot::of)
             .unwrap_or_else(|| {
                 tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())
@@ -349,7 +349,7 @@ impl PlayerSession {
                             .hand(off_hand)
                             .map(tuff_item::item::ItemSnapshot::of)
                     })
-                    .find(|stack| stack.item == tuff_vanilla_data::Item::FishingRod);
+                    .find(|stack| stack.item() == tuff_vanilla_data::Item::FishingRod);
                 if let Some(rod) = rod {
                     self.fire(Event::FishingRodHooked {
                         rod: &rod,
@@ -777,7 +777,7 @@ impl PlayerSession {
             && let Some(stack) = self
                 .inventory
                 .hand(using.off_hand)
-                .filter(|stack| stack.item == using.item)
+                .filter(|stack| stack.item() == using.item)
                 .map(tuff_item::item::ItemSnapshot::of)
         {
             self.fire(Event::UsingItem(&stack));
@@ -864,7 +864,7 @@ pub(crate) fn potions_taken(
         .filter_map(|(slot, taken)| {
             let taken = taken.as_ref()?;
             let left = after.get(slot).and_then(Option::as_ref);
-            if left.is_some_and(|stack| stack.item == taken.item) {
+            if left.is_some_and(|stack| stack.item() == taken.item()) {
                 return None;
             }
             let contents = taken.components.potion_contents.as_ref()?;

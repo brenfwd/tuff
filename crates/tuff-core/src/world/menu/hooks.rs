@@ -2,12 +2,12 @@ use super::*;
 
 /// What a cartography table's second slot accepts.
 pub fn is_cartography_additional(stack: &ItemStack) -> bool {
-    matches!(stack.item, Item::Paper | Item::Map | Item::GlassPane)
+    matches!(stack.item(), Item::Paper | Item::Map | Item::GlassPane)
 }
 
 /// What a furnace's fuel slot accepts: fuel, or a bucket to catch water.
 pub fn is_fuel(stack: &ItemStack) -> bool {
-    stack.item.cooking_fuel().is_some() || stack.item == Item::Bucket
+    stack.item().cooking_fuel().is_some() || stack.item() == Item::Bucket
 }
 
 /// Furnace result taken: nothing changes in the slots; the region awards

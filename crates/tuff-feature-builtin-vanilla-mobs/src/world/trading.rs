@@ -197,10 +197,10 @@ fn apply_function(
         }
         "minecraft:set_enchantments" => {
             let add = function["add"].as_bool().unwrap_or(false);
-            if stack.item == Item::Book {
+            if stack.item() == Item::Book {
                 stack = ItemStack::mint(Item::EnchantedBook, stack.count(), MintReason::Spawn);
             }
-            let target = if stack.item == Item::EnchantedBook {
+            let target = if stack.item() == Item::EnchantedBook {
                 &mut stack.components.stored_enchantments
             } else {
                 &mut stack.components.enchantments
@@ -241,7 +241,7 @@ fn apply_function(
         }
         "minecraft:set_stew_effect" => {
             let effects = function["effects"].as_array()?;
-            if stack.item != Item::SuspiciousStew || effects.is_empty() {
+            if stack.item() != Item::SuspiciousStew || effects.is_empty() {
                 return Some((stack, None));
             }
             let entry = &effects[rng.gen_range(0..effects.len())];
@@ -303,7 +303,7 @@ fn potion_options(value: &Value) -> Vec<Potion> {
 /// fails.
 fn filter_passes(stack: &ItemStack, filter: &Value) -> bool {
     if let Some(items) = filter.get("items") {
-        let name = stack.item.name();
+        let name = stack.item().name();
         let listed = match items {
             Value::String(s) => match s.strip_prefix('#') {
                 Some(tag) => {
@@ -531,7 +531,7 @@ mod tests {
             Trade::builtin("minecraft:librarian/1/emerald_and_book_enchanted_book").unwrap();
         for seed in 0..50 {
             let offer = offer_from_trade(trade, None, &mut StdRng::seed_from_u64(seed)).unwrap();
-            assert_eq!(offer.sell.item, Item::EnchantedBook);
+            assert_eq!(offer.sell.item(), Item::EnchantedBook);
             let stored = offer.sell.components.stored_enchantments.as_ref().unwrap();
             let (id, level) = &stored.entries()[0];
             assert!(tuff_datapack::tags::has(
@@ -651,7 +651,7 @@ mod tests {
             })
             .unwrap();
         let offer = offer_from_trade(trade, None, &mut rng()).unwrap();
-        assert_eq!(offer.sell.item, Item::WoodlandMansionMap);
+        assert_eq!(offer.sell.item(), Item::WoodlandMansionMap);
         let spec = tuff_core::world::exploration::pending(&offer.sell).unwrap();
         assert_eq!(spec.destination, "#minecraft:on_woodland_mansion_maps");
         assert_eq!(spec.search_radius, 100);

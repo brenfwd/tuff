@@ -120,7 +120,7 @@ fn quick_move_into_a_mount_fills_armor_then_saddle_then_chest() {
             },
         );
     }
-    let item = |slot: usize| container[slot].as_ref().map(|stack| stack.item);
+    let item = |slot: usize| container[slot].as_ref().map(|stack| stack.item());
     assert_eq!(container.len(), 2 + 9);
     assert_eq!(item(mount::BODY), Some(Item::IronHorseArmor));
     assert_eq!(item(mount::SADDLE), Some(Item::Saddle));
@@ -346,7 +346,7 @@ fn held(bundle: &ItemStack) -> Vec<(Item, u8)> {
         .components
         .bundle_contents
         .as_ref()
-        .map(|c| c.items().iter().map(|s| (s.item, s.count())).collect())
+        .map(|c| c.items().iter().map(|s| (s.item(), s.count())).collect())
         .unwrap_or_default()
 }
 

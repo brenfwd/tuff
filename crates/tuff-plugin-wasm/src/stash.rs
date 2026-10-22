@@ -154,7 +154,7 @@ impl Stashes {
             if left == 0 {
                 break;
             }
-            if item.is_some_and(|item| slot.item != item) {
+            if item.is_some_and(|item| slot.item() != item) {
                 continue;
             }
             let part = slot.take(left.min(u32::from(slot.count())) as u8);
@@ -236,7 +236,7 @@ mod tests {
             .get(stash)
             .unwrap()
             .iter()
-            .map(|s| (s.item, s.count()))
+            .map(|s| (s.item(), s.count()))
             .collect()
     }
 

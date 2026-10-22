@@ -45,7 +45,7 @@ fn act(
     if !host.listens(flag) {
         return false;
     }
-    let item = stack.item.name();
+    let item = stack.item().name();
     let cancel = host.snapshot().items.iter().any(|filter| {
         filter.kind == kind
             && filter.item.as_deref().is_none_or(|wanted| wanted == item)

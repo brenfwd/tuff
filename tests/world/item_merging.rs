@@ -85,7 +85,7 @@ async fn resting_items_merge_into_the_bigger_stack() {
         .collect();
     let dirt_near: Vec<u8> = after
         .iter()
-        .filter(|(_, pos, stack)| pos[0] < 4.0 && stack.item == tuff_vanilla_data::Item::Dirt)
+        .filter(|(_, pos, stack)| pos[0] < 4.0 && stack.item() == tuff_vanilla_data::Item::Dirt)
         .map(|(_, _, stack)| stack.count())
         .collect();
     let mut sorted = dirt_near.clone();
@@ -100,9 +100,9 @@ async fn resting_items_merge_into_the_bigger_stack() {
         "the biggest of the three absorbs the rest"
     );
     assert!(
-        after
-            .iter()
-            .any(|(_, _, stack)| stack.item == tuff_vanilla_data::Item::Stone && stack.count() == 3),
+        after.iter().any(
+            |(_, _, stack)| stack.item() == tuff_vanilla_data::Item::Stone && stack.count() == 3
+        ),
         "other items stay apart"
     );
     assert_eq!(
@@ -162,7 +162,7 @@ async fn items_merge_across_a_region_border_into_the_bigger_stack() {
     let all: Vec<(tuff_vanilla_data::Item, u8, f64)> = west_items
         .iter()
         .chain(&east_items)
-        .map(|(_, pos, stack)| (stack.item, stack.count(), pos[0]))
+        .map(|(_, pos, stack)| (stack.item(), stack.count(), pos[0]))
         .collect();
     let of = |item| -> Vec<(u8, f64)> {
         all.iter()

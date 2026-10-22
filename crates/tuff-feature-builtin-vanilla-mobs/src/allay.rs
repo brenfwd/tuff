@@ -257,12 +257,12 @@ impl Allay {
     /// Room left for `item` in its one slot, if it wants it at all.
     fn room_for(&self, core: &MobCore, item: Item) -> Option<u8> {
         let held = core.equipment.main_hand()?;
-        if held.item != item {
+        if held.item() != item {
             return None;
         }
         match &self.inventory {
             None => Some(held.max_stack_size()),
-            Some(stack) if stack.item == item => {
+            Some(stack) if stack.item() == item => {
                 Some(stack.max_stack_size().saturating_sub(stack.count())).filter(|n| *n > 0)
             }
             Some(_) => None,
@@ -707,7 +707,7 @@ impl Species for Allay {
         if let Some(stack) = stack
             && self.dancing
             && self.can_duplicate()
-            && tuff_datapack::tags::is(tag::item::key::DUPLICATES_ALLAYS, stack.item)
+            && tuff_datapack::tags::is(tag::item::key::DUPLICATES_ALLAYS, stack.item())
         {
             self.duplicate(core, cx);
             core.entity_event(HEART_EVENT, cx);
@@ -715,7 +715,7 @@ impl Species for Allay {
             return Some(HandEffect::Consume(1));
         }
         if let Some(stack) = stack
-            && stack.item == Item::NameTag
+            && stack.item() == Item::NameTag
             && stack.components.custom_name.is_some()
         {
             return None;
@@ -746,7 +746,7 @@ impl Species for Allay {
         let fits = core
             .equipment
             .main_hand()
-            .is_some_and(|held| held.item == stack.item && !has_potion_mismatch(held, &stack));
+            .is_some_and(|held| held.item() == stack.item() && !has_potion_mismatch(held, &stack));
         match &mut self.inventory {
             None if fits => self.inventory = Some(stack),
             Some(kept) if fits && kept.stacks_with(&stack) => {
@@ -895,7 +895,7 @@ mod tests {
             assert!(matches!(effect, Some(HandEffect::None)));
             assert_eq!(click.hand.into_inner().map(|left| left.count()), Some(4));
             assert_eq!(
-                core.equipment.main_hand().map(|s| (s.item, s.count())),
+                core.equipment.main_hand().map(|s| (s.item(), s.count())),
                 Some((Item::Cobblestone, 1))
             );
             assert_eq!(allay.liked_player(), Some(9));
@@ -915,7 +915,7 @@ mod tests {
             let effect = allay.interact(core, &interaction(9, None, false), cx);
             assert!(matches!(
                 effect,
-                Some(HandEffect::Replace(Some(ref stack))) if stack.item == Item::Cobblestone
+                Some(HandEffect::Replace(Some(ref stack))) if stack.item() == Item::Cobblestone
             ));
             assert!(core.equipment.main_hand().is_none());
             assert_eq!(allay.liked_player(), None);
@@ -923,7 +923,7 @@ mod tests {
             assert!(
                 cx.effects.iter().any(|e| matches!(
                     e,
-                    Effect::DropItem { stack, .. } if stack.item == Item::Cobblestone && stack.count() == 3
+                    Effect::DropItem { stack, .. } if stack.item() == Item::Cobblestone && stack.count() == 3
                 )),
                 "what it gathered falls out"
             );

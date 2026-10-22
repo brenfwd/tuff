@@ -191,7 +191,9 @@ impl PlayerSession {
                 options,
                 selected,
             }) => {
-                let item = menu.container[stonecutter::INPUT].as_ref().map(|s| s.item);
+                let item = menu.container[stonecutter::INPUT]
+                    .as_ref()
+                    .map(|s| s.item());
                 if item != *input {
                     *input = item;
                     *options = item
@@ -1109,7 +1111,7 @@ impl PlayerSession {
             .kind
             .result_slot()
             .and_then(|slot| menu.container.get(slot)?.as_ref())
-            .map(|stack| stack.item);
+            .map(|stack| stack.item());
         let held_before = result_before.map(|item| Self::count_in(&self.inventory, item));
         let action = Click {
             slot: click.slot,
@@ -1250,7 +1252,7 @@ impl PlayerSession {
             };
             let dropped: i32 = dropped
                 .iter()
-                .filter(|stack| stack.item == item)
+                .filter(|stack| stack.item() == item)
                 .map(|stack| i32::from(stack.count()))
                 .sum();
             self.count_crafted(item, after - before + dropped);

@@ -23,13 +23,13 @@ impl Fired {
     /// moves one out for it: projectiles, wearables and what a sulfur cube
     /// swallows. Items used in place (shears, buckets) stay in the slot.
     pub fn keepable(stack: &ItemStack) -> bool {
-        stack.item.dispense() != Some(tuff_vanilla_data::redstone::Dispense::Special)
+        stack.item().dispense() != Some(tuff_vanilla_data::redstone::Dispense::Special)
             || stack
                 .equippable()
                 .is_some_and(|equippable| equippable.dispensable)
             || tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::SULFUR_CUBE_SWALLOWABLE,
-                stack.item,
+                stack.item(),
             )
     }
 

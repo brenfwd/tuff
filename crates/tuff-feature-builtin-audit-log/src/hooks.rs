@@ -439,7 +439,7 @@ fn item_record(
     stack: tuff_item::item::ItemView<'_>,
 ) -> Record {
     let mut record = Record::new(now_ms(), who, kind, world.dimension_id(), world_pos(at));
-    record.material = Some(stack.item.name().to_owned());
+    record.material = Some(stack.item().name().to_owned());
     record.amount = i32::from(stack.count());
     record.data = Some(stack.to_nbt());
     record
@@ -577,7 +577,7 @@ fn action_record(
     action: ItemAction,
     stack: tuff_item::item::ItemView<'_>,
 ) -> Record {
-    record.material = Some(stack.item.name().to_owned());
+    record.material = Some(stack.item().name().to_owned());
     record.amount = i32::from(stack.count());
     record.data = Some(stack.to_nbt());
     record.text = Some(action.name().to_owned());

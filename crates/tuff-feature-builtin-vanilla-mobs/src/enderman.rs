@@ -857,6 +857,6 @@ mod tests {
             &mut rng,
         );
         assert_eq!(drops.len(), 1);
-        assert_eq!(drops[0].item, tuff_vanilla_data::Item::GrassBlock);
+        assert_eq!(drops[0].item(), tuff_vanilla_data::Item::GrassBlock);
     }
 }

@@ -437,7 +437,7 @@ fn handle_eating(core: &mut MobCore, cx: &mut TickContext) {
                 && core
                     .equipment
                     .main_hand()
-                    .is_some_and(|s| eats_from_ground(s.item));
+                    .is_some_and(|s| eats_from_ground(s.item()));
             if finished {
                 core.equipment.set(EquipmentSlot::Mainhand, None);
                 set_flag(core, FLAG_SITTING, false);
@@ -641,7 +641,7 @@ impl Species for Panda {
             return Some(HandEffect::None);
         }
         let stack = interaction.stack.as_deref()?;
-        if !panda_food(stack.item)
+        if !panda_food(stack.item())
             || core.is_baby()
             || core.panda_flags & FLAG_SITTING != 0
             || core.body.in_water
@@ -697,7 +697,7 @@ impl Species for Panda {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        panda_food(stack.item)
+        panda_food(stack.item())
     }
 
     fn offspring(&self, partner: &Self, rng: &mut StdRng) -> Self {

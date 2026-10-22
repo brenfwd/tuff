@@ -527,7 +527,7 @@ async fn a_plugin_give_lands_in_the_inventory() {
         .slots()
         .iter()
         .flatten()
-        .filter(|stack| stack.item == Item::Stone)
+        .filter(|stack| stack.item() == Item::Stone)
         .map(|stack| u32::from(stack.count()))
         .sum();
     assert_eq!(total, 70);
@@ -547,7 +547,7 @@ async fn plugin_inventory_ops_take_clear_set_and_keep() {
             .slots()
             .iter()
             .flatten()
-            .filter(|stack| stack.item == Item::Stone)
+            .filter(|stack| stack.item() == Item::Stone)
             .map(|stack| u32::from(stack.count()))
             .sum()
     };
@@ -607,7 +607,7 @@ async fn a_failed_all_or_nothing_take_skips_the_give_after_it() {
             .slots()
             .iter()
             .flatten()
-            .filter(|stack| stack.item == item)
+            .filter(|stack| stack.item() == item)
             .map(|stack| u32::from(stack.count()))
             .sum()
     };

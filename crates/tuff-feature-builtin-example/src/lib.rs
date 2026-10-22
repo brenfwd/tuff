@@ -519,7 +519,7 @@ impl DirtToDiamond {
 
 impl Recipe for DirtToDiamond {
     fn matches(&self, input: &CraftingInput) -> bool {
-        input.ingredient_count() == 1 && input.stacks().any(|s| s.item == Item::Dirt)
+        input.ingredient_count() == 1 && input.stacks().any(|s| s.item() == Item::Dirt)
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
@@ -547,12 +547,12 @@ pub struct DiamondRepair;
 
 impl DiamondRepair {
     fn damaged_tool<'a>(input: &CraftingInput<'a>) -> Option<&'a ItemStack> {
-        if input.ingredient_count() != 2 || !input.stacks().any(|s| s.item == Item::Diamond) {
+        if input.ingredient_count() != 2 || !input.stacks().any(|s| s.item() == Item::Diamond) {
             return None;
         }
         input
             .stacks()
-            .find(|stack| stack.item != Item::Diamond && stack.has_damage())
+            .find(|stack| stack.item() != Item::Diamond && stack.has_damage())
     }
 }
 

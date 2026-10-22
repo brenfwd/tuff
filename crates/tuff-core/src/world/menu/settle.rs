@@ -130,9 +130,9 @@ pub enum Settled {
 fn census<'a>(stacks: impl Iterator<Item = &'a ItemStack>) -> Vec<(Item, u64)> {
     let mut counts: Vec<(Item, u64)> = Vec::new();
     for stack in stacks.filter(|stack| !stack.is_empty()) {
-        match counts.iter_mut().find(|(item, _)| *item == stack.item) {
+        match counts.iter_mut().find(|(item, _)| *item == stack.item()) {
             Some((_, count)) => *count += u64::from(stack.count()),
-            None => counts.push((stack.item, u64::from(stack.count()))),
+            None => counts.push((stack.item(), u64::from(stack.count()))),
         }
     }
     counts.sort_unstable_by_key(|(item, _)| *item as u32);
@@ -291,7 +291,7 @@ fn tally(stacks: &[(ItemSnapshot, u32)]) -> HashMap<Item, u64> {
 }
 
 fn count_into(stack: &ItemStack, times: u64, counts: &mut HashMap<Item, u64>) {
-    *counts.entry(stack.item).or_default() += times;
+    *counts.entry(stack.item()).or_default() += times;
     let components = &stack.components;
     if let Some(contents) = &components.bundle_contents {
         for inner in contents.items() {
@@ -328,11 +328,11 @@ mod tests {
         assert_eq!(apply(&mut slots, &new, &mut pool, false), Settled::Applied);
         assert_eq!(slots[0].as_ref().map(ItemStack::count), Some(4));
         assert_eq!(
-            slots[1].as_ref().map(|s| (s.item, s.count())),
+            slots[1].as_ref().map(|s| (s.item(), s.count())),
             Some((Item::Dirt, 3))
         );
         assert_eq!(pool.len(), 1);
-        assert_eq!((pool[0].item, pool[0].count()), (Item::Stone, 6));
+        assert_eq!((pool[0].item(), pool[0].count()), (Item::Stone, 6));
     }
 
     #[tuff_core::watchdog]
@@ -360,7 +360,7 @@ mod tests {
         ));
         assert_eq!(slots[0].as_ref().map(ItemStack::count), Some(10));
         assert!(slots[1].is_none());
-        assert_eq!((pool[0].item, pool[0].count()), (Item::Dirt, 3));
+        assert_eq!((pool[0].item(), pool[0].count()), (Item::Dirt, 3));
     }
 
     #[tuff_core::watchdog]
@@ -377,7 +377,7 @@ mod tests {
         let balance = Balance::of(losses.iter(), gains.iter());
         assert_eq!(balance.short.len(), 1);
         assert_eq!(
-            (balance.short[0].0.item, balance.short[0].1),
+            (balance.short[0].0.item(), balance.short[0].1),
             (Item::Apple, 1)
         );
         assert_eq!(balance.spare.len(), 2);

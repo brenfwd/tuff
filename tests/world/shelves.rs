@@ -54,7 +54,7 @@ fn offer(items: impl IntoIterator<Item = (usize, Item)>) -> PlaceOffer {
 
 async fn returned(events: &mut mpsc::UnboundedReceiver<PlayerEvent>) -> (usize, Item) {
     expect(events, |event| match event {
-        PlayerEvent::HandReturned { slot, stack, .. } => Some((slot, stack.item)),
+        PlayerEvent::HandReturned { slot, stack, .. } => Some((slot, stack.item())),
         _ => None,
     })
     .await
@@ -160,7 +160,7 @@ async fn a_chiseled_bookshelf_takes_a_book_in_the_clicked_slot_and_gives_it_back
         outcome(&mut events, 3).await,
         ActionOutcome::Interacted { .. }
     ));
-    assert_eq!(granted.item, Item::Book);
+    assert_eq!(granted.item(), Item::Book);
     assert_eq!(
         prop(&region, shelf, "slot_5_occupied").await.unwrap(),
         "false"

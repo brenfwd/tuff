@@ -303,7 +303,7 @@ impl Witch {
             ..Default::default()
         }));
         self.using_time = stack
-            .item
+            .item()
             .consumable()
             .map_or(DEFAULT_DRINK_TICKS, |c| (c.consume_seconds * 20.0) as i32);
         core.equipment.set(EquipmentSlot::Mainhand, Some(stack));
@@ -326,10 +326,10 @@ impl Witch {
         core.signal = 0;
         core.changed(DRINKING);
         if let Some(stack) = core.equipment.take(EquipmentSlot::Mainhand) {
-            if stack.item == Item::Potion
+            if stack.item() == Item::Potion
                 && let Some(contents) = &stack.components.potion_contents
             {
-                let scale = stack.item.potion_duration_scale();
+                let scale = stack.item().potion_duration_scale();
                 for effect in effects::potion_effects(contents, scale) {
                     if effect.effect.is_instantaneous() {
                         // Only instant effect witches ever drink is Healing.

@@ -262,7 +262,7 @@ impl Fox {
         let Some(held) = core.equipment.get(slot) else {
             return;
         };
-        let consumable = held.item.food().is_some() && held.consumable().is_some();
+        let consumable = held.item().food().is_some() && held.consumable().is_some();
         if !(consumable && core.target.is_none() && core.base.on_ground && !core.sleeping) {
             return;
         }
@@ -370,7 +370,7 @@ impl Species for Fox {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        fox_food(stack.item)
+        fox_food(stack.item())
     }
 
     fn offspring(&self, partner: &Self, rng: &mut StdRng) -> Self {

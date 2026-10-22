@@ -914,7 +914,7 @@ impl Species for Dolphin {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item) {
+        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item()) {
             return None;
         }
         core.sound_as(
@@ -1189,7 +1189,7 @@ mod tests {
             assert!(!holding(core));
             assert!(cx.effects.iter().any(|e| matches!(
                 e,
-                Effect::DropItem { pickup_delay: 40, stack, .. } if stack.item == Item::Stick
+                Effect::DropItem { pickup_delay: 40, stack, .. } if stack.item() == Item::Stick
             )));
         });
     }

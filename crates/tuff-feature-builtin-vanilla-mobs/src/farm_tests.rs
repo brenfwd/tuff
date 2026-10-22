@@ -187,7 +187,7 @@ fn a_brown_mooshroom_eats_a_flower_and_gives_suspicious_stew() {
         let Some(HandEffect::ExchangeStack(stew)) = stew else {
             panic!("a suspicious stew");
         };
-        assert_eq!(stew.item, Item::SuspiciousStew);
+        assert_eq!(stew.item(), Item::SuspiciousStew);
         assert_eq!(
             stew.components.suspicious_stew_effects,
             Some(vec![SuspiciousEffect {

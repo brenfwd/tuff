@@ -175,7 +175,7 @@ impl PlayerSession {
                 item,
                 effect,
             } => {
-                if self.inventory.hand(off_hand).map(|s| s.item) == item {
+                if self.inventory.hand(off_hand).map(|s| s.item()) == item {
                     self.apply_hand_effect(off_hand, effect).await;
                 }
                 self.send_inventory();
@@ -263,7 +263,7 @@ impl PlayerSession {
                 }
             }
             PlayerEvent::ItemGranted { stack, picked_up } => {
-                let item = stack.item;
+                let item = stack.item();
                 let offered = stack.count();
                 let leftover = if self.is_dead() {
                     Some(stack)
@@ -741,7 +741,7 @@ impl PlayerSession {
                 let held = self
                     .inventory
                     .hand(off_hand)
-                    .filter(|s| s.item == item)
+                    .filter(|s| s.item() == item)
                     .map(|s| s.max_damage().is_some());
                 match held {
                     Some(true) => self.hurt_hand(off_hand, 1).await,
@@ -785,7 +785,7 @@ impl PlayerSession {
                 if self
                     .inventory
                     .hand(off_hand)
-                    .is_some_and(|s| s.item == item)
+                    .is_some_and(|s| s.item() == item)
                 {
                     self.apply_hand_effect(off_hand, effect).await;
                 }
@@ -815,7 +815,7 @@ impl PlayerSession {
                 if self
                     .inventory
                     .hand(off_hand)
-                    .is_some_and(|s| s.item == item)
+                    .is_some_and(|s| s.item() == item)
                 {
                     self.actions.using = Some(UsingItem::new(off_hand, item, ticks));
                     self.publish(false).await;

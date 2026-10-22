@@ -52,7 +52,7 @@ pub fn cook_time_for_input(
 ) -> i32 {
     items[furnace::INPUT]
         .as_ref()
-        .and_then(|input| recipe_for(recipes, kind, input.item))
+        .and_then(|input| recipe_for(recipes, kind, input.item()))
         .map_or(DEFAULT_COOK_TIME, |(_, recipe)| {
             total_cook_time(recipe, furnace.speed_multiplier)
         })
@@ -80,7 +80,7 @@ pub fn place_food(
     let Some(slot) = items.iter().position(Option::is_none) else {
         return Err(stack);
     };
-    let Some((_, recipe)) = recipe_for(recipes, ContainerKind::Campfire, stack.item) else {
+    let Some((_, recipe)) = recipe_for(recipes, ContainerKind::Campfire, stack.item()) else {
         return Err(stack);
     };
     campfire.cooking_time[slot] = recipe.cooking_time as i32;

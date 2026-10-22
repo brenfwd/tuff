@@ -112,7 +112,7 @@ impl PlayerSession {
             hotbar: std::array::from_fn(|i| {
                 self.inventory.slots()[crate::world::inventory::Inventory::hotbar_slot(i)]
                     .as_ref()
-                    .map(|stack| stack.item)
+                    .map(|stack| stack.item())
             }),
             dig_progress: driver.dig_progress(),
             alive: !self.is_dead(),

@@ -206,7 +206,7 @@ impl SpearUse {
             return;
         };
         let (Some(kinetic), Some(mut range)) =
-            (stack.kinetic_weapon(), stack.item.attack_range().copied())
+            (stack.kinetic_weapon(), stack.item().attack_range().copied())
         else {
             return;
         };
@@ -285,7 +285,10 @@ impl SpearUse {
         let knockback_base = mob.attribute(Attribute::AttackKnockback);
         let base_damage = mob.attribute(Attribute::AttackDamage);
         let yaw = f64::from(mob.base.yaw.to_radians());
-        let kind = stack.item.damage_type().unwrap_or(&damage_type::MOB_ATTACK);
+        let kind = stack
+            .item()
+            .damage_type()
+            .unwrap_or(&damage_type::MOB_ATTACK);
         let test = |c: &Option<tuff_vanilla_data::item::KineticCondition>, relative: f64| {
             c.as_ref()
                 .is_some_and(|c| c.test(used, speed, relative, MOB_ACTION_FACTOR))

@@ -178,7 +178,7 @@ fn ominous_banner_as(reason: MintReason) -> ItemStack {
 
 pub fn is_ominous_banner(stack: &ItemStack) -> bool {
     let banner = ominous_banner_as(MintReason::Template);
-    stack.item == banner.item && stack.components == banner.components
+    stack.item() == banner.item() && stack.components == banner.components
 }
 
 /// A leader wears the banner, which always drops.
@@ -1118,7 +1118,7 @@ mod tests {
     #[test]
     fn the_ominous_banner_is_a_white_banner_with_eight_layers() {
         let banner = ominous_banner();
-        assert_eq!(banner.item, Item::WhiteBanner);
+        assert_eq!(banner.item(), Item::WhiteBanner);
         assert_eq!(banner.components.banner_patterns.as_ref().unwrap().len(), 8);
         assert!(
             banner

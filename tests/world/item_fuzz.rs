@@ -193,7 +193,7 @@ fn chest_census(slots: &[Option<(Item, u8)>], hand: &[ItemStack]) -> Census {
         add(&mut census, name(*item), i64::from(*count));
     }
     for stack in hand {
-        add(&mut census, name(stack.item), i64::from(stack.count()));
+        add(&mut census, name(stack.item()), i64::from(stack.count()));
     }
     census
 }
@@ -296,14 +296,14 @@ async fn menu_clicks(seed: u64) {
             3 if !hand.is_empty() => {
                 let stack = hand.swap_remove(rng.below(hand.len() as u64) as usize);
                 let to = rng.below(27) as usize;
-                let n = room(slots[to], stack.item).min(stack.count());
+                let n = room(slots[to], stack.item()).min(stack.count());
                 if n == 0 {
                     hand.push(stack);
                     continue;
                 }
                 let landed = slots[to].map_or(n, |(_, held)| held + n);
                 (
-                    vec![change(to, slots[to], Some((stack.item, landed)))],
+                    vec![change(to, slots[to], Some((stack.item(), landed)))],
                     vec![stack],
                     true,
                 )
@@ -317,7 +317,7 @@ async fn menu_clicks(seed: u64) {
                 let landed = slots[to].map_or(1, |(_, held)| held + 1);
                 let pool = hand
                     .iter()
-                    .position(|stack| stack.item != item)
+                    .position(|stack| stack.item() != item)
                     .map(|at| vec![hand.swap_remove(at)])
                     .unwrap_or_default();
                 (

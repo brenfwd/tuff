@@ -135,7 +135,7 @@ fn recipes_are_added_beside_vanilla() {
     let grid = damaged_pickaxe_and_diamond();
     assert_eq!(recipes.grid_recipe(&grid, 2, 1), Some(DIAMOND_REPAIR));
     let repaired = recipes.grid_result(&grid, 2, 1).unwrap();
-    assert_eq!((repaired.item, repaired.damage()), (Item::IronPickaxe, 0));
+    assert_eq!((repaired.item(), repaired.damage()), (Item::IronPickaxe, 0));
     assert!(
         recipes.displays_for(DIAMOND_REPAIR).is_empty(),
         "code recipes stay out of the book"
@@ -185,7 +185,7 @@ fn custom_item_resolves_beside_vanilla() {
         .item(tuff_feature_builtin_example::GOLD_NUGGET_ITEM)
         .unwrap();
     let stack = charm.stack(1);
-    assert_eq!(stack.item, Item::GoldNugget);
+    assert_eq!(stack.item(), Item::GoldNugget);
     assert_eq!(
         content.item_of(&stack).map(|d| d.id.as_str()),
         Some(tuff_feature_builtin_example::GOLD_NUGGET_ITEM)

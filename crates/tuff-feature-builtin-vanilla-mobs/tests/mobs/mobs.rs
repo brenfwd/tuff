@@ -1520,7 +1520,7 @@ async fn fish_and_axolotl_buckets_capture_and_place_their_data() {
     let HandEffect::ExchangeStack(stack) = effect else {
         panic!("expected a filled cod bucket, got {effect:?}");
     };
-    assert_eq!(stack.item, Item::CodBucket);
+    assert_eq!(stack.item(), Item::CodBucket);
     assert!(
         mobs(&region, EntityType::Cod).await.is_empty(),
         "the captured cod leaves the world"
@@ -1580,7 +1580,7 @@ async fn fish_and_axolotl_buckets_capture_and_place_their_data() {
     let HandEffect::ExchangeStack(stack) = effect else {
         panic!("expected a filled tropical fish bucket, got {effect:?}");
     };
-    assert_eq!(stack.item, Item::TropicalFishBucket);
+    assert_eq!(stack.item(), Item::TropicalFishBucket);
     let data = bucket_entity_data(&stack).expect("bucket entity data");
     assert_eq!(data.get_int("Variant"), Some(variant));
 
@@ -1638,7 +1638,7 @@ async fn fish_and_axolotl_buckets_capture_and_place_their_data() {
     let HandEffect::ExchangeStack(stack) = effect else {
         panic!("expected a filled axolotl bucket, got {effect:?}");
     };
-    assert_eq!(stack.item, Item::AxolotlBucket);
+    assert_eq!(stack.item(), Item::AxolotlBucket);
     let data = bucket_entity_data(&stack).expect("bucket entity data");
     assert_eq!(data.get_int("Variant"), Some(3));
     assert!(

@@ -168,7 +168,7 @@ fn click(session: &mut PlayerSession, window: i32, slot: i16, button: i8, mode: 
     let container = container_name(kind);
     let stack = slot_stack(session, kind, slot)
         .or_else(|| session.inventory.carried().map(ItemStack::view));
-    let item = stack.as_ref().map(|stack| stack.item.name());
+    let item = stack.as_ref().map(|stack| stack.item().name());
     let cancel = host
         .snapshot()
         .inventory

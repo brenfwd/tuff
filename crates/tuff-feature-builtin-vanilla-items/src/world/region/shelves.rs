@@ -52,7 +52,7 @@ pub fn hit_slot(
 }
 
 fn is_enchanted(stack: &ItemStack) -> bool {
-    stack.item == Item::EnchantedBook
+    stack.item() == Item::EnchantedBook
 }
 
 /// Shelf logic over a region: the block entity edits and the sounds and

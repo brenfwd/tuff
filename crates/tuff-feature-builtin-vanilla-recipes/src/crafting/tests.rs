@@ -176,7 +176,7 @@ fn transmute_keeps_components_and_counts_materials() {
     ]);
     let (name, result) = found(&cloning);
     assert_eq!(name, "minecraft:map_cloning");
-    assert_eq!(result.item, Item::FilledMap);
+    assert_eq!(result.item(), Item::FilledMap);
     assert_eq!(result.count(), 3);
     assert_eq!(result.components, map.components);
 
@@ -190,7 +190,7 @@ fn transmute_keeps_components_and_counts_materials() {
     ]);
     let (name, result) = found(&dyed);
     assert_eq!(name, "minecraft:blue_shulker_box");
-    assert_eq!(result.item, Item::BlueShulkerBox);
+    assert_eq!(result.item(), Item::BlueShulkerBox);
     assert_eq!(result.components.container, shulker.components.container);
     let same = grid2([
         Some(ItemStack::mint(Item::BlueShulkerBox, 1, MintReason::Test)),
@@ -217,7 +217,7 @@ fn repair_combines_durability_and_keeps_only_curses() {
     let input = grid2([Some(first), None, None, Some(second)]);
     let (name, result) = found(&input);
     assert_eq!(name, "minecraft:repair_item");
-    assert_eq!(result.item, Item::DiamondPickaxe);
+    assert_eq!(result.item(), Item::DiamondPickaxe);
     let remaining = 561 + 361 + 1561 * 5 / 100;
     assert_eq!(result.damage(), 1561 - remaining);
     assert_eq!(result.components.max_damage, None);
@@ -444,7 +444,7 @@ fn book_cloning_and_banners_copy_their_source() {
     ]);
     let (name, result) = found(&shield);
     assert_eq!(name, "minecraft:shield_decoration");
-    assert_eq!(result.item, Item::Shield);
+    assert_eq!(result.item(), Item::Shield);
     assert_eq!(result.components.base_color, Some(DyeColor::White));
     assert_eq!(
         result.components.banner_patterns,
@@ -575,7 +575,7 @@ fn stonecutter_and_smithing_results() {
         .unwrap();
     assert_eq!(entry, "minecraft:netherite_sword_smithing");
     let result = result.unwrap();
-    assert_eq!(result.item, Item::NetheriteSword);
+    assert_eq!(result.item(), Item::NetheriteSword);
     assert_eq!(result.damage(), 10);
     assert_eq!(
         result.components.enchantments,
@@ -952,7 +952,7 @@ fn suspicious_stew_carries_its_flowers_effect() {
     ]);
     let (name, result) = found(&input);
     assert_eq!(name, "minecraft:suspicious_stew_from_poppy");
-    assert_eq!(result.item, Item::SuspiciousStew);
+    assert_eq!(result.item(), Item::SuspiciousStew);
     assert_eq!(
         result.components.suspicious_stew_effects,
         Some(vec![SuspiciousEffect {
@@ -978,7 +978,7 @@ fn decorated_pots_take_the_four_side_items() {
     ]);
     let (name, result) = found(&pot);
     assert_eq!(name, "minecraft:decorated_pot");
-    assert_eq!(result.item, Item::DecoratedPot);
+    assert_eq!(result.item(), Item::DecoratedPot);
     let sides = result
         .components
         .other
@@ -987,7 +987,7 @@ fn decorated_pots_take_the_four_side_items() {
         .unwrap();
     let items: Vec<_> = sides
         .iter()
-        .map(|side| side.as_ref().map(|s| s.item))
+        .map(|side| side.as_ref().map(|s| s.item()))
         .collect();
     assert_eq!(
         items,
@@ -1021,7 +1021,7 @@ fn extending_a_map_surrounds_it_with_paper() {
     cells[4] = Some(map.test_copy());
     let (name, result) = found(&grid3(cells));
     assert_eq!(name, "minecraft:map_extending");
-    assert_eq!(result.item, Item::FilledMap);
+    assert_eq!(result.item(), Item::FilledMap);
     assert_eq!(result.count(), 1);
     assert!(result.components.other.contains_key("minecraft:map_id"));
 }

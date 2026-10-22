@@ -30,7 +30,7 @@ fn consume_fuel(items: &mut [Option<ItemStack>], drops: &mut Vec<ItemStack>) {
     let Some(fuel) = items[furnace::FUEL].as_mut() else {
         return;
     };
-    let remainder = fuel.item.crafting_remainder();
+    let remainder = fuel.item().crafting_remainder();
     fuel.shrink(1, BurnReason::Consumed);
     let empty = fuel.count() == 0;
     match remainder {
@@ -57,10 +57,10 @@ fn burn(items: &mut [Option<ItemStack>], result: &ItemStack) {
     let input = items[furnace::INPUT]
         .as_mut()
         .expect("an ingredient is cooking");
-    if input.item == Item::WetSponge
+    if input.item() == Item::WetSponge
         && items[furnace::FUEL]
             .as_ref()
-            .is_some_and(|fuel| fuel.item == Item::Bucket)
+            .is_some_and(|fuel| fuel.item() == Item::Bucket)
     {
         items[furnace::FUEL] = Some(ItemStack::mint(Item::WaterBucket, 1, MintReason::Remainder));
     }
@@ -92,8 +92,8 @@ pub fn tick_furnace(
         furnace.lit_time_remaining -= 1;
         is_lit = furnace.lit_time_remaining > 0;
     }
-    let ingredient = items[furnace::INPUT].as_ref().map(|stack| stack.item);
-    let fuel = items[furnace::FUEL].as_ref().map(|stack| stack.item);
+    let ingredient = items[furnace::INPUT].as_ref().map(|stack| stack.item());
+    let fuel = items[furnace::FUEL].as_ref().map(|stack| stack.item());
     if is_lit || (fuel.is_some() && ingredient.is_some()) {
         match ingredient {
             None => furnace.cooking_timer = 0,
@@ -165,7 +165,7 @@ pub fn tick_campfire(
     let mut popped = Vec::new();
     for slot in 0..CAMPFIRE_SLOTS {
         if lit {
-            let Some(item) = items[slot].as_ref().map(|stack| stack.item) else {
+            let Some(item) = items[slot].as_ref().map(|stack| stack.item()) else {
                 continue;
             };
             changed = true;

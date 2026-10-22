@@ -1,6 +1,7 @@
 //! Inventory edits features queue for a player by uuid.
 
 use super::*;
+use crate::world::conservation::Transfer;
 use tuff_item::item::BurnReason;
 use tuff_item::item::ItemStack;
 
@@ -114,8 +115,18 @@ impl PlayerSession {
 
     /// Applies one feature call's edits in order. A failed all-or-nothing
     /// take skips the rest, so a take followed by a give is an exchange.
+    /// Refused by the conservation check, the op and the rest of the call
+    /// do nothing: stacks they carry are dropped at the player.
     pub async fn apply_inventory_ops(&mut self, ops: Vec<InventoryOp>) {
-        for op in ops {
+        let mut ops = ops.into_iter();
+        while let Some(op) = ops.next() {
+            let at = BlockPos::containing(self.pose.position);
+            if !self.may_transfer(Transfer::Plugin, None, at, None) {
+                for op in std::iter::once(op).chain(ops) {
+                    self.refuse_inventory_op(op).await;
+                }
+                return;
+            }
             match op {
                 InventoryOp::Give { stack, count } => {
                     self.give_items(stack.view(), count, tuff_item::item::MintReason::Plugin)
@@ -141,6 +152,23 @@ impl PlayerSession {
                     }
                 }
             }
+        }
+    }
+
+    /// Lets go of an op the conservation check refused: what it carries is
+    /// dropped where the player stands, and a sink gets nothing.
+    async fn refuse_inventory_op(&mut self, op: InventoryOp) {
+        let stacks = match op {
+            InventoryOp::GiveStacks(stacks) => stacks,
+            InventoryOp::SetSlot {
+                stack: Some(stack), ..
+            } => vec![stack],
+            _ => return,
+        };
+        let at = self.pose.position;
+        for stack in stacks {
+            self.spawn_item(stack, at, [0.0; 3], player::THROWN_PICKUP_DELAY)
+                .await;
         }
     }
 
@@ -174,7 +202,7 @@ impl PlayerSession {
             && self
                 .inventory
                 .carried()
-                .is_some_and(|stack| stack.item == item);
+                .is_some_and(|stack| stack.item() == item);
         let mut taken = Vec::new();
         for slot in (36..crate::world::inventory::SLOTS).chain(9..36) {
             if remaining == 0 {
@@ -195,6 +223,9 @@ impl PlayerSession {
         }
         self.send_inventory();
         self.items_taken_hooks(item, count, count.min(held) - remaining);
+        let after = u64::try_from(Self::count_in(&self.inventory, item)).unwrap_or(0);
+        let sent = taken.iter().map(|stack| u64::from(stack.count())).sum();
+        self.transfer_balanced(Transfer::Plugin, u64::from(held), 0, after, sent);
         Some(taken)
     }
 
@@ -248,7 +279,7 @@ fn take_some(
     item: tuff_vanilla_data::Item,
     remaining: &mut u32,
 ) -> Option<ItemStack> {
-    if held.as_ref().is_none_or(|stack| stack.item != item) {
+    if held.as_ref().is_none_or(|stack| stack.item() != item) {
         return None;
     }
     let count = u32::from(held.as_ref().map_or(0, ItemStack::count));

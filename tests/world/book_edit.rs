@@ -31,7 +31,7 @@ async fn editing_and_signing_a_book_rewrites_the_held_stack() {
         .as_ref()
         .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
-    assert_eq!(book.item, Item::WritableBook);
+    assert_eq!(book.item(), Item::WritableBook);
     assert_eq!(book.components.writable_book.as_ref().unwrap().len(), 2);
 
     player
@@ -41,7 +41,7 @@ async fn editing_and_signing_a_book_rewrites_the_held_stack() {
         .as_ref()
         .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
-    assert_eq!(book.item, Item::WrittenBook);
+    assert_eq!(book.item(), Item::WrittenBook);
     let written = book.components.written_book.as_ref().unwrap();
     assert_eq!(written.title.raw, "Title");
     assert_eq!(written.pages.len(), 1);
@@ -51,7 +51,7 @@ async fn editing_and_signing_a_book_rewrites_the_held_stack() {
         .as_ref()
         .map(tuff_item::item::ItemStack::test_copy)
         .unwrap();
-    assert_eq!(book.item, Item::WrittenBook, "a signed book stays signed");
+    assert_eq!(book.item(), Item::WrittenBook, "a signed book stays signed");
     world.shutdown().await;
 }
 

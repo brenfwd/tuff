@@ -107,10 +107,10 @@ impl MountArmor {
             .is_some_and(|eq| eq.slot == EquipmentSlot::Body);
         match self {
             Self::None => false,
-            Self::Horse => body && stack.item.name().ends_with("_horse_armor"),
-            Self::Nautilus => body && stack.item.name().ends_with("_nautilus_armor"),
+            Self::Horse => body && stack.item().name().ends_with("_horse_armor"),
+            Self::Nautilus => body && stack.item().name().ends_with("_nautilus_armor"),
             Self::Carpet => {
-                body && tuff_datapack::tags::is(tag::item::key::WOOL_CARPETS, stack.item)
+                body && tuff_datapack::tags::is(tag::item::key::WOOL_CARPETS, stack.item())
             }
         }
     }
@@ -310,14 +310,18 @@ impl MenuKind {
     }
 
     pub fn can_smelt(self, recipes: &RecipeSet, stack: &ItemStack) -> bool {
-        self.cooking_set()
-            .is_some_and(|set| recipes.property_set(set).binary_search(&stack.item).is_ok())
+        self.cooking_set().is_some_and(|set| {
+            recipes
+                .property_set(set)
+                .binary_search(&stack.item())
+                .is_ok()
+        })
     }
 
     /// The most of `stack` that `slot` holds: a furnace's fuel slot takes
     /// one bucket.
     pub fn max_stack(self, slot: usize, stack: &ItemStack) -> u8 {
-        if self.is_furnace() && slot == furnace::FUEL && stack.item == Item::Bucket {
+        if self.is_furnace() && slot == furnace::FUEL && stack.item() == Item::Bucket {
             return 1;
         }
         if self == Self::Beacon {
@@ -443,14 +447,14 @@ impl MenuKind {
             Self::Grindstone if slot < grindstone::RESULT => {
                 stack.is_damageable() || holds_enchantments(stack)
             }
-            Self::Beacon => tag::item::BEACON_PAYMENT_ITEMS.contains(&stack.item),
-            Self::Enchantment if slot == enchantment::LAPIS => stack.item == Item::LapisLazuli,
+            Self::Beacon => tag::item::BEACON_PAYMENT_ITEMS.contains(&stack.item()),
+            Self::Enchantment if slot == enchantment::LAPIS => stack.item() == Item::LapisLazuli,
             Self::Cartography if slot == cartography::MAP => stack.components.map_id.is_some(),
             Self::Cartography if slot == cartography::ADDITIONAL => {
                 is_cartography_additional(stack)
             }
             Self::Loom => match slot {
-                loom::BANNER => stack.item.banner_color().is_some(),
+                loom::BANNER => stack.item().banner_color().is_some(),
                 loom::DYE => is_loom_dye(stack),
                 _ => is_loom_pattern_item(stack),
             },
@@ -460,7 +464,10 @@ impl MenuKind {
                     smithing::BASE => "smithing_base",
                     _ => "smithing_addition",
                 };
-                recipes.property_set(set).binary_search(&stack.item).is_ok()
+                recipes
+                    .property_set(set)
+                    .binary_search(&stack.item())
+                    .is_ok()
             }
             _ if self.is_furnace() && slot == furnace::FUEL => is_fuel(stack),
             Self::BrewingStand => match slot {
@@ -549,13 +556,13 @@ impl MenuKind {
             },
             Self::Enchantment => match slot {
                 enchantment::ITEM | enchantment::LAPIS => vec![(2, 38, true)],
-                _ if stack.item == Item::LapisLazuli => vec![(1, 2, true)],
+                _ if stack.item() == Item::LapisLazuli => vec![(1, 2, true)],
                 _ => vec![(0, 1, false)],
             },
             Self::Stonecutter => match slot {
                 stonecutter::RESULT => vec![(2, 38, true)],
                 stonecutter::INPUT => vec![(2, 38, false)],
-                _ if recipes.stonecutter_accepts(stack.item) => vec![(0, 1, false)],
+                _ if recipes.stonecutter_accepts(stack.item()) => vec![(0, 1, false)],
                 2..=28 => vec![(29, 38, false)],
                 _ => vec![(2, 29, false)],
             },
@@ -581,7 +588,7 @@ impl MenuKind {
             Self::Loom => match slot {
                 loom::RESULT => vec![(4, 40, true)],
                 loom::BANNER | loom::DYE | loom::PATTERN => vec![(4, 40, false)],
-                _ if stack.item.banner_color().is_some() => vec![(0, 1, false)],
+                _ if stack.item().banner_color().is_some() => vec![(0, 1, false)],
                 _ if is_loom_dye(stack) => vec![(1, 2, false)],
                 _ if is_loom_pattern_item(stack) => vec![(2, 3, false)],
                 4..=30 => vec![(31, 40, false)],
@@ -605,7 +612,7 @@ impl MenuKind {
                 _ if self.can_smelt(recipes, stack) => {
                     vec![(furnace::INPUT, furnace::INPUT + 1, false)]
                 }
-                _ if stack.item.cooking_fuel().is_some() => {
+                _ if stack.item().cooking_fuel().is_some() => {
                     vec![(furnace::FUEL, furnace::FUEL + 1, false)]
                 }
                 3..=29 => vec![(30, 39, false)],
@@ -888,7 +895,7 @@ impl View<'_> {
         let targets = self.kind.quick_move_targets(slot, held, self);
         let count = held.count();
         let mut stack = self.take(slot, count)?;
-        let item = stack.item;
+        let item = stack.item();
         let mut moved = false;
         for (start, end, backwards) in targets {
             moved |= self.move_into(&mut stack, start, end, backwards);
@@ -985,10 +992,10 @@ pub fn click(
                     _ => view.get(index).map_or(0, |s| s.count()),
                 };
                 while let Some(stack) = view.try_remove(index, amount, u8::MAX) {
-                    let item = stack.item;
+                    let item = stack.item();
                     view.drops.push(stack);
                     view.taken(index);
-                    if button != 1 || !view.get(index).is_some_and(|s| s.item == item) {
+                    if button != 1 || !view.get(index).is_some_and(|s| s.item() == item) {
                         break;
                     }
                 }
@@ -1016,7 +1023,7 @@ pub fn click(
             return view.drops;
         }
         while let Some(moved) = view.quick_move(index) {
-            let same = view.get(index).is_some_and(|s| s.item == moved);
+            let same = view.get(index).is_some_and(|s| s.item() == moved);
             if !same {
                 break;
             }

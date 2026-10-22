@@ -171,7 +171,7 @@ async fn a_used_interaction_reports_the_item_and_entity() {
     let found = interact_reporting(&world, &region, &player, &mut events, cow, Item::Wheat).await;
     match found.into_iter().next().expect("the feeding is reported") {
         AdvancementEvent::InteractedWithEntity { item, entity } => {
-            assert_eq!(item.map(|stack| stack.item), Some(Item::Wheat));
+            assert_eq!(item.map(|stack| stack.item()), Some(Item::Wheat));
             assert_eq!(entity.kind, Some(EntityType::Cow));
         }
         other => panic!("{other:?}"),
@@ -722,7 +722,7 @@ async fn breaking_a_bee_nest_reports_the_bees_inside() {
     })
     .await;
     assert_eq!(block.block(), Block::BeeNest);
-    assert_eq!(item.map(|stack| stack.item), Some(Item::Shears));
+    assert_eq!(item.map(|stack| stack.item()), Some(Item::Shears));
     assert_eq!(bees, 3);
     world.shutdown().await;
 }
@@ -768,7 +768,7 @@ async fn picking_up_a_thrown_item_reports_to_the_picker_and_the_thrower() {
     let thrown_by = reported(&world, &mut events).await;
     assert!(
         matches!(&thrown_by, AdvancementEvent::ThrownItemPickedUpByPlayer { item, thrower }
-            if item.item == Item::GoldIngot && thrower.kind == Some(EntityType::Player)),
+            if item.item() == Item::GoldIngot && thrower.kind == Some(EntityType::Player)),
         "{thrown_by:?}"
     );
     let picked_by = reported(&world, &mut thrower_events).await;

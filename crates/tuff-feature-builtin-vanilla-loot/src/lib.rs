@@ -187,7 +187,7 @@ mod tests {
             ..EntityFacts::default()
         };
         let drops = loot.entity_drops("minecraft:entities/cow", &facts, &mut rng);
-        assert!(drops.iter().any(|s| s.item == Item::Beef));
+        assert!(drops.iter().any(|s| s.item() == Item::Beef));
         let rod = ItemStack::mint(Item::FishingRod, 1, MintReason::Test);
         assert_eq!(loot.fishing(0.0, true, &rod, &mut rng).len(), 1);
 

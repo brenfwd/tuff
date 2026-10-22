@@ -422,7 +422,7 @@ impl<S: Species> RegionEntity for Mob<S> {
         }
         let stack = interaction.stack.as_deref()?;
         let name = stack.components.custom_name.as_ref()?;
-        if stack.item != tuff_vanilla_data::Item::NameTag {
+        if stack.item() != tuff_vanilla_data::Item::NameTag {
             return None;
         }
         self.core.base.custom_name = Some(name.to_nbt());
@@ -753,7 +753,7 @@ impl<S: Species> RegionEntity for Mob<S> {
     }
 
     fn mount_refused_by(&self, stack: Option<&ItemStack>) -> bool {
-        let shears = stack.is_some_and(|s| s.item == tuff_vanilla_data::Item::Shears)
+        let shears = stack.is_some_and(|s| s.item() == tuff_vanilla_data::Item::Shears)
             && SHEARABLE_SLOTS
                 .iter()
                 .any(|slot| shearable(self.core.equipment.get(*slot), true));

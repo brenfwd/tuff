@@ -491,7 +491,7 @@ async fn a_hopper_under_two_carts_pulls_from_either_at_random() {
         panic!("a hopper is a block container");
     };
     let contents = stacks(&contents);
-    let held: Vec<Item> = contents.into_iter().flatten().map(|s| s.item).collect();
+    let held: Vec<Item> = contents.into_iter().flatten().map(|s| s.item()).collect();
     assert!(
         held.contains(&Item::Stone) && held.contains(&Item::Dirt),
         "pulled from both carts: {held:?}"

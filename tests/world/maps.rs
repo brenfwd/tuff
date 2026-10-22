@@ -123,14 +123,14 @@ async fn an_empty_map_makes_a_filled_map_centered_on_the_player() {
         .set_slot(slot, Some(ItemStack::mint(Item::Map, 2, MintReason::Test)));
 
     session.handle_packet(use_item(1)).await;
-    assert_eq!(session.inventory().hand(false).unwrap().item, Item::Map);
+    assert_eq!(session.inventory().hand(false).unwrap().item(), Item::Map);
     assert_eq!(session.inventory().hand(false).unwrap().count(), 1);
     let made = session
         .inventory()
         .slots()
         .iter()
         .flatten()
-        .find(|stack| stack.item == Item::FilledMap)
+        .find(|stack| stack.item() == Item::FilledMap)
         .expect("the filled map went to the inventory");
     assert_eq!(made.components.map_id, Some(0));
     let data = service(&world).data(0).await.expect("the map exists");
@@ -142,7 +142,7 @@ async fn an_empty_map_makes_a_filled_map_centered_on_the_player() {
     session.handle_packet(use_item(2)).await;
     let hand = session.inventory().hand(false).unwrap();
     assert_eq!(
-        (hand.item, hand.components.map_id),
+        (hand.item(), hand.components.map_id),
         (Item::FilledMap, Some(1)),
         "the last empty map turns into the filled one in hand"
     );
@@ -161,14 +161,14 @@ async fn creative_players_keep_their_empty_maps() {
         .inventory_mut()
         .set_slot(slot, Some(ItemStack::mint(Item::Map, 1, MintReason::Test)));
     session.handle_packet(use_item(1)).await;
-    assert_eq!(session.inventory().hand(false).unwrap().item, Item::Map);
+    assert_eq!(session.inventory().hand(false).unwrap().item(), Item::Map);
     assert!(
         session
             .inventory()
             .slots()
             .iter()
             .flatten()
-            .any(|stack| stack.item == Item::FilledMap)
+            .any(|stack| stack.item() == Item::FilledMap)
     );
     world.shutdown().await;
 }
@@ -729,7 +729,11 @@ async fn an_explorer_maps_target_marker_comes_from_the_item() {
         .await
         .unwrap();
     let mut map = filled(id);
-    map.item = Item::WoodlandMansionMap;
+    map.transform(
+        Item::WoodlandMansionMap,
+        tuff_item::item::MintReason::Test,
+        tuff_item::item::BurnReason::Test,
+    );
     let target = tuff_feature_builtin_vanilla_maps::StaticMarker {
         key: "+".to_owned(),
         kind: MapDecorationType::Mansion,
@@ -1075,7 +1079,7 @@ mod explorer {
             }
         }
         let made = made.expect("the explorer map offer came back");
-        assert_eq!(made.item, Item::WoodlandMansionMap);
+        assert_eq!(made.item(), Item::WoodlandMansionMap);
         assert!(pending(&made).is_none());
         let data = service(&world)
             .data(made.components.map_id.unwrap())

@@ -9,7 +9,7 @@ fn fished(luck: f32, open_water: bool, runs: u64) -> Vec<Item> {
     let mut rng = StdRng::seed_from_u64(7);
     (0..runs)
         .flat_map(|_| fishing_drops(LootTables::builtin(), luck, open_water, &rod, &mut rng))
-        .map(|s| s.item)
+        .map(|s| s.item())
         .collect()
 }
 
@@ -63,7 +63,7 @@ fn tag_entries_read_the_tags_in_effect() {
     let items = |rng: &mut StdRng| -> Vec<Item> {
         roll_in(&tables, "t:t", rng)
             .iter()
-            .map(|s| s.item)
+            .map(|s| s.item())
             .collect()
     };
     assert!(!items(&mut rng).contains(&Item::Stone));
@@ -82,9 +82,9 @@ fn trial_chamber_rewards_carry_their_components() {
     let (mut heavy_core, mut enchanted, mut bottles) = (false, false, Vec::new());
     for _ in 0..400 {
         for stack in roll("minecraft:chests/trial_chambers/reward_ominous", &mut rng) {
-            heavy_core |= stack.item == Item::HeavyCore;
+            heavy_core |= stack.item() == Item::HeavyCore;
             enchanted |= stack.is_enchanted() || stack.components.stored_enchantments.is_some();
-            if stack.item == Item::OminousBottle {
+            if stack.item() == Item::OminousBottle {
                 bottles.push(stack.ominous_bottle_amplifier().unwrap());
             }
         }
@@ -97,7 +97,7 @@ fn trial_chamber_rewards_carry_their_components() {
         &mut rng,
     );
     assert_eq!(drops.len(), 2);
-    assert_eq!(drops[0].item, Item::LingeringPotion);
+    assert_eq!(drops[0].item(), Item::LingeringPotion);
     assert!(
         drops[0]
             .components
@@ -116,8 +116,8 @@ fn trial_chamber_equipment_is_trimmed_and_enchanted() {
     let mut trimmed = false;
     for _ in 0..100 {
         let drops = roll("minecraft:equipment/trial_chamber_ranged", &mut rng);
-        assert!(drops.iter().any(|s| s.item == Item::Bow));
-        for stack in drops.iter().filter(|s| s.item != Item::Bow) {
+        assert!(drops.iter().any(|s| s.item() == Item::Bow));
+        for stack in drops.iter().filter(|s| s.item() != Item::Bow) {
             trimmed |= stack.components.trim.is_some();
             assert!(stack.enchantment_level("minecraft:protection") == 4);
         }
@@ -146,7 +146,7 @@ fn set_damage_leaves_the_rolled_share_of_durability() {
         &bare_context(),
         &mut rng,
     );
-    assert_eq!(book.item, Item::EnchantedBook);
+    assert_eq!(book.item(), Item::EnchantedBook);
     assert_eq!(
         book.components
             .stored_enchantments
@@ -282,7 +282,7 @@ fn decorated_pots_keep_or_scatter_their_sherds() {
         &mut rng,
     );
     assert_eq!(whole.len(), 1);
-    assert_eq!(whole[0].item, Item::DecoratedPot);
+    assert_eq!(whole[0].item(), Item::DecoratedPot);
     assert!(
         whole[0]
             .components
@@ -295,7 +295,7 @@ fn decorated_pots_keep_or_scatter_their_sherds() {
         Some(&nbt),
         &mut rng,
     );
-    let items: Vec<Item> = cracked.iter().map(|stack| stack.item).collect();
+    let items: Vec<Item> = cracked.iter().map(|stack| stack.item()).collect();
     assert_eq!(
         items,
         [
@@ -346,7 +346,7 @@ fn fortune_multiplies_ore_drops_up_to_level_plus_one() {
             &mut rng,
         );
         assert_eq!(drops.len(), 1);
-        assert_eq!(drops[0].item, Item::Diamond);
+        assert_eq!(drops[0].item(), Item::Diamond);
         counts.insert(drops[0].count());
         assert!((1..=4).contains(&drops[0].count()));
     }
@@ -383,7 +383,7 @@ fn fortune_on_glowstone_stays_within_its_limit() {
             &mut rng,
         );
         assert_eq!(drops.len(), 1);
-        assert_eq!(drops[0].item, Item::GlowstoneDust);
+        assert_eq!(drops[0].item(), Item::GlowstoneDust);
         counts.insert(drops[0].count());
     }
     assert_eq!(counts, [2, 3, 4].into());
@@ -398,7 +398,7 @@ fn looting_raises_rotten_flesh_by_up_to_its_level() {
             .map(|_| {
                 super::entity_drops("minecraft:entities/zombie", facts, rng)
                     .iter()
-                    .filter(|s| s.item == Item::RottenFlesh)
+                    .filter(|s| s.item() == Item::RottenFlesh)
                     .map(|s| s.count())
                     .sum::<u8>()
             })
@@ -643,7 +643,7 @@ fn drops_follow_block_state_and_tool_conditions() {
     assert!(
         drops("minecraft:short_grass", None, &mut rng)
             .iter()
-            .all(|stack| stack.item == Item::WheatSeeds)
+            .all(|stack| stack.item() == Item::WheatSeeds)
     );
 }
 
@@ -738,7 +738,7 @@ fn fill_container_slots_splits_large_stacks_to_use_available_room() {
         );
         let total: u32 = filled.iter().map(|s| s.count() as u32).sum();
         assert_eq!(total, 20, "splitting must conserve the total item count");
-        assert!(filled.iter().all(|s| s.item == Item::Bone));
+        assert!(filled.iter().all(|s| s.item() == Item::Bone));
     }
 }
 
@@ -762,9 +762,9 @@ fn fill_container_slots_never_splits_stacks_already_at_one() {
         &mut rng,
     );
     let mut filled: Vec<ItemStack> = result.into_iter().flatten().collect();
-    filled.sort_by_key(|s| s.item.name());
+    filled.sort_by_key(|s| s.item().name());
     let mut expected = drops;
-    expected.sort_by_key(|s| s.item.name());
+    expected.sort_by_key(|s| s.item().name());
     assert_eq!(filled, expected);
 }
 
@@ -833,7 +833,7 @@ fn creepers_drop_music_discs_only_when_a_skeleton_killed_them() {
                 let mut rng = StdRng::seed_from_u64(seed);
                 super::entity_drops("minecraft:entities/creeper", &creeper(attacker), &mut rng)
             })
-            .filter(|stack| stack.item.name().contains("music_disc"))
+            .filter(|stack| stack.item().name().contains("music_disc"))
             .count()
     };
     assert_eq!(discs(Some(EntityType::Zombie)), 0);
@@ -858,7 +858,7 @@ fn built_in_tag_entries_draw_from_pack_tag_members() {
                 let mut rng = StdRng::seed_from_u64(seed);
                 super::entity_drops("minecraft:entities/creeper", &creeper, &mut rng)
             })
-            .filter(|stack| stack.item == Item::Stone)
+            .filter(|stack| stack.item() == Item::Stone)
             .count()
     };
     assert_eq!(stones(), 0);
@@ -889,7 +889,7 @@ fn furnace_smelt_follows_the_servers_recipes() {
         let mut rng = StdRng::seed_from_u64(1);
         super::entity_drops("minecraft:entities/chicken", facts, &mut rng)
             .into_iter()
-            .map(|stack| stack.item)
+            .map(|stack| stack.item())
             .find(|item| *item != Item::Feather)
     };
     assert_eq!(meat(&chicken(false, None)), Some(Item::Chicken));
@@ -1051,7 +1051,7 @@ fn pillager_outpost_goat_horns_get_an_instrument() {
     let mut rng = StdRng::seed_from_u64(11);
     let horns: Vec<ItemStack> = (0..300)
         .flat_map(|_| roll("minecraft:chests/pillager_outpost", &mut rng))
-        .filter(|s| s.item == Item::GoatHorn)
+        .filter(|s| s.item() == Item::GoatHorn)
         .collect();
     assert!(!horns.is_empty());
     assert!(
@@ -1357,7 +1357,7 @@ fn pool_level_functions_set_item_count_and_name() {
         ItemStack::mint(Item::Stick, 3, MintReason::Test),
         &mut rng,
     );
-    assert_eq!((swapped.item, swapped.count()), (Item::Diamond, 3));
+    assert_eq!((swapped.item(), swapped.count()), (Item::Diamond, 3));
     let counted = stack(
         "minecraft:set_count",
         serde_json::json!({"count": 5, "add": true}),
@@ -1605,7 +1605,7 @@ fn contents_dynamic_drops_the_block_entity_items() {
         Some(&entity),
     );
     assert_eq!(drops.len(), 1);
-    assert_eq!((drops[0].item, drops[0].count()), (Item::Diamond, 5));
+    assert_eq!((drops[0].item(), drops[0].count()), (Item::Diamond, 5));
 }
 
 #[tuff_core::watchdog]
@@ -1613,12 +1613,12 @@ fn contents_dynamic_drops_the_block_entity_items() {
 fn furnace_smelt_scales_by_result_count_and_use_input_count() {
     let beef = ItemStack::mint(Item::Beef, 3, MintReason::Test);
     let kept = modified(r#"[{"type":"minecraft:furnace_smelt"}]"#, beef.test_copy());
-    assert_eq!((kept.item, kept.count()), (Item::CookedBeef, 3));
+    assert_eq!((kept.item(), kept.count()), (Item::CookedBeef, 3));
     let single = modified(
         r#"[{"type":"minecraft:furnace_smelt","use_input_count":false}]"#,
         beef,
     );
-    assert_eq!((single.item, single.count()), (Item::CookedBeef, 1));
+    assert_eq!((single.item(), single.count()), (Item::CookedBeef, 1));
 }
 
 #[tuff_core::watchdog]
@@ -1687,7 +1687,7 @@ fn expanded_tag_entries_weigh_each_item_against_siblings() {
     let mut rng = StdRng::seed_from_u64(5);
     let stones = (0..400)
         .flat_map(|_| roll_in(&tables, "t:t", &mut rng))
-        .filter(|s| s.item == Item::Stone)
+        .filter(|s| s.item() == Item::Stone)
         .count();
     assert!(stones < 80, "stone dropped {stones} of 400 rolls");
 }

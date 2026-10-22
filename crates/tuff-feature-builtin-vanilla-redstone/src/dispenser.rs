@@ -99,7 +99,7 @@ fn fire(world: &mut dyn RegionWorld, pos: BlockPos) {
     let behaviour = if dropper {
         Some(Dispense::Default)
     } else {
-        stack.item.dispense()
+        stack.item().dispense()
     };
     if behaviour == Some(Dispense::Default) {
         complete(
@@ -177,7 +177,7 @@ fn put_back(
         let fits = match (held.as_ref(), back.as_ref()) {
             (None, _) => true,
             (Some(held), Some(back)) => {
-                held.stacks_with(back) && held.count() < held.item.max_stack_size()
+                held.stacks_with(back) && held.count() < held.item().max_stack_size()
             }
             (Some(_), None) => false,
         };
@@ -312,7 +312,7 @@ fn complete(
         Fate::Slot => (None, false),
     };
     let held = kept || one.is_some();
-    if !held && !slot_stack(world, pos, slot).is_some_and(|held| held.item == stack.item) {
+    if !held && !slot_stack(world, pos, slot).is_some_and(|held| held.item() == stack.item()) {
         return;
     }
     let sound = match outcome {

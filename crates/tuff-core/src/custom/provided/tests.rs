@@ -42,7 +42,7 @@ fn provided_content_joins_the_features_content() {
     assert_eq!(accepted.len(), 1);
     assert!(content.item("core:gem").is_some());
     let ruby = content.item("mine:ruby").unwrap();
-    assert_eq!(ruby.stack(1).item, Item::Emerald);
+    assert_eq!(ruby.stack(1).item(), Item::Emerald);
     assert!(content.entity("mine:golem").is_some());
     assert!(
         content

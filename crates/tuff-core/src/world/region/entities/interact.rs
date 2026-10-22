@@ -233,6 +233,18 @@ impl RegionActor {
             return;
         };
         let creative = interaction.creative;
+        let pos = BlockPos::containing(interaction.position);
+        if !creative
+            && !self.may_transfer_with(
+                crate::world::conservation::Transfer::HandReturn,
+                pos,
+                player,
+                true,
+            )
+        {
+            self.spawn_item_at(stack, interaction.position, [0.0; 3], 0);
+            return;
+        }
         if let Err(refused) = player.try_send(PlayerEvent::HandReturned {
             slot: interaction.hand.slot,
             stack,
@@ -278,7 +290,7 @@ impl RegionActor {
             }
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_deref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item()),
                 effect,
             });
             return;
@@ -357,7 +369,7 @@ impl RegionActor {
         if let Some(effect) = outcome {
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_deref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item()),
                 effect,
             });
         }

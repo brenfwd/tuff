@@ -23,7 +23,7 @@ pub fn crafting_enchantments<'a>(
     registry: &'a EnchantmentRegistry,
     stack: &ItemStack,
 ) -> Vec<(Choice<'a>, i32)> {
-    let list = if stack.item == Item::EnchantedBook {
+    let list = if stack.item() == Item::EnchantedBook {
         &stack.components.stored_enchantments
     } else {
         &stack.components.enchantments
@@ -40,7 +40,7 @@ pub fn crafting_enchantments<'a>(
 pub fn set_enchantments(stack: &mut ItemStack, list: &[(Choice<'_>, i32)]) {
     let value = (!list.is_empty())
         .then(|| Enchantments::new(list.iter().map(|((id, _), l)| ((*id).to_owned(), *l))));
-    if stack.item == Item::EnchantedBook {
+    if stack.item() == Item::EnchantedBook {
         stack.components.stored_enchantments = value;
     } else {
         stack.components.enchantments = value;
@@ -48,7 +48,7 @@ pub fn set_enchantments(stack: &mut ItemStack, list: &[(Choice<'_>, i32)]) {
 }
 
 fn is_valid_repair_item(input: &ItemStack, addition: &ItemStack) -> bool {
-    input.item.repairable_with().contains(&addition.item)
+    input.item().repairable_with().contains(&addition.item())
 }
 
 pub fn compute(
@@ -85,7 +85,7 @@ pub fn compute(
             }
             repair_count = count;
         } else {
-            if !using_book && (result.item != addition.item || !result.is_damageable()) {
+            if !using_book && (result.item() != addition.item() || !result.is_damageable()) {
                 return AnvilOutcome::NOTHING;
             }
             if result.is_damageable() && !using_book {
@@ -118,8 +118,8 @@ pub fn compute(
                     level.max(current)
                 };
                 let mut compatible = infinite
-                    || input.item == Item::EnchantedBook
-                    || enchantment.1.supports(input.item);
+                    || input.item() == Item::EnchantedBook
+                    || enchantment.1.supports(input.item());
                 for (other, _) in &enchantments {
                     if other.0 != enchantment.0 && !enchantment::compatible(*other, enchantment) {
                         compatible = false;

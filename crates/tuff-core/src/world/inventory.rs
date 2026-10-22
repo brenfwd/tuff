@@ -120,7 +120,7 @@ impl Inventory {
     pub fn find_item(&self, item: tuff_vanilla_data::Item) -> Option<usize> {
         HOTBAR
             .chain(MAIN)
-            .find(|slot| self.slots[*slot].as_ref().is_some_and(|s| s.item == item))
+            .find(|slot| self.slots[*slot].as_ref().is_some_and(|s| s.item() == item))
     }
 
     /// The first hotbar or main-inventory window slot whose stack

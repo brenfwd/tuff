@@ -209,7 +209,7 @@ impl MobCore {
         let (max_reach, min_reach) = match self
             .equipment
             .main_hand()
-            .and_then(|stack| stack.item.attack_range())
+            .and_then(|stack| stack.item().attack_range())
         {
             Some(range) => (
                 f64::from(range.max_reach * range.mob_factor),

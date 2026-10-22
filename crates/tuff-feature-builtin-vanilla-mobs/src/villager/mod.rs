@@ -525,7 +525,11 @@ impl Villager {
         self.inventory
             .iter()
             .flatten()
-            .filter_map(|s| s.item.villager_food().map(|n| n as i32 * s.count() as i32))
+            .filter_map(|s| {
+                s.item()
+                    .villager_food()
+                    .map(|n| n as i32 * s.count() as i32)
+            })
             .sum()
     }
 
@@ -537,14 +541,14 @@ impl Villager {
     /// Whether it would pick up `stack`: food, what its profession wants,
     /// or the items every villager takes, if it has room.
     pub fn wants(&self, stack: &ItemStack) -> bool {
-        let wanted = tuff_datapack::tags::is(tag::item::key::VILLAGER_PICKS_UP, stack.item)
-            || stack.item.villager_food().is_some()
+        let wanted = tuff_datapack::tags::is(tag::item::key::VILLAGER_PICKS_UP, stack.item())
+            || stack.item().villager_food().is_some()
             || self
                 .data
                 .profession
                 .info()
                 .requested_items
-                .contains(&stack.item);
+                .contains(&stack.item());
         wanted && self.room_for(stack) > 0
     }
 
@@ -592,7 +596,7 @@ impl Villager {
             let Some(stack) = slot else {
                 continue;
             };
-            let Some(nutrition) = stack.item.villager_food() else {
+            let Some(nutrition) = stack.item().villager_food() else {
                 continue;
             };
             while stack.count() > 0 && self.food_level < BREEDING_FOOD_THRESHOLD {
@@ -984,7 +988,7 @@ impl Species for Villager {
         if interaction
             .stack
             .as_ref()
-            .is_some_and(|s| s.item == Item::VillagerSpawnEgg)
+            .is_some_and(|s| s.item() == Item::VillagerSpawnEgg)
             || self.trading.is_some()
             || self.brain.sleeping.is_some()
         {

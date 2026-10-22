@@ -729,7 +729,7 @@ fn use_in_air(session: &mut PlayerSession, sequence: i32) -> Verdict {
     };
     let matched = host.intercepts(
         ClickKind::Air,
-        held.item.name(),
+        held.item().name(),
         |tag| {
             held.components
                 .other
@@ -745,7 +745,7 @@ fn use_in_air(session: &mut PlayerSession, sequence: i32) -> Verdict {
     let who: Player = crate::bridge::player(session);
     let use_ = ItemUse {
         player: who.to_wit(),
-        item: held.item.name().to_owned(),
+        item: held.item().name().to_owned(),
         dimension: session.shared.dimensions.get(session.dimension).key.clone(),
         rotation: Rotation {
             yaw: session.pose.yaw,

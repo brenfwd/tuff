@@ -409,12 +409,12 @@ impl RegionEntity for ItemEntity {
     }
 
     fn display_name(&self) -> String {
-        self.stack.item.name().to_owned()
+        self.stack.item().name().to_owned()
     }
 
     fn resists(&self, damage_type: &'static DamageType) -> bool {
         self.stack
-            .item
+            .item()
             .damage_resistant()
             .is_some_and(|tag| crate::world::damage_type_in_tag(damage_type, tag))
     }
@@ -542,7 +542,7 @@ mod tests {
         let mut entity = ItemEntity::new(1, 1, shulker, [0.5, 65.0, 0.5], [0.0; 3], 0);
         let spilled = entity.spilled_contents();
         assert_eq!(spilled.len(), 2);
-        assert_eq!(spilled[0].item, Item::Stone);
+        assert_eq!(spilled[0].item(), Item::Stone);
         assert!(entity.spilled_contents().is_empty());
     }
 

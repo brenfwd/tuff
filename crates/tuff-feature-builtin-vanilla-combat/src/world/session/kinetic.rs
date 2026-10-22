@@ -58,7 +58,7 @@ impl KineticExt for PlayerSession {
         else {
             return;
         };
-        if using.item != stack.item {
+        if using.item != stack.item() {
             return;
         }
         let Some(kinetic) = stack.kinetic_weapon() else {
@@ -74,7 +74,7 @@ impl KineticExt for PlayerSession {
             return;
         }
         let used = used - kinetic.delay_ticks;
-        let Some(range) = stack.item.attack_range() else {
+        let Some(range) = stack.item().attack_range() else {
             return;
         };
         let forward = tuff_core::world::raycast::view_vector(self.pose.yaw, self.pose.pitch);
@@ -109,7 +109,7 @@ impl KineticExt for PlayerSession {
             return;
         }
         let kind = stack
-            .item
+            .item()
             .damage_type()
             .unwrap_or(&damage_type::PLAYER_ATTACK);
         let knockback_attribute = self.attribute(Attribute::AttackKnockback) as f32;

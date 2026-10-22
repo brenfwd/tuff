@@ -338,10 +338,10 @@ impl Villager {
             let Some(stack) = slot else {
                 continue;
             };
-            if !tuff_datapack::tags::is(tag::item::key::VILLAGER_PLANTABLE_SEEDS, stack.item) {
+            if !tuff_datapack::tags::is(tag::item::key::VILLAGER_PLANTABLE_SEEDS, stack.item()) {
                 continue;
             }
-            let Some(block) = seed_block(stack.item) else {
+            let Some(block) = seed_block(stack.item()) else {
                 continue;
             };
             cx.effects.push(Effect::SetBlock {
@@ -405,7 +405,7 @@ impl Villager {
         let Some(slot) = self
             .inventory
             .iter_mut()
-            .find(|s| s.as_ref().is_some_and(|s| s.item == Item::BoneMeal))
+            .find(|s| s.as_ref().is_some_and(|s| s.item() == Item::BoneMeal))
         else {
             return false;
         };
@@ -446,7 +446,7 @@ impl Villager {
             let Some(stack) = slot else {
                 continue;
             };
-            if stack.item != Item::Wheat {
+            if stack.item() != Item::Wheat {
                 continue;
             }
             let used = wheat.min(stack.count() as u32);
@@ -491,7 +491,10 @@ impl Villager {
             let Some(stack) = slot else {
                 continue;
             };
-            let Some(index) = COMPOSTED_SEEDS.iter().position(|seed| *seed == stack.item) else {
+            let Some(index) = COMPOSTED_SEEDS
+                .iter()
+                .position(|seed| *seed == stack.item())
+            else {
                 continue;
             };
             let count = u32::from(stack.count());

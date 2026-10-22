@@ -98,7 +98,7 @@ async fn piercing_arrows_bounce_off_what_they_fail_to_hurt() {
             world
                 .entity(id)
                 .and_then(|tracked| tracked.entity.downcast_ref::<Arrow>())
-                .map(|arrow| (arrow.item.item, arrow.item.count()))
+                .map(|arrow| (arrow.item.item(), arrow.item.count()))
         })
         .await
         .flatten();
@@ -373,7 +373,7 @@ async fn pillagers_load_multishot_crossbows_and_fire_three_piercing_bolts() {
         }
     }
     assert_eq!(charged.len(), 3, "Multishot loads three");
-    assert!(charged.iter().all(|s| s.item == Item::Arrow));
+    assert!(charged.iter().all(|s| s.item() == Item::Arrow));
     let found = wait_for(&world, &region, 100, |found| {
         found.iter().filter(|s| s.kind == EntityType::Arrow).count() >= 3
     })

@@ -91,13 +91,13 @@ fn summary(entity: &dyn RegionEntity) -> EntitySummary {
         pickable: entity.pickable(),
         item: entity.downcast_ref::<ItemEntity>().map(|item| {
             let takeable = item.pickup_delay == 0 && item.reserved.is_none();
-            (item.stack.item, item.stack.count(), takeable)
+            (item.stack.item(), item.stack.count(), takeable)
         }),
         vehicle: base.vehicle.as_ref().map(|mount| mount.id),
         carries: !base.riders.is_empty() || !base.entity_riders.is_empty(),
         blue_sheep: entity.blue_sheep(),
         ominous_banner: entity.downcast_ref::<ItemEntity>().is_some_and(|item| {
-            item.stack.item == tuff_vanilla_data::Item::WhiteBanner
+            item.stack.item() == tuff_vanilla_data::Item::WhiteBanner
                 && item
                     .stack
                     .components
@@ -938,18 +938,21 @@ impl RegionActor {
                 .is_some_and(|mount| self.ents.entities.contains_key(&mount.id));
             if !self.pos.contains(to) && !seated_here {
                 let seq = tracked.seq;
-                let handed = match self.border.neighbors.get(&to.region()) {
-                    Some(neighbor) => neighbor.try_entity(tracked.entity, seq),
+                let handed = match self.border.neighbors.get(&to.region()).cloned() {
+                    Some(neighbor) => self
+                        .hand_entity(&neighbor, tracked.entity, seq)
+                        .map(|()| neighbor),
                     None => Err(tracked.entity),
                 };
-                let Err(mut entity) = handed else {
-                    if let Some(neighbor) = self.border.neighbors.get(&to.region()).cloned() {
+                let mut entity = match handed {
+                    Ok(neighbor) => {
                         self.hand_off_viewers(id, &neighbor);
+                        summaries.retain(|s| s.id != id);
+                        grid = EntityGrid::build(&summaries);
+                        slots = summary_slots(&summaries);
+                        continue;
                     }
-                    summaries.retain(|s| s.id != id);
-                    grid = EntityGrid::build(&summaries);
-                    slots = summary_slots(&summaries);
-                    continue;
+                    Err(entity) => entity,
                 };
                 let base = entity.base_mut();
                 base.position = before;

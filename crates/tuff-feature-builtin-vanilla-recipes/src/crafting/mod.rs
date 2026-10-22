@@ -39,7 +39,7 @@ const REPAIR_BONUS_PERCENT: u32 = 5;
 const DEFAULT_TRANSMUTE_MATERIALS: (u64, u64) = (1, 8);
 
 fn accepts(ingredient: &Ingredient, stack: &ItemStack) -> bool {
-    ingredient.matches(stack.item)
+    ingredient.matches(stack.item())
 }
 
 /// Whether a recipe belongs to the crafting grid.
@@ -149,7 +149,7 @@ pub fn matches(recipe: &Recipe, input: &CraftingInput) -> bool {
                         return false;
                     }
                     has_target = true;
-                } else if accepts(&dye.dye, stack) && stack.item.dye().is_some() {
+                } else if accepts(&dye.dye, stack) && stack.item().dye().is_some() {
                     has_dye = true;
                 } else {
                     return false;
@@ -233,7 +233,7 @@ pub fn matches(recipe: &Recipe, input: &CraftingInput) -> bool {
                         return false;
                     }
                     has_fuel = true;
-                } else if accepts(&star.dye, stack) && stack.item.dye().is_some() {
+                } else if accepts(&star.dye, stack) && stack.item().dye().is_some() {
                     has_dye = true;
                 } else {
                     let shape = star.shapes.iter().any(|(_, shape)| accepts(shape, stack));
@@ -251,7 +251,7 @@ pub fn matches(recipe: &Recipe, input: &CraftingInput) -> bool {
             }
             let (mut has_dye, mut has_target) = (false, false);
             for stack in input.stacks() {
-                if accepts(&fade.dye, stack) && stack.item.dye().is_some() {
+                if accepts(&fade.dye, stack) && stack.item().dye().is_some() {
                     has_dye = true;
                 } else {
                     if !accepts(&fade.target, stack) || has_target {
@@ -268,7 +268,7 @@ pub fn matches(recipe: &Recipe, input: &CraftingInput) -> bool {
             }
             let (mut has_target, mut has_banner) = (false, false);
             for stack in input.stacks() {
-                if accepts(&shield.banner, stack) && stack.item.banner_color().is_some() {
+                if accepts(&shield.banner, stack) && stack.item().banner_color().is_some() {
                     if has_banner {
                         return false;
                     }
@@ -298,7 +298,7 @@ pub fn matches(recipe: &Recipe, input: &CraftingInput) -> bool {
             let (mut has_target, mut has_source) = (false, false);
             for stack in input.stacks() {
                 let Some(banner) = stack
-                    .item
+                    .item()
                     .banner_color()
                     .filter(|_| accepts(&duplicate.banner, stack))
                 else {
@@ -425,7 +425,7 @@ fn matches_transmute(recipe: &TransmuteRecipe, input: &CraftingInput) -> bool {
         return true;
     }
     let result = transmute_result(recipe, found, 0);
-    !(result.item == found.item && result.components == found.components)
+    !(result.item() == found.item() && result.components == found.components)
 }
 
 fn transmute_count(recipe: &TransmuteRecipe, materials: u64) -> u64 {
@@ -448,7 +448,7 @@ fn transmute_result(recipe: &TransmuteRecipe, input: &ItemStack, materials: u64)
         }
         None => {
             let kept = RecipeResult {
-                item: input.item,
+                item: input.item(),
                 count: recipe.keep_count,
                 components: recipe.keep_components.clone(),
             };
@@ -467,12 +467,12 @@ fn repair_pair<'a>(input: &CraftingInput<'a>) -> Option<(&'a ItemStack, &'a Item
     let repairable = |stack: &ItemStack| {
         stack.count() == 1 && stack.max_damage().is_some() && stack.has_damage()
     };
-    (first.item == second.item && repairable(first) && repairable(second))
+    (first.item() == second.item() && repairable(first) && repairable(second))
         .then_some((first, second))
 }
 
 fn crafting_enchantments(stack: &ItemStack) -> Option<&Enchantments> {
-    if stack.item == Item::EnchantedBook {
+    if stack.item() == Item::EnchantedBook {
         stack.components.stored_enchantments.as_ref()
     } else {
         stack.components.enchantments.as_ref()
@@ -510,7 +510,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
                     }
                     target = Some(stack);
                 } else if accepts(&dye.dye, stack) {
-                    dyes.push(stack.item.dye().unwrap_or(DyeColor::White));
+                    dyes.push(stack.item().dye().unwrap_or(DyeColor::White));
                 } else {
                     return None;
                 }
@@ -530,8 +530,8 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             let remaining = (first.max_damage()? - first.damage())
                 + (second.max_damage()? - second.damage())
                 + durability * REPAIR_BONUS_PERCENT / 100;
-            let mut result = ItemStack::mint(first.item, 1, MintReason::Crafting);
-            if first.item.max_damage() != Some(durability) {
+            let mut result = ItemStack::mint(first.item(), 1, MintReason::Crafting);
+            if first.item().max_damage() != Some(durability) {
                 result.components.max_damage = Some(durability);
             }
             result.set_damage(durability.saturating_sub(remaining));
@@ -609,9 +609,13 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
                 } else if accepts(&star.trail, stack) {
                     explosion.has_trail = true;
                 } else if accepts(&star.dye, stack) {
-                    explosion
-                        .colors
-                        .push(stack.item.dye().unwrap_or(DyeColor::White).firework_color());
+                    explosion.colors.push(
+                        stack
+                            .item()
+                            .dye()
+                            .unwrap_or(DyeColor::White)
+                            .firework_color(),
+                    );
                 }
             }
             let mut result = result_stack(&star.result);
@@ -623,7 +627,13 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             let mut target = None;
             for stack in input.stacks() {
                 if accepts(&fade.dye, stack) {
-                    colors.push(stack.item.dye().unwrap_or(DyeColor::White).firework_color());
+                    colors.push(
+                        stack
+                            .item()
+                            .dye()
+                            .unwrap_or(DyeColor::White)
+                            .firework_color(),
+                    );
                 } else if accepts(&fade.target, stack) {
                     target = Some(stack);
                 }
@@ -648,7 +658,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             let mut target = None;
             for stack in input.stacks() {
                 if accepts(&shield.banner, stack)
-                    && let Some(color) = stack.item.banner_color()
+                    && let Some(color) = stack.item().banner_color()
                 {
                     patterns = stack.components.banner_patterns.clone();
                     base_color = color;
@@ -710,7 +720,7 @@ pub fn remaining_items(recipe: &Recipe, input: &CraftingInput) -> Vec<Option<Ite
         Recipe::CraftingSpecialBookCloning(_) => {
             if let Some(index) = input.items.iter().position(|slot| {
                 slot.as_ref().is_some_and(|stack| {
-                    stack.item.crafting_remainder().is_none()
+                    stack.item().crafting_remainder().is_none()
                         && stack.components.written_book.is_some()
                 })
             }) {
@@ -721,7 +731,7 @@ pub fn remaining_items(recipe: &Recipe, input: &CraftingInput) -> Vec<Option<Ite
         Recipe::CraftingSpecialBannerDuplicate(_) => {
             for (index, slot) in input.items.iter().enumerate() {
                 if let Some(stack) = *slot
-                    && stack.item.crafting_remainder().is_none()
+                    && stack.item().crafting_remainder().is_none()
                     && banner_layers(stack) > 0
                 {
                     remaining[index] = Some(ItemStack::mint_like(stack, 1, MintReason::Remainder));
@@ -740,7 +750,7 @@ pub fn apply_trim(
     base: &ItemStack,
     material: &ItemStack,
 ) -> Option<ItemStack> {
-    let material = material.item.trim_material()?;
+    let material = material.item().trim_material()?;
     if !TRIM_PATTERN.entries.contains(&recipe.pattern) {
         return None;
     }

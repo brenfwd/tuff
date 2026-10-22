@@ -498,7 +498,7 @@ async fn killing_a_chest_boat_scatters_its_stacks_in_pieces() {
             .and_then(|tag| tag.as_compound())
             .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
             .expect("a saved stack");
-        if stack.item == Item::Stone {
+        if stack.item() == Item::Stone {
             pieces.push(stack.count());
         }
     }

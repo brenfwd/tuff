@@ -266,9 +266,12 @@ fn clipped(world: &ChunkMirror, kind: EntityType, from: [f64; 3], to: [f64; 3]) 
 }
 
 fn holds(session: &PlayerSession, item: Item) -> bool {
-    [false, true]
-        .into_iter()
-        .any(|off| session.inventory.hand(off).is_some_and(|s| s.item == item))
+    [false, true].into_iter().any(|off| {
+        session
+            .inventory
+            .hand(off)
+            .is_some_and(|s| s.item() == item)
+    })
 }
 
 /// Whether the game's client lets this rider steer: the first rider of

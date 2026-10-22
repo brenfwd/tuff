@@ -1039,7 +1039,7 @@ mod tests {
             Some(ItemStack::mint(Item::Stone, 1, MintReason::Test))
         );
         let sword = slot(&state, 37).unwrap();
-        assert_eq!(sword.item, Item::DiamondSword);
+        assert_eq!(sword.item(), Item::DiamondSword);
         assert_eq!(sword.damage(), 3);
         assert_eq!(
             slot(&state, 45),

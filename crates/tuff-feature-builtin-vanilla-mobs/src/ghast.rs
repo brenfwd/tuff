@@ -383,7 +383,7 @@ impl<G: Goal> Goal for BabyOnly<G> {
 }
 
 fn is_harness(stack: &tuff_item::item::ItemStack) -> bool {
-    stack.item.name().ends_with("_harness")
+    stack.item().name().ends_with("_harness")
 }
 
 fn harnessed(core: &MobCore) -> bool {
@@ -571,7 +571,7 @@ impl Species for HappyGhast {
     }
 
     fn is_food(&self, stack: &tuff_item::item::ItemStack) -> bool {
-        happy_ghast_food(stack.item)
+        happy_ghast_food(stack.item())
     }
 
     fn experience(&self, _core: &MobCore, rng: &mut StdRng) -> i32 {
@@ -688,9 +688,9 @@ impl Species for HappyGhast {
 
     fn mount_refused(&self, core: &MobCore, stack: Option<&tuff_item::item::ItemStack>) -> bool {
         stack.is_some_and(|stack| {
-            happy_ghast_food(stack.item)
-                || stack.item == tuff_vanilla_data::Item::Shears
-                || stack.item == tuff_vanilla_data::Item::Lead
+            happy_ghast_food(stack.item())
+                || stack.item() == tuff_vanilla_data::Item::Shears
+                || stack.item() == tuff_vanilla_data::Item::Lead
                 || (is_harness(stack) && !harnessed(core))
         })
     }

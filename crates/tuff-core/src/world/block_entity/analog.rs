@@ -103,7 +103,7 @@ pub fn song_output(record: &ItemStack) -> u8 {
     }
     match components.other.get_str(JUKEBOX_PLAYABLE) {
         Some(song) => tuff_vanilla_data::item::jukebox_song_output(song).unwrap_or(0),
-        None => record.item.jukebox_output(),
+        None => record.item().jukebox_output(),
     }
 }
 
@@ -115,7 +115,7 @@ pub fn song_id(record: &ItemStack) -> Option<u32> {
     }
     match components.other.get_str(JUKEBOX_PLAYABLE) {
         Some(song) => tuff_vanilla_data::item::jukebox_song(song).map(|(id, _)| id),
-        None => record.item.jukebox_song_id(),
+        None => record.item().jukebox_song_id(),
     }
 }
 

@@ -222,7 +222,7 @@ pub(super) fn type_specific(kind: &str, predicate: &Value, entity: &EntityFacts)
 }
 
 fn is_ominous_banner(stack: &ItemStack) -> bool {
-    stack.item == tuff_vanilla_data::Item::WhiteBanner
+    stack.item() == tuff_vanilla_data::Item::WhiteBanner
         && stack
             .components
             .to_nbt()

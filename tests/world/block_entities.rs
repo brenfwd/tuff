@@ -281,12 +281,12 @@ async fn broken_banners_and_named_chests_drop_their_data() {
     }
     let banner_drop = dropped
         .iter()
-        .find(|s| s.item == Item::WhiteBanner)
+        .find(|s| s.item() == Item::WhiteBanner)
         .expect("banner dropped");
     assert_eq!(banner_drop.components, patterned());
     let chest_drop = dropped
         .iter()
-        .find(|s| s.item == Item::Chest)
+        .find(|s| s.item() == Item::Chest)
         .expect("chest dropped");
     assert_eq!(chest_drop.components, named());
     world.shutdown().await;

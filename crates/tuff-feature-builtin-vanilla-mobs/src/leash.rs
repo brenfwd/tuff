@@ -579,7 +579,7 @@ pub fn interact(
     let (position, category) = (base.position, sound_category_of(entity));
     let own = entity.leash().cloned();
     let player_anchor = Anchor::Entity(interaction.player_uuid);
-    let item = interaction.stack.as_deref().map(|s| s.item);
+    let item = interaction.stack.as_deref().map(|s| s.item());
     if interaction.sneaking && profile.is_some() && alive && !baby {
         let around = center(holder.bounds);
         let ids = leashed_to(world, player_anchor, around);
@@ -667,7 +667,7 @@ fn interact_knot(
     if interaction
         .stack
         .as_ref()
-        .is_some_and(|s| s.item == Item::Shears)
+        .is_some_and(|s| s.item() == Item::Shears)
         && cut_all(world, knot)
     {
         world.game_event(GameEvent::Shear, position, source);
@@ -832,7 +832,7 @@ mod tests {
     fn dropped_leads(cx: &TickContext) -> usize {
         cx.effects
             .iter()
-            .filter(|e| matches!(e, Effect::DropItem { stack, .. } if stack.item == Item::Lead))
+            .filter(|e| matches!(e, Effect::DropItem { stack, .. } if stack.item() == Item::Lead))
             .count()
     }
 

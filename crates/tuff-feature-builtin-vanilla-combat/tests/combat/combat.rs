@@ -368,7 +368,7 @@ async fn players_kill_and_milk_mobs_through_their_regions() {
             .await
     );
     assert_eq!(
-        player.inventory().hand(false).unwrap().item,
+        player.inventory().hand(false).unwrap().item(),
         Item::MilkBucket
     );
     world.shutdown().await;
@@ -401,7 +401,7 @@ async fn weapon_attacks_follow_the_cooldown_which_an_item_change_resets() {
             ..
         }
     ));
-    assert_eq!(strong.weapon.unwrap().item, Item::DiamondSword);
+    assert_eq!(strong.weapon.unwrap().item(), Item::DiamondSword);
 
     attacker.handle_packet(Serverbound::Attack(2)).await;
     let spam = attacked(&mut victim_events).unwrap();

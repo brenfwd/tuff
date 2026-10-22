@@ -75,7 +75,9 @@ fn a_brute_keeps_a_home_and_only_takes_a_golden_axe() {
         assert!(core.equipment.get(EquipmentSlot::Mainhand).is_none());
         brute.took_item(core, ItemStack::mint(Item::GoldenAxe, 1, MintReason::Test));
         assert_eq!(
-            core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.item),
+            core.equipment
+                .get(EquipmentSlot::Mainhand)
+                .map(|s| s.item()),
             Some(Item::GoldenAxe)
         );
     });
@@ -112,7 +114,7 @@ fn spawned_piglins_may_be_babies_or_carry_a_crossbow_sword_or_spear() {
                 babies += 1;
                 assert!(core.equipment.main_hand().is_none());
             } else {
-                let weapon = core.equipment.main_hand().unwrap().item;
+                let weapon = core.equipment.main_hand().unwrap().item();
                 *weapons.entry(weapon).or_insert(0) += 1;
             }
         }

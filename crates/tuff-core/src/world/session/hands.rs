@@ -32,7 +32,7 @@ impl PlayerSession {
         let is_book = self
             .inventory
             .hand(off_hand)
-            .is_some_and(|s| matches!(s.item, Item::WritableBook | Item::WrittenBook));
+            .is_some_and(|s| matches!(s.item(), Item::WritableBook | Item::WrittenBook));
         if is_book {
             self.send(&play::OpenBook { off_hand });
         }
@@ -273,7 +273,7 @@ impl PlayerSession {
         let held = self
             .inventory
             .hand(off_hand)
-            .map(|stack| stack.item)
+            .map(|stack| stack.item())
             .filter(|_| {
                 self.mode.abilities.may_build || self.adventure_tool(off_hand, CAN_PLACE_ON)
             });
@@ -320,7 +320,7 @@ impl PlayerSession {
         let Some(item) = self
             .inventory
             .hand(off_hand)
-            .map(|stack| stack.item)
+            .map(|stack| stack.item())
             .filter(|item| self.shared.block_rules.places_on_water(*item))
         else {
             return false;
@@ -384,7 +384,7 @@ impl PlayerSession {
             off_hand_item: self
                 .inventory
                 .hand(true)
-                .map(|stack| stack.item)
+                .map(|stack| stack.item())
                 .filter(|_| self.mode.abilities.may_build),
             sequence,
             interact,
@@ -395,7 +395,7 @@ impl PlayerSession {
             off_hand_blocks: self
                 .inventory
                 .hand(true)
-                .is_some_and(|stack| stack.item.blocks_attacks().is_some())
+                .is_some_and(|stack| stack.item().blocks_attacks().is_some())
                 && !self.pose.sneaking,
             may_build: self.mode.abilities.may_build,
             game_master: self.mode.game_mode == GameMode::Creative
@@ -413,7 +413,7 @@ impl PlayerSession {
         let Some(stack) = self.inventory.hand(off_hand) else {
             return false;
         };
-        let item = stack.item;
+        let item = stack.item();
         let egg = item.spawns_entity().is_some();
         let (fluid, mob) = match item.bucket() {
             Some(tuff_vanilla_data::item::Bucket::Fluid { fluid, mob }) => (fluid, mob),
@@ -481,7 +481,7 @@ impl PlayerSession {
         stack
             .use_cooldown()
             .and_then(|cooldown| cooldown.group)
-            .unwrap_or_else(|| stack.item.name().to_owned())
+            .unwrap_or_else(|| stack.item().name().to_owned())
     }
 
     pub fn stack_on_cooldown(&self, stack: &ItemStack) -> bool {
@@ -685,7 +685,7 @@ impl PlayerSession {
         let key = self.dimension().key.clone();
         let mut checks = Vec::new();
         for (slot, stack) in self.inventory.slots().iter().enumerate() {
-            let Some(stack) = stack.as_ref().filter(|s| s.item == Item::Compass) else {
+            let Some(stack) = stack.as_ref().filter(|s| s.item() == Item::Compass) else {
                 continue;
             };
             let Some(tracker) = stack
@@ -953,7 +953,7 @@ impl PlayerSession {
     /// Shared body of [`HandEffect::Exchange`] and [`HandEffect::ExchangeStack`].
     pub async fn apply_exchange(&mut self, off_hand: bool, creative: bool, result: ItemStack) {
         if creative {
-            let spare = match self.inventory.find_item(result.item) {
+            let spare = match self.inventory.find_item(result.item()) {
                 None => self.inventory.add(result),
                 Some(_) => Some(result),
             };
@@ -1019,35 +1019,105 @@ impl PlayerSession {
     /// that will not be saved. An injected failure is a violation: the
     /// player and the region are quarantined and the player is kicked.
     fn may_drop_into(&mut self, to: &RegionHandle, stack: &ItemStack, position: [f64; 3]) -> bool {
-        use crate::world::conservation::{ItemViolation, Subject, Transfer};
+        use crate::world::conservation::Transfer;
+        self.may_transfer(
+            Transfer::Drop,
+            Some((to.dimension, to.pos)),
+            BlockPos::containing(position),
+            Some(stack),
+        )
+    }
+
+    /// Whether a `transfer` between this player and the region `region`
+    /// (or only this player) may run: not while a side is quarantined.
+    /// An injected failure is a violation quarantining both sides and
+    /// kicking the player. Refused, nothing moves.
+    pub(crate) fn may_transfer(
+        &mut self,
+        transfer: crate::world::conservation::Transfer,
+        region: Option<(DimensionId, RegionPos)>,
+        pos: BlockPos,
+        stack: Option<&ItemStack>,
+    ) -> bool {
+        use crate::world::conservation::Subject;
         let conservation = &self.shared.conservation;
-        let region = Subject::Region(to.dimension, to.pos);
-        if conservation.quarantined(Subject::Player(self.id)) || conservation.quarantined(region) {
+        let region = region.map(|(dimension, pos)| (dimension, Subject::Region(dimension, pos)));
+        if conservation.quarantined(Subject::Player(self.id))
+            || region.is_some_and(|(_, region)| conservation.quarantined(region))
+        {
             return false;
         }
-        if !conservation.take_injected(Transfer::Drop) {
+        if !conservation.take_injected(transfer) {
             return true;
         }
+        self.transfer_violation(
+            transfer,
+            region,
+            pos,
+            stack,
+            "the transfer check was made to fail".to_owned(),
+        );
+        false
+    }
+
+    /// The release check of a `transfer` from this player's side: the
+    /// items held `before` plus those `received` equal those held `after`
+    /// plus those `sent` on. A mismatch is a violation; the moves already
+    /// ran, so the player is quarantined and kicked and the answer is false.
+    pub(crate) fn transfer_balanced(
+        &mut self,
+        transfer: crate::world::conservation::Transfer,
+        before: u64,
+        received: u64,
+        after: u64,
+        sent: u64,
+    ) -> bool {
+        if before + received == after + sent || !tuff_item::item::conservation::checks() {
+            return true;
+        }
+        self.transfer_violation(
+            transfer,
+            None,
+            BlockPos::containing(self.pose.position),
+            None,
+            format!("held {before} and received {received}, but holds {after} and sent {sent}"),
+        );
+        false
+    }
+
+    fn transfer_violation(
+        &mut self,
+        transfer: crate::world::conservation::Transfer,
+        region: Option<(DimensionId, crate::world::conservation::Subject)>,
+        pos: BlockPos,
+        stack: Option<&ItemStack>,
+        detail: String,
+    ) {
+        use crate::world::conservation::{ItemViolation, Subject};
         let violation = ItemViolation {
-            operation: Transfer::Drop.operation(),
+            operation: transfer.operation(),
             player: Some(self.id),
-            pos: BlockPos::containing(position),
-            item: Some(tuff_item::item::ItemSnapshot::of(stack)),
-            detail: "the transfer check was made to fail".to_owned(),
+            pos,
+            item: stack.map(tuff_item::item::ItemSnapshot::of),
+            detail,
         };
         tuff_item::item::conservation::violation(
             violation.operation,
             format_args!("player {:?}: {}", self.id, violation.detail),
         );
+        let dimension = region.map_or(self.dimension, |(dimension, _)| dimension);
         self.shared.services.item_violation(
             crate::world::services::ViolationCulprit::Player {
                 uuid: self.profile.id,
                 name: &self.profile.name,
             },
-            to.dimension,
+            dimension,
             &violation,
         );
-        conservation.quarantine(region);
+        let conservation = &self.shared.conservation;
+        if let Some((_, region)) = region {
+            conservation.quarantine(region);
+        }
         conservation.quarantine(Subject::Player(self.id));
         let kick = self
             .shared
@@ -1059,7 +1129,6 @@ impl PlayerSession {
                 "An item operation was refused; reconnect to reload your inventory",
             ));
         }
-        false
     }
 
     fn keep_unspawned(&mut self, stack: ItemStack) {

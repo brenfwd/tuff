@@ -385,7 +385,7 @@ impl<const HUSK: bool> Species for Camel<HUSK> {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        Self::food(stack.item)
+        Self::food(stack.item())
     }
 
     fn offspring(&self, _partner: &Self, _rng: &mut StdRng) -> Self {

@@ -147,7 +147,7 @@ async fn location(
     );
     let signature: Vec<(EquipmentSlot, Item, Option<Enchantments>)> = equipment
         .iter()
-        .map(|(slot, stack)| (*slot, stack.item, stack.components.enchantments.clone()))
+        .map(|(slot, stack)| (*slot, stack.item(), stack.components.enchantments.clone()))
         .collect();
     let tracked = session.ext.entry::<LocationEffects>();
     if tracked.block == Some(block) && tracked.equipment == signature {

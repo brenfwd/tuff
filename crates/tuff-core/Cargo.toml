@@ -58,3 +58,6 @@ test-hooks = []
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+
+[dev-dependencies]
+tuff-item = { workspace = true, features = ["test-support"] }

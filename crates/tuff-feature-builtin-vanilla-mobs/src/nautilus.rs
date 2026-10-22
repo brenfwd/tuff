@@ -91,7 +91,7 @@ fn nautilus_taming_item(item: Item) -> bool {
 const NAUTILUS_FEED_HEAL: f32 = 2.0;
 
 fn food_effect(stack: &ItemStack) -> HandEffect {
-    if tuff_datapack::tags::is(tag::item::key::NAUTILUS_BUCKET_FOOD, stack.item) {
+    if tuff_datapack::tags::is(tag::item::key::NAUTILUS_BUCKET_FOOD, stack.item()) {
         HandEffect::ExchangeStack(Box::new(ItemStack::mint(
             Item::WaterBucket,
             1,
@@ -515,7 +515,7 @@ impl Species for Nautilus {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        nautilus_food(stack.item)
+        nautilus_food(stack.item())
     }
 
     fn seats(&self, core: &MobCore) -> usize {
@@ -529,7 +529,7 @@ impl Species for Nautilus {
         if !tamed(core) || core.is_baby() {
             return false;
         }
-        nautilus_food(stack.item)
+        nautilus_food(stack.item())
             || stack.equippable().is_some_and(|eq| {
                 eq.equip_on_interact
                     && matches!(eq.slot, EquipmentSlot::Saddle | EquipmentSlot::Body)
@@ -635,7 +635,7 @@ impl Species for Nautilus {
             if interaction.sneaking {
                 return None;
             }
-            if tuff_datapack::tags::is(tag::item::key::NAUTILUS_FOOD, stack.item)
+            if tuff_datapack::tags::is(tag::item::key::NAUTILUS_FOOD, stack.item())
                 && core.health < core.max_health()
             {
                 core.heal(NAUTILUS_FEED_HEAL);
@@ -645,7 +645,7 @@ impl Species for Nautilus {
             self.inventory.adopt(core);
             return equipped;
         }
-        if !nautilus_taming_item(stack.item) {
+        if !nautilus_taming_item(stack.item()) {
             return None;
         }
         core.try_tame(interaction.player_uuid, 1.0 / 3.0, cx);
@@ -799,7 +799,7 @@ impl Species for ZombieNautilus {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        nautilus_food(stack.item)
+        nautilus_food(stack.item())
     }
 
     fn seats(&self, core: &MobCore) -> usize {

@@ -155,7 +155,7 @@ impl Species for Tadpole {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         if let Some(stack) = &interaction.stack
-            && frog_food(stack.item)
+            && frog_food(stack.item())
             && !self.age_locked
             && core.is_alive()
         {
@@ -163,7 +163,7 @@ impl Species for Tadpole {
             return Some(HandEffect::Consume(1));
         }
         if let Some(stack) = &interaction.stack
-            && stack.item == Item::GoldenDandelion
+            && stack.item() == Item::GoldenDandelion
             && self.lock_cooldown == 0
             && !tuff_core::world::entity_in_tag(core.base.kind, "cannot_be_age_locked")
         {

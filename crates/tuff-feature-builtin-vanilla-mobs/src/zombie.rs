@@ -601,7 +601,7 @@ fn ride_zombie_nautilus(core: &mut MobCore, cx: &mut TickContext) {
     let holds_trident = core
         .equipment
         .get(EquipmentSlot::Mainhand)
-        .is_some_and(|stack| stack.item == Item::Trident);
+        .is_some_and(|stack| stack.item() == Item::Trident);
     if !holds_trident || cx.rng.r#gen::<f32>() >= NAUTILUS_JOCKEY_CHANCE || core.is_baby() {
         return;
     }
@@ -839,7 +839,7 @@ mod tests {
                 assert!(core.equipment.get(EquipmentSlot::Head).is_none());
                 core.wear_halloween_head(&mut rng, true);
                 if let Some(head) = core.equipment.get(EquipmentSlot::Head) {
-                    heads.insert(head.item);
+                    heads.insert(head.item());
                 }
             }
         });

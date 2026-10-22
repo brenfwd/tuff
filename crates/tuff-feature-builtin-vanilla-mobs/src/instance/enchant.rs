@@ -77,7 +77,7 @@ impl<S: Species> Mob<S> {
         );
         let signature: Vec<(EquipmentSlot, Item, Option<Enchantments>)> = gear
             .iter()
-            .map(|(slot, stack)| (*slot, stack.item, stack.components.enchantments.clone()))
+            .map(|(slot, stack)| (*slot, stack.item(), stack.components.enchantments.clone()))
             .collect();
         let mut fired = {
             let world = TickWorld { cx };

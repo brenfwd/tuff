@@ -7,14 +7,14 @@ use tuff_item::item::ItemStack;
 pub const MAX_LAYERS: usize = 6;
 
 pub fn is_loom_dye(stack: &ItemStack) -> bool {
-    tag::item::LOOM_DYES.contains(&stack.item) && stack.item.dye().is_some()
+    tag::item::LOOM_DYES.contains(&stack.item()) && stack.item().dye().is_some()
 }
 
 fn pattern_tag(stack: &ItemStack) -> Option<&'static [&'static str]> {
-    if !tag::item::LOOM_PATTERNS.contains(&stack.item) {
+    if !tag::item::LOOM_PATTERNS.contains(&stack.item()) {
         return None;
     }
-    let name = stack.item.name();
+    let name = stack.item().name();
     let kind = name
         .strip_prefix("minecraft:")?
         .strip_suffix("_banner_pattern")?;

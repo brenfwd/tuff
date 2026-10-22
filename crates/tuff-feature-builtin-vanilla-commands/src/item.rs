@@ -502,7 +502,7 @@ impl Executor for ItemCommand {
             let template = ItemSnapshot::of(&stack);
             stack.burn(BurnReason::Template);
             let stack = template;
-            let item = item_name(stack.item, &stack.components);
+            let item = item_name(stack.item(), &stack.components);
             if is_block {
                 return set_block(ctx, mode, &slot, &stack, item).await;
             }
@@ -568,7 +568,7 @@ impl Executor for ItemCommand {
             let player_ids = slot.player_ids(ctx, &players);
             let name = slot.label();
             let single_item = item.clone();
-            let known = item_name(stack.item, &stack.components);
+            let known = item_name(stack.item(), &stack.components);
             let messages = Messages::new(
                 move |reply| {
                     TextComponent::translate(

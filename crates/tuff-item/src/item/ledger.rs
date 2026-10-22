@@ -333,7 +333,9 @@ impl ItemStack {
     }
 
     /// Tests and fixtures only: new items like this stack, minted for
-    /// [`MintReason::Test`].
+    /// [`MintReason::Test`]. Only built for this crate's tests and with the
+    /// `test-support` feature, which only dev-dependencies enable.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn test_copy(&self) -> Self {
         Self::mint_like(self, self.count, MintReason::Test)
     }
@@ -378,6 +380,29 @@ impl ItemStack {
         let components = std::mem::take(&mut self.components);
         self.burn(burn);
         Self::mint(item, count, mint).with_components(components)
+    }
+
+    /// The item this stack holds. It only changes through a mint, a burn
+    /// or [`Self::transform`].
+    #[inline]
+    pub fn item(&self) -> Item {
+        self.item
+    }
+
+    /// Turns this stack into `item` in place, keeping its count and
+    /// components: the ledger records a burn of the old items and a mint of
+    /// the new ones. A picture stays a picture.
+    pub fn transform(&mut self, item: Item, mint: MintReason, _burn: BurnReason) {
+        if matches!(self.tally, Tally::Counted) {
+            if !self.is_empty() {
+                conservation::burned(self.count);
+            }
+            self.tally = Tally::of(mint);
+            if matches!(self.tally, Tally::Counted) && item != Item::Air && self.count > 0 {
+                conservation::minted(self.count);
+            }
+        }
+        self.item = item;
     }
 
     /// Whether this stack is a picture (template, snapshot or test

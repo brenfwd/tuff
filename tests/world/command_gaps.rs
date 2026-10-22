@@ -296,7 +296,7 @@ async fn item_slots_are_replaced_filled_and_overridden() {
     assert_eq!(
         player.inventory().slots()[crate::world::inventory::Inventory::hotbar_slot(held)]
             .as_ref()
-            .map(|s| s.item),
+            .map(|s| s.item()),
         Some(Item::Stick)
     );
 
@@ -321,7 +321,7 @@ async fn item_slots_are_replaced_filled_and_overridden() {
         .slots()
         .iter()
         .flatten()
-        .filter(|s| s.item == Item::Stick)
+        .filter(|s| s.item() == Item::Stick)
         .count();
     assert_eq!(filled, 4 + 1, "armor, and hotbar.0 which is container.0");
     world.shutdown().await;

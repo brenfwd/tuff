@@ -95,7 +95,7 @@ async fn granted_plugin_content_joins_the_world_at_start() {
     ]);
     let (name, recipe) = recipes.find(&input).expect("the recipe crafts");
     assert_eq!(&**name, "gems:ruby_block");
-    assert_eq!(recipe.assemble(&input).unwrap().item, Item::RedstoneBlock);
+    assert_eq!(recipe.assemble(&input).unwrap().item(), Item::RedstoneBlock);
     let emeralds = shapeless(vec![
         ItemStack::mint(Item::Emerald, 1, MintReason::Test),
         ItemStack::mint(Item::Redstone, 1, MintReason::Test),

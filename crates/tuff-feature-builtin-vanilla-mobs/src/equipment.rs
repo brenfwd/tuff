@@ -350,7 +350,10 @@ mod tests {
             Ok(None)
         ));
         assert!(equipment.replace_number(99, None).is_err());
-        assert_eq!(equipment.by_number()[head].map(|s| s.item), Some(Item::Bow));
+        assert_eq!(
+            equipment.by_number()[head].map(|s| s.item()),
+            Some(Item::Bow)
+        );
         assert!(equipment.take_changed());
     }
 
@@ -382,9 +385,9 @@ mod tests {
             );
         let mut equipment = Equipment::default();
         equipment.load(&mut nbt);
-        assert_eq!(equipment.main_hand().map(|s| s.item), Some(Item::Bow));
+        assert_eq!(equipment.main_hand().map(|s| s.item()), Some(Item::Bow));
         assert_eq!(
-            equipment.get(EquipmentSlot::Saddle).map(|s| s.item),
+            equipment.get(EquipmentSlot::Saddle).map(|s| s.item()),
             Some(Item::Saddle)
         );
         assert!(nbt.get("equipment").is_some(), "the unknown slot stays raw");
@@ -430,7 +433,7 @@ mod tests {
         equipment.set_drop_chance(EquipmentSlot::Mainhand, PRESERVED_DROP_CHANCE);
         let drops = equipment.death_drops(false, &mut rng, |chance, _| chance);
         assert_eq!(drops.len(), 1);
-        assert_eq!(drops[0].item, Item::GoldIngot);
+        assert_eq!(drops[0].item(), Item::GoldIngot);
         assert!(equipment.get(EquipmentSlot::Head).is_some());
     }
 }

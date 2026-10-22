@@ -160,7 +160,7 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
             } else {
                 let mut items = loot.drops(state, Some(&tool), data.as_ref(), &mut rng);
                 if items.is_empty() && !loot.can_harvest(state, Some(&tool)) {
-                    items = loot.table(table, state, Some(tool.item), &mut rng);
+                    items = loot.table(table, state, Some(tool.item()), &mut rng);
                 }
                 items
             };
@@ -435,7 +435,7 @@ impl Executor for Loot {
                     "commands.drop.success.single_with_table",
                     [
                         text(only.count()),
-                        item_name(only.item, &only.components),
+                        item_name(only.item(), &only.components),
                         text(table),
                     ],
                 ),
@@ -445,7 +445,7 @@ impl Executor for Loot {
                 ),
                 ([only], None) => TextComponent::translate(
                     "commands.drop.success.single",
-                    [text(only.count()), item_name(only.item, &only.components)],
+                    [text(only.count()), item_name(only.item(), &only.components)],
                 ),
                 (many, None) => {
                     TextComponent::translate("commands.drop.success.multiple", [text(many.len())])

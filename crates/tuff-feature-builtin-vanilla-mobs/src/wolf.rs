@@ -132,7 +132,7 @@ impl Species for Wolf {
         let Some(armor) = core
             .equipment
             .get_mut(EquipmentSlot::Body)
-            .filter(|stack| stack.item == tuff_vanilla_data::Item::WolfArmor)
+            .filter(|stack| stack.item() == tuff_vanilla_data::Item::WolfArmor)
         else {
             return false;
         };
@@ -350,10 +350,10 @@ impl Species for Wolf {
             }
             if let Some(stack) = stack
                 && owned
-                && stack.item.dye().is_some()
-                && tuff_datapack::tags::is(tag::item::key::WOLF_COLLAR_DYES, stack.item)
+                && stack.item().dye().is_some()
+                && tuff_datapack::tags::is(tag::item::key::WOLF_COLLAR_DYES, stack.item())
             {
-                let color = stack.item.dye()?;
+                let color = stack.item().dye()?;
                 if color == self.collar {
                     return None;
                 }
@@ -364,16 +364,16 @@ impl Species for Wolf {
                 use tuff_vanilla_data::item::EquipmentSlot;
                 let sitting = core.tame.as_ref().is_some_and(|t| t.sitting);
                 let worn = core.equipment.get(EquipmentSlot::Body).is_some();
-                if stack.item == tuff_vanilla_data::Item::WolfArmor && !worn && !core.is_baby() {
+                if stack.item() == tuff_vanilla_data::Item::WolfArmor && !worn && !core.is_baby() {
                     let armor = interaction.hand.take(1)?;
                     core.equipment.set(EquipmentSlot::Body, Some(armor));
                     return Some(HandEffect::None);
                 }
                 if sitting
                     && let Some(armor) = core.equipment.get_mut(EquipmentSlot::Body)
-                    && armor.item == tuff_vanilla_data::Item::WolfArmor
+                    && armor.item() == tuff_vanilla_data::Item::WolfArmor
                     && armor.damage() > 0
-                    && armor.item.repairable_with().contains(&stack.item)
+                    && armor.item().repairable_with().contains(&stack.item())
                 {
                     let unit = (armor.max_damage().unwrap_or(0) as f32 * ARMOR_REPAIR_UNIT) as u32;
                     armor.set_damage(armor.damage().saturating_sub(unit));
@@ -396,7 +396,7 @@ impl Species for Wolf {
             return None;
         }
         if let Some(stack) = stack
-            && stack.item == tuff_vanilla_data::Item::Bone
+            && stack.item() == tuff_vanilla_data::Item::Bone
             && core.anger.is_none()
         {
             if core.try_tame(interaction.player_uuid, TAME_CHANCE, cx) {
@@ -466,7 +466,7 @@ impl Wolf {
 }
 
 fn core_owned_food(stack: &ItemStack) -> bool {
-    wolf_food(stack.item)
+    wolf_food(stack.item())
 }
 
 /// Registers the wolf's loader.
@@ -613,7 +613,7 @@ mod tests {
             );
             assert!(wolf.core.equipment.get(EquipmentSlot::Body).is_none());
             let dropped = cx.effects.iter().any(|e| {
-                matches!(e, Effect::DropItem { stack, .. } if stack.item == tuff_vanilla_data::Item::WolfArmor)
+                matches!(e, Effect::DropItem { stack, .. } if stack.item() == tuff_vanilla_data::Item::WolfArmor)
             });
             let reported = cx.effects.iter().any(|e| {
                 matches!(e, Effect::Advancement { player: 1, event }

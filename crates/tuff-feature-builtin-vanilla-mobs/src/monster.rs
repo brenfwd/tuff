@@ -271,7 +271,7 @@ mod tests {
             for _ in 0..2000 {
                 mob.equipment = super::super::equipment::Equipment::default();
                 mob.populate_spawn_armor(hard, cx.rng);
-                let head = mob.equipment.get(EquipmentSlot::Head).map(|s| s.item);
+                let head = mob.equipment.get(EquipmentSlot::Head).map(|s| s.item());
                 let feet = mob.equipment.get(EquipmentSlot::Feet);
                 if feet.is_some() {
                     assert!(head.is_some(), "armor goes on from the head down");

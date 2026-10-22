@@ -51,7 +51,7 @@ fn hides_marker(session: &PlayerSession) -> bool {
         session.inventory.equipped(slot).is_some_and(|stack| {
             tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::MAP_INVISIBILITY_EQUIPMENT,
-                stack.item,
+                stack.item(),
             )
         })
     })
@@ -107,7 +107,10 @@ fn report_carried(session: &mut PlayerSession) {
 }
 
 pub fn is_map(stack: &ItemStack) -> bool {
-    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::CLONABLE_MAPS, stack.item)
+    tuff_datapack::tags::is(
+        tuff_vanilla_data::tag::item::key::CLONABLE_MAPS,
+        stack.item(),
+    )
 }
 
 /// The cartography table's result, worked out again after its inputs
@@ -265,7 +268,7 @@ async fn use_empty_map(session: &mut PlayerSession, off_hand: bool) {
     if session.is_dead() || session.mode.game_mode == GameMode::Spectator {
         return;
     }
-    if session.inventory.hand(off_hand).map(|stack| stack.item) != Some(Item::Map) {
+    if session.inventory.hand(off_hand).map(|stack| stack.item()) != Some(Item::Map) {
         return;
     }
     let shared = session.shared.clone();

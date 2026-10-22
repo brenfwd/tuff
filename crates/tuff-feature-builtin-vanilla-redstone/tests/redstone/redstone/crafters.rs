@@ -43,7 +43,7 @@ async fn the_clickers_own_menu_gets_the_new_preview() {
     let dir = TestDir::new();
     let (mut b, crafter, _) = crafter_bench(dir.path()).await;
     let shown = preview(&mut b, crafter).await;
-    assert_eq!(shown.map(|s| s.item), Some(Item::OakPlanks));
+    assert_eq!(shown.map(|s| s.item()), Some(Item::OakPlanks));
     assert!(
         put(
             &mut b,

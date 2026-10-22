@@ -288,7 +288,7 @@ fn a_tamed_horse_takes_a_saddle_and_armor_from_a_plain_click() {
         assert_eq!(
             slots[tuff_core::world::menu::mount::BODY]
                 .as_ref()
-                .map(|s| s.item),
+                .map(|s| s.item()),
             Some(Item::IronHorseArmor)
         );
         assert!(
@@ -314,7 +314,7 @@ fn a_removed_donkey_gives_up_its_saddle_and_chest_contents_once() {
         slots[tuff_core::world::menu::mount::SADDLE] =
             Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test));
         slots[4] = Some(ItemStack::mint(Item::Diamond, 3, MintReason::Test));
-        let mut taken: Vec<_> = donkey.take_items().iter().map(|s| s.item).collect();
+        let mut taken: Vec<_> = donkey.take_items().iter().map(|s| s.item()).collect();
         taken.sort_by_key(|item| *item as u32);
         let mut want = vec![Item::Saddle, Item::Diamond];
         want.sort_by_key(|item| *item as u32);

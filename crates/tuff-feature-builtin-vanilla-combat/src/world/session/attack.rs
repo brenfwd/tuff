@@ -263,15 +263,15 @@ impl CombatExt for PlayerSession {
         let attack_speed = self.attribute(Attribute::AttackSpeed);
         let ticks_since_reset = self.tick.saturating_sub(self.actions.attack_reset_tick) as u32;
         let strength = combat::attack_strength(ticks_since_reset, attack_speed);
-        if strength < stack.item.minimum_attack_charge() {
+        if strength < stack.item().minimum_attack_charge() {
             return;
         }
         self.actions.attack_reset_tick = self.tick;
-        let Some(range) = stack.item.attack_range() else {
+        let Some(range) = stack.item().attack_range() else {
             return;
         };
         let kind = stack
-            .item
+            .item()
             .damage_type()
             .unwrap_or(&damage_type::PLAYER_ATTACK);
         let base = self.attribute(Attribute::AttackDamage) as f32;
@@ -640,7 +640,7 @@ impl CombatExt for PlayerSession {
         }
         if let Some(weapon) = weapon
             && let Some(held) = self.inventory.hand(false)
-            && held.item == weapon.item
+            && held.item() == weapon.item()
         {
             let wear = held.weapon().map_or(0, |w| w.item_damage_per_attack as u32);
             self.hurt_hand(false, wear).await;
@@ -1251,7 +1251,7 @@ impl CombatExt for PlayerSession {
                 .is_some_and(|equippable| equippable.damage_on_hurt)
                 && stack.max_damage().is_some()
                 && !stack
-                    .item
+                    .item()
                     .damage_resistant()
                     .is_some_and(|tag| damage_type_in_tag(kind, tag));
             let Some(window) = Inventory::armor_slot(*slot) else {

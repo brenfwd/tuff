@@ -333,7 +333,7 @@ async fn arrows_stick_in_walls_and_players_pick_them_up() {
         _ => None,
     })
     .await;
-    assert_eq!(offered.item, Item::Arrow);
+    assert_eq!(offered.item(), Item::Arrow);
     world.shutdown().await;
 }
 
@@ -593,7 +593,7 @@ async fn witches_throw_splash_potions_on_a_sixty_tick_cooldown() {
         "60-tick cooldown between throws, got {gap}"
     );
     for (_, item) in &throws {
-        assert_eq!(item.item, Item::SplashPotion);
+        assert_eq!(item.item(), Item::SplashPotion);
         assert_eq!(
             item.components
                 .potion_contents
@@ -628,7 +628,7 @@ async fn hurt_witches_drink_a_healing_potion() {
     let mut drank = false;
     for _ in 0..2000u32 {
         if let Some(stack) = main_hand(&region, id).await
-            && stack.item == Item::Potion
+            && stack.item() == Item::Potion
             && stack
                 .components
                 .potion_contents

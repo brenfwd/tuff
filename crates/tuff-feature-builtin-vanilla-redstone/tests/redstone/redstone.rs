@@ -1012,7 +1012,7 @@ async fn a_dispenser_pours_a_water_bucket_and_scoops_it_back() {
     b.world.ticks(4).await;
     assert_eq!(state(&b.region, front).await.block(), Block::Water);
     let left = dispenser_slot(&mut b, dispenser).await;
-    assert_eq!(left.map(|s| (s.item, s.count())), Some((Item::Bucket, 1)));
+    assert_eq!(left.map(|s| (s.item(), s.count())), Some((Item::Bucket, 1)));
 
     b.world.ticks(30).await;
     click(&mut b, button, 3).await;
@@ -1023,7 +1023,7 @@ async fn a_dispenser_pours_a_water_bucket_and_scoops_it_back() {
     );
     let left = dispenser_slot(&mut b, dispenser).await;
     assert_eq!(
-        left.map(|s| (s.item, s.count())),
+        left.map(|s| (s.item(), s.count())),
         Some((Item::WaterBucket, 1))
     );
     b.world.shutdown().await;
@@ -1047,7 +1047,10 @@ async fn a_dispenser_bone_meals_a_sapling() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let left = dispenser_slot(&mut b, dispenser).await;
-    assert_eq!(left.map(|s| (s.item, s.count())), Some((Item::BoneMeal, 7)));
+    assert_eq!(
+        left.map(|s| (s.item(), s.count())),
+        Some((Item::BoneMeal, 7))
+    );
     let grown = state(&b.region, sapling).await;
     assert!(
         grown.block() != Block::OakSapling || grown.get("stage") == Some("1"),
@@ -1105,7 +1108,7 @@ async fn a_dispenser_puts_a_helmet_on_the_player_in_front() {
     })
     .await;
     assert_eq!(slot, tuff_vanilla_data::item::EquipmentSlot::Head);
-    assert_eq!((stack.item, stack.count()), (Item::IronHelmet, 1));
+    assert_eq!((stack.item(), stack.count()), (Item::IronHelmet, 1));
     let entities = entity_kinds(&b.region).await;
     assert!(
         !entities
@@ -1206,7 +1209,7 @@ async fn a_dispenser_fills_a_glass_bottle_from_water() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let filled = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!(filled.item, Item::Potion);
+    assert_eq!(filled.item(), Item::Potion);
     assert_eq!(
         filled
             .components
@@ -1242,7 +1245,7 @@ async fn a_dispenser_shears_a_sheep_and_wears_the_shears() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let worn = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!((worn.item, worn.damage()), (Item::Shears, 1));
+    assert_eq!((worn.item(), worn.damage()), (Item::Shears, 1));
     b.world.ticks(2).await;
     let entities = entity_kinds(&b.region).await;
     assert!(
@@ -1340,7 +1343,7 @@ async fn a_dispenser_brushes_a_scute_off_an_armadillo() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let worn = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!((worn.item, worn.damage()), (Item::Brush, 16));
+    assert_eq!((worn.item(), worn.damage()), (Item::Brush, 16));
     b.world.ticks(2).await;
     let entities = entity_kinds(&b.region).await;
     assert!(
@@ -1371,7 +1374,7 @@ async fn a_dispenser_swallows_into_a_sulfur_cube() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let left = dispenser_slot(&mut b, dispenser).await;
-    assert_eq!(left.map(|s| (s.item, s.count())), Some((Item::Dirt, 1)));
+    assert_eq!(left.map(|s| (s.item(), s.count())), Some((Item::Dirt, 1)));
     b.world.shutdown().await;
 }
 
@@ -1398,7 +1401,7 @@ async fn a_dispenser_bottles_and_shears_a_full_beehive() {
     let state_now = state(&b.region, front).await;
     assert_eq!(state_now.get("honey_level"), Some("0"));
     let filled = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!(filled.item, Item::HoneyBottle);
+    assert_eq!(filled.item(), Item::HoneyBottle);
 
     set(
         &b.region,
@@ -1555,7 +1558,7 @@ async fn a_dispenser_acts_on_a_block_in_the_neighbouring_region() {
     assert!(is_air(state(&east, front).await), "the source was taken");
     let left = dispenser_slot(&mut b, dispenser).await;
     assert_eq!(
-        left.map(|s| (s.item, s.count())),
+        left.map(|s| (s.item(), s.count())),
         Some((Item::WaterBucket, 1))
     );
     b.world.shutdown().await;
@@ -2275,7 +2278,7 @@ async fn a_lectern_takes_a_book_turns_pages_pulses_and_gives_it_back() {
         PlayerEvent::ItemGranted {
             stack,
             picked_up: false,
-        } if stack.item == Item::WritableBook => Some(()),
+        } if stack.item() == Item::WritableBook => Some(()),
         _ => None,
     })
     .await;
@@ -2353,7 +2356,7 @@ async fn a_crafter_tells_players_nearby_what_it_crafted() {
     .await;
     assert_eq!(&*recipe, "minecraft:oak_planks");
     assert_eq!(
-        ingredients.iter().map(|s| s.item).collect::<Vec<_>>(),
+        ingredients.iter().map(|s| s.item()).collect::<Vec<_>>(),
         [Item::OakLog]
     );
     b.world.shutdown().await;

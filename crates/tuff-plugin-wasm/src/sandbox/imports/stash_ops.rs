@@ -55,7 +55,7 @@ impl State {
         Ok(self.stashes.get(stash).map(|held| {
             held.iter()
                 .map(|stack| StackPicture {
-                    item: stack.item.name().to_owned(),
+                    item: stack.item().name().to_owned(),
                     count: stack.count(),
                 })
                 .collect()

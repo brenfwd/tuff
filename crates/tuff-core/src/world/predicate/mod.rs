@@ -358,7 +358,9 @@ pub fn item(predicate: &Value, stack: &ItemStack) -> bool {
         return false;
     };
     fields.iter().all(|(key, value)| match key.as_str() {
-        "items" => in_set(value, stack.item.name(), |tag| item_in_tag(stack.item, tag)),
+        "items" => in_set(value, stack.item().name(), |tag| {
+            item_in_tag(stack.item(), tag)
+        }),
         "count" => bounds(value, f64::from(stack.count())),
         "components" => value.as_object().is_some_and(|components| {
             let patch = stack.components.to_nbt();
@@ -387,7 +389,7 @@ pub fn item(predicate: &Value, stack: &ItemStack) -> bool {
 /// The prototype value of the item component `id` on `stack` for the
 /// components the item type fixes.
 fn default_component(stack: &ItemStack, id: &str) -> Option<Tag> {
-    let item = stack.item;
+    let item = stack.item();
     let int = |value: u32| Tag::Int(i32::try_from(value).unwrap_or(i32::MAX));
     match id {
         "minecraft:max_stack_size" => Some(Tag::Int(i32::from(item.max_stack_size()))),

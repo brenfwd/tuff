@@ -53,7 +53,8 @@ pub(crate) fn player(session: &PlayerSession) -> Player {
 
 fn items(session: &PlayerSession) -> Items {
     let slots = session.inventory.slots();
-    let named = |stack: &tuff_item::item::ItemStack| (stack.item.name().to_owned(), stack.count());
+    let named =
+        |stack: &tuff_item::item::ItemStack| (stack.item().name().to_owned(), stack.count());
     Items {
         held: slots[Inventory::hotbar_slot(session.inventory.selected())]
             .as_ref()
@@ -410,7 +411,7 @@ impl PacketInterceptor for Clicks {
             };
             let blocks = host.matching_clicks(
                 kind,
-                held.item.name(),
+                held.item().name(),
                 |tag| {
                     held.components
                         .other

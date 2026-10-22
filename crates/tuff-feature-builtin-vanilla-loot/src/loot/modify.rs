@@ -59,7 +59,7 @@ pub fn modify_item(functions: &[LootFunction], stack: ItemStack, rng: &mut impl 
                 }
             }
             "minecraft:furnace_smelt" => {
-                if let Some(recipe) = smelting_recipe(stack.item) {
+                if let Some(recipe) = smelting_recipe(stack.item()) {
                     let input = if params["use_input_count"].as_bool() == Some(false) {
                         1
                     } else {

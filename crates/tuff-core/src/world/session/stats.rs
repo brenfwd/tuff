@@ -18,7 +18,7 @@ impl PlayerSession {
             .iter()
             .flatten()
             .chain(inventory.carried())
-            .filter(|stack| stack.item == item)
+            .filter(|stack| stack.item() == item)
             .map(|stack| i32::from(stack.count()))
             .sum()
     }

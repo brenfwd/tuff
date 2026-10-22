@@ -20,6 +20,7 @@ tuff-vanilla-common = { workspace = true }
 tuff-vanilla-data = { workspace = true }
 
 [dev-dependencies]
+tuff-item = { workspace = true, features = ["test-support"] }
 tuff-feature-builtin-vanilla-combat = { workspace = true }
 tuff-feature-builtin-vanilla-recipes = { workspace = true }
 tuff-feature-builtin-vanilla-worldgen = { workspace = true }

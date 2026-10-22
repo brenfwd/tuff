@@ -657,7 +657,7 @@ impl RegionActor {
                 .creative_break(self, pos, state);
         }
         if state.block() == Block::Tripwire
-            && tool.is_some_and(|tool| tool.item == Item::Shears)
+            && tool.is_some_and(|tool| tool.item() == Item::Shears)
             && let Some(disarmed) = state.with("disarmed", "true")
         {
             self.raw_set_block(pos, disarmed);
@@ -1298,6 +1298,12 @@ impl RegionActor {
     pub(crate) fn return_offer(&mut self, place: &Place) {
         for (slot, stack) in place.offer.drain() {
             if stack.is_empty() {
+                continue;
+            }
+            let pos = BlockPos::containing(place.position);
+            let transfer = crate::world::conservation::Transfer::HandReturn;
+            if !self.may_transfer_with(transfer, pos, &place.player, true) {
+                self.spawn_item_at(stack, place.position, [0.0; 3], 0);
                 continue;
             }
             if let Err(refused) = place.player.try_send(PlayerEvent::HandReturned {

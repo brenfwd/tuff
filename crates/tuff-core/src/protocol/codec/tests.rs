@@ -151,7 +151,7 @@ fn bytes_reader(bytes: &[u8]) -> PacketReader {
 fn write_creative_slot(stack: &ItemStack) -> PacketWriter {
     let mut w = PacketWriter::new();
     w.write_var_int(stack.count() as i32);
-    w.write_var_int(stack.item.id() as i32);
+    w.write_var_int(stack.item().id() as i32);
     let added = stack.components.network_added();
     let removed = stack.components.network_removed();
     w.write_var_int(added.len() as i32);
@@ -415,7 +415,7 @@ fn creative_slot_decodes_real_client_payloads() {
         assert_eq!(r.remaining(), 0);
         assert_eq!(stack.count(), 1);
         assert_eq!(stack.components.damage, Some(damage));
-        let mut expected = ItemStack::mint(stack.item, 1, MintReason::Test);
+        let mut expected = ItemStack::mint(stack.item(), 1, MintReason::Test);
         expected.components.damage = Some(damage);
         assert_eq!(stack, expected);
     }
@@ -742,8 +742,8 @@ fn pot_decorations_are_sent_as_optional_templates_per_side() {
 
     let legacy = Tag::List(vec!["minecraft:angler_pottery_sherd".into()]);
     let sides = tuff_item::item::pot_decorations_from_nbt(&legacy).unwrap();
-    assert_eq!(sides[0].as_ref().unwrap().item, Item::AnglerPotterySherd);
-    assert_eq!(sides[3].as_ref().unwrap().item, Item::Brick);
+    assert_eq!(sides[0].as_ref().unwrap().item(), Item::AnglerPotterySherd);
+    assert_eq!(sides[3].as_ref().unwrap().item(), Item::Brick);
 }
 
 #[tuff_core::watchdog]

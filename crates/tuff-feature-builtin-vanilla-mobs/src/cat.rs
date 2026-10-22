@@ -548,7 +548,7 @@ impl Species for Cat {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        cat_food(stack.item)
+        cat_food(stack.item())
     }
 
     fn interact(
@@ -564,7 +564,7 @@ impl Species for Cat {
                 return None;
             }
             if let Some(stack) = stack
-                && cat_food(stack.item)
+                && cat_food(stack.item())
                 && core.health < core.max_health()
             {
                 core.heal(HEAL_AMOUNT);
@@ -578,7 +578,7 @@ impl Species for Cat {
             return None;
         }
         if let Some(stack) = stack
-            && cat_food(stack.item)
+            && cat_food(stack.item())
         {
             core.try_tame(interaction.player_uuid, TAME_CHANCE, cx);
             return Some(HandEffect::Consume(1));

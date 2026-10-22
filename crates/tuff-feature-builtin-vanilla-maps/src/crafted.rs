@@ -43,11 +43,11 @@ pub fn cartography_result(
     additional: &ItemStack,
     data: &MapData,
 ) -> Option<ItemStack> {
-    match additional.item {
+    match additional.item() {
         Item::Paper
             if tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::EXTENDABLE_MAPS,
-                map.item,
+                map.item(),
             ) && !data.locked
                 && data.scale < MAX_SCALE =>
         {
@@ -74,7 +74,7 @@ pub fn extends(data: Option<&MapData>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuff_item::item::MintReason;
+    use tuff_item::item::{BurnReason, MintReason};
 
     fn map(id: u32) -> ItemStack {
         let mut stack = ItemStack::mint(Item::FilledMap, 3, MintReason::Test);
@@ -99,7 +99,7 @@ mod tests {
         assert!(cartography_result(&map(4), &paper, &data(MAX_SCALE, false)).is_none());
         assert!(cartography_result(&map(4), &paper, &data(0, true)).is_none());
         let mut explorer = map(4);
-        explorer.item = Item::WoodlandMansionMap;
+        explorer.transform(Item::WoodlandMansionMap, MintReason::Test, BurnReason::Test);
         assert!(cartography_result(&explorer, &paper, &data(0, false)).is_none());
     }
 

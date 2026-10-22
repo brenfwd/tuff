@@ -132,7 +132,7 @@ pub(crate) fn bucket_interact(
     cx: &mut TickContext,
 ) -> InteractOutcome {
     let stack = interaction.stack.as_deref()?;
-    if stack.item != Item::WaterBucket || !core.is_alive() {
+    if stack.item() != Item::WaterBucket || !core.is_alive() {
         return None;
     }
     let bucket_item = Item::of_bucket(kind)?;

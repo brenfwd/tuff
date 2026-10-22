@@ -175,7 +175,7 @@ pub type GossipRequests = super::super::Mail<i32>;
 pub type JobOffers = super::super::Mail<BlockPos>;
 
 fn is_wanted_food(stack: &ItemStack) -> bool {
-    stack.item.villager_food().is_some()
+    stack.item().villager_food().is_some()
 }
 
 impl Villager {
@@ -502,7 +502,13 @@ impl Villager {
             self.throw_half(core, other, cx, is_wanted_food, KEEP_FOOD_STACK);
         }
         if farmer && self.count_of(Item::Wheat) > KEEP_WHEAT as u32 {
-            self.throw_half(core, other, cx, |s| s.item == Item::Wheat, KEEP_FOOD_STACK);
+            self.throw_half(
+                core,
+                other,
+                cx,
+                |s| s.item() == Item::Wheat,
+                KEEP_FOOD_STACK,
+            );
         }
         let own = self.data.profession.info().requested_items;
         let willing: Vec<Item> = fact
@@ -518,7 +524,7 @@ impl Villager {
                 core,
                 other,
                 cx,
-                |s| willing.contains(&s.item),
+                |s| willing.contains(&s.item()),
                 KEEP_FOOD_STACK,
             );
         }
@@ -528,7 +534,7 @@ impl Villager {
         self.inventory
             .iter()
             .flatten()
-            .filter(|s| s.item == item)
+            .filter(|s| s.item() == item)
             .map(|s| s.count() as u32)
             .sum()
     }

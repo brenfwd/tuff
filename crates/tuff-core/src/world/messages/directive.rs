@@ -374,7 +374,7 @@ pub fn enchant_stack(
         return Err(EnchantAnswer::NotLiving);
     };
     let existing = stack.components.enchantments.clone().unwrap_or_default();
-    let compatible = definition.supports(stack.item)
+    let compatible = definition.supports(stack.item())
         && existing.entries().iter().all(|(id, _)| {
             registry.get(id).is_none_or(|other| {
                 id == enchantment
@@ -382,7 +382,7 @@ pub fn enchant_stack(
             })
         });
     if !compatible {
-        return Err(EnchantAnswer::Incompatible(stack.item.name().to_owned()));
+        return Err(EnchantAnswer::Incompatible(stack.item().name().to_owned()));
     }
     let mut entries: Vec<(String, i32)> = existing
         .entries()

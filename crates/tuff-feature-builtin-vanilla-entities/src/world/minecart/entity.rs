@@ -301,7 +301,7 @@ impl RegionEntity for Minecart {
         let fuel = interaction.stack.as_deref().is_some_and(|stack| {
             tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::FURNACE_MINECART_FUEL,
-                stack.item,
+                stack.item(),
             )
         });
         if !fuel || self.fuel + FUEL_TICKS_PER_ITEM > MAX_FUEL_TICKS {

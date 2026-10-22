@@ -138,7 +138,7 @@ impl Species for Goat {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        goat_food(stack.item)
+        goat_food(stack.item())
     }
 
     fn eating_sound(&self, _core: &MobCore) -> Option<SoundEvent> {
@@ -156,7 +156,7 @@ impl Species for Goat {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != Item::Bucket || core.is_baby() {
+        if stack.item() != Item::Bucket || core.is_baby() {
             return None;
         }
         core.sound_as(

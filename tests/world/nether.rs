@@ -433,7 +433,7 @@ async fn wither_skeletons_hit_with_stone_swords_that_wither() {
     let hit = next_hit(&world, &mut events, 600).await;
     assert_eq!(hit.kind.name, "minecraft:mob_attack");
     assert_eq!(
-        hit.weapon.map(|w| w.item),
+        hit.weapon.map(|w| w.item()),
         Some(Item::StoneSword),
         "armed with a stone sword"
     );

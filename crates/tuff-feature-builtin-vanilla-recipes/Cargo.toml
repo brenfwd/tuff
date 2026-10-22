@@ -13,3 +13,6 @@ rand = { workspace = true }
 serde_json = { workspace = true }
 tuff-core = { workspace = true }
 tuff-vanilla-data = { workspace = true }
+
+[dev-dependencies]
+tuff-item = { workspace = true, features = ["test-support"] }
