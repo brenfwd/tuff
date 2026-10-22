@@ -1,4 +1,10 @@
-# tuff
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img src="docs/assets/logo-light.svg" alt="" width="40" height="40" align="top">
+  </picture>
+  tuff
+</h1>
 
 A Minecraft Java Edition server written in Rust, for game version 26.3.
 The vanilla game runs as a set of plugins on an inert core, and external
