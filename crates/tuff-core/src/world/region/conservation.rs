@@ -3,9 +3,11 @@
 //! trades items with players until it unloads.
 
 use super::RegionActor;
-use crate::world::conservation::{ItemViolation, Subject};
+use crate::world::conservation::{ItemViolation, Subject, Transfer};
 use crate::world::messages::{PlayerEvent, PlayerHandle};
 use tuff_item::text::TextComponent;
+use tuff_world_model::BlockPos;
+use tuff_world_model::pos::RegionPos;
 
 impl RegionActor {
     fn subject(&self) -> Subject {
@@ -62,5 +64,81 @@ impl RegionActor {
         for hook in hooks.iter() {
             hook.item_violation(self, &violation);
         }
+    }
+
+    /// Whether a `transfer` at `pos` may start, sending to region `to`
+    /// when another region takes part: never while either is quarantined
+    /// (nothing taken from unsaved state reaches saved state, and nothing
+    /// goes where it would not be saved), and an injected failure is a
+    /// refused violation. Refused, nothing moves.
+    pub(in crate::world::region) fn may_transfer(
+        &mut self,
+        transfer: Transfer,
+        pos: BlockPos,
+        to: Option<RegionPos>,
+    ) -> bool {
+        let conservation = &self.shared.conservation;
+        if self.quarantined()
+            || to.is_some_and(|to| conservation.quarantined(Subject::Region(self.dimension, to)))
+        {
+            return false;
+        }
+        if !conservation.take_injected(transfer) {
+            return true;
+        }
+        self.item_violation(
+            None,
+            ItemViolation {
+                operation: transfer.operation(),
+                player: None,
+                pos,
+                item: None,
+                detail: "the transfer check was made to fail".to_owned(),
+            },
+        );
+        false
+    }
+
+    /// The release check of one side of a `transfer` at `pos`: the items
+    /// held `before` plus those `received` equal those held `after` plus
+    /// those `sent` on. A mismatch is a violation; the moves already ran,
+    /// so the region is quarantined and the answer is false.
+    pub(in crate::world::region) fn transfer_balanced(
+        &mut self,
+        transfer: Transfer,
+        pos: BlockPos,
+        before: u64,
+        received: u64,
+        after: u64,
+        sent: u64,
+    ) -> bool {
+        if before + received == after + sent || !tuff_item::item::conservation::checks() {
+            return true;
+        }
+        self.item_violation(
+            None,
+            ItemViolation {
+                operation: transfer.operation(),
+                player: None,
+                pos,
+                item: None,
+                detail: format!(
+                    "held {before} and received {received}, but holds {after} and sent {sent}"
+                ),
+            },
+        );
+        false
+    }
+
+    /// Items in the container at `pos`, for [`Self::transfer_balanced`].
+    pub(in crate::world::region) fn held_at(&self, pos: BlockPos) -> u64 {
+        self.block_entity(pos).map_or(0, |entity| {
+            entity
+                .items
+                .iter()
+                .flatten()
+                .map(|stack| u64::from(stack.count()))
+                .sum()
+        })
     }
 }

@@ -4,10 +4,12 @@
 //! to the bigger one in one message, taking them out before sending.
 
 use super::RegionActor;
+use crate::world::conservation::Transfer;
 use crate::world::experience;
 use crate::world::items::{BorderMerge, ItemEntity};
 use crate::world::messages::{RegionHandle, RegionInternal};
 use tuff_item::item::{ItemSnapshot, ItemStack};
+use tuff_world_model::BlockPos;
 use tuff_world_model::pos::{REGION_CHUNKS, RegionPos};
 
 const REGION_BLOCKS: f64 = (REGION_CHUNKS * 16) as f64;
@@ -48,6 +50,9 @@ impl RegionActor {
     /// Asks every neighbour the merge reach of item `id` meets for an item
     /// to merge with.
     pub(super) fn probe_border_merges(&mut self, id: i32) {
+        if self.quarantined() {
+            return;
+        }
         let Some(item) = self.item(id).filter(|item| item.mergeable()) else {
             return;
         };
@@ -76,14 +81,31 @@ impl RegionActor {
     /// behind `handle`. A refused message hands the items back, so both
     /// sides keep what they had.
     fn send_merge(&mut self, handle: &RegionHandle, from: i32, to: i32, moved: u8) {
-        let Some(own) = self.item_mut(from) else {
+        let Some(own) = self.item(from) else {
             return;
         };
         if moved == 0 {
             return;
         }
-        let (pickup_delay, age, at) = (own.pickup_delay, own.age, own.base.position);
+        let at = own.base.position;
+        let pos = BlockPos::containing(at);
+        if !self.may_transfer(Transfer::BorderMerge, pos, Some(handle.pos)) {
+            return;
+        }
+        let own = self.item_mut(from).expect("looked up above");
+        let (pickup_delay, age) = (own.pickup_delay, own.age);
+        let before = u64::from(own.stack.count());
         let stack = own.stack.take(moved);
+        let (after, sent) = (u64::from(own.stack.count()), u64::from(stack.count()));
+        if sent != u64::from(moved)
+            || !self.transfer_balanced(Transfer::BorderMerge, pos, before, 0, after, sent)
+        {
+            let own = self.item_mut(from).expect("taken from above");
+            if let Err(stack) = own.stack.join(stack) {
+                self.spawn_item_at(stack, at, [0.0; 3], pickup_delay);
+            }
+            return;
+        }
         match handle.try_internal(RegionInternal::BorderMerge(BorderMerge::Take {
             item: to,
             stack,
@@ -183,20 +205,38 @@ impl RegionActor {
                 age,
                 at,
             } => {
+                let pos = BlockPos::containing(at);
+                let received = u64::from(stack.count());
                 let Some(own) = self.item_mut(item) else {
                     self.spawn_item_at(stack, at, [0.0; 3], pickup_delay);
                     return;
                 };
+                let before = u64::from(own.stack.count());
                 if !own.stack.stacks_with(&stack) || room(&own.stack) < stack.count() {
                     self.spawn_item_at(stack, at, [0.0; 3], pickup_delay);
                     return;
                 }
                 own.pickup_delay = own.pickup_delay.max(pickup_delay);
                 own.age = own.age.min(age);
-                if let Err(stack) = own.stack.join(stack) {
-                    self.spawn_item_at(stack, at, [0.0; 3], pickup_delay);
-                    return;
-                }
+                let spilled = match own.stack.join(stack) {
+                    Ok(()) => 0,
+                    Err(stack) => {
+                        let spilled = u64::from(stack.count());
+                        self.spawn_item_at(stack, at, [0.0; 3], pickup_delay);
+                        spilled
+                    }
+                };
+                let after = self
+                    .item(item)
+                    .map_or(0, |own| u64::from(own.stack.count()));
+                self.transfer_balanced(
+                    Transfer::BorderMerge,
+                    pos,
+                    before,
+                    received,
+                    after,
+                    spilled,
+                );
                 self.refresh_item_stack(item);
             }
         }

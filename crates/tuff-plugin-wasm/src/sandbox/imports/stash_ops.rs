@@ -117,12 +117,9 @@ impl State {
             {
                 return Err(WorldError::OverBudget);
             }
-            let moved = self
-                .stashes
-                .remove(source)
-                .ok_or(WorldError::InvalidState)?;
-            self.stashes.fill(target, moved);
-            Ok(())
+            self.stashes
+                .merge(target, source)
+                .ok_or(WorldError::InvalidState)
         })())
     }
 
@@ -176,7 +173,10 @@ impl State {
             return Ok(Err(WorldError::NotGranted));
         }
         Ok((|| {
-            if !(1..=abi::MAX_GIVE_COUNT).contains(&count) || !self.stashes.contains(stash) {
+            if !(1..=abi::MAX_GIVE_COUNT).contains(&count)
+                || !self.stashes.contains(stash)
+                || self.stashes.quarantined()
+            {
                 return Err(WorldError::InvalidState);
             }
             let item =

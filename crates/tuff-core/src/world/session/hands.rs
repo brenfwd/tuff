@@ -1007,6 +1007,39 @@ impl PlayerSession {
     }
 
     /// Puts back a stack whose item entity could not be spawned.
+    /// Whether items may be dropped into the region behind `to`: not
+    /// while it or this player is quarantined, so nothing reaches state
+    /// that will not be saved. An injected failure is a violation: the
+    /// player and the region are quarantined and the player is kicked.
+    fn may_drop_into(&mut self, to: &RegionHandle) -> bool {
+        use crate::world::conservation::{Subject, Transfer};
+        let conservation = &self.shared.conservation;
+        let region = Subject::Region(to.dimension, to.pos);
+        if conservation.quarantined(Subject::Player(self.id)) || conservation.quarantined(region) {
+            return false;
+        }
+        if !conservation.take_injected(Transfer::Drop) {
+            return true;
+        }
+        tuff_item::item::conservation::violation(
+            Transfer::Drop.operation(),
+            format_args!("player {:?}: the transfer check was made to fail", self.id),
+        );
+        conservation.quarantine(region);
+        conservation.quarantine(Subject::Player(self.id));
+        let kick = self
+            .shared
+            .config
+            .get_bool(crate::config::ITEMS_CONSERVATION_KICK)
+            .unwrap_or(true);
+        if kick {
+            self.kick(tuff_item::text::TextComponent::from(
+                "An item operation was refused; reconnect to reload your inventory",
+            ));
+        }
+        false
+    }
+
     fn keep_unspawned(&mut self, stack: ItemStack) {
         if let Some(lost) = self.inventory.add(stack) {
             log::warn!(
@@ -1048,6 +1081,7 @@ impl PlayerSession {
     ) {
         let region = ChunkPos::of_position(position).region();
         let back = match self.region(region).await {
+            Some(handle) if !self.may_drop_into(&handle) => Some(stack),
             Some(handle) => {
                 let request = RegionRequest::SpawnItem {
                     stack,

@@ -182,3 +182,45 @@ async fn items_merge_across_a_region_border_into_the_bigger_stack() {
     assert_eq!(of(tuff_vanilla_data::Item::Sand).len(), 1, "{all:?}");
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_border_merge_whose_check_fails_keeps_both_stacks() {
+    use crate::world::conservation::{Subject, Transfer};
+    let dir = TestDir::new();
+    let (player, mut events) = PlayerHandle::new(100);
+    let world = TestWorld::start(dir.path());
+    view_around(&world, &player, &mut events, ChunkPos::new(31, 0)).await;
+    view_around(&world, &player, &mut events, ChunkPos::new(32, 0)).await;
+    let west = world.region(RegionPos::new(0, 0)).await;
+    let east = world.region(RegionPos::new(1, 0)).await;
+    let floor = |range: std::ops::Range<i32>| -> Vec<_> {
+        range
+            .flat_map(|x| (0..16).map(move |z| BlockPos::new(x, SKY, z)))
+            .map(|pos| (pos, Block::Stone.default_state()))
+            .collect()
+    };
+    place_blocks(&world, &west, floor(500..512)).await;
+    place_blocks(&world, &east, floor(512..524)).await;
+    world.shared.conservation.fail_next(Transfer::BorderMerge);
+    drop_at(&west, "minecraft:dirt", 5, 511.8, 3.5).await;
+    drop_at(&east, "minecraft:dirt", 20, 512.2, 3.5).await;
+    world.ticks(81).await;
+
+    let counts: Vec<u8> = dropped(&west)
+        .await
+        .iter()
+        .chain(&dropped(&east).await)
+        .map(|(_, _, stack)| stack.count())
+        .collect();
+    assert_eq!(counts.len(), 2, "a refused merge moves nothing: {counts:?}");
+    assert_eq!(counts.iter().map(|c| u32::from(*c)).sum::<u32>(), 25);
+    let dimension = world.dimension(OVERWORLD);
+    assert!([&west, &east].iter().any(|region| {
+        world
+            .shared
+            .conservation
+            .quarantined(Subject::Region(dimension, region.pos))
+    }));
+    world.shutdown().await;
+}
