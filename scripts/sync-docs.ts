@@ -58,7 +58,7 @@ for (const p of readmePages) {
     used.add(s);
     // The page title replaces the first section's own heading.
     if (i > 0) return b;
-    return b.replace(/^#{1,2} .*\n/, "").replace(/^#(#{2,5}) /gm, "$1 ");
+    return b.replace(/^<h1>[\s\S]*?<\/h1>\n/, "").replace(/^#{1,2} .*\n/, "").replace(/^#(#{2,5}) /gm, "$1 ");
   });
   const body = parts.join("\n\n").trim();
   writeFileSync(join(out, `${p.slug}.md`), `---\ntitle: ${p.title}\ndescription: ${p.description}\ngroup: ${p.group}\nsource: README.md\n---\n\n${body}\n`);
