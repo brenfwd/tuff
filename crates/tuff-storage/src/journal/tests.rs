@@ -296,7 +296,7 @@ fn prepared_writes_are_journaled_once_and_roll_back_after_a_crash() {
         store
             .prepare_writes(&[PreparedWrite {
                 pos: chunk(),
-                epoch,
+                epoch: Some(epoch),
                 chunk: true,
                 entities: false,
                 pois: false,

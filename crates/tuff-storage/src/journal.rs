@@ -1081,7 +1081,9 @@ impl RegionStore for JournaledRegion {
 
     fn prepare_writes(&mut self, writes: &[PreparedWrite]) -> io::Result<()> {
         let mut images = Vec::new();
+        let open = self.journal.open_epoch();
         for write in writes {
+            let epoch = write.epoch.unwrap_or(open);
             let kinds = [
                 (write.chunk, BlobKind::Chunk),
                 (write.entities, BlobKind::Entities),
@@ -1089,7 +1091,7 @@ impl RegionStore for JournaledRegion {
             ];
             for (_, kind) in kinds.into_iter().filter(|(wanted, _)| *wanted) {
                 let key = self.key(kind, write.pos);
-                if !self.journal.needs_image(write.epoch, &key) {
+                if !self.journal.needs_image(epoch, &key) {
                     continue;
                 }
                 let image = match kind {
@@ -1097,7 +1099,7 @@ impl RegionStore for JournaledRegion {
                     BlobKind::Entities => self.inner.read_entities(write.pos),
                     BlobKind::Pois => self.inner.read_pois(write.pos),
                 }?;
-                images.push((write.epoch, key, image));
+                images.push((epoch, key, image));
             }
         }
         self.journal.prepare(images)

@@ -1110,10 +1110,10 @@ fn run_io(
                 blocks,
                 entities,
                 pois,
-                ticket: Some(ticket),
+                ticket,
             } => Some(tuff_storage::backend::PreparedWrite {
                 pos: *pos,
-                epoch: ticket.epoch(),
+                epoch: ticket.as_ref().map(|ticket| ticket.epoch()),
                 chunk: blocks.is_some(),
                 entities: !matches!(entities, EntityWrite::Keep),
                 pois: !matches!(pois, EntityWrite::Keep),
@@ -1121,7 +1121,7 @@ fn run_io(
             _ => None,
         })
         .collect();
-    if prepared.len() > 1
+    if !prepared.is_empty()
         && let Err(err) = store.prepare_writes(&prepared)
     {
         log::warn!("cannot journal region {region:?} ahead of its writes: {err}");

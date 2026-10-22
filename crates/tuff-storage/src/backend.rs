@@ -48,8 +48,9 @@ pub trait WorldLock: Send + Sync {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparedWrite {
     pub pos: ChunkPos,
-    /// The save epoch the writes belong to (their ticket's).
-    pub epoch: u64,
+    /// The save epoch the writes belong to (their ticket's), or `None`
+    /// for writes without a ticket, which join the open epoch.
+    pub epoch: Option<u64>,
     pub chunk: bool,
     pub entities: bool,
     pub pois: bool,
