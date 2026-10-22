@@ -18,10 +18,12 @@
 //! (8), `--flyers`/`--miners`/`--walkers`/`--entities <n>` (from the
 //! preset), `--idlers <n>` (0, survival players standing at spawn), `--sprinters <n>` (0, survival players sprint-jumping), `--entity_types <a,b,..>`, `--duration <d>` (60s),
 //! `--warmup <d>` (10s), `--seed <n>` (1), `--view_distance <n>` (10),
+//! `--simulation_distance <n>` (the view distance),
 //! `--speed <blocks per tick>` (2.0), `--mine_rate <blocks per tick>` (1),
 //! `--home_radius <blocks>` (40), `--tick_lockstep <always|sprint>`
 //! (always), `--config <key>=<value>` (repeatable), `--label <text>`,
-//! `--out <file>`, `--instance_dir <dir>` (a fresh temporary directory),
+//! `--out <file>`, `--instance_dir <dir>` (a fresh directory under the target
+//! directory),
 //! `--ops <name,..>` (players made operators so a human can join and
 //! watch), `--host <ip>` (127.0.0.1), `--port <n>` (0, an ephemeral port),
 //! `--server tuff|vanilla|both` (tuff), and for vanilla
@@ -242,6 +244,7 @@ async fn run(options: Options) -> Result<()> {
         watch: options.watch.clone(),
         seed: options.seed,
         view_distance: options.view_distance.into(),
+        simulation_distance: options.simulation_distance.into(),
         max_players: Some(options.bots() + 9),
         tick_lockstep: options.tick_lockstep,
         config: options.config.clone(),

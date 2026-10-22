@@ -488,6 +488,7 @@ async fn fill_setblock_clone_drops_match_vanilla() {
         rcon_password: String::new(),
         seed: SEED,
         view_distance: 4,
+        simulation_distance: 4,
         max_players: 2,
     };
     let vanilla = Vanilla::start(&options, settings, &dir.join("vanilla"))

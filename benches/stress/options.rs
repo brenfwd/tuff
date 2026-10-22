@@ -73,6 +73,7 @@ pub struct Options {
     pub warmup: Duration,
     pub seed: i64,
     pub view_distance: i8,
+    pub simulation_distance: i8,
     pub speed: f64,
     pub mine_rate: u32,
     pub home_radius: f64,
@@ -116,6 +117,7 @@ impl Options {
             "warmup_s": self.warmup.as_secs_f64(),
             "seed": self.seed,
             "view_distance": self.view_distance,
+            "simulation_distance": self.simulation_distance,
             "speed": self.speed,
             "mine_rate": self.mine_rate,
             "home_radius": self.home_radius,
@@ -170,6 +172,7 @@ pub fn parse_from(args: impl IntoIterator<Item = String>) -> Result<Mode> {
         warmup: Duration::from_secs(10),
         seed: 1,
         view_distance: 10,
+        simulation_distance: 0,
         speed: 2.0,
         mine_rate: 1,
         home_radius: 40.0,
@@ -218,6 +221,7 @@ pub fn parse_from(args: impl IntoIterator<Item = String>) -> Result<Mode> {
             "--heap_sample" => options.heap_sample = value()?.parse()?,
             "--seed" => options.seed = value()?.parse()?,
             "--view_distance" => options.view_distance = value()?.parse()?,
+            "--simulation_distance" => options.simulation_distance = value()?.parse()?,
             "--speed" => options.speed = value()?.parse()?,
             "--mine_rate" => options.mine_rate = value()?.parse()?,
             "--home_radius" => options.home_radius = value()?.parse()?,
@@ -244,6 +248,9 @@ pub fn parse_from(args: impl IntoIterator<Item = String>) -> Result<Mode> {
     let mix = preset.mix(players);
     let [flyers, miners, walkers, entities] =
         std::array::from_fn(|i| overrides[i].unwrap_or(mix[i]));
+    if options.simulation_distance == 0 {
+        options.simulation_distance = options.view_distance;
+    }
     options.preset = preset;
     options.players = players;
     options.flyers = flyers;
