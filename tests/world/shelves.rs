@@ -4,7 +4,8 @@
 
 use super::jukebox::{prop, saved, set, start, wait_prop};
 use super::*;
-use crate::world::messages::HandEffect;
+use crate::world::inventory::Inventory;
+use crate::world::messages::{HandEffect, PlaceOffer};
 use tuff_nbt::Tag;
 use tuff_vanilla_data::BlockState;
 
@@ -30,7 +31,33 @@ fn click(
     click.held_count = u8::from(held.is_some());
     click.face = face;
     click.cursor = cursor;
+    click.offer = offer(held.into_iter().map(|item| (0, item)));
     click
+}
+
+/// Moves one of each `(hotbar index, item)` into a click, as a session
+/// does for a shelf.
+fn offer(items: impl IntoIterator<Item = (usize, Item)>) -> PlaceOffer {
+    PlaceOffer::new(
+        false,
+        items
+            .into_iter()
+            .map(|(index, item)| {
+                (
+                    Inventory::hotbar_slot(index),
+                    tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::Test),
+                )
+            })
+            .collect(),
+    )
+}
+
+async fn returned(events: &mut mpsc::UnboundedReceiver<PlayerEvent>) -> (usize, Item) {
+    expect(events, |event| match event {
+        PlayerEvent::HandReturned { slot, stack, .. } => Some((slot, stack.item())),
+        _ => None,
+    })
+    .await
 }
 
 async fn outcome(events: &mut mpsc::UnboundedReceiver<PlayerEvent>, seq: i32) -> ActionOutcome {
@@ -83,7 +110,7 @@ async fn a_chiseled_bookshelf_takes_a_book_in_the_clicked_slot_and_gives_it_back
         outcome(&mut events, 1).await,
         ActionOutcome::Used {
             item: Item::Book,
-            effect: HandEffect::Consume(1),
+            effect: HandEffect::None,
             ..
         }
     ));
@@ -133,7 +160,7 @@ async fn a_chiseled_bookshelf_takes_a_book_in_the_clicked_slot_and_gives_it_back
         outcome(&mut events, 3).await,
         ActionOutcome::Interacted { .. }
     ));
-    assert_eq!(granted.item, Item::Book);
+    assert_eq!(granted.item(), Item::Book);
     assert_eq!(
         prop(&region, shelf, "slot_5_occupied").await.unwrap(),
         "false"
@@ -166,11 +193,10 @@ async fn an_unpowered_shelf_swaps_the_hand_with_the_clicked_slot() {
             1,
         )))
         .await;
-    let ActionOutcome::HotbarSwapped { slots: swapped, .. } = outcome(&mut events, 1).await else {
-        panic!("not a swap");
-    };
-    assert_eq!(swapped.len(), 1);
-    assert!(swapped[0].1.is_none());
+    assert!(matches!(
+        outcome(&mut events, 1).await,
+        ActionOutcome::Interacted { .. }
+    ));
     assert_eq!(
         slots(&saved(&region, shelf).await),
         vec![(1, "minecraft:stick".to_owned())]
@@ -186,10 +212,14 @@ async fn an_unpowered_shelf_swaps_the_hand_with_the_clicked_slot() {
             2,
         )))
         .await;
-    let ActionOutcome::HotbarSwapped { slots: swapped, .. } = outcome(&mut events, 2).await else {
-        panic!("not a swap");
-    };
-    assert_eq!(swapped[0].1.as_ref().unwrap().item, Item::Stick);
+    assert_eq!(
+        returned(&mut events).await,
+        (Inventory::hotbar_slot(0), Item::Stick)
+    );
+    assert!(matches!(
+        outcome(&mut events, 2).await,
+        ActionOutcome::Interacted { .. }
+    ));
     assert_eq!(
         slots(&saved(&region, shelf).await),
         vec![(1, "minecraft:apple".to_owned())]
@@ -205,11 +235,10 @@ async fn an_unpowered_shelf_swaps_the_hand_with_the_clicked_slot() {
             3,
         )))
         .await;
-    assert!(
-        !matches!(
-            outcome(&mut events, 3).await,
-            ActionOutcome::HotbarSwapped { .. }
-        ),
+    outcome(&mut events, 3).await;
+    assert_eq!(
+        slots(&saved(&region, shelf).await),
+        vec![(1, "minecraft:apple".to_owned())],
         "an empty hand on an empty slot swaps nothing"
     );
     world.shutdown().await;
@@ -256,21 +285,12 @@ async fn a_powered_shelf_chain_swaps_the_hotbar_row() {
         Some(Item::Stick),
         1,
     );
-    swap.hotbar = vec![None; 9];
-    swap.hotbar[3] = Some(tuff_item::item::ItemStack::new(Item::Apple, 1));
-    swap.hotbar[8] = Some(tuff_item::item::ItemStack::new(Item::Stick, 1));
+    swap.offer = offer([(3, Item::Apple), (8, Item::Stick)]);
     region.request(RegionRequest::Place(swap)).await;
-    let ActionOutcome::HotbarSwapped {
-        slots: swapped,
-        single,
-    } = outcome(&mut events, 1).await
-    else {
-        panic!("not a swap");
-    };
-    assert!(!single);
-    let touched: Vec<usize> = swapped.iter().map(|(i, _)| *i).collect();
-    assert!(touched.contains(&3) && touched.contains(&8), "{touched:?}");
-    assert!(swapped.iter().all(|(_, stack)| stack.is_none()));
+    assert!(matches!(
+        outcome(&mut events, 1).await,
+        ActionOutcome::Interacted { .. }
+    ));
     let all = [saved(&region, left).await, saved(&region, right).await];
     let held: Vec<String> = all.iter().flat_map(slots).map(|(_, id)| id).collect();
     assert!(held.contains(&"minecraft:apple".to_owned()), "{held:?}");

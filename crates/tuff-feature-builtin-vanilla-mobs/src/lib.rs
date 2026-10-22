@@ -115,7 +115,6 @@ use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 
 use tuff_core::world::entity::EntityHit;
-use tuff_item::item::ItemStack;
 use tuff_vanilla_common::combat;
 
 mod core;
@@ -197,7 +196,7 @@ pub struct MobSounds {
 }
 
 /// What hurt a mob.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Damage {
     pub kind: &'static DamageType,
     /// The player responsible, by entity id and UUID.
@@ -212,7 +211,7 @@ pub struct Damage {
     pub projectile: Option<EntityType>,
     pub projectile_id: Option<i32>,
     pub position: Option<[f64; 3]>,
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// Where the responsible entity's eyes were and where it looked, when
     /// known (a player's swing).
     pub aim: Option<Aim>,
@@ -397,7 +396,7 @@ fn egg_entity_type(
             .get_str("id")
             .and_then(tuff_vanilla_data::registry::EntityType::from_name),
         Some(_) => None,
-        None => stack.item.spawns_entity(),
+        None => stack.item().spawns_entity(),
     }
 }
 
@@ -520,10 +519,10 @@ impl tuff_core::world::region_api::RegionHooks for MobRegionHooks {
         pos: tuff_world_model::BlockPos,
         facing: tuff_vanilla_data::block::Facing,
         _origin: [f64; 3],
-        stack: &tuff_item::item::ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         let target = tuff_vanilla_common::placement::step(pos, facing);
-        hive::dispensed_at(world, target, stack.item)
+        hive::dispensed_at(world, target, stack.item())
             .or_else(|| world::region::assembly::dispensed(world, target, facing, stack))
             .or_else(|| dispense_spawn_egg(world, pos, facing, stack))
     }
@@ -767,9 +766,9 @@ pub(crate) mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_spawn_egg_hatches_the_type_its_entity_data_names() {
-        use tuff_item::item::ItemStack;
+        use tuff_item::item::{ItemStack, MintReason};
         use tuff_vanilla_data::registry::EntityType;
-        let mut egg = ItemStack::new(tuff_vanilla_data::Item::CowSpawnEgg, 1);
+        let mut egg = ItemStack::mint(tuff_vanilla_data::Item::CowSpawnEgg, 1, MintReason::Test);
         assert_eq!(egg_entity_type(&egg), Some(EntityType::Cow));
         egg.components.other.insert(
             "minecraft:entity_data",

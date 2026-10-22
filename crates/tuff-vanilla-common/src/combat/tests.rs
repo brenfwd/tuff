@@ -18,7 +18,7 @@ fn damage_statistics_count_rounded_tenths_of_positive_finite_amounts() {
 }
 
 fn enchanted(item: Item, enchantments: &[(&str, i32)]) -> ItemStack {
-    let mut stack = ItemStack::new(item, 1);
+    let mut stack = ItemStack::mint(item, 1, MintReason::Test);
     stack.components.enchantments = Some(Enchantments::new(
         enchantments
             .iter()
@@ -47,9 +47,9 @@ fn attacker<'a>(equipment: &'a [Equipped<'a>], ticks: u32) -> Attacker<'a> {
 #[tuff_core::watchdog]
 #[test]
 fn armor_and_toughness_add_up_from_worn_pieces() {
-    let helmet = ItemStack::new(Item::DiamondHelmet, 1);
-    let chest = ItemStack::new(Item::DiamondChestplate, 1);
-    let sword = ItemStack::new(Item::DiamondSword, 1);
+    let helmet = ItemStack::mint(Item::DiamondHelmet, 1, MintReason::Test);
+    let chest = ItemStack::mint(Item::DiamondChestplate, 1, MintReason::Test);
+    let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     let equipment = [
         (EquipmentSlot::Head, &helmet),
         (EquipmentSlot::Chest, &chest),
@@ -63,7 +63,7 @@ fn armor_and_toughness_add_up_from_worn_pieces() {
 #[tuff_core::watchdog]
 #[test]
 fn attributes_combine_weapons_effects_and_enchantments() {
-    let sword = ItemStack::new(Item::DiamondSword, 1);
+    let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     let equipment = [(EquipmentSlot::Mainhand, &sword)];
     let plain = Modifiers::equipment(&equipment);
     assert_eq!(plain.value(Attribute::AttackDamage), 7.0);
@@ -100,7 +100,7 @@ fn attributes_combine_weapons_effects_and_enchantments() {
     let equipment = [(EquipmentSlot::Head, &aqua)];
     let submerged = Modifiers::equipment(&equipment).value(Attribute::SubmergedMiningSpeed);
     assert!((submerged - 1.0).abs() < 1e-6, "{submerged}");
-    let netherite = ItemStack::new(Item::NetheriteBoots, 1);
+    let netherite = ItemStack::mint(Item::NetheriteBoots, 1, MintReason::Test);
     let equipment = [(EquipmentSlot::Feet, &netherite)];
     let resistance = Modifiers::equipment(&equipment).value(Attribute::KnockbackResistance);
     assert!((resistance - 0.1).abs() < 1e-6);
@@ -111,7 +111,7 @@ fn attributes_combine_weapons_effects_and_enchantments() {
 fn a_stacks_own_attribute_modifiers_replace_the_items() {
     use tuff_item::item::gear::{AttributeModifier, ModifierDisplay};
     use tuff_vanilla_data::item::EquipmentSlotGroup;
-    let mut stick = ItemStack::new(Item::Stick, 1);
+    let mut stick = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     stick.components.attribute_modifiers = Some(vec![AttributeModifier {
         attribute: Attribute::AttackDamage,
         id: "minecraft:spiked".into(),
@@ -130,13 +130,13 @@ fn a_stacks_own_attribute_modifiers_replace_the_items() {
         Modifiers::equipment(&worn).value(Attribute::AttackDamage),
         1.0
     );
-    let mut blunt = ItemStack::new(Item::DiamondSword, 1);
+    let mut blunt = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     blunt.components.removed = vec!["minecraft:attribute_modifiers".into()];
     let held = [(EquipmentSlot::Mainhand, &blunt)];
     let modifiers = Modifiers::equipment(&held);
     assert_eq!(modifiers.value(Attribute::AttackDamage), 1.0);
     assert_eq!(modifiers.value(Attribute::AttackSpeed), 4.0);
-    let mut plated = ItemStack::new(Item::LeatherHelmet, 1);
+    let mut plated = ItemStack::mint(Item::LeatherHelmet, 1, MintReason::Test);
     plated.components.attribute_modifiers = Some(vec![AttributeModifier {
         attribute: Attribute::Armor,
         id: "minecraft:plate".into(),
@@ -159,7 +159,7 @@ fn melee_follows_weapon_cooldown_and_crits() {
     let spam = melee(&attacker(&[], 0), EntityType::Player, &mut rng).unwrap();
     assert!(spam.damage < 1.0 && !spam.full_strength);
 
-    let sword = ItemStack::new(Item::DiamondSword, 1);
+    let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     let equipment = [(EquipmentSlot::Mainhand, &sword)];
     let ready = attacker(&equipment, 13);
     let hit = melee(&ready, EntityType::Player, &mut rng).unwrap();
@@ -209,7 +209,7 @@ fn melee_follows_weapon_cooldown_and_crits() {
     };
     let hit = melee(&fast, EntityType::Player, &mut rng).unwrap();
     assert!(hit.sweep.is_none(), "too fast to sweep");
-    let axe = ItemStack::new(Item::DiamondAxe, 1);
+    let axe = ItemStack::mint(Item::DiamondAxe, 1, MintReason::Test);
     let equipment = [(EquipmentSlot::Mainhand, &axe)];
     let chop = melee(&attacker(&equipment, 40), EntityType::Player, &mut rng).unwrap();
     assert!(chop.sweep.is_none(), "only swords sweep");
@@ -440,7 +440,7 @@ fn shields_block_in_front_unless_bypassed() {
 #[test]
 fn mace_smash_needs_a_real_fall_and_adds_fall_based_damage() {
     let mut rng = rng();
-    let mace = ItemStack::new(Item::Mace, 1);
+    let mace = ItemStack::mint(Item::Mace, 1, MintReason::Test);
     let equipment = [(EquipmentSlot::Mainhand, &mace)];
     let falling = Attacker {
         fall_distance: 2.0,
@@ -478,7 +478,7 @@ fn mace_smash_needs_a_real_fall_and_adds_fall_based_damage() {
         None,
         "below the 1.5 block threshold"
     );
-    let sword = ItemStack::new(Item::DiamondSword, 1);
+    let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     let equipment = [(EquipmentSlot::Mainhand, &sword)];
     let falling_sword = Attacker {
         fall_distance: 2.0,
@@ -618,7 +618,7 @@ fn looting_raises_the_equipment_drop_chance() {
     let mut rng = rng();
     let boosted = equipment_drop_chance(&looting, &context, 0.085, &mut rng);
     assert!((boosted - 0.115).abs() < 1e-4, "got {boosted}");
-    let plain = ItemStack::new(Item::IronSword, 1);
+    let plain = ItemStack::mint(Item::IronSword, 1, MintReason::Test);
     assert_eq!(
         equipment_drop_chance(&plain, &context, 0.085, &mut rng),
         0.085

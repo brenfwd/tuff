@@ -128,6 +128,7 @@ async fn click(
         .request(RegionRequest::ContainerTransaction {
             player: player.clone(),
             window_id: 1,
+            pool: pool_for(&changes),
             changes,
             took_result: false,
         })
@@ -153,8 +154,8 @@ async fn player_clicks_log_net_item_rows_that_roll_back_and_restore() {
         .await;
     expect(&mut events, container_menu).await;
 
-    let diamonds = |count| Some(ItemStack::new(Item::Diamond, count));
-    let stone = |count| Some(ItemStack::new(Item::Stone, count));
+    let diamonds = |count| Some(ItemStack::mint(Item::Diamond, count, MintReason::Test));
+    let stone = |count| Some(ItemStack::mint(Item::Stone, count, MintReason::Test));
     click(
         &region,
         &alex,
@@ -416,7 +417,7 @@ async fn a_decorated_pots_item_rolls_back_and_restores() {
     let mut click = place(&alex, pot, Item::Brick, 1);
     click.item = None;
     click.held = Some(Item::Brick);
-    region.request(RegionRequest::Place(click)).await;
+    region.request(RegionRequest::Place(offering(click))).await;
     world.ticks(2).await;
     assert!(pot_has_item(&region, pot).await);
     let rolled = console(&world, "tuff audit rollback t:1h r:#global a:container").await;
@@ -445,7 +446,7 @@ async fn a_rollback_while_the_chest_is_open_rejects_the_viewers_stale_clicks() {
         .request(RegionRequest::Place(place(&alex, chest, Item::Torch, 1)))
         .await;
     expect(&mut events, container_menu).await;
-    let diamonds = |count| Some(ItemStack::new(Item::Diamond, count));
+    let diamonds = |count| Some(ItemStack::mint(Item::Diamond, count, MintReason::Test));
     click(
         &region,
         &alex,
@@ -467,6 +468,7 @@ async fn a_rollback_while_the_chest_is_open_rejects_the_viewers_stale_clicks() {
             player: alex.clone(),
             window_id: 1,
             changes: set_slot(chest, 0, diamonds(2), None),
+            pool: pool_for(&set_slot(chest, 0, diamonds(2), None)),
             took_result: false,
         })
         .await;

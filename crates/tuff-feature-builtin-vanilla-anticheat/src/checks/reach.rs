@@ -64,7 +64,7 @@ impl Reach {
                 let weapon = session
                     .inventory
                     .hand(false)
-                    .and_then(|stack| stack.item.attack_range())
+                    .and_then(|stack| stack.item().attack_range())
                     .map(|range| {
                         let (_, max) = range.reach(creative);
                         f64::from(max) + f64::from(range.hitbox_margin)

@@ -8,7 +8,7 @@ use crate::protocol::configuration as cfg;
 use crate::protocol::pack;
 use crate::protocol::play::*;
 use crate::world::scoreboard::{NumberFormat, RenderType, Team};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_wire::PacketWriter;
 use tuff_world_model::BlockPos;
 
@@ -466,8 +466,8 @@ fn player_state_packets_round_trip() {
 #[tuff_core::watchdog]
 #[test]
 fn metadata_attributes_and_equipment_round_trip() {
-    let stack = ItemStack::new(Item::DiamondSword, 1);
-    let mut damaged = ItemStack::new(Item::IronPickaxe, 1);
+    let stack = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
+    let mut damaged = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     damaged.set_damage(5);
     has(
         &play(&SetEntityData {
@@ -479,7 +479,10 @@ fn metadata_attributes_and_equipment_round_trip() {
                     2,
                     MetadataValue::OptionalText(Some(TextComponent::new("Bob"))),
                 ),
-                (8, MetadataValue::Slot(Some(stack.clone()))),
+                (
+                    8,
+                    MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&stack))),
+                ),
                 (6, MetadataValue::Pose(0)),
                 (13, MetadataValue::OptionalVarInt(Some(4))),
                 (
@@ -507,7 +510,7 @@ fn metadata_attributes_and_equipment_round_trip() {
         &play(&SetEquipment {
             entity_id: 1,
             items: &[
-                (equipment_slot::MAIN_HAND, Some(&damaged)),
+                (equipment_slot::MAIN_HAND, Some(damaged.view())),
                 (equipment_slot::HEAD, None),
             ],
         }),
@@ -540,12 +543,12 @@ fn metadata_attributes_and_equipment_round_trip() {
 #[tuff_core::watchdog]
 #[test]
 fn container_packets_round_trip() {
-    let stack = ItemStack::new(Item::Stone, 3);
+    let stack = ItemStack::mint(Item::Stone, 3, MintReason::Test);
     has(
         &play(&ContainerSetContent {
             window_id: 1,
             state_id: 2,
-            slots: &[Some(stack.clone()), None],
+            slots: [Some(stack.view()), None].as_slice().into(),
             carried: None,
         }),
         &["slots: [minecraft:stone x3, empty], carried: empty"],
@@ -555,7 +558,7 @@ fn container_packets_round_trip() {
             window_id: 0,
             state_id: 1,
             slot: 36,
-            item: Some(stack.clone()),
+            item: Some(stack.view()),
         }),
         &["slot: 36, item: minecraft:stone x3"],
     );
@@ -563,7 +566,7 @@ fn container_packets_round_trip() {
     has(
         &play(&SetPlayerInventory {
             slot: 5,
-            item: Some(stack.clone()),
+            item: Some(stack.view()),
         }),
         &["slot: 5, item: minecraft:stone x3"],
     );
@@ -605,7 +608,7 @@ fn container_packets_round_trip() {
             components: Default::default(),
         },
         buy_b: None,
-        sell: ItemStack::new(Item::Bread, 4),
+        sell: tuff_item::item::ItemSnapshot::describe(Item::Bread, 4, Default::default()),
         uses: 0,
         max_uses: 12,
         reward_exp: true,
@@ -1068,7 +1071,7 @@ fn chat_and_scoreboard_packets_round_trip() {
         &play(&SelectAdvancementsTab(Some("minecraft:story/root"))),
         &["story/root"],
     );
-    let icon = ItemStack::new(Item::GrassBlock, 1);
+    let icon = ItemStack::mint(Item::GrassBlock, 1, MintReason::Test);
     has(
         &play(&UpdateAdvancements {
             reset: true,
@@ -1078,7 +1081,7 @@ fn chat_and_scoreboard_packets_round_trip() {
                 display: Some(AdvancementDisplay {
                     title: &text,
                     description: &text,
-                    icon: &icon,
+                    icon: icon.view(),
                     frame: 0,
                     background: Some("minecraft:block/dirt"),
                     show_toast: true,

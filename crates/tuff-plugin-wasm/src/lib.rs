@@ -41,6 +41,7 @@ pub mod portal;
 pub mod registry;
 pub mod routes;
 pub mod sandbox;
+pub mod stash;
 pub mod state;
 pub mod storage;
 pub mod wit;

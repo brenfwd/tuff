@@ -15,7 +15,7 @@ use crate::world::region_api::{PlayerEffectEvent, PlayerEffectTrigger, RegionTas
 use crate::world::stats::Stat;
 use crate::world::{EYE_HEIGHT, block_contact, framed, message_plain, packets};
 use rand::Rng;
-use tuff_item::item::{Hurt, ItemStack};
+use tuff_item::item::{Hurt, ItemSnapshot, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -34,11 +34,7 @@ impl PlayerSession {
 
     /// How this player's gear and effects change its mining speed.
     pub fn miner(&self) -> player::Miner {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         let modifiers = attributes::Modifiers {
             equipment: &worn,
@@ -60,11 +56,7 @@ impl PlayerSession {
 
     /// The value of one of this player's attributes.
     pub fn attribute(&self, attribute: Attribute) -> f64 {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         attributes::Modifiers {
             equipment: &worn,
@@ -243,15 +235,26 @@ impl PlayerSession {
         .landed
     }
 
-    pub fn equipment_snapshot(&self) -> [Option<ItemStack>; 6] {
-        EQUIPMENT_SLOTS.map(|slot| self.inventory.equipped(slot).cloned())
+    pub fn equipment_snapshot(&self) -> [Option<tuff_item::item::ItemSnapshot>; 6] {
+        EQUIPMENT_SLOTS.map(|slot| {
+            self.inventory
+                .equipped(slot)
+                .map(tuff_item::item::ItemSnapshot::of)
+        })
     }
 
     /// The equipment worn and held, by slot.
-    pub fn equipment(&self) -> Vec<(EquipmentSlot, ItemStack)> {
+    pub fn worn(&self) -> Vec<attributes::Equipped<'_>> {
         EQUIPMENT_SLOTS
             .into_iter()
-            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?.clone())))
+            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?)))
+            .collect()
+    }
+
+    pub fn equipment(&self) -> Vec<(EquipmentSlot, ItemSnapshot)> {
+        EQUIPMENT_SLOTS
+            .into_iter()
+            .filter_map(|slot| Some((slot, ItemSnapshot::of(self.inventory.equipped(slot)?))))
             .collect()
     }
 
@@ -270,7 +273,7 @@ impl PlayerSession {
         };
         let held = self.inventory.slots()[window]
             .as_ref()
-            .map(|stack| stack.item);
+            .map(|stack| stack.item());
         match self.hurt_slot_reporting(window, amount) {
             Hurt::Unchanged => {}
             Hurt::Damaged => self.send_inventory(),
@@ -278,7 +281,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        &ItemStack::new(item, 1),
+                        ItemStack::mint(item, 1, MintReason::Template).view(),
                     );
                     self.progress
                         .stats
@@ -348,7 +351,7 @@ impl PlayerSession {
         };
         self.progress
             .stats
-            .award(Stat::item(StatType::Used, used.item), 1);
+            .award(Stat::item(StatType::Used, used.item()), 1);
         self.body.health.value = 1.0;
         for effect in death_effects {
             match effect {
@@ -560,7 +563,12 @@ impl PlayerSession {
     /// Wears the stack in a window slot and reports the durability change
     /// to advancement criteria, including the hit that breaks it.
     pub fn hurt_slot_reporting(&mut self, window: usize, amount: u32) -> Hurt {
-        let before = self.inventory.slots().get(window).cloned().flatten();
+        let before = self
+            .inventory
+            .slots()
+            .get(window)
+            .and_then(Option::as_ref)
+            .map(tuff_item::item::ItemSnapshot::of);
         let outcome = self.inventory.hurt_slot(window, amount, &mut self.rng);
         let Some(mut stack) = before else {
             return outcome;
@@ -569,7 +577,13 @@ impl PlayerSession {
         match outcome {
             Hurt::Unchanged => {}
             Hurt::Damaged => {
-                if let Some(now) = self.inventory.slots().get(window).cloned().flatten() {
+                if let Some(now) = self
+                    .inventory
+                    .slots()
+                    .get(window)
+                    .and_then(Option::as_ref)
+                    .map(tuff_item::item::ItemSnapshot::of)
+                {
                     let delta = damage_before as i32 - now.damage() as i32;
                     self.fire(
                         crate::world::advancement::trigger::Event::ItemDurabilityChanged {
@@ -581,7 +595,7 @@ impl PlayerSession {
             }
             Hurt::Broken => {
                 let max = stack.max_damage().unwrap_or(damage_before);
-                stack.set_damage(max);
+                stack.edit_components(|components| components.damage = Some(max));
                 let delta = damage_before as i32 - max as i32;
                 self.fire(
                     crate::world::advancement::trigger::Event::ItemDurabilityChanged {
@@ -601,7 +615,7 @@ impl PlayerSession {
         if amount == 0 || self.mode.abilities.instabuild {
             return;
         }
-        let held = self.inventory.hand(off_hand).map(|stack| stack.item);
+        let held = self.inventory.hand(off_hand).map(|stack| stack.item());
         let window = self.inventory.hand_slot(off_hand);
         match self.hurt_slot_reporting(window, amount) {
             Hurt::Unchanged => {}
@@ -610,7 +624,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        &ItemStack::new(item, 1),
+                        ItemStack::mint(item, 1, MintReason::Template).view(),
                     );
                     self.progress
                         .stats

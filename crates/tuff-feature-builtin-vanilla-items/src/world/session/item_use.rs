@@ -26,7 +26,7 @@ use tuff_core::world::projectile::{ArrowShot, Flight, Launch, Owner, Pickup, Sho
 use tuff_core::world::session::hooks::{HookFuture, SessionHooks, SessionTick};
 use tuff_core::world::session::*;
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_common::combat;
 use tuff_world_model::BlockPos;
 use tuff_world_model::pos::ChunkPos;
@@ -56,7 +56,7 @@ pub trait ItemUseExt {
     /// first), else the first in the inventory; creative players always
     /// have one. The window slot is `None` for a creative player's free
     /// arrow.
-    fn bow_ammo(&self) -> Option<(Option<usize>, ItemStack)>;
+    fn bow_ammo(&self) -> Option<(Option<usize>, tuff_item::item::ItemSnapshot)>;
     /// The velocity of something this player shoots or throws along its
     /// view, carrying its own movement along.
     fn shot_velocity(&mut self, power: f32) -> [f64; 3];
@@ -107,11 +107,10 @@ impl ItemUseExt for PlayerSession {
     /// A firework rocket used while gliding: consumed, and its boost
     /// applied to the tracked glide velocity for its flight duration.
     async fn boost_with_firework(&mut self, off_hand: bool) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = use_one(self, off_hand) else {
             return;
         };
         if !self.mode.abilities.instabuild {
-            self.inventory.take_from_hand(off_hand, 1);
             self.send_inventory();
         }
         let lifetime = tuff_core::world::projectile::firework_lifetime(&stack, &mut self.rng);
@@ -147,7 +146,7 @@ impl ItemUseExt for PlayerSession {
             })
             .unwrap_or_default();
         if !self.mode.abilities.instabuild {
-            self.inventory.take_from_hand(off_hand, 1);
+            self.inventory.consume_from_hand(off_hand, 1);
             self.send_inventory();
         }
         let set = self.shared.recipes();
@@ -169,7 +168,7 @@ impl ItemUseExt for PlayerSession {
         let Some(stack) = self.inventory.hand(off_hand) else {
             return;
         };
-        let item = stack.item;
+        let item = stack.item();
         let kept = |kind: DataComponentType| !stack.components.is_removed(kind.name());
         let consumable = stack.consumable();
         let food = item.food().filter(|_| kept(DataComponentType::Food));
@@ -283,39 +282,41 @@ impl ItemUseExt for PlayerSession {
     /// From a stack of several, one is worn and the old piece goes to the
     /// inventory.
     async fn swap_equipment(&mut self, off_hand: bool, slot: usize) {
-        let Some(hand) = self.inventory.hand(off_hand).cloned() else {
-            return;
-        };
-        let worn = self.inventory.slots()[slot].clone();
-        let bound = worn.as_ref().is_some_and(|stack| {
-            stack.has_enchantment_effect(|effects| effects.prevent_armor_change)
-        });
-        let identical = worn
-            .as_ref()
-            .is_some_and(|w| w.item == hand.item && w.components == hand.components);
-        if (bound && !self.mode.abilities.instabuild) || identical {
-            self.send_inventory();
-            return;
-        }
+        let creative = self.mode.abilities.instabuild;
         let hand_slot = if off_hand {
             Inventory::OFFHAND_SLOT
         } else {
             Inventory::hotbar_slot(self.inventory.selected())
         };
-        if hand.count <= 1 {
-            let to_hand = if worn.is_none() && self.mode.abilities.instabuild {
-                Some(hand.clone())
-            } else {
-                worn
+        let Some(hand) = self.inventory.slots()[hand_slot].as_ref() else {
+            return;
+        };
+        let worn = self.inventory.slots()[slot].as_ref();
+        let bound = worn.is_some_and(|stack| {
+            stack.has_enchantment_effect(|effects| effects.prevent_armor_change)
+        });
+        let identical =
+            worn.is_some_and(|w| w.item() == hand.item() && w.components == hand.components);
+        if (bound && !creative) || identical {
+            self.send_inventory();
+            return;
+        }
+        if hand.count() <= 1 {
+            let hand = self.inventory.slot_mut(hand_slot).take();
+            let worn = self.inventory.slot_mut(slot).take();
+            let to_hand = match (worn, &hand) {
+                (None, Some(hand)) if creative => Some(ItemStack::mint_like(
+                    hand,
+                    hand.count(),
+                    MintReason::Creative,
+                )),
+                (worn, _) => worn,
             };
-            self.inventory.set_slot(slot, Some(hand));
-            self.inventory.set_slot(hand_slot, to_hand);
+            *self.inventory.slot_mut(slot) = hand;
+            *self.inventory.slot_mut(hand_slot) = to_hand;
         } else {
-            self.inventory
-                .set_slot(slot, Some(hand.clone().with_count(1)));
-            if !self.mode.abilities.instabuild {
-                self.inventory.take_from_hand(off_hand, 1);
-            }
+            let one = use_one(self, off_hand);
+            let worn = std::mem::replace(self.inventory.slot_mut(slot), one);
             if let Some(worn) = worn
                 && let Some(extra) = self.inventory.add(worn)
             {
@@ -329,9 +330,9 @@ impl ItemUseExt for PlayerSession {
     /// first), else the first in the inventory; creative players always
     /// have one. The window slot is `None` for a creative player's free
     /// arrow.
-    fn bow_ammo(&self) -> Option<(Option<usize>, ItemStack)> {
+    fn bow_ammo(&self) -> Option<(Option<usize>, tuff_item::item::ItemSnapshot)> {
         let is_arrow = |s: &ItemStack| {
-            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, s.item)
+            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, s.item())
         };
         for off_hand in [true, false] {
             if let Some(stack) = self.inventory.hand(off_hand).filter(|s| is_arrow(s)) {
@@ -340,17 +341,19 @@ impl ItemUseExt for PlayerSession {
                 } else {
                     Inventory::hotbar_slot(self.inventory.selected())
                 };
-                return Some((Some(slot), stack.clone()));
+                return Some((Some(slot), tuff_item::item::ItemSnapshot::of(stack)));
             }
         }
         if let Some(slot) = self.inventory.find_matching(is_arrow) {
-            let stack = self.inventory.slots()[slot].clone()?;
-            return Some((Some(slot), stack));
+            let stack = self.inventory.slots()[slot].as_ref()?;
+            return Some((Some(slot), tuff_item::item::ItemSnapshot::of(stack)));
         }
-        self.mode
-            .abilities
-            .instabuild
-            .then(|| (None, ItemStack::new(Item::Arrow, 1)))
+        self.mode.abilities.instabuild.then(|| {
+            (
+                None,
+                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default()),
+            )
+        })
     }
 
     /// The velocity of something this player shoots or throws along its
@@ -381,12 +384,17 @@ impl ItemUseExt for PlayerSession {
 
     async fn launch(&mut self, position: [f64; 3], shot: Shot) -> Option<i32> {
         let launched = match &shot {
-            Shot::Arrow(arrow) => Some(arrow.item.clone()),
-            Shot::Thrown { item, .. } | Shot::Firework { item, .. } => Some(item.clone()),
+            Shot::Arrow(arrow) => Some(tuff_item::item::ItemSnapshot::of(&arrow.item)),
+            Shot::Thrown { item, .. } | Shot::Firework { item, .. } => {
+                Some(tuff_item::item::ItemSnapshot::of(item))
+            }
             _ => None,
         };
         if let Some(stack) = launched {
-            self.item_action_hooks(tuff_core::world::session::hooks::ItemAction::Shot, &stack);
+            self.item_action_hooks(
+                tuff_core::world::session::hooks::ItemAction::Shot,
+                stack.view(),
+            );
         }
         let id = self.shared.next_entity_id();
         let owner = Owner::of(
@@ -419,8 +427,8 @@ impl ItemUseExt for PlayerSession {
         let Some(bow) = self
             .inventory
             .hand(using.off_hand)
-            .filter(|s| s.item == Item::Bow)
-            .cloned()
+            .filter(|s| s.item() == Item::Bow)
+            .map(tuff_item::item::ItemSnapshot::of)
         else {
             return;
         };
@@ -437,22 +445,23 @@ impl ItemUseExt for PlayerSession {
         let uses = if self.mode.abilities.instabuild {
             0
         } else {
-            combat::ammo_use(&bow, ammo.item, 1.0).floor().max(0.0) as u8
+            combat::ammo_use(&bow, ammo.item(), 1.0).floor().max(0.0) as u8
         };
-        if uses > ammo.count {
+        if uses > ammo.count() {
             return;
         }
-        if uses > 0
-            && let Some(slot) = slot
-        {
-            let left = ammo.count - uses;
-            self.inventory
-                .set_slot(slot, (left > 0).then(|| ammo.clone().with_count(left)));
-        }
+        let taken = match slot {
+            Some(slot) if uses > 0 => ItemStack::take_from(self.inventory.slot_mut(slot), uses),
+            _ => None,
+        };
+        let projectile = match taken {
+            Some(taken) => taken.keep(1, tuff_item::item::BurnReason::Consumed),
+            None => ItemStack::mint_like(&ammo, 1, MintReason::Creative),
+        };
         let velocity = self.shot_velocity(power * 3.0);
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.100_000_001_490_116_12, eye[2]];
-        let mut arrow = ArrowShot::new(ammo.clone().with_count(1), velocity);
+        let mut arrow = ArrowShot::new(projectile, velocity);
         arrow.weapon = Some(bow.clone());
         arrow.crit = power == 1.0;
         if uses == 0 {
@@ -542,12 +551,14 @@ impl ItemUseExt for PlayerSession {
         if self.is_dead() || self.mode.game_mode == GameMode::Spectator {
             return;
         }
-        let Some(stack) = self
+        if self
             .inventory
             .hand(off_hand)
-            .filter(|s| s.item == Item::EnderEye)
-            .cloned()
-        else {
+            .is_none_or(|s| s.item() != Item::EnderEye)
+        {
+            return;
+        }
+        let Some(stack) = use_one(self, off_hand) else {
             return;
         };
         let position = [
@@ -583,9 +594,6 @@ impl ItemUseExt for PlayerSession {
             seed,
         })]);
         self.broadcast_chunk(packet).await;
-        if !self.mode.abilities.instabuild {
-            self.inventory.take_from_hand(off_hand, 1);
-        }
         self.progress
             .stats
             .award(Stat::item(StatType::Used, Item::EnderEye), 1);
@@ -594,7 +602,7 @@ impl ItemUseExt for PlayerSession {
 
     /// Throwing a snowball, egg or ender pearl.
     async fn throw_projectile(&mut self, off_hand: bool, item: Item, kind: EntityType) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = use_one(self, off_hand) else {
             return;
         };
         let cooldown = stack.use_cooldown();
@@ -650,9 +658,6 @@ impl ItemUseExt for PlayerSession {
         self.progress
             .stats
             .award(Stat::item(StatType::Used, item), 1);
-        if !self.mode.abilities.instabuild {
-            self.inventory.take_from_hand(off_hand, 1);
-        }
         if let Some(cooldown) = cooldown {
             self.add_stack_cooldown(item, cooldown);
         }
@@ -660,7 +665,11 @@ impl ItemUseExt for PlayerSession {
     }
 
     async fn use_fishing_rod(&mut self, off_hand: bool) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = self
+            .inventory
+            .hand(off_hand)
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
             return;
         };
         let pitch = 0.4 / (self.rng.r#gen::<f32>() * 0.4 + 0.8);
@@ -728,13 +737,13 @@ impl ItemUseExt for PlayerSession {
         let main = self
             .inventory
             .hand(false)
-            .is_some_and(|s| s.item == Item::FishingRod);
+            .is_some_and(|s| s.item() == Item::FishingRod);
         if main {
             self.wear_slot(EquipmentSlot::Mainhand, damage).await;
         } else if self
             .inventory
             .hand(true)
-            .is_some_and(|s| s.item == Item::FishingRod)
+            .is_some_and(|s| s.item() == Item::FishingRod)
         {
             match self.hurt_slot_reporting(Inventory::OFFHAND_SLOT, damage) {
                 Hurt::Unchanged => {}
@@ -769,7 +778,7 @@ impl ItemUseExt for PlayerSession {
             .stats
             .award(Stat::item(StatType::Used, Item::WindCharge), 1);
         if !self.mode.abilities.instabuild {
-            self.inventory.take_from_hand(off_hand, 1);
+            self.inventory.consume_from_hand(off_hand, 1);
         }
         if let Some(cooldown) = Item::WindCharge.use_cooldown() {
             self.add_cooldown(Item::WindCharge, cooldown.ticks());
@@ -802,7 +811,8 @@ impl ItemUseExt for PlayerSession {
         let Some(mut using) = self.actions.using else {
             return;
         };
-        if self.is_dead() || self.inventory.hand(using.off_hand).map(|s| s.item) != Some(using.item)
+        if self.is_dead()
+            || self.inventory.hand(using.off_hand).map(|s| s.item()) != Some(using.item)
         {
             self.stop_using();
             self.publish(false).await;
@@ -925,7 +935,10 @@ impl ItemUseExt for PlayerSession {
             .inventory
             .hand(off_hand)
             .and_then(|stack| stack.components.suspicious_stew_effects.clone());
-        let consumed = self.inventory.hand(off_hand).cloned();
+        let consumed = self
+            .inventory
+            .hand(off_hand)
+            .map(tuff_item::item::ItemSnapshot::of);
         if let Some(stack) = &consumed {
             self.fire(tuff_core::world::advancement::trigger::Event::ConsumeItem(
                 stack,
@@ -998,10 +1011,10 @@ impl ItemUseExt for PlayerSession {
             self.apply_consume_effect(effect).await;
         }
         if !self.mode.abilities.instabuild {
-            let before = self.inventory.hand(off_hand).map_or(0, |s| s.count);
-            self.inventory.take_from_hand(off_hand, 1);
+            let before = self.inventory.hand(off_hand).map_or(0, |s| s.count());
+            self.inventory.consume_from_hand(off_hand, 1);
             if before > 0
-                && let Some(remainder) = consumed.as_ref().and_then(ItemStack::use_remainder)
+                && let Some(remainder) = consumed.as_deref().and_then(ItemStack::use_remainder)
             {
                 if self.inventory.hand(off_hand).is_none() {
                     let slot = if off_hand {
@@ -1015,7 +1028,7 @@ impl ItemUseExt for PlayerSession {
                 }
             }
         }
-        if let Some(cooldown) = consumed.as_ref().and_then(ItemStack::use_cooldown) {
+        if let Some(cooldown) = consumed.as_deref().and_then(ItemStack::use_cooldown) {
             self.add_stack_cooldown(item, cooldown);
         }
         self.send_inventory();
@@ -1180,4 +1193,15 @@ fn goat_horn_sound(instrument: &str) -> Option<SoundEvent> {
         "dream_goat_horn" => SoundEvent::ItemGoatHornSound7,
         _ => return None,
     })
+}
+
+/// One item from the hand for a projectile: taken from the held stack, or
+/// minted for a creative player, whose stack stays.
+pub(super) fn use_one(session: &mut PlayerSession, off_hand: bool) -> Option<ItemStack> {
+    if session.mode.abilities.instabuild {
+        let held = session.inventory.hand(off_hand)?;
+        Some(ItemStack::mint_like(held, 1, MintReason::Creative))
+    } else {
+        session.inventory.take_from_hand(off_hand, 1)
+    }
 }

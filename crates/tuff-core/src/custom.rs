@@ -16,7 +16,7 @@ use bytes::Bytes;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::EntityType;
 
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_item::load::{LoadError, LoadErrorKind};
 use tuff_item::registry::Registry;
 use tuff_nbt::{Compound, Tag};
@@ -43,7 +43,7 @@ pub struct CustomItemDef {
     pub base: Item,
     /// The `item_model` the pack provides; `None` keeps the base model.
     pub model: Option<String>,
-    pub components: Components,
+    pub components: tuff_item::item::ComponentsSnapshot,
     /// Whether the base item's own behaviour still runs on use.
     pub inherit_behavior: bool,
     /// What using the item does, before (or instead of) the base item.
@@ -58,7 +58,7 @@ impl CustomItemDef {
             id: id.into(),
             base,
             model: None,
-            components: Components::default(),
+            components: Default::default(),
             inherit_behavior: false,
             behavior: None,
             private_data: false,
@@ -71,13 +71,27 @@ impl CustomItemDef {
     }
 
     pub fn with_components(mut self, components: Components) -> Self {
-        self.components = components;
+        self.components = tuff_item::item::ComponentsSnapshot::describing(components);
         self
     }
 
     /// A stack of this item.
     pub fn stack(&self, count: u8) -> ItemStack {
-        let mut components = self.components.clone();
+        ItemStack::mint_with(self.base, count, &self.components(), MintReason::Command)
+    }
+
+    /// A picture of one of this item, never a real item.
+    pub fn template(&self) -> tuff_item::item::ItemSnapshot {
+        tuff_item::item::ItemSnapshot::describe_with(self.base, 1, &self.components())
+    }
+
+    fn components(&self) -> tuff_item::item::ComponentsSnapshot {
+        let mut snapshot = self.components.clone();
+        snapshot.edit(|components| self.finish_components(components));
+        snapshot
+    }
+
+    fn finish_components(&self, components: &mut Components) {
         if let Some(model) = &self.model {
             components.other.insert(ITEM_MODEL, model.as_str());
         }
@@ -98,7 +112,6 @@ impl CustomItemDef {
                 }
             }
         }
-        ItemStack::new(self.base, count).with_components(components)
     }
 }
 
@@ -488,15 +501,19 @@ mod tests {
         defs.register_item("ex", def).unwrap();
         let content = defs.resolve().unwrap();
         let stack = content.item("ex:ruby").unwrap().stack(3);
-        assert_eq!(stack.item, Item::Emerald);
-        assert_eq!(stack.count, 3);
+        assert_eq!(stack.item(), Item::Emerald);
+        assert_eq!(stack.count(), 3);
         assert_eq!(item_id(&stack), Some("ex:ruby"));
         assert_eq!(content.item_of(&stack).unwrap().id, "ex:ruby");
         assert_eq!(
             stack.components.other.get(ITEM_MODEL).and_then(Tag::as_str),
             Some("ex:ruby")
         );
-        assert!(content.item_of(&ItemStack::new(Item::Emerald, 1)).is_none());
+        assert!(
+            content
+                .item_of(&ItemStack::mint(Item::Emerald, 1, MintReason::Test))
+                .is_none()
+        );
         assert!(stack.stacks_with(&content.item("ex:ruby").unwrap().stack(1)));
     }
 

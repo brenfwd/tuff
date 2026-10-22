@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::MintReason;
 use tuff_world_model::BlockPos;
 
 fn read_text_nbt(reader: &mut PacketReader) -> Result<Option<TextComponent>> {
@@ -106,18 +107,18 @@ impl ReadExt for PacketReader {
             components.remove_network(kind);
         }
         let item = u32::try_from(item).ok().and_then(Item::from_id);
-        let stack = match item {
+        let shown = match item {
             Some(Item::Air) => return Ok(CreativeSlot::Empty),
-            Some(item) => ItemStack::new(item, 1).with_components(components),
+            Some(item) => tuff_item::item::ItemSnapshot::describe(item, 1, components),
             None => return Ok(CreativeSlot::Invalid),
         };
         if !supported {
             return Ok(CreativeSlot::Unsupported);
         }
-        if count > stack.max_stack_size() as i32 {
+        if count > shown.max_stack_size() as i32 {
             return Ok(CreativeSlot::Invalid);
         }
-        Ok(CreativeSlot::Stack(stack.with_count(count as u8)))
+        Ok(CreativeSlot::Stack(shown.with_count(count as u8)))
     }
 
     fn read_component(
@@ -221,11 +222,15 @@ impl ReadExt for PacketReader {
         if item == Item::Air || !supported {
             return Ok(None);
         }
-        let stack = ItemStack::new(item, 1).with_components(components);
+        let stack = ItemStack::mint(item, 1, MintReason::Network).with_components(components);
         if !(1..=stack.max_stack_size() as i32).contains(&count) {
             return Err(BufferError::InvalidEnum(count));
         }
-        Ok(Some(stack.with_count(count as u8)))
+        Ok(Some(ItemStack::mint_like(
+            &stack,
+            count as u8,
+            MintReason::Network,
+        )))
     }
 
     fn read_component_at(
@@ -427,7 +432,8 @@ impl ReadExt for PacketReader {
                 let Some(contents) = self.read_container(depth)? else {
                     return Ok(false);
                 };
-                return Ok(components.set_network(NetworkComponent::Container(&contents)));
+                components.set_network_container(contents);
+                return Ok(true);
             }
             DataComponentType::SulfurCubeContent => {
                 let Some(stack) = self.read_item_template(depth)? else {
@@ -441,15 +447,15 @@ impl ReadExt for PacketReader {
                 let Some(projectiles) = self.read_charged_projectiles(depth)? else {
                     return Ok(false);
                 };
-                return Ok(
-                    components.set_network(NetworkComponent::ChargedProjectiles(&projectiles))
-                );
+                components.set_network_projectiles(projectiles);
+                return Ok(true);
             }
             DataComponentType::BundleContents => {
                 let Some(contents) = self.read_bundle(depth)? else {
                     return Ok(false);
                 };
-                return Ok(components.set_network(NetworkComponent::BundleContents(&contents)));
+                components.set_network_bundle(contents);
+                return Ok(true);
             }
             DataComponentType::Lore => {
                 let len = self.read_var_int()?;

@@ -25,5 +25,5 @@ pub fn compostable(stack: &ItemStack) -> Option<&'static tuff_vanilla_data::prov
     if stack.components.is_removed("minecraft:compostable") {
         return None;
     }
-    stack.item.compostable()
+    stack.item().compostable()
 }

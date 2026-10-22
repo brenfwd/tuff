@@ -188,13 +188,9 @@ impl Resolved {
         for content in &merged.accepted {
             for def in &content.items {
                 if let Some(def) = merged.custom.item(&def.id) {
-                    let stack = def.stack(1);
                     commands.add_custom_item(
                         def.id.clone(),
-                        crate::command::item::ItemInput {
-                            item: stack.item,
-                            components: stack.components,
-                        },
+                        crate::command::item::ItemInput::from_template(&def.template()),
                     );
                 }
             }

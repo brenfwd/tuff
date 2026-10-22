@@ -392,7 +392,7 @@ impl Components {
             {
                 added.push(NetworkComponent::ClientData(view));
             } else if TEMPLATE_ON_WIRE.contains(&kind) {
-                if let Some(stack) = value.as_compound().and_then(ItemStack::from_nbt) {
+                if let Some(stack) = value.as_compound().and_then(ItemStack::decode_nbt) {
                     added.push(NetworkComponent::Template(kind, Box::new(stack)));
                 }
             } else if NBT_ON_WIRE.contains(&kind) {
@@ -417,8 +417,23 @@ impl Components {
             .collect()
     }
 
+    /// Stores the nested stacks of a component received in a Slot, moving
+    /// them in.
+    pub fn set_network_container(&mut self, contents: Vec<Option<ItemStack>>) {
+        self.container = Some(contents);
+    }
+
+    pub fn set_network_projectiles(&mut self, projectiles: Vec<ItemStack>) {
+        self.charged_projectiles = Some(projectiles);
+    }
+
+    pub fn set_network_bundle(&mut self, contents: BundleContents) {
+        self.bundle_contents = Some(Box::new(contents));
+    }
+
     /// Stores a component received in a Slot. Returns false for a type this
-    /// server cannot hold.
+    /// server cannot hold (nested stacks go through the `set_network_*`
+    /// moves).
     pub fn set_network(&mut self, component: NetworkComponent<'_>) -> bool {
         match component {
             NetworkComponent::Damage(damage) => self.damage = Some(damage),
@@ -439,13 +454,9 @@ impl Components {
                 self.ominous_bottle_amplifier = Some(amplifier)
             }
             NetworkComponent::MapId(id) => self.map_id = Some(id),
-            NetworkComponent::Container(contents) => self.container = Some(contents.to_vec()),
-            NetworkComponent::ChargedProjectiles(projectiles) => {
-                self.charged_projectiles = Some(projectiles.to_vec())
-            }
-            NetworkComponent::BundleContents(contents) => {
-                self.bundle_contents = Some(Box::new(contents.clone()))
-            }
+            NetworkComponent::Container(_)
+            | NetworkComponent::ChargedProjectiles(_)
+            | NetworkComponent::BundleContents(_) => return false,
             NetworkComponent::DyedColor(rgb) => self.dyed_color = Some(rgb),
             NetworkComponent::BaseColor(color) => self.base_color = Some(color),
             NetworkComponent::BannerPatterns(layers) => {

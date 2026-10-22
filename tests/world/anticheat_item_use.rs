@@ -25,7 +25,7 @@ fn slow_pace(n: usize) -> f64 {
 fn shield_up(w: &mut Walker) {
     w.session.inventory_mut().set_slot(
         Inventory::OFFHAND_SLOT,
-        Some(ItemStack::new(Item::Shield, 1)),
+        Some(ItemStack::mint(Item::Shield, 1, MintReason::Test)),
     );
     w.session.hold_up(true, 10);
 }
@@ -72,7 +72,7 @@ async fn walking_faster_than_eating_allows_is_resynced_then_set_back() {
     let mut w = walker(&world, 1, ChunkPos::new(62, 62)).await;
     w.session.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::CookedBeef, 4)),
+        Some(ItemStack::mint(Item::CookedBeef, 4, MintReason::Test)),
     );
     w.session.body.food.level = 10;
     let eat = Serverbound::UseItem {
@@ -117,7 +117,7 @@ async fn packets_do_not_speed_up_eating() {
     let mut w = walker(&world, 1, ChunkPos::new(61, 61)).await;
     w.session.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::CookedBeef, 4)),
+        Some(ItemStack::mint(Item::CookedBeef, 4, MintReason::Test)),
     );
     w.session.body.food.level = 10;
     w.session

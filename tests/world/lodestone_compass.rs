@@ -59,8 +59,8 @@ async fn a_compass_used_on_a_lodestone_locks_onto_it() {
     else {
         panic!("expected a split compass, got {outcome:?}");
     };
-    assert_eq!(locked.item, Item::Compass);
-    assert_eq!(locked.count, 1);
+    assert_eq!(locked.item(), Item::Compass);
+    assert_eq!(locked.count(), 1);
     let tracker = locked
         .components
         .other

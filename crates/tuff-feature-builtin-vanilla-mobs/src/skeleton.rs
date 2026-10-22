@@ -28,7 +28,7 @@ use tuff_core::world::entity::{
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::player::Difficulty;
 use tuff_core::world::projectile::ArrowShot;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 /// Ticks between shots, and on hard.
 const ATTACK_INTERVAL: i32 = 40;
@@ -300,8 +300,8 @@ impl Species for Skeleton {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
-        if stack.item != Item::Shears {
+        let stack = interaction.stack.as_deref()?;
+        if stack.item() != Item::Shears {
             return None;
         }
         bogged_shear(self, core, play::sound_category::PLAYERS, cx).then_some(HandEffect::Damage(1))
@@ -319,8 +319,10 @@ impl Species for Skeleton {
             core.populate_spawn_armor(LocalDifficulty::at(cx, core.base.position), cx.rng);
             Item::Bow
         };
-        core.equipment
-            .set(EquipmentSlot::Mainhand, Some(ItemStack::new(weapon, 1)));
+        core.equipment.set(
+            EquipmentSlot::Mainhand,
+            Some(ItemStack::mint(weapon, 1, MintReason::Spawn)),
+        );
         let difficulty = LocalDifficulty::at(cx, core.base.position);
         if core.kind() != EntityType::WitherSkeleton {
             core.populate_spawn_enchantments(difficulty, cx.rng);

@@ -22,7 +22,7 @@ use tuff_core::world::entity::{
     Effect, EntityInteraction, InteractOutcome, Notice, TickContext, take_bool, take_number,
 };
 use tuff_core::world::messages::{HandEffect, PlayerEvent};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::entity::PathType;
 
@@ -270,9 +270,10 @@ impl Axolotl {
         } else {
             return None;
         }
-        Some(HandEffect::ExchangeStack(Box::new(ItemStack::new(
+        Some(HandEffect::ExchangeStack(Box::new(ItemStack::mint(
             Item::WaterBucket,
             1,
+            MintReason::Spawn,
         ))))
     }
 }
@@ -452,7 +453,7 @@ impl Species for Axolotl {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        tuff_datapack::tags::is(tag::item::key::AXOLOTL_FOOD, stack.item)
+        tuff_datapack::tags::is(tag::item::key::AXOLOTL_FOOD, stack.item())
     }
 
     fn interact(
@@ -461,8 +462,8 @@ impl Species for Axolotl {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
-        if stack.item == Item::TropicalFishBucket && self.is_food(stack) {
+        let stack = interaction.stack.as_deref()?;
+        if stack.item() == Item::TropicalFishBucket && self.is_food(stack) {
             return self.feed(core, interaction, cx);
         }
         let color = self.color;

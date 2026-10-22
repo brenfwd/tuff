@@ -25,7 +25,7 @@ pub struct Lecterns;
 
 fn book(world: &dyn RegionWorld, pos: BlockPos) -> Option<(ItemStack, i32)> {
     let nbt = world.raw_block_entity(pos)?;
-    let book = nbt.get_compound("Book").and_then(ItemStack::from_nbt)?;
+    let book = nbt.get_compound("Book").and_then(ItemStack::from_storage)?;
     Some((book, nbt.get_int("Page").unwrap_or(0)))
 }
 
@@ -48,7 +48,7 @@ fn open(world: &mut dyn RegionWorld, place: &Place) -> bool {
         title: TextComponent::translate("container.lectern", []),
         source: MenuSource::Blocks {
             parts: vec![(pos, 1)],
-            contents: vec![Some(book)],
+            contents: vec![Some(book.into_template())],
             data: vec![page],
             remote: None,
         },
@@ -117,6 +117,10 @@ fn pulse(world: &mut dyn RegionWorld, pos: BlockPos) {
 }
 
 fn place_book(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState, book: ItemStack) {
+    tuff_item::item::conservation::releasing(|| store_book(world, pos, state, book));
+}
+
+fn store_book(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState, book: ItemStack) {
     let Some(next) = state.with("has_book", "true") else {
         return;
     };
@@ -142,13 +146,13 @@ impl RegionHooks for Lecterns {
             let item = place
                 .held
                 .filter(|item| item_tags::LECTERN_BOOKS.contains(item))?;
-            let book = ItemStack::new(item, 1).with_components(place.components.clone());
+            let book = place.offer.keep_one(place.hand_slot)?;
             place_book(world, place.target, state, book);
             world.play_sound(SoundEvent::ItemBookPut, place.target, 1.0, 1.0, None);
             return Some(ActionOutcome::Used {
                 off_hand: place.off_hand,
                 item,
-                effect: HandEffect::Consume(1),
+                effect: HandEffect::None,
             });
         }
         open(world, place).then_some(ActionOutcome::Interacted {
@@ -170,14 +174,17 @@ impl RegionHooks for Lecterns {
         let Some((book, page)) = book(world, pos) else {
             return true;
         };
+        if button == BUTTON_TAKE && may_build {
+            take(world, pos, state, book, player);
+            return true;
+        }
         match button {
-            BUTTON_TAKE if !may_build => {}
-            BUTTON_TAKE => take(world, pos, state, book, player),
             BUTTON_PREVIOUS => set_page(world, pos, page - 1, &book),
             BUTTON_NEXT => set_page(world, pos, page + 1, &book),
             b if b >= BUTTON_PAGE => set_page(world, pos, b - BUTTON_PAGE, &book),
             _ => {}
         }
+        tuff_item::item::conservation::release(book);
         true
     }
 }

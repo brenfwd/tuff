@@ -425,8 +425,10 @@ impl RegionActor {
             return;
         }
         let seq = tracked.seq;
-        let handed = match self.border.neighbors.get(&to.region()) {
-            Some(neighbor) => neighbor.try_entity(tracked.entity, seq),
+        let handed = match self.border.neighbors.get(&to.region()).cloned() {
+            Some(neighbor) => self
+                .hand_entity(&neighbor, tracked.entity, seq)
+                .map(|()| neighbor),
             None => Err(tracked.entity),
         };
         match handed {
@@ -434,11 +436,7 @@ impl RegionActor {
                 tracked.entity = entity;
                 self.ents.entities.insert(vehicle, tracked);
             }
-            Ok(()) => {
-                if let Some(neighbor) = self.border.neighbors.get(&to.region()).cloned() {
-                    self.hand_off_viewers(vehicle, &neighbor);
-                }
-            }
+            Ok(neighbor) => self.hand_off_viewers(vehicle, &neighbor),
         }
     }
 }

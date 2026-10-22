@@ -82,8 +82,11 @@ pub struct SeenPlayer {
     pub looks: crate::world::messages::PlayerLooks,
 }
 
+mod fired;
+pub use fired::Fired;
+
 /// What a dispenser did with an item a hook fired.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum DispenseOutcome {
     /// Used one of the item in place (the plain dispense sound).
     Dispensed,
@@ -242,17 +245,27 @@ impl ContainerHolder {
 }
 
 /// One slot of a container before and after a change.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct SlotEdit {
     pub slot: usize,
-    pub old: Option<ItemStack>,
-    pub new: Option<ItemStack>,
+    pub old: Option<tuff_item::item::ItemSnapshot>,
+    pub new: Option<tuff_item::item::ItemSnapshot>,
+}
+
+impl SlotEdit {
+    pub fn of(slot: usize, old: Option<&ItemStack>, new: Option<&ItemStack>) -> Self {
+        Self {
+            slot,
+            old: old.map(tuff_item::item::ItemSnapshot::of),
+            new: new.map(tuff_item::item::ItemSnapshot::of),
+        }
+    }
 }
 
 /// Container slots that just changed together (one click, one hopper
 /// move), as [`RegionHooks::container_changed`] reports them, with the
 /// cause in effect (the clicking player, `Block(Hopper)` for a hopper).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ContainerEdit {
     pub holder: ContainerHolder,
     pub slots: Vec<SlotEdit>,
@@ -271,10 +284,10 @@ pub enum ItemTaker {
 
 /// A dropped item entity picked up, as [`RegionHooks::item_picked_up`]
 /// reports it.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ItemPickup {
     pub taker: ItemTaker,
-    pub stack: ItemStack,
+    pub stack: tuff_item::item::ItemSnapshot,
     pub position: [f64; 3],
     pub thrower: Option<u128>,
 }
@@ -308,7 +321,7 @@ impl dyn RegionWorld + '_ {
 }
 
 /// What `RegionWorld::insert_item` did with the stack.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Insert {
     /// Nothing there takes items; the stack comes back untouched.
     Nothing(ItemStack),
@@ -509,15 +522,11 @@ pub trait RegionWorld: GrowthLevel {
     fn shear_entity_in(&mut self, pos: BlockPos) -> bool;
     /// Offers `stack` (a dispenser's) to each entity in the block at
     /// `pos` until one uses it.
-    fn dispense_on_entity_in(
-        &mut self,
-        pos: BlockPos,
-        stack: &ItemStack,
-    ) -> Option<DispenseOutcome>;
+    fn dispense_on_entity_in(&mut self, pos: BlockPos, stack: &Fired) -> Option<DispenseOutcome>;
     /// Puts one of `stack` (a dispenser's wearable) on an entity, else on a
     /// player with that armor slot free, standing in the block at `pos`;
     /// `None` if nobody there takes it.
-    fn dispense_equip_in(&mut self, pos: BlockPos, stack: &ItemStack) -> Option<DispenseOutcome> {
+    fn dispense_equip_in(&mut self, pos: BlockPos, stack: &Fired) -> Option<DispenseOutcome> {
         use tuff_vanilla_data::item::EquipmentSlot;
         if let Some(outcome) = self.dispense_on_entity_in(pos, stack) {
             return Some(outcome);
@@ -547,16 +556,29 @@ pub trait RegionWorld: GrowthLevel {
                 && z - half < z0 + 1.0
                 && p.armor[index].is_none()
         })?;
-        player
-            .handle
-            .send(crate::world::messages::PlayerEvent::DispenserEquip {
-                slot: equippable.slot,
-                stack: stack.clone().with_count(1),
-            });
+        let one = stack.take()?;
+        if let Err(refused) =
+            player
+                .handle
+                .try_send(crate::world::messages::PlayerEvent::DispenserEquip {
+                    slot: equippable.slot,
+                    stack: one,
+                })
+        {
+            if let crate::world::messages::PlayerEvent::DispenserEquip { stack: one, .. } = *refused
+            {
+                stack.give_back(one);
+            }
+            return None;
+        }
         Some(DispenseOutcome::Dispensed)
     }
-    /// Takes an entity out of the region (no death, no drops).
+    /// Takes an entity out of the region (no death, no drops), burning
+    /// the items still in it.
     fn remove_entity(&mut self, id: i32) -> Option<TrackedEntity>;
+    /// Like `remove_entity` for an entity whose items live on: it is
+    /// saved elsewhere (a hive, a pearl list) or moved to another region.
+    fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity>;
     /// Like `remove_entity` for an entity that lives on elsewhere: its
     /// scores and team stay.
     fn remove_entity_kept(&mut self, id: i32) -> Option<TrackedEntity>;
@@ -812,16 +834,43 @@ pub trait RegionWorld: GrowthLevel {
         false
     }
 
+    /// Changes the slots of the block container at `pos` in place and
+    /// shows its viewers the ones that changed, unless a transaction
+    /// holds it; false if nothing could be edited.
+    fn edit_container(
+        &mut self,
+        _pos: BlockPos,
+        _edit: &mut dyn FnMut(&mut [Option<ItemStack>]),
+    ) -> bool {
+        false
+    }
+
+    /// Changes slot `slot` of the block container at `pos` in place and
+    /// shows its viewers, unless a transaction holds it; false if nothing
+    /// could be edited. The change is reported to container observers
+    /// under the current cause.
+    fn edit_container_slot(
+        &mut self,
+        _pos: BlockPos,
+        _slot: usize,
+        _edit: &mut dyn FnMut(&mut Option<ItemStack>),
+    ) -> bool {
+        false
+    }
+
     /// The container slots of the entity `uuid` in this region (a chest
     /// boat, a minecart).
-    fn entity_container_items(&self, _uuid: u128) -> Option<&[Option<ItemStack>]> {
+    fn entity_container_items(
+        &self,
+        _uuid: u128,
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         None
     }
 
     /// The held or worn slots of the entity `uuid` in this region (an
     /// item frame's item, an armor stand's equipment), indexed as its
     /// held-item edits report them.
-    fn entity_held_items(&self, _uuid: u128) -> Option<Vec<Option<ItemStack>>> {
+    fn entity_held_items(&self, _uuid: u128) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         None
     }
 
@@ -952,7 +1001,7 @@ pub trait RegionHooks: Send + Sync {
         _pos: BlockPos,
         _facing: tuff_vanilla_data::block::Facing,
         _origin: [f64; 3],
-        _stack: &ItemStack,
+        _stack: &Fired,
     ) -> Option<DispenseOutcome> {
         None
     }
@@ -1141,6 +1190,15 @@ pub trait RegionHooks: Send + Sync {
 
     /// A region entity died (it is still in the region). Observe only.
     fn entity_died(&self, _world: &mut dyn RegionWorld, _death: &EntityDeath) {}
+
+    /// An item operation was refused because it would make or lose items.
+    /// Observe only (the audit log records it).
+    fn item_violation(
+        &self,
+        _world: &mut dyn RegionWorld,
+        _violation: &crate::world::conservation::ItemViolation,
+    ) {
+    }
 
     /// A player opened or broke a chest boat or cart.
     fn guarded_container_disturbed(&self, _world: &mut dyn RegionWorld, _player: PlayerId) {}

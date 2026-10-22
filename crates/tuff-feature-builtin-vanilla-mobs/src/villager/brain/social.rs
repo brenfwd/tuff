@@ -175,7 +175,7 @@ pub type GossipRequests = super::super::Mail<i32>;
 pub type JobOffers = super::super::Mail<BlockPos>;
 
 fn is_wanted_food(stack: &ItemStack) -> bool {
-    stack.item.villager_food().is_some()
+    stack.item().villager_food().is_some()
 }
 
 impl Villager {
@@ -502,7 +502,13 @@ impl Villager {
             self.throw_half(core, other, cx, is_wanted_food, KEEP_FOOD_STACK);
         }
         if farmer && self.count_of(Item::Wheat) > KEEP_WHEAT as u32 {
-            self.throw_half(core, other, cx, |s| s.item == Item::Wheat, KEEP_FOOD_STACK);
+            self.throw_half(
+                core,
+                other,
+                cx,
+                |s| s.item() == Item::Wheat,
+                KEEP_FOOD_STACK,
+            );
         }
         let own = self.data.profession.info().requested_items;
         let willing: Vec<Item> = fact
@@ -518,7 +524,7 @@ impl Villager {
                 core,
                 other,
                 cx,
-                |s| willing.contains(&s.item),
+                |s| willing.contains(&s.item()),
                 KEEP_FOOD_STACK,
             );
         }
@@ -528,8 +534,8 @@ impl Villager {
         self.inventory
             .iter()
             .flatten()
-            .filter(|s| s.item == item)
-            .map(|s| s.count as u32)
+            .filter(|s| s.item() == item)
+            .map(|s| s.count() as u32)
             .sum()
     }
 
@@ -551,17 +557,15 @@ impl Villager {
                 continue;
             }
             let max = stack.max_stack_size();
-            let count = if stack.count > max / 2 {
-                stack.count / 2
-            } else if stack.count > keep {
-                stack.count - keep
+            let count = if stack.count() > max / 2 {
+                stack.count() / 2
+            } else if stack.count() > keep {
+                stack.count() - keep
             } else {
                 continue;
             };
-            let mut thrown = stack.clone();
-            thrown.count = count;
-            stack.count -= count;
-            if stack.count == 0 {
+            let thrown = stack.take(count);
+            if stack.count() == 0 {
                 *slot = None;
             }
             let from = [

@@ -4,7 +4,7 @@
 use super::RegionActor;
 use super::sim::BlockWatchers;
 use crate::world::region_api::{ContainerEdit, ContainerHolder, SlotEdit};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack};
 use tuff_world_model::BlockPos;
 
 impl RegionActor {
@@ -43,44 +43,82 @@ impl RegionActor {
     }
 
     /// Writes one slot of the block container at `pos`, reporting the
-    /// change; returns false if there is no container there.
+    /// change; returns what the slot held, or `Err(stack)` if there is no
+    /// container there.
     pub(super) fn write_container_slot(
         &mut self,
         pos: BlockPos,
         slot: usize,
         stack: Option<ItemStack>,
-    ) -> bool {
+    ) -> Result<Option<ItemStack>, Option<ItemStack>> {
         let observed = self.observes_containers();
         let Some(current) = self
             .block_entity_mut(pos)
             .and_then(|entity| entity.items.get_mut(slot))
         else {
-            return false;
+            return Err(stack);
         };
-        let new = observed.then(|| stack.clone());
         let old = std::mem::replace(current, stack);
-        if let Some(new) = new {
-            self.report_container_edit(
-                ContainerHolder::Block(pos),
-                vec![SlotEdit { slot, old, new }],
-            );
+        if observed {
+            let edit = SlotEdit::of(slot, old.as_ref(), current.as_ref());
+            self.report_container_edit(ContainerHolder::Block(pos), vec![edit]);
         }
-        true
+        Ok(old)
     }
 
-    /// Takes one item out of `slot` of the block container at `pos` (a
-    /// hopper or dropper moving it on) and tells its viewers.
-    pub(super) fn take_one(&mut self, pos: BlockPos, slot: usize) {
-        let Some(mut rest) = self
+    /// Takes one item out of `slot` of the block container at `pos` for a
+    /// hopper or dropper to move on, telling no one yet: hand it back with
+    /// [`return_one`](Self::return_one) when it finds no home, or confirm
+    /// the move with [`took_one`](Self::took_one).
+    pub(super) fn take_one_out(&mut self, pos: BlockPos, slot: usize) -> Option<ItemStack> {
+        let held = self.block_entity_mut(pos)?.items.get_mut(slot)?;
+        ItemStack::take_from(held, 1)
+    }
+
+    /// Puts back an item [`take_one_out`](Self::take_one_out) took.
+    pub(super) fn return_one(&mut self, pos: BlockPos, slot: usize, stack: ItemStack) {
+        match self
+            .block_entity_mut(pos)
+            .and_then(|entity| entity.items.get_mut(slot))
+        {
+            Some(held) => ItemStack::put_back(held, stack),
+            None => self.spill_stack(pos, stack),
+        }
+    }
+
+    /// Reports slot `slot` of the block container at `pos`, which held
+    /// `old`, as changed to what it holds now.
+    pub(super) fn report_slot(&mut self, pos: BlockPos, slot: usize, old: Option<ItemSnapshot>) {
+        let Some(now) = self
             .block_entity(pos)
-            .and_then(|entity| entity.items.get(slot)?.clone())
+            .and_then(|entity| entity.items.get(slot))
         else {
             return;
         };
-        rest.count -= 1;
-        let rest = (rest.count > 0).then_some(rest);
-        self.write_container_slot(pos, slot, rest.clone());
-        self.broadcast_slots(pos, vec![(slot, rest)]);
+        let edit = SlotEdit {
+            slot,
+            old,
+            new: now.as_ref().map(ItemSnapshot::of),
+        };
+        self.report_container_edit(ContainerHolder::Block(pos), vec![edit]);
+    }
+
+    /// Reports and shows the item `taken` out of `slot` with
+    /// [`take_one_out`](Self::take_one_out) as gone for good.
+    /// `taken` is needed only while containers are observed.
+    pub(super) fn took_one(&mut self, pos: BlockPos, slot: usize, taken: Option<&ItemStack>) {
+        if let Some(taken) = taken.filter(|_| self.observes_containers()) {
+            let Some(now) = self
+                .block_entity(pos)
+                .and_then(|entity| entity.items.get(slot))
+            else {
+                return;
+            };
+            let old = ItemSnapshot::of(now.as_ref().unwrap_or(taken))
+                .with_count(now.as_ref().map_or(0, ItemStack::count) + taken.count());
+            self.report_slot(pos, slot, Some(old));
+        }
+        self.broadcast_slots(pos, &[slot]);
     }
 
     /// Reports the slots `changed` of a block container whose items were
@@ -88,7 +126,7 @@ impl RegionActor {
     pub(super) fn report_block_slots(
         &mut self,
         pos: BlockPos,
-        before: Option<Vec<Option<ItemStack>>>,
+        before: Option<Vec<Option<ItemSnapshot>>>,
         changed: &[usize],
     ) {
         let Some(before) = before else {
@@ -103,7 +141,7 @@ impl RegionActor {
                 Some(SlotEdit {
                     slot,
                     old: before.get(slot)?.clone(),
-                    new: items.get(slot)?.clone(),
+                    new: items.get(slot)?.as_ref().map(ItemSnapshot::of),
                 })
             })
             .collect();
@@ -117,6 +155,77 @@ impl RegionActor {
         }
         let tracked = self.ents.entities.get(&id)?;
         Some(ContainerHolder::entity(tracked.entity.as_ref()))
+    }
+
+    /// Changes the slots of a block container in place for a feature; see
+    /// `RegionWorld::edit_container`.
+    pub(super) fn edit_container_for_feature(
+        &mut self,
+        pos: BlockPos,
+        edit: &mut dyn FnMut(&mut [Option<ItemStack>]),
+    ) -> bool {
+        if self.menus.container_locks.contains_key(&pos) || !self.owns(pos) {
+            return false;
+        }
+        let observed = self.observes_containers();
+        let Some(entity) = self.block_entity_mut(pos) else {
+            return false;
+        };
+        let before: Vec<Option<ItemSnapshot>> = tuff_item::item::snapshot_slots(&entity.items);
+        edit(&mut entity.items);
+        let changed: Vec<usize> = entity
+            .items
+            .iter()
+            .zip(&before)
+            .enumerate()
+            .filter(|(_, (now, was))| now.as_ref() != was.as_deref())
+            .map(|(slot, _)| slot)
+            .collect();
+        if changed.is_empty() {
+            return true;
+        }
+        if observed {
+            for &slot in &changed {
+                self.report_slot(pos, slot, before[slot].clone());
+            }
+        }
+        self.broadcast_slots(pos, &changed);
+        true
+    }
+
+    /// Changes one slot of a block container in place for a feature; see
+    /// `RegionWorld::edit_container_slot`.
+    pub(super) fn edit_container_slot_for_feature(
+        &mut self,
+        pos: BlockPos,
+        slot: usize,
+        edit: &mut dyn FnMut(&mut Option<ItemStack>),
+    ) -> bool {
+        if self.menus.container_locks.contains_key(&pos) || !self.owns(pos) {
+            return false;
+        }
+        let observed = self.observes_containers();
+        let Some(entity) = self.block_entity_mut(pos) else {
+            return false;
+        };
+        let kind = entity.kind;
+        let Some(held) = entity.items.get_mut(slot) else {
+            return false;
+        };
+        let old = held.as_ref().map(ItemSnapshot::of);
+        edit(held);
+        let same = match (&old, held.as_ref()) {
+            (Some(old), Some(new)) => old.stacks_with(new),
+            _ => false,
+        };
+        if observed {
+            self.report_slot(pos, slot, old);
+        }
+        if kind.is_furnace() && slot == crate::world::block_entity::furnace::INPUT && !same {
+            self.furnace_input_changed(pos);
+        }
+        self.broadcast_slots(pos, &[slot]);
+        true
     }
 
     /// Sets slots of a block container for a feature; see
@@ -136,10 +245,13 @@ impl RegionActor {
         if slots.is_empty() {
             return false;
         }
-        for (slot, stack) in &slots {
-            self.set_container_slot(pos, *slot, stack.clone());
+        let changed: Vec<usize> = slots.iter().map(|(slot, _)| *slot).collect();
+        for (slot, stack) in slots {
+            if let Some(displaced) = self.set_container_slot(pos, slot, stack) {
+                displaced.burn(tuff_item::item::BurnReason::Plugin);
+            }
         }
-        self.broadcast_slots(pos, slots);
+        self.broadcast_slots(pos, &changed);
         true
     }
 
@@ -154,12 +266,15 @@ impl RegionActor {
     pub(super) fn entity_container_items_by_uuid(
         &self,
         uuid: u128,
-    ) -> Option<&[Option<ItemStack>]> {
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         let id = self.entity_by_uuid(uuid)?;
         self.ents.entities.get(&id)?.entity.container()
     }
 
-    pub(super) fn entity_held_items_by_uuid(&self, uuid: u128) -> Option<Vec<Option<ItemStack>>> {
+    pub(super) fn entity_held_items_by_uuid(
+        &self,
+        uuid: u128,
+    ) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         let id = self.entity_by_uuid(uuid)?;
         self.ents.entities.get(&id)?.entity.held_items()
     }
@@ -177,7 +292,12 @@ impl RegionActor {
         let Some(entity) = self.ents.entities.get_mut(&id).map(|t| &mut t.entity) else {
             return false;
         };
-        let Some(before) = entity.held_items() else {
+        let Some(before) = entity.held_items().map(|items| {
+            items
+                .into_iter()
+                .map(|item| item.map(ItemSnapshot::of))
+                .collect::<Vec<_>>()
+        }) else {
             return false;
         };
         if !entity.set_held_items(slots) {
@@ -188,8 +308,12 @@ impl RegionActor {
             .into_iter()
             .zip(after)
             .enumerate()
-            .filter(|(_, (old, new))| old != new)
-            .map(|(slot, (old, new))| SlotEdit { slot, old, new })
+            .filter(|(_, (old, new))| old.as_deref() != new.map(|new| new.get()))
+            .map(|(slot, (old, new))| SlotEdit {
+                slot,
+                old,
+                new: new.map(ItemSnapshot::of),
+            })
             .collect();
         if let Some(holder) = holder {
             self.report_container_edit(holder, edits);
@@ -207,7 +331,7 @@ impl RegionActor {
             return false;
         };
         let holder = self.entity_holder(id);
-        let Some(items) = self
+        let Some(mut items) = self
             .ents
             .entities
             .get_mut(&id)
@@ -223,18 +347,18 @@ impl RegionActor {
             return false;
         }
         let mut edits = Vec::with_capacity(slots.len());
-        for (slot, stack) in &slots {
-            let old = std::mem::replace(&mut items[*slot], stack.clone());
-            edits.push(SlotEdit {
-                slot: *slot,
-                old,
-                new: stack.clone(),
-            });
+        let mut changed = Vec::with_capacity(slots.len());
+        for (slot, stack) in slots {
+            edits.push(SlotEdit::of(slot, items[slot].as_ref(), stack.as_ref()));
+            if let Some(old) = std::mem::replace(&mut items[slot], stack) {
+                old.burn(tuff_item::item::BurnReason::Plugin);
+            }
+            changed.push(slot);
         }
         if let Some(holder) = holder {
             self.report_container_edit(holder, edits);
         }
-        self.entity_slots_changed(id, slots, None);
+        self.entity_slots_changed(id, &changed, None);
         true
     }
 }

@@ -3,7 +3,7 @@
 use tuff_core::world::anvil::AnvilOutcome;
 use tuff_item::enchantment::{self, EnchantmentRegistry};
 use tuff_item::item::enchanting::Choice;
-use tuff_item::item::{Enchantments, ItemStack};
+use tuff_item::item::{Enchantments, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::Item;
 
@@ -23,7 +23,7 @@ pub fn crafting_enchantments<'a>(
     registry: &'a EnchantmentRegistry,
     stack: &ItemStack,
 ) -> Vec<(Choice<'a>, i32)> {
-    let list = if stack.item == Item::EnchantedBook {
+    let list = if stack.item() == Item::EnchantedBook {
         &stack.components.stored_enchantments
     } else {
         &stack.components.enchantments
@@ -40,7 +40,7 @@ pub fn crafting_enchantments<'a>(
 pub fn set_enchantments(stack: &mut ItemStack, list: &[(Choice<'_>, i32)]) {
     let value = (!list.is_empty())
         .then(|| Enchantments::new(list.iter().map(|((id, _), l)| ((*id).to_owned(), *l))));
-    if stack.item == Item::EnchantedBook {
+    if stack.item() == Item::EnchantedBook {
         stack.components.stored_enchantments = value;
     } else {
         stack.components.enchantments = value;
@@ -48,7 +48,7 @@ pub fn set_enchantments(stack: &mut ItemStack, list: &[(Choice<'_>, i32)]) {
 }
 
 fn is_valid_repair_item(input: &ItemStack, addition: &ItemStack) -> bool {
-    input.item.repairable_with().contains(&addition.item)
+    input.item().repairable_with().contains(&addition.item())
 }
 
 pub fn compute(
@@ -60,7 +60,7 @@ pub fn compute(
     let Some(input) = input else {
         return AnvilOutcome::NOTHING;
     };
-    let mut result = input.clone();
+    let mut result = ItemStack::mint_like(input, input.count(), MintReason::Crafting);
     let registry = enchantment::current();
     let mut enchantments = crafting_enchantments(&registry, &result);
     let tax = i64::from(input.components.repair_cost.unwrap_or(0))
@@ -77,7 +77,7 @@ pub fn compute(
                 return AnvilOutcome::NOTHING;
             }
             let mut count = 0u8;
-            while amount > 0 && count < addition.count {
+            while amount > 0 && count < addition.count() {
                 result.set_damage(result.damage() - amount);
                 price += 1;
                 amount = step(result.damage());
@@ -85,7 +85,7 @@ pub fn compute(
             }
             repair_count = count;
         } else {
-            if !using_book && (result.item != addition.item || !result.is_damageable()) {
+            if !using_book && (result.item() != addition.item() || !result.is_damageable()) {
                 return AnvilOutcome::NOTHING;
             }
             if result.is_damageable() && !using_book {
@@ -118,8 +118,8 @@ pub fn compute(
                     level.max(current)
                 };
                 let mut compatible = infinite
-                    || input.item == Item::EnchantedBook
-                    || enchantment.1.supports(input.item);
+                    || input.item() == Item::EnchantedBook
+                    || enchantment.1.supports(input.item());
                 for (other, _) in &enchantments {
                     if other.0 != enchantment.0 && !enchantment::compatible(*other, enchantment) {
                         compatible = false;
@@ -141,7 +141,7 @@ pub fn compute(
                     fee = (fee / 2).max(1);
                 }
                 price += fee * i64::from(merged);
-                if input.count > 1 {
+                if input.count() > 1 {
                     price = 40;
                 }
             }
@@ -211,15 +211,16 @@ pub fn compute(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
 
     fn damaged(item: Item, damage: u32) -> ItemStack {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         stack.set_damage(damage);
         stack
     }
 
     fn enchanted(item: Item, id: &str, level: i32) -> ItemStack {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         let entries = vec![(id.to_owned(), level)];
         if item == Item::EnchantedBook {
             stack.components.stored_enchantments = Some(Enchantments::new(entries));
@@ -232,7 +233,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn renaming_costs_one_level_and_does_not_raise_the_repair_cost() {
-        let sword = ItemStack::new(Item::IronSword, 1);
+        let sword = ItemStack::mint(Item::IronSword, 1, MintReason::Test);
         let out = compute(Some(&sword), None, Some("Sting"), false);
         assert_eq!(out.cost, 1);
         assert!(out.only_renaming);
@@ -250,7 +251,7 @@ mod tests {
     fn repairing_with_material_takes_quarter_steps_and_doubles_the_cost() {
         let max = Item::IronSword.max_damage().unwrap();
         let sword = damaged(Item::IronSword, max);
-        let ingots = ItemStack::new(Item::IronIngot, 5);
+        let ingots = ItemStack::mint(Item::IronIngot, 5, MintReason::Test);
         let out = compute(Some(&sword), Some(&ingots), None, false);
         assert_eq!(out.repair_count, 5);
         assert_eq!(out.cost, 5);
@@ -286,7 +287,7 @@ mod tests {
             None
         );
         let efficiency = enchanted(Item::EnchantedBook, "minecraft:efficiency", 1);
-        let plain = ItemStack::new(Item::DiamondSword, 1);
+        let plain = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         assert_eq!(
             compute(Some(&plain), Some(&efficiency), None, false).result,
             None

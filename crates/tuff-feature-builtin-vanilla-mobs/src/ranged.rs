@@ -2,6 +2,7 @@
 //! goal that keeps a skeleton at range, strafing while it draws.
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -15,7 +16,7 @@ use tuff_core::world::entity::{Culprit, TickContext};
 use tuff_core::world::projectile::{
     self, ArrowShot, Flight, Launch, Owner, Pickup, Shot, shot_velocity, triangle,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_common::combat;
 use tuff_vanilla_common::ranged;
 
@@ -30,16 +31,16 @@ const ARROW_DROP: f64 = 0.100_000_001_490_116_12;
 const ROCKET_DROP: f64 = 0.150_000_005_960_464_48;
 
 fn is_arrow(stack: &ItemStack) -> bool {
-    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item)
+    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item())
 }
 
 impl MobCore {
     pub fn holding(&self, item: tuff_vanilla_data::Item) -> bool {
-        self.equipment.main_hand().is_some_and(|s| s.item == item)
+        self.equipment.main_hand().is_some_and(|s| s.item() == item)
             || self
                 .equipment
                 .get(tuff_vanilla_data::item::EquipmentSlot::Offhand)
-                .is_some_and(|s| s.item == item)
+                .is_some_and(|s| s.item() == item)
     }
 
     pub fn start_using_item(&mut self) {
@@ -65,14 +66,18 @@ impl MobCore {
     fn weapon_slot(&self, weapon: Item) -> Option<EquipmentSlot> {
         [EquipmentSlot::Mainhand, EquipmentSlot::Offhand]
             .into_iter()
-            .find(|slot| self.equipment.get(*slot).is_some_and(|s| s.item == weapon))
+            .find(|slot| {
+                self.equipment
+                    .get(*slot)
+                    .is_some_and(|s| s.item() == weapon)
+            })
     }
 
     /// Where the ammo `weapon` takes is held (the off hand first): arrows,
     /// and rockets for a crossbow.
     fn ammo_slot(&self, weapon: Item) -> Option<EquipmentSlot> {
         let fits = |s: &ItemStack| {
-            is_arrow(s) || (weapon == Item::Crossbow && s.item == Item::FireworkRocket)
+            is_arrow(s) || (weapon == Item::Crossbow && s.item() == Item::FireworkRocket)
         };
         [EquipmentSlot::Offhand, EquipmentSlot::Mainhand]
             .into_iter()
@@ -80,11 +85,13 @@ impl MobCore {
     }
 
     /// What `weapon` shoots: the ammo held, else a plain arrow.
-    pub fn projectile_for(&self, weapon: Item) -> ItemStack {
+    pub fn projectile_for(&self, weapon: Item) -> tuff_item::item::ItemSnapshot {
         self.ammo_slot(weapon)
             .and_then(|slot| self.equipment.get(slot))
-            .cloned()
-            .unwrap_or_else(|| ItemStack::new(Item::Arrow, 1))
+            .map(tuff_item::item::ItemSnapshot::of)
+            .unwrap_or_else(|| {
+                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default())
+            })
     }
 
     /// An arrow of `projectile` leaving `start`, fired from `weapon`.
@@ -94,16 +101,16 @@ impl MobCore {
         weapon: Option<&ItemStack>,
         velocity: [f64; 3],
     ) -> ArrowShot {
-        let mut item = projectile.clone();
+        let mut item = ItemStack::mint_like(projectile, 1, MintReason::EntityDrop);
         let free = item.components.remove_other(ranged::INTANGIBLE).is_some();
-        let mut arrow = ArrowShot::new(item.with_count(1), velocity);
+        let mut arrow = ArrowShot::new(item, velocity);
         if free {
             arrow.pickup = Some(Pickup::CreativeOnly);
         }
         if let Some(weapon) = weapon {
             arrow.pierce = ranged::piercing(weapon);
         }
-        arrow.weapon = weapon.cloned();
+        arrow.weapon = weapon.map(tuff_item::item::ItemSnapshot::of);
         arrow
     }
 
@@ -152,50 +159,52 @@ impl MobCore {
         if self.crossbow_charged() {
             return false;
         }
-        let Some(mut crossbow) = self.equipment.get(slot).cloned() else {
+        let Some(crossbow) = self.equipment.get(slot) else {
             return false;
         };
         let held = self.ammo_slot(Item::Crossbow);
         let ammo = self.projectile_for(Item::Crossbow);
-        let mut left = ammo.count;
+        let shots = ranged::projectile_count(crossbow);
+        let first = combat::ammo_use(crossbow, ammo.item(), 1.0)
+            .floor()
+            .max(0.0) as u8;
+        let mut left = ammo.count();
         let mut drawn = Vec::new();
-        for i in 0..ranged::projectile_count(&crossbow) {
-            let uses = if i > 0 {
-                0
-            } else {
-                combat::ammo_use(&crossbow, ammo.item, 1.0).floor().max(0.0) as u8
-            };
+        for i in 0..shots {
+            let uses = if i > 0 { 0 } else { first };
             if uses > left {
                 continue;
             }
             if uses == 0 {
-                drawn.push(ranged::intangible(ammo.clone()));
+                let free = ItemStack::mint_like(&ammo, 1, MintReason::EntityDrop);
+                drawn.push(ranged::intangible(free));
             } else {
                 left -= uses;
-                drawn.push(ammo.clone().with_count(uses));
+                let taken = match held {
+                    Some(held) => self.equipment.take_some(held, uses),
+                    None => Some(ItemStack::mint_like(&ammo, uses, MintReason::EntityDrop)),
+                };
+                drawn.extend(taken);
             }
         }
         if drawn.is_empty() {
             return false;
         }
-        if let Some(held) = held
-            && left != ammo.count
-        {
-            self.equipment
-                .set(held, (left > 0).then(|| ammo.clone().with_count(left)));
+        if let Some(crossbow) = self.equipment.get_mut(slot) {
+            crossbow.components.charged_projectiles = Some(drawn);
         }
-        crossbow.components.charged_projectiles = Some(drawn);
-        self.equipment.set(slot, Some(crossbow));
         true
     }
 
     /// Empties a half-loaded crossbow (a charge cut short).
     fn unload_crossbow(&mut self) {
         if let Some(slot) = self.weapon_slot(Item::Crossbow)
-            && let Some(mut crossbow) = self.equipment.get(slot).cloned()
-            && crossbow.components.charged_projectiles.take().is_some()
+            && let Some(crossbow) = self.equipment.get_mut(slot)
+            && let Some(loaded) = crossbow.components.charged_projectiles.take()
         {
-            self.equipment.set(slot, Some(crossbow));
+            for projectile in loaded {
+                projectile.burn(BurnReason::Discarded);
+            }
         }
     }
 
@@ -206,7 +215,7 @@ impl MobCore {
         let Some(slot) = self.weapon_slot(Item::Crossbow) else {
             return;
         };
-        let Some(mut crossbow) = self.equipment.get(slot).cloned() else {
+        let Some(crossbow) = self.equipment.get_mut(slot) else {
             return;
         };
         let projectiles = crossbow
@@ -214,18 +223,24 @@ impl MobCore {
             .charged_projectiles
             .take()
             .unwrap_or_default();
-        self.equipment.set(slot, Some(crossbow.clone()));
         if projectiles.is_empty() {
             return;
         }
+        let Some(crossbow) = self
+            .equipment
+            .get(slot)
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
+            return;
+        };
         let difficulty = f32::from(cx.shared.difficulty.borrow().id());
         let uncertainty = 14.0 - difficulty * 4.0;
         let angles = ranged::volley_angles(projectiles.len(), ranged::projectile_spread(&crossbow));
         let up = ranged::view_vector(self.base.pitch - 90.0, self.base.yaw);
         let eye = self.eye_position();
         let height = target.bounds[4] - target.bounds[1];
-        for (index, (projectile, angle)) in projectiles.iter().zip(angles).enumerate() {
-            let rocket = projectile.item == Item::FireworkRocket;
+        for (index, (projectile, angle)) in projectiles.into_iter().zip(angles).enumerate() {
+            let rocket = projectile.item() == Item::FireworkRocket;
             let drop = if rocket { ROCKET_DROP } else { ARROW_DROP };
             let start = [self.base.position[0], eye[1] - drop, self.base.position[2]];
             let dx = target.position[0] - start[0];
@@ -237,11 +252,12 @@ impl MobCore {
             let velocity = shot_velocity(direction, CROSSBOW_POWER, uncertainty, cx.rng);
             let shot = if rocket {
                 Shot::Firework {
-                    item: projectile.clone(),
+                    item: projectile,
                     flight: Flight::Shot(velocity),
                 }
             } else {
-                let mut arrow = self.arrow_from(projectile, Some(&crossbow), velocity);
+                let mut arrow = self.arrow_from(&projectile, Some(&*crossbow), velocity);
+                projectile.burn(BurnReason::Consumed);
                 arrow.sound = Some(SoundEvent::ItemCrossbowHit);
                 Shot::Arrow(arrow)
             };
@@ -254,11 +270,15 @@ impl MobCore {
             };
             self.sound_as(sound, self.sound_category(), 1.0, pitch, cx);
             let wear = if rocket { 3 } else { 1 };
-            if crossbow.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken {
-                self.equipment.set(slot, None);
+            let broken = self.equipment.get_mut(slot).is_some_and(|crossbow| {
+                crossbow.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken
+            });
+            if broken {
+                if let Some(crossbow) = self.equipment.take(slot) {
+                    crossbow.burn(BurnReason::Broken);
+                }
                 break;
             }
-            self.equipment.set(slot, Some(crossbow.clone()));
         }
     }
 
@@ -289,9 +309,9 @@ impl MobCore {
         let weapon = self
             .weapon_slot(Item::Bow)
             .and_then(|slot| self.equipment.get(slot))
-            .cloned();
+            .map(tuff_item::item::ItemSnapshot::of);
         let projectile = self.projectile_for(Item::Bow);
-        let mut arrow = self.arrow_from(&projectile, weapon.as_ref(), velocity);
+        let mut arrow = self.arrow_from(&projectile, weapon.as_deref(), velocity);
         arrow.damage = Some(f64::from(power * 2.0) + triangle(cx.rng, difficulty * 0.11, 0.574_25));
         if arrow.kind() == EntityType::Arrow
             && let Some(hook) = self.arrow_hook
@@ -668,11 +688,9 @@ impl TridentAttack {
         let stack = mob
             .equipment
             .main_hand()
-            .filter(|s| s.item == tuff_vanilla_data::Item::Trident)
-            .cloned()
-            .unwrap_or_else(|| {
-                tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::Trident, 1)
-            });
+            .filter(|s| s.item() == tuff_vanilla_data::Item::Trident)
+            .map(|held| ItemStack::mint_like(held, 1, MintReason::EntityDrop))
+            .unwrap_or_else(|| ItemStack::mint(Item::Trident, 1, MintReason::EntityDrop));
         let eye = mob.eye_position();
         let start = [
             mob.base.position[0],
@@ -687,11 +705,7 @@ impl TridentAttack {
         let difficulty = cx.shared.difficulty.borrow().id();
         let uncertainty = 14.0 - f32::from(difficulty) * 4.0;
         let velocity = shot_velocity([dx, dy + horizontal * 0.2, dz], 1.6, uncertainty, cx.rng);
-        mob.launch(
-            start,
-            Shot::Arrow(ArrowShot::new(stack.clone().with_count(1), velocity)),
-            cx,
-        );
+        mob.launch(start, Shot::Arrow(ArrowShot::new(stack, velocity)), cx);
         let pitch = 1.0 / (cx.rng.r#gen::<f32>() * 0.4 + 0.8);
         mob.sound(SoundEvent::EntityDrownedShoot, 1.0, pitch, cx);
     }
@@ -705,7 +719,7 @@ impl Goal for TridentAttack {
     fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
         mob.equipment
             .main_hand()
-            .is_some_and(|s| s.item == tuff_vanilla_data::Item::Trident)
+            .is_some_and(|s| s.item() == tuff_vanilla_data::Item::Trident)
             && mob.target_view(cx).is_some_and(|t| t.alive)
     }
 

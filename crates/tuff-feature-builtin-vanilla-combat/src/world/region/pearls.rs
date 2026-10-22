@@ -129,9 +129,10 @@ fn take_pearls(world: &mut dyn RegionWorld, owner: u128) -> Vec<Compound> {
         if !owned {
             continue;
         }
-        if let Some(tracked) = world.remove_entity(id) {
+        if let Some(tracked) = world.remove_entity_intact(id) {
             let mut saved = tuff_core::world::entity::save(&*tracked.entity);
             saved.insert(PEARL_DIMENSION, dimension.as_str());
+            tuff_item::item::conservation::release(tracked);
             taken.push(saved);
         }
     }

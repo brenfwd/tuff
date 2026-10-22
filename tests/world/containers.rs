@@ -31,7 +31,12 @@ async fn expect_slots(
     container: BlockPos,
 ) -> Vec<(usize, Option<ItemStack>)> {
     expect(events, |event| match event {
-        PlayerEvent::ContainerSlots { pos, slots, .. } if pos == container => Some(slots),
+        PlayerEvent::ContainerSlots { pos, slots, .. } if pos == container => Some(
+            slots
+                .into_iter()
+                .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
+                .collect::<Vec<_>>(),
+        ),
         _ => None,
     })
     .await
@@ -91,8 +96,12 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(chest, 27)]);
-    assert_eq!(contents, vec![None; 27]);
+    assert_eq!(
+        contents,
+        (0..27).map(|_| None).collect::<Vec<Option<ItemStack>>>()
+    );
     expect_chunk_packet(&mut bob_events, pos, lid_event(chest, Block::Chest, 1)).await;
 
     region
@@ -101,12 +110,13 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     expect(&mut bob_events, container_menu).await;
     expect_chunk_packet(&mut alice_events, pos, lid_event(chest, Block::Chest, 2)).await;
 
-    let stone = ItemStack::new(Item::Stone, 5);
+    let stone = ItemStack::mint(Item::Stone, 5, MintReason::Test);
     region
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
             window_id: 1,
-            changes: set_slot(chest, 0, None, Some(stone.clone())),
+            changes: set_slot(chest, 0, None, Some(stone.test_copy())),
+            pool: pool_for(&set_slot(chest, 0, None, Some(stone.test_copy()))),
             took_result: false,
         })
         .await;
@@ -116,16 +126,17 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     for events in [&mut alice_events, &mut bob_events] {
         assert_eq!(
             expect_slots(events, chest).await,
-            vec![(0, Some(stone.clone()))]
+            vec![(0, Some(stone.test_copy()))]
         );
     }
 
-    let dirt = ItemStack::new(Item::Dirt, 1);
+    let dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
     region
         .request(RegionRequest::ContainerTransaction {
             player: bob.clone(),
             window_id: 1,
-            changes: set_slot(chest, 0, None, Some(dirt.clone())),
+            changes: set_slot(chest, 0, None, Some(dirt.test_copy())),
+            pool: pool_for(&set_slot(chest, 0, None, Some(dirt.test_copy()))),
             took_result: false,
         })
         .await;
@@ -133,14 +144,15 @@ async fn chest_viewers_share_its_contents_and_a_broken_chest_spills_them() {
     assert!(!accepted, "a stale expectation is rejected");
     assert_eq!(contents.len(), 1);
     assert_eq!(contents[0].0, chest);
-    assert_eq!(contents[0].1[0], Some(stone.clone()));
+    assert_eq!(stacks(&contents[0].1)[0], Some(stone.test_copy()));
 
     let (carol, mut carol_events) = PlayerHandle::new(102);
     region
         .request(RegionRequest::ContainerTransaction {
             player: carol.clone(),
             window_id: 1,
-            changes: set_slot(chest, 1, None, Some(dirt.clone())),
+            changes: set_slot(chest, 1, None, Some(dirt.test_copy())),
+            pool: pool_for(&set_slot(chest, 1, None, Some(dirt.test_copy()))),
             took_result: false,
         })
         .await;
@@ -238,7 +250,12 @@ async fn a_locked_chest_refuses_the_wrong_key_and_opens_with_the_right_one() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
-    assert_eq!(contents, vec![None; 27], "the right key opens it, empty");
+    let contents = stacks(&contents);
+    assert_eq!(
+        contents,
+        (0..27).map(|_| None).collect::<Vec<Option<ItemStack>>>(),
+        "the right key opens it, empty"
+    );
 
     world.shutdown().await;
 }
@@ -280,6 +297,7 @@ async fn a_loot_chest_rolls_its_table_once_on_first_open() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     let expected = tuff_feature_builtin_vanilla_loot::container_loot(
         "minecraft:chests/simple_dungeon",
         27,
@@ -345,6 +363,7 @@ async fn a_loot_chest_explorer_map_is_finished_or_dropped() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     let waiting = |stack: &ItemStack| {
         tuff_feature_builtin_vanilla_loot::exploration::pending(stack).is_some()
     };
@@ -434,22 +453,24 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
     assert_eq!(contents.len(), 54);
 
-    let apple = ItemStack::new(Item::Apple, 3);
+    let apple = ItemStack::mint(Item::Apple, 3, MintReason::Test);
     region
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
             window_id: 1,
-            changes: set_slot(right, 0, None, Some(apple.clone())),
+            changes: set_slot(right, 0, None, Some(apple.test_copy())),
+            pool: pool_for(&set_slot(right, 0, None, Some(apple.test_copy()))),
             took_result: false,
         })
         .await;
     assert!(expect(&mut alice_events, transaction_answer).await.0);
     assert_eq!(
         expect_slots(&mut alice_events, right).await,
-        vec![(0, Some(apple.clone()))]
+        vec![(0, Some(apple.test_copy()))]
     );
 
     region
@@ -462,8 +483,9 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
-    assert_eq!(contents[0], Some(apple.clone()));
+    assert_eq!(contents[0], Some(apple.test_copy()));
     world.shutdown().await;
 
     let world = TestWorld::start(dir.path());
@@ -479,9 +501,13 @@ async fn double_chests_join_with_the_right_half_first_and_persist() {
     else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(right, 27), (left, 27)]);
     assert_eq!(contents[0], Some(apple));
-    assert_eq!(contents[1..], vec![None; 53][..]);
+    assert_eq!(
+        contents[1..],
+        (0..53).map(|_| None).collect::<Vec<Option<ItemStack>>>()[..]
+    );
     world.shutdown().await;
 }
 
@@ -518,12 +544,13 @@ async fn hoppers_move_one_item_per_cooldown_and_pull_dropped_items() {
         .request(RegionRequest::Place(place(&alice, top, Item::Torch, 1)))
         .await;
     expect(&mut alice_events, container_menu).await;
-    let stone = |count| Some(ItemStack::new(Item::Stone, count));
+    let stone = |count| Some(ItemStack::mint(Item::Stone, count, MintReason::Test));
     region
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(top, 0, None, stone(3)),
+            pool: pool_for(&set_slot(top, 0, None, stone(3))),
             took_result: false,
         })
         .await;
@@ -561,6 +588,7 @@ async fn hoppers_move_one_item_per_cooldown_and_pull_dropped_items() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(contents[0], stone(3));
     region
         .request(RegionRequest::CloseContainer {
@@ -571,7 +599,7 @@ async fn hoppers_move_one_item_per_cooldown_and_pull_dropped_items() {
 
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Apple, 2),
+            stack: ItemStack::mint(Item::Apple, 2, MintReason::Test),
             position: [
                 lone.x as f64 + 0.5,
                 lone.y as f64 + 1.0,
@@ -591,9 +619,16 @@ async fn hoppers_move_one_item_per_cooldown_and_pull_dropped_items() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a hopper is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(
         contents,
-        vec![Some(ItemStack::new(Item::Apple, 2)), None, None, None, None]
+        vec![
+            Some(ItemStack::mint(Item::Apple, 2, MintReason::Test)),
+            None,
+            None,
+            None,
+            None
+        ]
     );
     world.shutdown().await;
 }
@@ -651,9 +686,9 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
 
     let floor = BlockPos::new(5, generator.height(5, 5), 5);
     let shulker = BlockPos::new(5, floor.y + 1, 5);
-    let apple = ItemStack::new(Item::Apple, 4);
+    let apple = ItemStack::mint(Item::Apple, 4, MintReason::Test);
     let mut placing = place(&alice, floor, Item::ShulkerBox, 3);
-    placing.components.container = Some(vec![Some(apple.clone())]);
+    placing.components.container = Some(vec![Some(apple.test_copy())]);
     region.request(RegionRequest::Place(placing)).await;
     expect(&mut alice_events, |event| match event {
         PlayerEvent::ActionResult {
@@ -678,8 +713,9 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
     else {
         panic!("a shulker box is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(shulker, 27)]);
-    assert_eq!(contents[0], Some(apple.clone()));
+    assert_eq!(contents[0], Some(apple.test_copy()));
     expect_chunk_packet(
         &mut bob_events,
         pos,
@@ -713,7 +749,7 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
         _ => None,
     })
     .await;
-    assert_eq!(offered.item, Item::ShulkerBox);
+    assert_eq!(offered.item(), Item::ShulkerBox);
     assert_eq!(offered.components.container, Some(vec![Some(apple)]));
     while let Ok(event) = bob_events.try_recv() {
         assert!(
@@ -829,12 +865,16 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
     else {
         panic!("a furnace is a block container");
     };
+    let contents = stacks(&contents);
     assert_eq!(parts, vec![(block, 3)]);
-    assert_eq!(contents, vec![None; 3]);
+    assert_eq!(
+        contents,
+        (0..3).map(|_| None).collect::<Vec<Option<ItemStack>>>()
+    );
     assert_eq!(data, vec![0; 4]);
 
-    let ore = |count| Some(ItemStack::new(Item::DiamondOre, count));
-    let coal = Some(ItemStack::new(Item::Coal, 1));
+    let ore = |count| Some(ItemStack::mint(Item::DiamondOre, count, MintReason::Test));
+    let coal = Some(ItemStack::mint(Item::Coal, 1, MintReason::Test));
     region
         .request(RegionRequest::ContainerTransaction {
             player: alice.clone(),
@@ -844,21 +884,38 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
                     pos: block,
                     slot: furnace::FUEL,
                     expected: None,
-                    new: coal.clone(),
+                    new: snap(coal.as_ref().map(tuff_item::item::ItemStack::test_copy)),
                 },
                 ContainerChange {
                     pos: block,
                     slot: furnace::INPUT,
                     expected: None,
-                    new: ore(2),
+                    new: snap(ore(2)),
                 },
             ],
+            pool: pool_for(&[
+                ContainerChange {
+                    pos: block,
+                    slot: furnace::FUEL,
+                    expected: None,
+                    new: snap(coal.as_ref().map(tuff_item::item::ItemStack::test_copy)),
+                },
+                ContainerChange {
+                    pos: block,
+                    slot: furnace::INPUT,
+                    expected: None,
+                    new: snap(ore(2)),
+                },
+            ]),
             took_result: false,
         })
         .await;
     assert!(expect(&mut alice_events, transaction_answer).await.0);
     let placed = expect_slots(&mut alice_events, block).await;
-    assert!(placed.contains(&(furnace::FUEL, coal.clone())));
+    assert!(placed.contains(&(
+        furnace::FUEL,
+        coal.as_ref().map(tuff_item::item::ItemStack::test_copy)
+    )));
     assert!(placed.contains(&(furnace::INPUT, ore(2))));
     world.ticks(2).await;
     assert_eq!(
@@ -880,12 +937,17 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
     })
     .await;
     world.ticks(100).await;
-    let diamond = |count| Some(ItemStack::new(Item::Diamond, count));
+    let diamond = |count| Some(ItemStack::mint(Item::Diamond, count, MintReason::Test));
     let first = expect(&mut alice_events, |event| match event {
         PlayerEvent::ContainerSlots { pos, slots, .. }
             if pos == block && slots.iter().any(|(slot, _)| *slot == furnace::RESULT) =>
         {
-            Some(slots)
+            Some(
+                slots
+                    .into_iter()
+                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
+                    .collect::<Vec<_>>(),
+            )
         }
         _ => None,
     })
@@ -897,7 +959,12 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
         PlayerEvent::ContainerSlots { pos, slots, .. }
             if pos == block && slots.iter().any(|(slot, _)| *slot == furnace::RESULT) =>
         {
-            Some(slots)
+            Some(
+                slots
+                    .into_iter()
+                    .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
+                    .collect::<Vec<_>>(),
+            )
         }
         _ => None,
     })
@@ -910,6 +977,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
             player: alice.clone(),
             window_id: 1,
             changes: set_slot(block, furnace::RESULT, diamond(2), None),
+            pool: pool_for(&set_slot(block, furnace::RESULT, diamond(2), None)),
             took_result: true,
         })
         .await;
@@ -948,6 +1016,7 @@ async fn furnaces_smelt_with_fuel_and_award_experience_when_the_result_is_taken(
             player: alice.clone(),
             window_id: 1,
             changes: Vec::new(),
+            pool: pool_for(&Vec::new()),
             took_result: true,
         })
         .await;
@@ -1005,12 +1074,17 @@ async fn joining_viewers_receive_block_entities_in_the_chunk_packet() {
     assert_eq!(campfire_items(&listed), Some(0));
 
     region
-        .request(RegionRequest::Place(place(&alice, campfire, Item::Beef, 1)))
+        .request(RegionRequest::Place(offering(place(
+            &alice,
+            campfire,
+            Item::Beef,
+            1,
+        ))))
         .await;
     expect(&mut alice_events, |event| match event {
         PlayerEvent::ActionResult {
             sequence: 1,
-            outcome: ActionOutcome::Placed { .. },
+            outcome: ActionOutcome::Used { .. },
         } => Some(()),
         _ => None,
     })
@@ -1053,7 +1127,12 @@ async fn campfires_cook_food_placed_on_them() {
     })
     .await;
     region
-        .request(RegionRequest::Place(place(&alice, block, Item::Beef, 2)))
+        .request(RegionRequest::Place(offering(place(
+            &alice,
+            block,
+            Item::Beef,
+            2,
+        ))))
         .await;
     let data_id = tuff_vanilla_data::packet::play::Clientbound::BlockEntityData.id();
     expect(&mut alice_events, |event| match event {
@@ -1066,7 +1145,7 @@ async fn campfires_cook_food_placed_on_them() {
     expect(&mut alice_events, |event| match event {
         PlayerEvent::ActionResult {
             sequence: 2,
-            outcome: ActionOutcome::Placed {
+            outcome: ActionOutcome::Used {
                 item: Item::Beef, ..
             },
         } => Some(()),
@@ -1099,7 +1178,7 @@ async fn limited_crafting_hides_results_of_recipes_the_player_has_not_unlocked()
     let mut player = session_with_outbound(&world, 1000).0;
     player
         .inventory_mut()
-        .set_slot(1, Some(ItemStack::new(Item::OakLog, 1)));
+        .set_slot(1, Some(ItemStack::mint(Item::OakLog, 1, MintReason::Test)));
     player.refresh_inventory_result();
     assert!(
         player.inventory().slots()[0].is_some(),
@@ -1133,10 +1212,12 @@ async fn a_shift_click_craft_stops_at_a_recipe_limited_crafting_hides() {
     let mut player = session_with_outbound(&world, 1000).0;
     let craft = |player: &mut crate::world::session::PlayerSession, gate| {
         let inventory = player.inventory_mut();
-        inventory.set_slot(1, Some(ItemStack::new(Item::OakLog, 2)));
+        inventory.set_slot(1, Some(ItemStack::mint(Item::OakLog, 2, MintReason::Test)));
         let mut hook = GridHook::new(MenuKind::Player, world.shared.recipes()).limited_to(gate);
         hook.taken(&mut [], inventory, &mut Vec::new());
-        inventory.slots()[0].clone()
+        inventory.slots()[0]
+            .as_ref()
+            .map(tuff_item::item::ItemStack::test_copy)
     };
     assert!(
         craft(&mut player, None).is_some(),
@@ -1159,7 +1240,7 @@ async fn crafting_a_recipe_unlocks_it_in_the_recipe_book() {
     let mut player = session_with_outbound(&world, 1000).0;
     player
         .inventory_mut()
-        .set_slot(1, Some(ItemStack::new(Item::OakLog, 1)));
+        .set_slot(1, Some(ItemStack::mint(Item::OakLog, 1, MintReason::Test)));
     let recipes = world.shared.recipes();
     let name = recipes
         .grid_recipe(player.inventory().craft_grid(), 2, 2)
@@ -1168,5 +1249,106 @@ async fn crafting_a_recipe_unlocks_it_in_the_recipe_book() {
     let frozen = tuff_vanilla_data::Frozen::from(name.to_string());
     player.crafted_recipes(&[(frozen, Vec::new())]);
     assert!(player.knows_recipe(name));
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_hopper_facing_a_full_chest_keeps_its_items() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let pos = ChunkPos::new(0, 0);
+    let region = world.region(pos.region()).await;
+    let (alice, mut alice_events) = PlayerHandle::new(100);
+    subscribe(&region, &alice, &mut alice_events, &[pos]).await;
+    let generator = Generator::new(1);
+    let y = generator.height(1, 1) + 2;
+    let bottom = BlockPos::new(1, y, 1);
+    let hopper = BlockPos::new(1, y + 1, 1);
+    place_blocks(
+        &world,
+        &region,
+        [
+            (bottom, Block::Chest.default_state()),
+            (hopper, Block::Hopper.default_state()),
+        ],
+    )
+    .await;
+    let dirt = || Some(ItemStack::mint(Item::Dirt, 64, MintReason::Test));
+    let stone = |count| Some(ItemStack::mint(Item::Stone, count, MintReason::Test));
+
+    region
+        .request(RegionRequest::Place(place(&alice, bottom, Item::Torch, 1)))
+        .await;
+    expect(&mut alice_events, container_menu).await;
+    region
+        .request(RegionRequest::ContainerTransaction {
+            player: alice.clone(),
+            window_id: 1,
+            changes: (0..27)
+                .flat_map(|slot| set_slot(bottom, slot, None, dirt()))
+                .collect(),
+            pool: pool_for(
+                &(0..27)
+                    .flat_map(|slot| set_slot(bottom, slot, None, dirt()))
+                    .collect::<Vec<_>>(),
+            ),
+            took_result: false,
+        })
+        .await;
+    assert!(expect(&mut alice_events, transaction_answer).await.0);
+    region
+        .request(RegionRequest::CloseContainer {
+            player: alice.id,
+            positions: vec![bottom],
+        })
+        .await;
+
+    region
+        .request(RegionRequest::Place(place(&alice, hopper, Item::Torch, 2)))
+        .await;
+    expect(&mut alice_events, container_menu).await;
+    region
+        .request(RegionRequest::ContainerTransaction {
+            player: alice.clone(),
+            window_id: 2,
+            changes: set_slot(hopper, 0, None, stone(5)),
+            pool: pool_for(&set_slot(hopper, 0, None, stone(5))),
+            took_result: false,
+        })
+        .await;
+    assert!(expect(&mut alice_events, transaction_answer).await.0);
+    world.ticks(40).await;
+    region
+        .request(RegionRequest::CloseContainer {
+            player: alice.id,
+            positions: vec![hopper],
+        })
+        .await;
+
+    region
+        .request(RegionRequest::Place(place(&alice, hopper, Item::Torch, 3)))
+        .await;
+    let open = expect(&mut alice_events, container_menu).await;
+    let MenuSource::Blocks { contents, .. } = open.source else {
+        panic!("a hopper is a block container");
+    };
+    let contents = stacks(&contents);
+    assert_eq!(contents[0], stone(5), "the refused item went back");
+    region
+        .request(RegionRequest::CloseContainer {
+            player: alice.id,
+            positions: vec![hopper],
+        })
+        .await;
+    region
+        .request(RegionRequest::Place(place(&alice, bottom, Item::Torch, 4)))
+        .await;
+    let open = expect(&mut alice_events, container_menu).await;
+    let MenuSource::Blocks { contents, .. } = open.source else {
+        panic!("a chest is a block container");
+    };
+    let contents = stacks(&contents);
+    assert!(contents.iter().all(|slot| *slot == dirt()));
     world.shutdown().await;
 }

@@ -273,18 +273,18 @@ async fn particle_directive_reaches_players_in_range_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn item_slots_are_replaced_filled_and_overridden() {
     use crate::world::messages::SlotFill;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
 
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let (mut player, _frames) = session_with_outbound(&world, 2000);
-    let stick = ItemStack::new(Item::Stick, 1);
+    let stick = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     let ids = |name: &str| crate::world::predicate::slot_range(name).unwrap();
     let set = |name: &str, mode| Directive::SetSlots {
         ids: ids(name),
         name: name.to_owned(),
-        stack: stick.clone(),
+        stack: tuff_item::item::ItemSnapshot::of(&stick),
         mode,
     };
 
@@ -296,7 +296,7 @@ async fn item_slots_are_replaced_filled_and_overridden() {
     assert_eq!(
         player.inventory().slots()[crate::world::inventory::Inventory::hotbar_slot(held)]
             .as_ref()
-            .map(|s| s.item),
+            .map(|s| s.item()),
         Some(Item::Stick)
     );
 
@@ -321,7 +321,7 @@ async fn item_slots_are_replaced_filled_and_overridden() {
         .slots()
         .iter()
         .flatten()
-        .filter(|s| s.item == Item::Stick)
+        .filter(|s| s.item() == Item::Stick)
         .count();
     assert_eq!(filled, 4 + 1, "armor, and hotbar.0 which is container.0");
     world.shutdown().await;

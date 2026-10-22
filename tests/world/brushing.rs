@@ -7,7 +7,7 @@ use crate::protocol::play::Serverbound;
 use crate::world::inventory::Inventory;
 use crate::world::region_api::RegionTask;
 use crate::world::session::PlayerSession;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::EntityType;
@@ -110,7 +110,7 @@ async fn brusher(bench: &Bench) -> PlayerSession {
     player.pose.pitch = 90.0;
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Brush, 1)),
+        Some(ItemStack::mint(Item::Brush, 1, MintReason::Test)),
     );
     player
         .handle_packet(Serverbound::UseItemOn {
@@ -187,7 +187,7 @@ async fn brushing_suspicious_sand_uncovers_its_loot_and_leaves_sand() {
     assert_eq!(stages, ["1", "2", "3"]);
     let dropped = entities_of(&bench.region, EntityType::Item).await;
     if let Some(dropped) = dropped.first() {
-        assert_eq!(dropped.name, item.item.name());
+        assert_eq!(dropped.name, item.item().name());
         assert!(
             dropped.position[1] > f64::from(SKY + 2),
             "out of the brushed top face"
@@ -201,7 +201,7 @@ async fn brushing_suspicious_sand_uncovers_its_loot_and_leaves_sand() {
             .slots()
             .iter()
             .flatten()
-            .any(|stack| stack.item == item.item);
+            .any(|stack| stack.item() == item.item());
     }
     assert!(
         picked_up,
@@ -282,7 +282,10 @@ async fn unsupported_suspicious_sand_falls_and_shatters_without_a_drop() {
     )
     .await;
     edit_block_entity(&region, sand, |nbt| {
-        nbt.insert("item", ItemStack::new(Item::Diamond, 1).to_nbt());
+        nbt.insert(
+            "item",
+            ItemStack::mint(Item::Diamond, 1, MintReason::Test).to_nbt(),
+        );
     })
     .await;
     place_blocks(&world, &region, [(support, Block::Air.default_state())]).await;

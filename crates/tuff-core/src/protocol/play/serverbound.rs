@@ -65,7 +65,7 @@ pub struct StructureBlockEdit {
     pub strict: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Serverbound {
     /// Confirm Teleportation: the teleport id, and where the client put
     /// itself on applying it.

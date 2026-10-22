@@ -14,6 +14,7 @@ mod environment;
 mod hands;
 mod health;
 mod menus;
+pub use menus::{Place, Reasons, Sim};
 mod merchant_menu;
 pub mod mirror;
 pub mod plugin_inventory;
@@ -42,6 +43,7 @@ mod net;
 pub use net::TickThrottler;
 mod packets;
 mod persist;
+mod place_offer;
 mod pose;
 mod progress;
 mod published;
@@ -243,7 +245,7 @@ pub struct DamageSource {
     /// Where it comes from, for shields and knockback.
     pub position: Option<[f64; 3]>,
     /// The attacker's weapon, which may disable a shield.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// The attacker dealt it itself (a melee hit, not a projectile or
     /// TNT); only such hits knock a shield holder back.
     pub direct: bool,
@@ -329,23 +331,43 @@ pub struct QueuedClick {
     pub carried: Option<HashedSlot>,
 }
 
-/// A transaction in flight: what to undo if it is rejected, and what to
-/// drop once it is accepted.
+/// A transaction in flight: where the stacks of the pool it carries came
+/// from, to put back on refusal, and the click's pictures to settle
+/// against once accepted.
 pub struct Pending {
-    pub inventory: Vec<(usize, Option<ItemStack>)>,
-    pub carried: Option<ItemStack>,
-    pub drops: Vec<ItemStack>,
-    /// A merchant screen's slots and offers before the trade.
-    pub merchant: Option<(Vec<Option<ItemStack>>, Vec<MerchantOffer>)>,
+    pub origins: Vec<Option<menus::Place>>,
+    pub sim: menus::Sim,
+    pub reasons: Option<menus::Reasons>,
+    /// The client's view may differ: send the screen once settled.
+    pub resend: bool,
+    /// A merchant screen's offers before the trade.
+    pub merchant: Option<Vec<MerchantOffer>>,
 }
 
 /// A transaction over both regions of a split double chest, waiting for
 /// both regions' votes.
 pub struct SplitTransaction {
     pub txn: u64,
-    pub votes: u8,
+    pub near_voted: bool,
+    pub far_voted: bool,
     pub prepared: bool,
-    pub contents: Vec<(BlockPos, Vec<Option<ItemStack>>)>,
+    pub contents: Vec<(BlockPos, Vec<Option<tuff_item::item::ItemSnapshot>>)>,
+    /// What the player's side gave up.
+    pub pool: Vec<ItemStack>,
+    pub near_changes: Vec<crate::world::messages::ContainerChange>,
+    pub far_changes: Vec<crate::world::messages::ContainerChange>,
+    /// What each region took out of its slots once prepared.
+    pub near_taken: Vec<ItemStack>,
+    pub far_taken: Vec<ItemStack>,
+}
+
+/// A two-region transaction whose menu closed before every region voted:
+/// a late vote's taken stacks go straight back to its region.
+pub struct AbandonedSplit {
+    pub txn: u64,
+    pub far_pos: Option<BlockPos>,
+    pub near: Option<RegionHandle>,
+    pub far: Option<RegionHandle>,
 }
 
 /// The state of a crafting station menu beyond its slots.
@@ -382,7 +404,7 @@ pub enum Station {
     /// the result is cleared and marked `stale`, and the feature owning
     /// maps fills it in again.
     Cartography {
-        inputs: Box<[Option<ItemStack>; 2]>,
+        inputs: Box<[Option<tuff_item::item::ItemSnapshot>; 2]>,
         stale: bool,
     },
     Grindstone,
@@ -762,6 +784,7 @@ impl PlayerSession {
             .coordinator
             .send(CoordinatorMessage::Left { player: self.id })
             .await;
+        tuff_item::item::conservation::release(self);
         let _ = done.send(true);
     }
 
@@ -1143,6 +1166,9 @@ impl PlayerSession {
         self.progress.stats.award_custom(CustomStat::LeaveGame, 1);
         self.disconnected = true;
         self.close_menu(false).await;
+        if let Some(menu) = self.menus.menu.as_mut() {
+            menu.pending = None;
+        }
         self.finish_menu_close().await;
         for stack in self.inventory.close() {
             self.throw_item(stack).await;
@@ -1151,20 +1177,57 @@ impl PlayerSession {
         self.leave_vehicle_offline().await;
         self.leaving_hooks().await;
         self.detach_from_regions().await;
-        self.keep_granted_items();
-        let _ = self.save_task().await;
+        self.keep_granted_items().await;
+        let deferred = self
+            .menus
+            .save_barrier
+            .take()
+            .and_then(|barrier| barrier.ticket);
+        let _ = self.save_task_in(deferred).await;
+        self.shared
+            .conservation
+            .release(crate::world::conservation::Subject::Player(self.id));
         log::info!("{} left the game", self.profile.name);
     }
 
     /// Stops taking events and keeps every item a region already gave
-    /// up for this player, so a pickup granted while leaving is saved.
-    fn keep_granted_items(&mut self) {
+    /// up for this player, so a pickup granted or a transaction answered
+    /// while leaving is saved, and hands a late two-region vote's stacks
+    /// back to its region.
+    async fn keep_granted_items(&mut self) {
         self.conn.events.close();
         while let Ok(event) = self.conn.events.try_recv() {
-            if let PlayerEvent::ItemGranted { stack, .. } = event
-                && let Some(lost) = self.inventory.add(stack)
-            {
-                log::warn!("{} lost {lost:?} granted while leaving", self.profile.name);
+            let stacks = match event {
+                PlayerEvent::ItemGranted { stack, .. }
+                | PlayerEvent::HandReturned {
+                    stack,
+                    creative: false,
+                    ..
+                } => vec![stack],
+                PlayerEvent::HandReturned { stack, .. } => {
+                    stack.burn(tuff_item::item::BurnReason::Creative);
+                    Vec::new()
+                }
+                PlayerEvent::Transaction { pool, .. }
+                | PlayerEvent::EntityTransaction { pool, .. } => pool,
+                PlayerEvent::TransactionPrepared {
+                    txn,
+                    contents,
+                    taken,
+                    ..
+                } => match self.abandoned_vote(txn, &contents) {
+                    Some(region) => {
+                        self.resolve_share(region, txn, false, taken).await;
+                        Vec::new()
+                    }
+                    None => taken,
+                },
+                _ => Vec::new(),
+            };
+            for stack in stacks {
+                if let Some(lost) = self.inventory.add(stack) {
+                    log::warn!("{} lost {lost:?} granted while leaving", self.profile.name);
+                }
             }
         }
     }
@@ -1183,11 +1246,7 @@ impl PlayerSession {
     /// The full value of `attribute`: its base with the commands', gear's
     /// and effects' modifiers.
     pub fn attribute_value(&self, attribute: Attribute) -> f64 {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         attributes::Modifiers {
             equipment: &worn,
@@ -1254,7 +1313,7 @@ impl PlayerSession {
             self.tick_air().await;
             self.tick_shoulders().await;
         }
-        let main_hand = self.inventory.hand(false).map(|stack| stack.item);
+        let main_hand = self.inventory.hand(false).map(|stack| stack.item());
         if main_hand != self.actions.last_main_hand {
             self.actions.last_main_hand = main_hand;
             self.actions.attack_reset_tick = self.tick;

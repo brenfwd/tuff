@@ -43,7 +43,7 @@ use tuff_core::world::services::{ServiceFactory, WorldService};
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{HookFuture, SessionHooks, SessionTick};
 use tuff_http::Response;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::load::{LoadError, Phase};
 use tuff_item::text::TextComponent;
 use tuff_nbt::Compound;
@@ -519,17 +519,17 @@ impl DirtToDiamond {
 
 impl Recipe for DirtToDiamond {
     fn matches(&self, input: &CraftingInput) -> bool {
-        input.ingredient_count() == 1 && input.stacks().any(|s| s.item == Item::Dirt)
+        input.ingredient_count() == 1 && input.stacks().any(|s| s.item() == Item::Dirt)
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
-        Some(ItemStack::new(Item::Diamond, 1))
+        Some(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting))
     }
 
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: vec![SlotDisplay::Ingredient(Self::DIRT)],
-            result: SlotDisplay::Stack(ItemStack::new(Item::Diamond, 1)),
+            result: SlotDisplay::template(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting)),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -546,13 +546,13 @@ pub const DIAMOND_REPAIR: &str = "example:diamond_repair";
 pub struct DiamondRepair;
 
 impl DiamondRepair {
-    fn damaged_tool(input: &CraftingInput) -> Option<&ItemStack> {
-        if input.ingredient_count() != 2 || !input.stacks().any(|s| s.item == Item::Diamond) {
+    fn damaged_tool<'a>(input: &CraftingInput<'a>) -> Option<&'a ItemStack> {
+        if input.ingredient_count() != 2 || !input.stacks().any(|s| s.item() == Item::Diamond) {
             return None;
         }
         input
             .stacks()
-            .find(|stack| stack.item != Item::Diamond && stack.has_damage())
+            .find(|stack| stack.item() != Item::Diamond && stack.has_damage())
     }
 }
 
@@ -562,7 +562,8 @@ impl Recipe for DiamondRepair {
     }
 
     fn assemble(&self, input: &CraftingInput) -> Option<ItemStack> {
-        let mut repaired = Self::damaged_tool(input)?.clone().with_count(1);
+        let mut repaired =
+            ItemStack::mint_like(Self::damaged_tool(input)?, 1, MintReason::Crafting);
         repaired.set_damage(0);
         Some(repaired)
     }

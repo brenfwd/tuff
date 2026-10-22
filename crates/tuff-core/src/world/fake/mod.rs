@@ -88,7 +88,7 @@ pub struct BodyStatus {
     pub dig_progress: f32,
     pub alive: bool,
     /// Every occupied inventory slot in window numbering.
-    pub items: Vec<(u8, tuff_item::item::ItemStack)>,
+    pub items: Vec<(u8, tuff_item::item::ItemSnapshot)>,
     /// How its gear and effects change its mining speed.
     pub miner: Option<crate::world::player::Miner>,
 }

@@ -15,7 +15,7 @@ pub(super) enum ExploreTarget {
 pub(super) struct Exploring {
     target: ExploreTarget,
     slot: usize,
-    answer: oneshot::Receiver<Option<ItemStack>>,
+    answer: crate::world::exploration::Answer,
 }
 
 fn waiting(stack: Option<&ItemStack>) -> bool {
@@ -68,18 +68,19 @@ impl RegionActor {
         for (target, slot, found) in done {
             match target {
                 ExploreTarget::Block(pos) => {
-                    let still_waiting = self
-                        .block_entity(pos)
-                        .and_then(|entity| entity.items.get(slot))
-                        .is_some_and(|stack| waiting(stack.as_ref()));
-                    if still_waiting {
-                        self.set_container_slot(pos, slot, found.clone());
-                        self.block_entity_changed(pos);
-                        self.broadcast_slots(pos, vec![(slot, found)]);
-                    }
+                    let Some(stack) = self
+                        .block_entity_mut(pos)
+                        .and_then(|entity| entity.items.get_mut(slot))
+                        .filter(|stack| waiting(stack.as_ref()))
+                    else {
+                        continue;
+                    };
+                    finish_map(stack, found);
+                    self.block_entity_changed(pos);
+                    self.broadcast_slots(pos, &[slot]);
                 }
                 ExploreTarget::Entity(id) => {
-                    let Some(container) = self
+                    let Some(mut container) = self
                         .ents
                         .entities
                         .get_mut(&id)
@@ -87,11 +88,30 @@ impl RegionActor {
                     else {
                         continue;
                     };
-                    if container.get(slot).is_some_and(|s| waiting(s.as_ref())) {
-                        container[slot] = found.clone();
-                        self.entity_slots_changed(id, vec![(slot, found)], None);
-                    }
+                    let Some(stack) = container.get_mut(slot).filter(|s| waiting(s.as_ref()))
+                    else {
+                        continue;
+                    };
+                    finish_map(stack, found);
+                    self.entity_slots_changed(id, &[slot], None);
                 }
+            }
+        }
+    }
+}
+
+/// Gives a waiting explorer map its map, or burns it when no structure
+/// was found.
+fn finish_map(slot: &mut Option<ItemStack>, found: Option<crate::world::exploration::ExploredMap>) {
+    match found {
+        Some(map) => {
+            if let Some(stack) = slot {
+                map.apply(&mut stack.components);
+            }
+        }
+        None => {
+            if let Some(stack) = slot.take() {
+                stack.burn(tuff_item::item::BurnReason::Loot);
             }
         }
     }

@@ -103,7 +103,11 @@ pub fn interaction(player: &PlayerHandle, item: Option<Item>) -> EntityInteracti
         player_uuid: 77,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: item.map(|item| ItemStack::new(item, 16)),
+        stack: item
+            .map(|item| tuff_item::item::ItemSnapshot::describe(item, 16, Default::default())),
+        hand: tuff_core::world::entity::HandOffer::new(item.map(|item| {
+            tuff_item::item::ItemStack::mint(item, 16, tuff_item::item::MintReason::Test)
+        })),
         off_hand: false,
         creative: false,
         sneaking: false,
@@ -174,7 +178,7 @@ pub fn attack(damage: f32, weapon: Option<ItemStack>) -> EntityAttack {
         attacker_pitch: 0.0,
         damage,
         knockback: 0.0,
-        weapon,
+        weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
         critical: false,
         magic: false,
         sweep: false,

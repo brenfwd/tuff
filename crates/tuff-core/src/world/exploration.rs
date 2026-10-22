@@ -127,46 +127,36 @@ pub struct ExploredMap {
 
 impl ExploredMap {
     /// Gives the stack its map and the target marker.
-    pub fn apply(&self, stack: &mut ItemStack) {
-        stack.components.remove_other(PENDING);
-        stack.components.map_id = Some(self.id);
+    pub fn apply(&self, components: &mut tuff_item::item::Components) {
+        components.remove_other(PENDING);
+        components.map_id = Some(self.id);
         let marker = Compound::new()
             .with("type", self.decoration.name())
             .with("x", f64::from(self.target.x))
             .with("z", f64::from(self.target.z))
             .with("rotation", 180.0f32);
-        let mut decorations = match stack.components.other.get(DECORATIONS) {
+        let mut decorations = match components.other.get(DECORATIONS) {
             Some(Tag::Compound(existing)) => existing.clone(),
             _ => Compound::new(),
         };
         decorations.insert(TARGET_KEY, marker);
-        stack.components.other.insert(DECORATIONS, decorations);
+        components.other.insert(DECORATIONS, decorations);
     }
 }
 
-/// Starts finishing a rolled explorer map stack; the answer is the stack
-/// with its map, or `None` when no structure was found.
+/// Starts the search for a rolled explorer map stack's map; the answer
+/// is the map, or `None` when no structure was found.
 pub fn finish(
     shared: &Arc<Shared>,
     dimension: DimensionId,
     origin: BlockPos,
     stack: &ItemStack,
-) -> Option<oneshot::Receiver<Option<ItemStack>>> {
+) -> Option<Answer> {
     let spec = pending(stack)?;
-    let answer = shared
+    shared
         .services
         .get::<ExplorationMaps>()?
-        .request(dimension, origin, spec)?;
-    let mut stack = stack.clone();
-    let (tx, rx) = oneshot::channel();
-    tokio::spawn(async move {
-        let found = answer.await.ok().flatten().map(|map| {
-            map.apply(&mut stack);
-            stack
-        });
-        let _ = tx.send(found);
-    });
-    Some(rx)
+        .request(dimension, origin, spec)
 }
 
 /// The answer to a map request.
@@ -261,6 +251,7 @@ impl WorldService for ExplorationMaps {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     #[tuff_core::watchdog]
@@ -283,7 +274,7 @@ mod tests {
         assert_eq!(defaults.decoration, MapDecorationType::Mansion);
         assert_eq!(defaults.search_radius, 50);
 
-        let mut stack = ItemStack::new(Item::PlainsVillageMap, 1);
+        let mut stack = ItemStack::mint(Item::PlainsVillageMap, 1, MintReason::Test);
         mark(&mut stack, &spec);
         assert_eq!(pending(&stack), Some(spec));
         ExploredMap {
@@ -291,7 +282,7 @@ mod tests {
             target: BlockPos::new(100, 64, -40),
             decoration: MapDecorationType::VillagePlains,
         }
-        .apply(&mut stack);
+        .apply(&mut stack.components);
         assert!(pending(&stack).is_none());
         assert_eq!(stack.components.map_id, Some(7));
         let target = stack

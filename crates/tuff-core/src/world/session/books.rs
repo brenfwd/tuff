@@ -1,9 +1,10 @@
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::Item;
 
 use super::PlayerSession;
 use crate::world::inventory::Inventory;
-use tuff_item::item::ItemStack;
 use tuff_item::item::decor::{Filterable, MAX_BOOK_PAGES, WrittenBook};
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Tag;
 
 const MAX_PAGE_CHARS: usize = 1024;
@@ -16,7 +17,7 @@ impl PlayerSession {
     /// Opening a signed book expands the selectors, scores and nbt in its
     /// pages once; a page that grows too large leaves the book as it was.
     pub async fn resolve_held_book(&mut self, off_hand: bool) {
-        let Some(stack) = self.inventory.hand(off_hand).cloned() else {
+        let Some(stack) = self.inventory.hand(off_hand) else {
             return;
         };
         let Some(book) = stack
@@ -28,7 +29,6 @@ impl PlayerSession {
             return;
         };
         let mut book = book.clone();
-        let mut stack = stack;
         let resolver = self.shared.commands.text_resolver().cloned();
         let mut ok = resolver.is_some();
         if let Some(resolver) = resolver.filter(|_| ok) {
@@ -72,8 +72,15 @@ impl PlayerSession {
             }
         }
         book.resolved = true;
-        stack.components.written_book = Some(Box::new(book));
-        self.inventory_mut().set_hand(off_hand, Some(stack));
+        let window = self.inventory.hand_slot(off_hand);
+        if let Some(stack) = self
+            .inventory_mut()
+            .slot_mut(window)
+            .as_mut()
+            .filter(|stack| stack.item() == Item::WrittenBook)
+        {
+            stack.components.written_book = Some(Box::new(book));
+        }
     }
 
     pub async fn edit_book(&mut self, slot: i32, pages: Vec<String>, title: Option<String>) {
@@ -86,21 +93,28 @@ impl PlayerSession {
         if !valid || !(off_hand || (0..9).contains(&slot)) {
             return;
         }
-        let inventory = self.inventory_mut();
-        let index = Inventory::hotbar_slot(slot.max(0) as usize);
-        let current = if off_hand {
-            inventory.hand(true)
+        let window = if off_hand {
+            Inventory::OFFHAND_SLOT
         } else {
-            inventory.slots()[index].as_ref()
+            Inventory::hotbar_slot(slot.max(0) as usize)
         };
-        let Some(stack) = current.filter(|s| s.item == Item::WritableBook) else {
+        let writable = |inventory: &mut Inventory| {
+            inventory
+                .slot_mut(window)
+                .as_mut()
+                .filter(|s| s.item() == Item::WritableBook)
+                .is_some()
+        };
+        if !writable(self.inventory_mut()) {
             return;
-        };
-        let mut stack = stack.clone();
+        }
         let filtered = self.filter_book(&pages, title.as_deref()).await;
         let author = self.profile.name.clone();
         match title {
             None => {
+                let Some(stack) = self.inventory_mut().slot_mut(window).as_mut() else {
+                    return;
+                };
                 stack.components.writable_book = Some(
                     pages
                         .into_iter()
@@ -116,7 +130,12 @@ impl PlayerSession {
                 );
             }
             Some(title) => {
-                let mut signed = ItemStack::new(Item::WrittenBook, stack.count);
+                let Some(old) = self.inventory_mut().slot_mut(window).take() else {
+                    return;
+                };
+                let mut signed =
+                    ItemStack::mint(Item::WrittenBook, old.count(), MintReason::Transform);
+                old.burn(BurnReason::Transform);
                 signed.components.written_book = Some(Box::new(WrittenBook {
                     title: Filterable {
                         filtered: filtered.title.filter(|f| *f != title),
@@ -138,14 +157,8 @@ impl PlayerSession {
                         .collect(),
                     resolved: false,
                 }));
-                stack = signed;
+                *self.inventory_mut().slot_mut(window) = Some(signed);
             }
-        }
-        let inventory = self.inventory_mut();
-        if off_hand {
-            inventory.set_hand(true, Some(stack));
-        } else {
-            inventory.set_slot(index, Some(stack));
         }
     }
 }

@@ -12,6 +12,7 @@
 //! here waits on another actor.
 
 use std::collections::HashMap;
+use tuff_item::item::BurnReason;
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -991,7 +992,13 @@ impl Tick<'_> {
         let id = self.world.shared().next_entity_id();
         let delay = self.world.rng().gen_range(60..=120);
         let uuid = self.world.rng().r#gen();
-        let mut entity = OminousItemSpawner::new(id, uuid, at, stack.clone(), delay);
+        let mut entity = OminousItemSpawner::new(
+            id,
+            uuid,
+            at,
+            ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Loot),
+            delay,
+        );
         entity.base.position = at;
         self.world.add_entity(Box::new(entity));
         let rng = self.world.rng();
@@ -1182,7 +1189,7 @@ fn dispensing_items(
     world: &dyn RegionWorld,
     config: &Config,
     pos: BlockPos,
-) -> Vec<(ItemStack, u64)> {
+) -> Vec<(tuff_item::item::ItemSnapshot, u64)> {
     let mut rng = StdRng::seed_from_u64(low_resolution_seed(world, pos));
     world
         .shared()
@@ -1190,8 +1197,8 @@ fn dispensing_items(
         .roll(config.ominous_items_table(), &mut rng)
         .into_iter()
         .map(|stack| {
-            let weight = u64::from(stack.count);
-            (stack.with_count(1), weight)
+            let weight = u64::from(stack.count());
+            (stack.keep(1, BurnReason::Loot).into_template(), weight)
         })
         .collect()
 }

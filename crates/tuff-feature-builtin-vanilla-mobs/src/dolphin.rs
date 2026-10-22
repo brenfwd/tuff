@@ -633,10 +633,9 @@ fn holding(mob: &MobCore) -> bool {
 
 /// Throws what it carries out of its mouth.
 fn spit_out(mob: &mut MobCore, cx: &mut TickContext) -> bool {
-    let Some(stack) = mob.equipment.main_hand().cloned() else {
+    let Some(stack) = mob.equipment.take(EquipmentSlot::Mainhand) else {
         return false;
     };
-    mob.equipment.set(EquipmentSlot::Mainhand, None);
     let [x, y, z] = mob.base.position;
     let (yaw, pitch) = (mob.base.yaw.to_radians(), mob.base.pitch.to_radians());
     let direction = cx.rng.r#gen::<f32>() * std::f32::consts::TAU;
@@ -914,8 +913,8 @@ impl Species for Dolphin {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
-        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item) {
+        let stack = interaction.stack.as_deref()?;
+        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item()) {
             return None;
         }
         core.sound_as(
@@ -955,7 +954,7 @@ mod tests {
     use tuff_vanilla_data::Item;
 
     use super::*;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
 
     fn fish_interaction() -> EntityInteraction {
         EntityInteraction {
@@ -963,7 +962,20 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::new(Item::Cod, 1)),
+            stack: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Cod,
+                1,
+                Default::default(),
+            )),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Cod,
+                    1,
+                    Default::default(),
+                )))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -1100,7 +1112,7 @@ mod tests {
         super::super::tests::with_context(|core, cx| {
             Dolphin::configure(core);
             let dolphin = Dolphin::default();
-            assert!(!dolphin.is_food(&ItemStack::new(Item::Cod, 1)));
+            assert!(!dolphin.is_food(&ItemStack::mint(Item::Cod, 1, MintReason::Test)));
             let _ = cx;
         });
     }
@@ -1170,14 +1182,14 @@ mod tests {
                     .iter()
                     .any(|e| matches!(e, Effect::TakeItem { item: 77, count: 1 }))
             );
-            dolphin.took_item(core, ItemStack::new(Item::Stick, 1));
+            dolphin.took_item(core, ItemStack::mint(Item::Stick, 1, MintReason::Test));
             assert!(holding(core));
             assert!(PlayWithItems.can_use(core, cx));
             PlayWithItems.tick(core, cx);
             assert!(!holding(core));
             assert!(cx.effects.iter().any(|e| matches!(
                 e,
-                Effect::DropItem { pickup_delay: 40, stack, .. } if stack.item == Item::Stick
+                Effect::DropItem { pickup_delay: 40, stack, .. } if stack.item() == Item::Stick
             )));
         });
     }

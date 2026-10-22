@@ -484,7 +484,11 @@ impl Coordinator {
             // A session panicking outside its play loop (which runs the
             // normal leave path itself) would otherwise never report
             // leaving, keeping it online and blocking shutdown.
-            if let Err(err) = tokio::spawn(tuff_timings::scope(session.run(previous, done))).await {
+            if let Err(err) = tokio::spawn(tuff_item::item::conservation::actor(
+                tuff_timings::scope(session.run(previous, done)),
+            ))
+            .await
+            {
                 log::error!("session of player {id} ended abnormally while leaving: {err}");
                 let _ = coordinator
                     .send(CoordinatorMessage::Left { player: id })

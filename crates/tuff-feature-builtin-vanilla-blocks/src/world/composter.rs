@@ -14,7 +14,7 @@ use tuff_core::world::item_port::{ItemPort, PortAccess, Porter};
 use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::redstone::UPDATE_ALL;
 use tuff_core::world::region_api::RegionWorld;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_common::composter::{COMPOSTER_FILL, FULL, READY, compostable, level, with_level};
 use tuff_world_model::BlockPos;
@@ -92,7 +92,7 @@ fn eject(world: &mut dyn RegionWorld, pos: BlockPos) {
         f64::from(pos.z) + 0.5 + dz,
     ];
     world.spawn_item_at(
-        ItemStack::new(Item::BoneMeal, 1),
+        ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop),
         position,
         [vx, 0.2, vz],
         BLOCK_DROP_PICKUP_DELAY,
@@ -103,17 +103,28 @@ fn eject(world: &mut dyn RegionWorld, pos: BlockPos) {
 pub struct ComposterPort;
 
 impl ItemPort for ComposterPort {
-    fn offer(&self, world: &mut dyn RegionWorld, at: &PortAccess, stack: &ItemStack) -> bool {
-        through(at, Facing::Up) && compost(world, at.pos, stack, at.by).is_some()
+    fn offer(
+        &self,
+        world: &mut dyn RegionWorld,
+        at: &PortAccess,
+        stack: ItemStack,
+    ) -> Result<(), ItemStack> {
+        if !through(at, Facing::Up) || compost(world, at.pos, &stack, at.by).is_none() {
+            return Err(stack);
+        }
+        stack.burn(tuff_item::item::BurnReason::Consumed);
+        Ok(())
     }
 
-    fn peek(&self, world: &dyn RegionWorld, at: &PortAccess) -> Option<ItemStack> {
-        let ripe = world.owns(at.pos) && world.block(at.pos).and_then(level) == Some(READY);
-        (ripe && through(at, Facing::Down)).then(|| ItemStack::new(Item::BoneMeal, 1))
+    fn peek(&self, world: &dyn RegionWorld, at: &PortAccess) -> Option<ItemSnapshot> {
+        ripe(world, at).then(|| ItemSnapshot::describe(Item::BoneMeal, 1, Default::default()))
     }
 
     fn take(&self, world: &mut dyn RegionWorld, at: &PortAccess) -> Option<ItemStack> {
-        let meal = self.peek(world, at)?;
+        if !ripe(world, at) {
+            return None;
+        }
+        let meal = ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop);
         let state = world.block(at.pos)?;
         let by_hand = matches!(at.by, Porter::Mob(_) | Porter::Player(_));
         if by_hand {
@@ -122,39 +133,58 @@ impl ItemPort for ComposterPort {
         let empty = with_level(state, 0);
         world.set_block_flags(at.pos, empty, UPDATE_ALL);
         changed(world, at.pos, empty, at.by);
-        (!by_hand).then_some(meal)
+        if by_hand {
+            meal.burn(tuff_item::item::BurnReason::Template);
+            return None;
+        }
+        Some(meal)
     }
+}
+
+fn ripe(world: &dyn RegionWorld, at: &PortAccess) -> bool {
+    world.owns(at.pos)
+        && world.block(at.pos).and_then(level) == Some(READY)
+        && through(at, Facing::Down)
 }
 
 pub struct PotPort;
 
 impl ItemPort for PotPort {
-    fn offer(&self, world: &mut dyn RegionWorld, at: &PortAccess, stack: &ItemStack) -> bool {
+    fn offer(
+        &self,
+        world: &mut dyn RegionWorld,
+        at: &PortAccess,
+        stack: ItemStack,
+    ) -> Result<(), ItemStack> {
         if !world.owns(at.pos)
             || world.block(at.pos).map(|s| s.block()) != Some(Block::DecoratedPot)
         {
-            return false;
+            return Err(stack);
         }
         let Some(nbt) = world.raw_block_entity_mut(at.pos) else {
-            return false;
+            return Err(stack);
         };
-        let merged = match nbt.get_compound(POT_ITEM).and_then(ItemStack::from_nbt) {
-            None => stack.clone().with_count(1),
-            Some(held) => {
-                if !held.stacks_with(stack) || held.count >= held.max_stack_size() {
-                    return false;
+        let merged = match nbt
+            .get_compound(POT_ITEM)
+            .and_then(ItemStack::picture_from_nbt)
+        {
+            None => stack,
+            Some(mut held) => {
+                if !held.stacks_with(&stack) || held.count() >= held.max_stack_size() {
+                    return Err(stack);
                 }
-                let count = held.count + 1;
-                held.with_count(count)
+                held.join(stack)?;
+                held
             }
         };
         let compound: Compound = merged.to_nbt();
+        tuff_item::item::conservation::release(merged);
         nbt.insert(POT_ITEM, compound);
         world.mark_blocks_dirty(at.pos);
-        true
+        Ok(())
     }
 
-    fn peek(&self, _world: &dyn RegionWorld, _at: &PortAccess) -> Option<ItemStack> {
+    fn peek(&self, _world: &dyn RegionWorld, _at: &PortAccess) -> Option<ItemSnapshot> {
         None
     }
 

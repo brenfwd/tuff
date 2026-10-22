@@ -74,7 +74,7 @@ async fn regions_and_predicates_follow_pack_tags_across_reloads() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn pack_tag_members_reach_built_in_recipes() {
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
     let dir = TestDir::new();
     pack(
@@ -88,12 +88,15 @@ async fn pack_tag_members_reach_built_in_recipes() {
     let world = TestWorld::start(dir.path());
     let sticks = |world: &TestWorld, item| {
         world.shared.recipes().grid_result(
-            &[Some(ItemStack::new(item, 1)), Some(ItemStack::new(item, 1))],
+            &[
+                Some(ItemStack::mint(item, 1, MintReason::Test)),
+                Some(ItemStack::mint(item, 1, MintReason::Test)),
+            ],
             1,
             2,
         )
     };
-    let four_sticks = Some(ItemStack::new(Item::Stick, 4));
+    let four_sticks = Some(ItemStack::mint(Item::Stick, 4, MintReason::Test));
     assert_eq!(sticks(&world, Item::Stone), four_sticks);
     assert_eq!(sticks(&world, Item::BirchPlanks), four_sticks);
 

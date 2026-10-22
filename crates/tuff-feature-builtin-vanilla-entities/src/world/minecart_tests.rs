@@ -155,7 +155,7 @@ fn container_minecarts_coast_by_fill_level() {
         Some(f64::from(0.98f32 + 15.0 * 0.001f32))
     );
     for slot in hopper.items.iter_mut() {
-        *slot = Some(ItemStack::new(Item::Stone, 64));
+        *slot = Some(ItemStack::mint(Item::Stone, 64, MintReason::Test));
     }
     assert_eq!(hopper.container_slowdown(), Some(f64::from(0.98f32)));
     let plain = Minecart::with_base(base(EntityType::Minecart));
@@ -166,7 +166,7 @@ fn container_minecarts_coast_by_fill_level() {
 #[test]
 fn container_minecarts_round_trip_their_items_and_enabled_flag() {
     let base = |kind| EntityBase::new(kind, 1, 1, [0.0; 3], [0.0; 3]);
-    let gold = ItemStack::new(Item::GoldIngot, 4);
+    let gold = ItemStack::mint(Item::GoldIngot, 4, MintReason::Test);
     let mut nbt = Compound::new()
         .with(
             ITEMS,
@@ -186,7 +186,7 @@ fn container_minecarts_round_trip_their_items_and_enabled_flag() {
 
     let mut nbt = Compound::new().with(LOOT_TABLE, "minecraft:chests/abandoned_mineshaft");
     let chest = load(base(EntityType::ChestMinecart), &mut nbt).unwrap();
-    assert_eq!(chest.container().map(<[_]>::len), Some(27));
+    assert_eq!(chest.container().map(|slots| slots.len()), Some(27));
     assert_eq!(chest.container_menu(), MenuKind::Generic { rows: 3 });
     assert!(chest.loot_pending());
     let mut saved = Compound::new();

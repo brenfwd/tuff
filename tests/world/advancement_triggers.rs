@@ -7,6 +7,7 @@ use crate::world::messages::{AdvancementEvent, PlayerLooks};
 use crate::world::nearby::{IndexedPlayer, PlayerIndex};
 use crate::world::predicate::EntityFacts;
 use tuff_core::world::advancement::SessionAdvancements;
+use tuff_item::item::ItemSnapshot;
 use tuff_vanilla_data::registry::EntityType;
 
 async fn loaded(
@@ -170,7 +171,7 @@ async fn a_used_interaction_reports_the_item_and_entity() {
     let found = interact_reporting(&world, &region, &player, &mut events, cow, Item::Wheat).await;
     match found.into_iter().next().expect("the feeding is reported") {
         AdvancementEvent::InteractedWithEntity { item, entity } => {
-            assert_eq!(item.map(|stack| stack.item), Some(Item::Wheat));
+            assert_eq!(item.map(|stack| stack.item()), Some(Item::Wheat));
             assert_eq!(entity.kind, Some(EntityType::Cow));
         }
         other => panic!("{other:?}"),
@@ -308,20 +309,28 @@ async fn reported_triggers_meet_their_advancements() {
 
     player
         .handle_event(report(AdvancementEvent::InteractedWithEntity {
-            item: Some(ItemStack::new(Item::Stick, 1)),
+            item: Some(ItemSnapshot::of(&ItemStack::mint(
+                Item::Stick,
+                1,
+                MintReason::Test,
+            ))),
             entity: facts(EntityType::Armadillo),
         }))
         .await;
     assert!(!player.advancement_done("minecraft:adventure/brush_armadillo"));
     player
         .handle_event(report(AdvancementEvent::InteractedWithEntity {
-            item: Some(ItemStack::new(Item::Brush, 1)),
+            item: Some(ItemSnapshot::of(&ItemStack::mint(
+                Item::Brush,
+                1,
+                MintReason::Test,
+            ))),
             entity: facts(EntityType::Armadillo),
         }))
         .await;
     assert!(player.advancement_done("minecraft:adventure/brush_armadillo"));
 
-    player.hurt_entity(&None, EntityType::Zombie, [2.0, 100.0, 0.5], 4.0, 4.0);
+    player.hurt_entity(None, EntityType::Zombie, [2.0, 100.0, 0.5], 4.0, 4.0);
     assert!(
         !player.advancement_done("minecraft:adventure/shoot_arrow"),
         "a melee hit is no arrow"
@@ -411,7 +420,7 @@ async fn reported_block_and_pickup_triggers_meet_their_advancements() {
         .await;
     assert!(player.advancement_done("minecraft:adventure/crafters_crafting_crafters"));
 
-    let mut silk = ItemStack::new(Item::IronPickaxe, 1);
+    let mut silk = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     silk.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:silk_touch".to_owned(),
         1,
@@ -419,7 +428,7 @@ async fn reported_block_and_pickup_triggers_meet_their_advancements() {
     player
         .handle_event(report(AdvancementEvent::BeeNestDestroyed {
             block: Block::BeeNest.default_state(),
-            item: Some(silk),
+            item: Some(ItemSnapshot::of(&silk)),
             bees: 3,
         }))
         .await;
@@ -427,7 +436,7 @@ async fn reported_block_and_pickup_triggers_meet_their_advancements() {
 
     player
         .handle_event(report(AdvancementEvent::ThrownItemPickedUpByEntity {
-            item: ItemStack::new(Item::GoldIngot, 1),
+            item: ItemSnapshot::of(&ItemStack::mint(Item::GoldIngot, 1, MintReason::Test)),
             entity: facts(EntityType::Piglin),
         }))
         .await;
@@ -652,7 +661,8 @@ async fn a_beacon_coming_on_reports_its_levels_to_players_nearby() {
             Compound::new().with("id", "minecraft:beacon"),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     region.request(RegionRequest::Place(beacon)).await;
     let level = ticking_expect(&world, &mut events, 200, |event| match event {
         PlayerEvent::Advancement(event) => match *event {
@@ -694,7 +704,11 @@ async fn breaking_a_bee_nest_reports_the_bees_inside() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: nest,
-            tool: Some(ItemStack::new(Item::Shears, 1)),
+            tool: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Shears,
+                1,
+                Default::default(),
+            )),
             mode: BreakMode::Finish,
             sequence: 1,
         })
@@ -708,7 +722,7 @@ async fn breaking_a_bee_nest_reports_the_bees_inside() {
     })
     .await;
     assert_eq!(block.block(), Block::BeeNest);
-    assert_eq!(item.map(|stack| stack.item), Some(Item::Shears));
+    assert_eq!(item.map(|stack| stack.item()), Some(Item::Shears));
     assert_eq!(bees, 3);
     world.shutdown().await;
 }
@@ -729,7 +743,7 @@ async fn picking_up_a_thrown_item_reports_to_the_picker_and_the_thrower() {
     let mut item = crate::world::items::ItemEntity::new(
         world.shared.next_entity_id(),
         77,
-        ItemStack::new(Item::GoldIngot, 1),
+        ItemStack::mint(Item::GoldIngot, 1, MintReason::Test),
         at,
         [0.0; 3],
         0,
@@ -754,7 +768,7 @@ async fn picking_up_a_thrown_item_reports_to_the_picker_and_the_thrower() {
     let thrown_by = reported(&world, &mut events).await;
     assert!(
         matches!(&thrown_by, AdvancementEvent::ThrownItemPickedUpByPlayer { item, thrower }
-            if item.item == Item::GoldIngot && thrower.kind == Some(EntityType::Player)),
+            if item.item() == Item::GoldIngot && thrower.kind == Some(EntityType::Player)),
         "{thrown_by:?}"
     );
     let picked_by = reported(&world, &mut thrower_events).await;

@@ -64,7 +64,7 @@ impl CustomItemBehavior for Recorder {
     ) -> InteractOutcome {
         let id = interaction
             .stack
-            .as_ref()
+            .as_deref()
             .and_then(tuff_core::custom::item_id)
             .unwrap_or("none");
         self.log
@@ -209,7 +209,7 @@ async fn removed_base_components_stop_the_client_and_server_use() {
         off_hand: false,
         sequence: 1,
     };
-    let mut plain = ItemStack::new(Item::Apple, 1);
+    let mut plain = ItemStack::mint(Item::Apple, 1, MintReason::Test);
     plain.components.removed = charm.components.removed.clone();
     player
         .inventory_mut()
@@ -223,7 +223,7 @@ async fn removed_base_components_stop_the_client_and_server_use() {
 
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Apple, 1)),
+        Some(ItemStack::mint(Item::Apple, 1, MintReason::Test)),
     );
     player.handle_packet(eat).await;
     assert!(player.is_using(), "a plain apple is eaten");
@@ -254,7 +254,7 @@ async fn block_clicks_go_to_the_behaviour_and_hide_the_base_item() {
     .await;
     let click = |target, id: &str, sequence| {
         let mut click = place(&player, target, Item::FlintAndSteel, sequence);
-        click.components = stack(&world, id, 1).components;
+        click.components = std::mem::take(&mut stack(&world, id, 1).components).into();
         click
     };
 
@@ -322,7 +322,7 @@ async fn entity_clicks_hide_the_base_and_reach_the_behaviour() {
     world.ticks(2).await;
     let creeper = mobs(&region, EntityType::Creeper).await[0].id;
     let mut click = interaction(&player, None);
-    click.stack = Some(stack(&world, WAND, 1));
+    click.stack = Some(tuff_item::item::ItemSnapshot::of(&stack(&world, WAND, 1)));
     region
         .request(RegionRequest::InteractEntity {
             player: player.clone(),
@@ -359,9 +359,9 @@ async fn creative_clients_get_private_data_back() {
         .get_compound_mut("minecraft:custom_data")
         .unwrap()
         .insert("secret", 42);
-    player.inventory_mut().set_slot(36, Some(held.clone()));
+    player.inventory_mut().set_slot(36, Some(held.test_copy()));
     let client_view = |stack: &ItemStack| {
-        let mut view = stack.clone();
+        let mut view = stack.test_copy();
         for component in stack.components.network_added() {
             if let tuff_item::item::NetworkComponent::ClientData(data) = component {
                 view.components
@@ -383,7 +383,7 @@ async fn creative_clients_get_private_data_back() {
     player
         .handle_packet(Serverbound::SetCreativeModeSlot {
             slot: 40,
-            stack: CreativeSlot::Stack(seen.clone()),
+            stack: CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(&seen.test_copy())),
         })
         .await;
     assert_eq!(player.inventory().slots()[40].as_ref(), Some(&held));
@@ -393,10 +393,15 @@ async fn creative_clients_get_private_data_back() {
     other
         .handle_packet(Serverbound::SetCreativeModeSlot {
             slot: 41,
-            stack: CreativeSlot::Stack(client_view(&stack(&world, CHARM, 1))),
+            stack: CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(&client_view(&stack(
+                &world, CHARM, 1,
+            )))),
         })
         .await;
-    let fresh = other.inventory().slots()[41].clone().unwrap();
+    let fresh = other.inventory().slots()[41]
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
+        .unwrap();
     assert_eq!(
         fresh,
         stack(&world, CHARM, 1),
@@ -445,7 +450,7 @@ async fn item_arguments_name_custom_items() {
         panic!("{CHARM} parses as a predicate");
     };
     assert!(only_charms.test(&stack(&world, CHARM, 1)));
-    assert!(!only_charms.test(&ItemStack::new(Item::Apple, 1)));
+    assert!(!only_charms.test(&ItemStack::mint(Item::Apple, 1, MintReason::Test)));
     assert!(!only_charms.test(&stack(&world, SWEET, 1)));
 
     let (mut player, _out) = session_with_outbound(&world, 1);
@@ -456,7 +461,7 @@ async fn item_arguments_name_custom_items() {
     player
         .apply_directive(
             Directive::Give {
-                stack: charm.stack(1),
+                stack: charm.template(1),
                 count: 2,
             },
             source,
@@ -467,7 +472,7 @@ async fn item_arguments_name_custom_items() {
         .slots()
         .iter()
         .flatten()
-        .cloned()
+        .map(tuff_item::item::ItemStack::test_copy)
         .collect();
     assert_eq!(given, [stack(&world, CHARM, 2)]);
     world.shutdown().await;
@@ -481,10 +486,11 @@ async fn the_inventory_grid_crafts_custom_results_only_from_exact_ingredients() 
     let (mut player, _out) = session_with_outbound(&world, 1);
     player
         .inventory_mut()
-        .set_slot(1, Some(ItemStack::new(Item::Apple, 1)));
-    player
-        .inventory_mut()
-        .set_slot(2, Some(ItemStack::new(Item::GoldNugget, 1)));
+        .set_slot(1, Some(ItemStack::mint(Item::Apple, 1, MintReason::Test)));
+    player.inventory_mut().set_slot(
+        2,
+        Some(ItemStack::mint(Item::GoldNugget, 1, MintReason::Test)),
+    );
     player.refresh_inventory_result();
     assert_eq!(
         player.inventory().slots()[0].as_ref(),

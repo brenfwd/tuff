@@ -18,7 +18,7 @@ use tuff_core::world::messages::{CoordinatorMessage, PlayerEvent, SessionTask};
 use tuff_core::world::services::{ServiceFactory, WorldService};
 use tuff_feature_builtin_audit_log::AuditLogFeature;
 use tuff_feature_builtin_audit_log::record::{Kind, Record, Who};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::load::{LoadError, Phase};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_data::Item;
@@ -107,7 +107,7 @@ async fn say(server: &TestServer, line: &str) -> Vec<String> {
 }
 
 fn diamond() -> ItemStack {
-    ItemStack::new(Item::Diamond, 1)
+    ItemStack::mint(Item::Diamond, 1, MintReason::Test)
 }
 
 /// Logs that `name` picked up `count` diamonds.
@@ -137,7 +137,7 @@ async fn log_pickup(shared: &Shared, name: &str, count: i32) {
 async fn write_stored(shared: &Shared, uuid: u128, diamonds: u8) {
     let backend = shared.backend.clone();
     tokio::task::spawn_blocking(move || {
-        let mut stack = ItemStack::new(Item::Diamond, diamonds).to_nbt();
+        let mut stack = ItemStack::mint(Item::Diamond, diamonds, MintReason::Test).to_nbt();
         stack.insert("Slot", Tag::Byte(0));
         let root = Compound::new().with("Inventory", Tag::from(vec![stack]));
         player_data::save(backend.documents(), uuid, root).unwrap();
@@ -167,8 +167,8 @@ fn count(slots: &[Option<ItemStack>]) -> u32 {
     slots
         .iter()
         .flatten()
-        .filter(|stack| stack.item == Item::Diamond)
-        .map(|stack| u32::from(stack.count))
+        .filter(|stack| stack.item() == Item::Diamond)
+        .map(|stack| u32::from(stack.count()))
         .sum()
 }
 
@@ -319,7 +319,7 @@ async fn a_login_waits_for_an_offline_edit_and_a_logout_save_comes_first() {
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Take {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 3,
             },
             reply,
@@ -341,7 +341,7 @@ async fn a_login_waits_for_an_offline_edit_and_a_logout_save_comes_first() {
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Take {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 2,
             },
             reply,
@@ -361,7 +361,7 @@ async fn a_login_waits_for_an_offline_edit_and_a_logout_save_comes_first() {
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Give {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 1,
             },
             reply,
@@ -417,7 +417,7 @@ async fn an_edit_queued_behind_a_logout_is_applied_once_after_the_logout_save() 
         .send(CoordinatorMessage::EditInventory {
             uuid,
             edit: InventoryEdit::Take {
-                stack: diamond(),
+                stack: tuff_item::item::ItemSnapshot::of(&diamond()),
                 count: 2,
             },
             reply,

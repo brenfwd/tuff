@@ -89,13 +89,9 @@ pub fn load_all(
     registries.freeze_all();
     let content = registries.custom.resolve()?;
     for def in content.items() {
-        let stack = def.stack(1);
         registries.commands.add_custom_item(
             def.id.clone(),
-            crate::command::item::ItemInput {
-                item: stack.item,
-                components: stack.components,
-            },
+            crate::command::item::ItemInput::from_template(&def.template()),
         );
     }
     Ok(())

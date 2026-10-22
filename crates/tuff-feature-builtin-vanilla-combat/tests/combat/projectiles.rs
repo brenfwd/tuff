@@ -22,7 +22,7 @@ fn owner(player: &PlayerHandle) -> Owner {
 }
 
 fn enchanted(item: Item, enchantments: &[(&str, i32)]) -> ItemStack {
-    let mut stack = ItemStack::new(item, 1);
+    let mut stack = ItemStack::mint(item, 1, MintReason::Test);
     stack.components.enchantments = Some(Enchantments::new(
         enchantments
             .iter()
@@ -91,6 +91,21 @@ async fn piercing_arrows_bounce_off_what_they_fail_to_hurt() {
     assert_eq!(
         arrows, 1,
         "the piercing arrow is gone, only its bounce flies"
+    );
+    let id = bounced.id;
+    let carried = region
+        .ask(move |world| {
+            world
+                .entity(id)
+                .and_then(|tracked| tracked.entity.downcast_ref::<Arrow>())
+                .map(|arrow| (arrow.item.item(), arrow.item.count()))
+        })
+        .await
+        .flatten();
+    assert_eq!(
+        carried,
+        Some((tuff_vanilla_data::Item::Arrow, 1)),
+        "the bounce carries the arrow's own item"
     );
     world.shutdown().await;
 }
@@ -252,13 +267,16 @@ async fn skeletons_shoot_the_tipped_arrows_they_hold() {
     let (player, mut events) = PlayerHandle::new(1000);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
-    let mut poison = ItemStack::new(Item::TippedArrow, 5);
+    let mut poison = ItemStack::mint(Item::TippedArrow, 5, MintReason::Test);
     poison.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Poison),
         ..Default::default()
     }));
     let equipment = Compound::new()
-        .with("mainhand", ItemStack::new(Item::Bow, 1).to_nbt())
+        .with(
+            "mainhand",
+            ItemStack::mint(Item::Bow, 1, MintReason::Test).to_nbt(),
+        )
         .with("offhand", poison.to_nbt());
     summon(
         &region,
@@ -292,8 +310,12 @@ async fn loaded(region: &RegionHandle, id: i32) -> Vec<ItemStack> {
     };
     nbt.get("equipment")
         .and_then(|e| e.as_compound()?.get("mainhand")?.as_compound())
-        .and_then(ItemStack::from_nbt)
-        .and_then(|crossbow| crossbow.components.into_patch().charged_projectiles)
+        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
+        .and_then(|mut crossbow| {
+            std::mem::take(&mut crossbow.components)
+                .into_patch()
+                .charged_projectiles
+        })
         .unwrap_or_default()
 }
 
@@ -351,7 +373,7 @@ async fn pillagers_load_multishot_crossbows_and_fire_three_piercing_bolts() {
         }
     }
     assert_eq!(charged.len(), 3, "Multishot loads three");
-    assert!(charged.iter().all(|s| s.item == Item::Arrow));
+    assert!(charged.iter().all(|s| s.item() == Item::Arrow));
     let found = wait_for(&world, &region, 100, |found| {
         found.iter().filter(|s| s.kind == EntityType::Arrow).count() >= 3
     })
@@ -377,8 +399,8 @@ async fn pillagers_fire_the_rockets_they_hold() {
     let region = world.region(chunk.region()).await;
     let (player, mut events) = PlayerHandle::new(1000);
     subscribe(&region, &player, &mut events, &[chunk]).await;
-    let rockets = ItemStack::new(Item::FireworkRocket, 4);
-    let crossbow = ItemStack::new(Item::Crossbow, 1);
+    let rockets = ItemStack::mint(Item::FireworkRocket, 4, MintReason::Test);
+    let crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
     let pillager = crossbow_pillager(&world, &region, &player, crossbow, Some(rockets)).await;
     wait_for(&world, &region, 400, |found| {
         found.iter().any(|s| s.kind == EntityType::FireworkRocket)
@@ -388,14 +410,14 @@ async fn pillagers_fire_the_rockets_they_hold() {
     let offhand = nbt
         .get("equipment")
         .and_then(|e| e.as_compound()?.get("offhand")?.as_compound())
-        .and_then(ItemStack::from_nbt)
+        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
         .expect("rockets left in hand");
-    assert_eq!(offhand.count, 3, "one rocket was loaded and fired");
+    assert_eq!(offhand.count(), 3, "one rocket was loaded and fired");
     world.shutdown().await;
 }
 
 fn starry_rocket() -> ItemStack {
-    let mut stack = ItemStack::new(Item::FireworkRocket, 1);
+    let mut stack = ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test);
     stack.components.fireworks = Some(Box::new(tuff_item::item::decor::Fireworks {
         flight_duration: 1,
         explosions: vec![Default::default()],
@@ -431,7 +453,7 @@ async fn rocket_bursts_hurt_what_the_next_region_holds() {
         world.shared.next_entity_id(),
         [510.5, f64::from(SKY) + 1.5, 8.5],
         [0.0, 0.0, 0.0],
-        &starry_rocket(),
+        starry_rocket(),
         owner(&viewer),
         &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1),
     );
@@ -477,7 +499,7 @@ async fn pearls_leave_with_their_thrower_and_come_back_with_it() {
         world.shared.next_entity_id(),
         hovering,
         [0.0, 0.0, 0.0],
-        ItemStack::new(Item::EnderPearl, 1),
+        ItemStack::mint(Item::EnderPearl, 1, MintReason::Test),
         owner(&player.conn.handle),
     );
     pearl.base.no_gravity = true;
@@ -532,7 +554,7 @@ async fn boosting_rockets_follow_their_glider_over_a_region_border() {
         world.shared.next_entity_id(),
         glider.id,
         at(505.5),
-        &ItemStack::new(Item::FireworkRocket, 1),
+        ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test),
         owner(&glider),
         40,
     );
@@ -592,7 +614,7 @@ async fn pearls_vanish_when_their_thrower_dies_unless_the_rule_is_off() {
             world.shared.next_entity_id(),
             [7.5, f64::from(SKY) + 20.0, 7.5],
             [0.0, 0.0, 0.0],
-            ItemStack::new(Item::EnderPearl, 1),
+            ItemStack::mint(Item::EnderPearl, 1, MintReason::Test),
             owner(&player.conn.handle),
         );
         pearl.base.no_gravity = true;

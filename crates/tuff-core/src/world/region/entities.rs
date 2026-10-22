@@ -91,13 +91,13 @@ fn summary(entity: &dyn RegionEntity) -> EntitySummary {
         pickable: entity.pickable(),
         item: entity.downcast_ref::<ItemEntity>().map(|item| {
             let takeable = item.pickup_delay == 0 && item.reserved.is_none();
-            (item.stack.item, item.stack.count, takeable)
+            (item.stack.item(), item.stack.count(), takeable)
         }),
         vehicle: base.vehicle.as_ref().map(|mount| mount.id),
         carries: !base.riders.is_empty() || !base.entity_riders.is_empty(),
         blue_sheep: entity.blue_sheep(),
         ominous_banner: entity.downcast_ref::<ItemEntity>().is_some_and(|item| {
-            item.stack.item == tuff_vanilla_data::Item::WhiteBanner
+            item.stack.item() == tuff_vanilla_data::Item::WhiteBanner
                 && item
                     .stack
                     .components
@@ -281,8 +281,22 @@ impl RegionActor {
     }
 
     /// Removes an entity for good, telling the viewers of `chunks` (its
-    /// chunk when empty).
+    /// chunk when empty); the items still in it are burned.
     pub(super) fn remove_entity(&mut self, id: i32, chunks: &[ChunkPos]) -> Option<TrackedEntity> {
+        let mut tracked = self.remove_entity_intact(id, chunks)?;
+        for stack in tracked.entity.take_items() {
+            stack.burn(tuff_item::item::BurnReason::Discarded);
+        }
+        Some(tracked)
+    }
+
+    /// Like `remove_entity` for an entity whose items live on (saved into
+    /// a block or sent elsewhere).
+    pub(super) fn remove_entity_intact(
+        &mut self,
+        id: i32,
+        chunks: &[ChunkPos],
+    ) -> Option<TrackedEntity> {
         let parts = self.custom_entity_parts(id);
         let tracked = self.remove_entity_kept(id, chunks)?;
         self.ents.destroyed.push(tracked.entity.base().uuid);
@@ -403,12 +417,15 @@ impl RegionActor {
         let mut gone: HashSet<i32> = self.stacks_on(&roots).into_iter().collect();
         gone.extend(roots);
         let shared = &self.shared;
-        self.ents.entities.retain(|id, tracked| {
-            let keep = !gone.contains(id);
-            if !keep {
-                shared.release_entity_uuid(tracked.entity.base().uuid);
-            }
-            keep
+        let entities = &mut self.ents.entities;
+        tuff_item::item::conservation::releasing(|| {
+            entities.retain(|id, tracked| {
+                let keep = !gone.contains(id);
+                if !keep {
+                    shared.release_entity_uuid(tracked.entity.base().uuid);
+                }
+                keep
+            })
         });
     }
 
@@ -921,18 +938,21 @@ impl RegionActor {
                 .is_some_and(|mount| self.ents.entities.contains_key(&mount.id));
             if !self.pos.contains(to) && !seated_here {
                 let seq = tracked.seq;
-                let handed = match self.border.neighbors.get(&to.region()) {
-                    Some(neighbor) => neighbor.try_entity(tracked.entity, seq),
+                let handed = match self.border.neighbors.get(&to.region()).cloned() {
+                    Some(neighbor) => self
+                        .hand_entity(&neighbor, tracked.entity, seq)
+                        .map(|()| neighbor),
                     None => Err(tracked.entity),
                 };
-                let Err(mut entity) = handed else {
-                    if let Some(neighbor) = self.border.neighbors.get(&to.region()).cloned() {
+                let mut entity = match handed {
+                    Ok(neighbor) => {
                         self.hand_off_viewers(id, &neighbor);
+                        summaries.retain(|s| s.id != id);
+                        grid = EntityGrid::build(&summaries);
+                        slots = summary_slots(&summaries);
+                        continue;
                     }
-                    summaries.retain(|s| s.id != id);
-                    grid = EntityGrid::build(&summaries);
-                    slots = summary_slots(&summaries);
-                    continue;
+                    Err(entity) => entity,
                 };
                 let base = entity.base_mut();
                 base.position = before;
@@ -1039,18 +1059,18 @@ impl RegionActor {
                     } else {
                         other.absorb(item);
                     }
-                    (item.stack.clone(), other.stack.clone())
+                    (item.stack.count(), other.stack.count())
                 });
             self.ents.entities.insert(id, own);
-            let Some((own_stack, other_stack)) = result else {
+            let Some((own_count, other_count)) = result else {
                 continue;
             };
             touched.extend([id, other_id]);
-            for (entity, stack) in [(other_id, other_stack), (id, own_stack)] {
-                if stack.count == 0 {
+            for (entity, count) in [(other_id, other_count), (id, own_count)] {
+                if count == 0 {
                     self.remove_entity(entity, &[]);
                 } else {
-                    self.set_item_stack(entity, stack);
+                    self.refresh_item_stack(entity);
                 }
             }
             if !self.ents.entities.contains_key(&id) {
@@ -1084,10 +1104,6 @@ impl RegionActor {
         }
         tracked.refresh_spawn();
         let items = tracked.entity.equipment();
-        let items: Vec<(u8, Option<&ItemStack>)> = items
-            .iter()
-            .map(|(slot, stack)| (*slot, stack.as_ref()))
-            .collect();
         let packet = packets([framed(&play::SetEquipment {
             entity_id: tracked.id(),
             items: &items,

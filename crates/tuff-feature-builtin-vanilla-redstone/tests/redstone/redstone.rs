@@ -349,7 +349,7 @@ async fn an_item_on_a_pressure_plate_opens_a_door() {
     assert_eq!(state(&b.region, door).await.open(), Some(false));
     b.region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [86.5, f64::from(FLOOR_Y) + 1.3, 86.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -461,13 +461,14 @@ async fn fill(b: &mut Bench, pos: BlockPos, stacks: Vec<ItemStack>, sequence: i3
             pos,
             slot,
             expected: None,
-            new: Some(stack),
+            new: snap(Some(stack)),
         })
-        .collect();
+        .collect::<Vec<_>>();
     b.region
         .request(RegionRequest::ContainerTransaction {
             player: b.player.clone(),
             window_id: 1,
+            pool: pool_for(&changes),
             changes,
             took_result: false,
         })
@@ -497,7 +498,7 @@ async fn a_dropper_feeds_a_chest_that_a_comparator_reads() {
     fill(
         &mut b,
         dropper,
-        vec![ItemStack::new(Item::Cobblestone, 64)],
+        vec![ItemStack::mint(Item::Cobblestone, 64, MintReason::Test)],
         1,
     )
     .await;
@@ -527,7 +528,13 @@ async fn a_dispenser_drops_items_and_primes_tnt() {
         ],
     )
     .await;
-    fill(&mut b, dispenser, vec![ItemStack::new(Item::Tnt, 1)], 1).await;
+    fill(
+        &mut b,
+        dispenser,
+        vec![ItemStack::mint(Item::Tnt, 1, MintReason::Test)],
+        1,
+    )
+    .await;
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let (reply, answer) = oneshot::channel();
@@ -972,7 +979,7 @@ async fn dispenser_slot(b: &mut Bench, dispenser: BlockPos) -> Option<ItemStack>
         PlayerEvent::ContainerSlots { pos, slots, .. } if pos == dispenser => slots
             .into_iter()
             .find(|(slot, _)| *slot == 0)
-            .map(|(_, stack)| stack),
+            .map(|(_, stack)| stack.as_deref().map(ItemStack::test_copy)),
         _ => None,
     })
     .await
@@ -995,14 +1002,17 @@ async fn entity_kinds(
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_pours_a_water_bucket_and_scoops_it_back() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::WaterBucket, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::WaterBucket, 1, MintReason::Test)],
+    )
+    .await;
     let front = at(86, 1, 86);
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     assert_eq!(state(&b.region, front).await.block(), Block::Water);
     let left = dispenser_slot(&mut b, dispenser).await;
-    assert_eq!(left.map(|s| (s.item, s.count)), Some((Item::Bucket, 1)));
+    assert_eq!(left.map(|s| (s.item(), s.count())), Some((Item::Bucket, 1)));
 
     b.world.ticks(30).await;
     click(&mut b, button, 3).await;
@@ -1013,7 +1023,7 @@ async fn a_dispenser_pours_a_water_bucket_and_scoops_it_back() {
     );
     let left = dispenser_slot(&mut b, dispenser).await;
     assert_eq!(
-        left.map(|s| (s.item, s.count)),
+        left.map(|s| (s.item(), s.count())),
         Some((Item::WaterBucket, 1))
     );
     b.world.shutdown().await;
@@ -1023,8 +1033,11 @@ async fn a_dispenser_pours_a_water_bucket_and_scoops_it_back() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_bone_meals_a_sapling() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::BoneMeal, 8)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::BoneMeal, 8, MintReason::Test)],
+    )
+    .await;
     let (soil, sapling) = (at(86, 0, 86), at(86, 1, 86));
     set(
         &b.region,
@@ -1034,7 +1047,10 @@ async fn a_dispenser_bone_meals_a_sapling() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let left = dispenser_slot(&mut b, dispenser).await;
-    assert_eq!(left.map(|s| (s.item, s.count)), Some((Item::BoneMeal, 7)));
+    assert_eq!(
+        left.map(|s| (s.item(), s.count())),
+        Some((Item::BoneMeal, 7))
+    );
     let grown = state(&b.region, sapling).await;
     assert!(
         grown.block() != Block::OakSapling || grown.get("stage") == Some("1"),
@@ -1047,8 +1063,11 @@ async fn a_dispenser_bone_meals_a_sapling() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_shoots_a_snowball() {
     let dir = TestDir::new();
-    let (mut b, _, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::Snowball, 4)]).await;
+    let (mut b, _, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::Snowball, 4, MintReason::Test)],
+    )
+    .await;
     click(&mut b, button, 2).await;
     let mut seen = Vec::new();
     for _ in 0..8 {
@@ -1068,8 +1087,11 @@ async fn a_dispenser_shoots_a_snowball() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_puts_a_helmet_on_the_player_in_front() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::IronHelmet, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::IronHelmet, 1, MintReason::Test)],
+    )
+    .await;
     let RegionRequest::Player(mut standing) =
         update(&b.player, 1, [86.5, f64::from(FLOOR_Y + 1), 86.5])
     else {
@@ -1079,14 +1101,14 @@ async fn a_dispenser_puts_a_helmet_on_the_player_in_front() {
     b.region.request(RegionRequest::Player(standing)).await;
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
+    assert_eq!(dispenser_slot(&mut b, dispenser).await, None);
     let (slot, stack) = expect(&mut b.events, |event| match event {
         PlayerEvent::DispenserEquip { slot, stack } => Some((slot, stack)),
         _ => None,
     })
     .await;
     assert_eq!(slot, tuff_vanilla_data::item::EquipmentSlot::Head);
-    assert_eq!((stack.item, stack.count), (Item::IronHelmet, 1));
-    assert_eq!(dispenser_slot(&mut b, dispenser).await, None);
+    assert_eq!((stack.item(), stack.count()), (Item::IronHelmet, 1));
     let entities = entity_kinds(&b.region).await;
     assert!(
         !entities
@@ -1101,8 +1123,11 @@ async fn a_dispenser_puts_a_helmet_on_the_player_in_front() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_places_a_shulker_box() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::RedShulkerBox, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::RedShulkerBox, 1, MintReason::Test)],
+    )
+    .await;
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let placed = state(&b.region, at(86, 1, 86)).await;
@@ -1119,8 +1144,8 @@ async fn a_dispenser_hatches_spawn_eggs_and_sets_carts_on_rails() {
     let (mut b, _, button) = dispenser_bench(
         dir.path(),
         vec![
-            ItemStack::new(Item::CowSpawnEgg, 1),
-            ItemStack::new(Item::Minecart, 1),
+            ItemStack::mint(Item::CowSpawnEgg, 1, MintReason::Test),
+            ItemStack::mint(Item::Minecart, 1, MintReason::Test),
         ],
     )
     .await;
@@ -1150,8 +1175,11 @@ async fn a_dispenser_hatches_spawn_eggs_and_sets_carts_on_rails() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_hatching_a_spawn_egg_is_heard_by_a_sculk_sensor() {
     let dir = TestDir::new();
-    let (mut b, _, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::CowSpawnEgg, 1)]).await;
+    let (mut b, _, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::CowSpawnEgg, 1, MintReason::Test)],
+    )
+    .await;
     let sensor = at(93, 1, 86);
     set(&b.region, &[(sensor, "minecraft:sculk_sensor")]).await;
     b.world.ticks(10).await;
@@ -1172,13 +1200,16 @@ async fn a_dispenser_hatching_a_spawn_egg_is_heard_by_a_sculk_sensor() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_fills_a_glass_bottle_from_water() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::GlassBottle, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::GlassBottle, 1, MintReason::Test)],
+    )
+    .await;
     set(&b.region, &[(at(86, 1, 86), "minecraft:water")]).await;
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let filled = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!(filled.item, Item::Potion);
+    assert_eq!(filled.item(), Item::Potion);
     assert_eq!(
         filled
             .components
@@ -1194,8 +1225,11 @@ async fn a_dispenser_fills_a_glass_bottle_from_water() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_shears_a_sheep_and_wears_the_shears() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::Shears, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::Shears, 1, MintReason::Test)],
+    )
+    .await;
     let (reply, answer) = oneshot::channel();
     b.region
         .request(RegionRequest::Summon {
@@ -1211,7 +1245,7 @@ async fn a_dispenser_shears_a_sheep_and_wears_the_shears() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let worn = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!((worn.item, worn.damage()), (Item::Shears, 1));
+    assert_eq!((worn.item(), worn.damage()), (Item::Shears, 1));
     b.world.ticks(2).await;
     let entities = entity_kinds(&b.region).await;
     assert!(
@@ -1244,8 +1278,11 @@ async fn summon_still(b: &Bench, id: &str, position: [f64; 3], extra: &[(&str, i
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_puts_armor_on_a_mob_that_picks_up_loot() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::IronHelmet, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::IronHelmet, 1, MintReason::Test)],
+    )
+    .await;
     summon_still(
         &b,
         "minecraft:zombie",
@@ -1263,8 +1300,11 @@ async fn a_dispenser_puts_armor_on_a_mob_that_picks_up_loot() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_keeps_armor_a_mob_will_not_wear() {
     let dir = TestDir::new();
-    let (mut b, _, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::IronHelmet, 1)]).await;
+    let (mut b, _, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::IronHelmet, 1, MintReason::Test)],
+    )
+    .await;
     summon_still(
         &b,
         "minecraft:zombie",
@@ -1288,8 +1328,11 @@ async fn a_dispenser_keeps_armor_a_mob_will_not_wear() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_brushes_a_scute_off_an_armadillo() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::Brush, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::Brush, 1, MintReason::Test)],
+    )
+    .await;
     summon_still(
         &b,
         "minecraft:armadillo",
@@ -1300,7 +1343,7 @@ async fn a_dispenser_brushes_a_scute_off_an_armadillo() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let worn = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!((worn.item, worn.damage()), (Item::Brush, 16));
+    assert_eq!((worn.item(), worn.damage()), (Item::Brush, 16));
     b.world.ticks(2).await;
     let entities = entity_kinds(&b.region).await;
     assert!(
@@ -1316,8 +1359,11 @@ async fn a_dispenser_brushes_a_scute_off_an_armadillo() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_swallows_into_a_sulfur_cube() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::Dirt, 2)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::Dirt, 2, MintReason::Test)],
+    )
+    .await;
     summon_still(
         &b,
         "minecraft:sulfur_cube",
@@ -1328,7 +1374,7 @@ async fn a_dispenser_swallows_into_a_sulfur_cube() {
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     let left = dispenser_slot(&mut b, dispenser).await;
-    assert_eq!(left.map(|s| (s.item, s.count)), Some((Item::Dirt, 1)));
+    assert_eq!(left.map(|s| (s.item(), s.count())), Some((Item::Dirt, 1)));
     b.world.shutdown().await;
 }
 
@@ -1339,8 +1385,8 @@ async fn a_dispenser_bottles_and_shears_a_full_beehive() {
     let (mut b, dispenser, button) = dispenser_bench(
         dir.path(),
         vec![
-            ItemStack::new(Item::GlassBottle, 1),
-            ItemStack::new(Item::Shears, 1),
+            ItemStack::mint(Item::GlassBottle, 1, MintReason::Test),
+            ItemStack::mint(Item::Shears, 1, MintReason::Test),
         ],
     )
     .await;
@@ -1355,7 +1401,7 @@ async fn a_dispenser_bottles_and_shears_a_full_beehive() {
     let state_now = state(&b.region, front).await;
     assert_eq!(state_now.get("honey_level"), Some("0"));
     let filled = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!(filled.item, Item::HoneyBottle);
+    assert_eq!(filled.item(), Item::HoneyBottle);
 
     set(
         &b.region,
@@ -1386,8 +1432,11 @@ async fn a_dispenser_bottles_and_shears_a_full_beehive() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_builds_a_snow_golem_with_a_pumpkin() {
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::CarvedPumpkin, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::CarvedPumpkin, 1, MintReason::Test)],
+    )
+    .await;
     set(
         &b.region,
         &[
@@ -1415,7 +1464,11 @@ async fn a_dispenser_summons_the_wither_with_the_last_skull() {
     let dir = TestDir::new();
     let (mut b, dispenser, button) = dispenser_bench(
         dir.path(),
-        vec![ItemStack::new(Item::WitherSkeletonSkull, 1)],
+        vec![ItemStack::mint(
+            Item::WitherSkeletonSkull,
+            1,
+            MintReason::Test,
+        )],
     )
     .await;
     let skull = "minecraft:wither_skeleton_skull";
@@ -1450,8 +1503,11 @@ async fn a_dispenser_summons_the_wither_with_the_last_skull() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_lights_a_nether_portal_with_flint_and_steel() {
     let dir = TestDir::new();
-    let (mut b, _, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::FlintAndSteel, 1)]).await;
+    let (mut b, _, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::FlintAndSteel, 1, MintReason::Test)],
+    )
+    .await;
     let obsidian = "minecraft:obsidian";
     let mut frame = Vec::new();
     for z in [86, 87] {
@@ -1490,13 +1546,19 @@ async fn a_dispenser_acts_on_a_block_in_the_neighbouring_region() {
     )
     .await;
     set(&east, &[(front, "minecraft:water")]).await;
-    fill(&mut b, dispenser, vec![ItemStack::new(Item::Bucket, 1)], 1).await;
+    fill(
+        &mut b,
+        dispenser,
+        vec![ItemStack::mint(Item::Bucket, 1, MintReason::Test)],
+        1,
+    )
+    .await;
     click(&mut b, button, 2).await;
     b.world.ticks(6).await;
     assert!(is_air(state(&east, front).await), "the source was taken");
     let left = dispenser_slot(&mut b, dispenser).await;
     assert_eq!(
-        left.map(|s| (s.item, s.count)),
+        left.map(|s| (s.item(), s.count())),
         Some((Item::WaterBucket, 1))
     );
     b.world.shutdown().await;
@@ -1644,7 +1706,10 @@ async fn paste(region: &RegionHandle, pos: BlockPos, state: &str, nbt: tuff_nbt:
 fn record(item: Item) -> tuff_nbt::Compound {
     tuff_nbt::Compound::new()
         .with("id", "minecraft:jukebox")
-        .with("RecordItem", ItemStack::new(item, 1).to_nbt())
+        .with(
+            "RecordItem",
+            ItemStack::mint(item, 1, MintReason::Test).to_nbt(),
+        )
 }
 
 /// A bench with a comparator at `(86, 1, 86)` reading west into `(85, 1,
@@ -1687,7 +1752,7 @@ async fn a_comparator_reads_a_jukeboxs_record_and_follows_a_new_one() {
 async fn a_comparator_reads_a_lecterns_page() {
     let dir = TestDir::new();
     let (b, input, output) = comparator_bench(dir.path()).await;
-    let mut book = ItemStack::new(Item::WritableBook, 1).to_nbt();
+    let mut book = ItemStack::mint(Item::WritableBook, 1, MintReason::Test).to_nbt();
     book.insert(
         "components",
         tuff_nbt::Compound::new().with(
@@ -2108,12 +2173,12 @@ async fn a_jukebox_takes_a_record_in_hand_and_gives_it_back() {
     set(&b.region, &[(input, "minecraft:jukebox")]).await;
     b.world.ticks(2).await;
     b.region
-        .request(RegionRequest::Place(place(
+        .request(RegionRequest::Place(offering(place(
             &b.player,
             input,
             Item::MusicDisc11,
             1,
-        )))
+        ))))
         .await;
     expect(&mut b.events, |event| match event {
         PlayerEvent::ActionResult {
@@ -2150,7 +2215,7 @@ async fn a_lectern_takes_a_book_turns_pages_pulses_and_gives_it_back() {
     b.world.ticks(2).await;
     let mut put = place(&b.player, input, Item::WritableBook, 1);
     put.components.writable_book = Some(vec![Filterable::plain("p".to_string()); 5]);
-    b.region.request(RegionRequest::Place(put)).await;
+    b.region.request(RegionRequest::Place(offering(put))).await;
     expect(&mut b.events, |event| match event {
         PlayerEvent::ActionResult {
             sequence: 1,
@@ -2213,7 +2278,7 @@ async fn a_lectern_takes_a_book_turns_pages_pulses_and_gives_it_back() {
         PlayerEvent::ItemGranted {
             stack,
             picked_up: false,
-        } if stack.item == Item::WritableBook => Some(()),
+        } if stack.item() == Item::WritableBook => Some(()),
         _ => None,
     })
     .await;
@@ -2231,7 +2296,13 @@ async fn crafter_bench(dir: &Path) -> (Bench, BlockPos, BlockPos) {
         ],
     )
     .await;
-    fill(&mut b, crafter, vec![ItemStack::new(Item::OakLog, 2)], 1).await;
+    fill(
+        &mut b,
+        crafter,
+        vec![ItemStack::mint(Item::OakLog, 2, MintReason::Test)],
+        1,
+    )
+    .await;
     (b, crafter, lever)
 }
 
@@ -2285,7 +2356,7 @@ async fn a_crafter_tells_players_nearby_what_it_crafted() {
     .await;
     assert_eq!(&*recipe, "minecraft:oak_planks");
     assert_eq!(
-        ingredients.iter().map(|s| s.item).collect::<Vec<_>>(),
+        ingredients.iter().map(|s| s.item()).collect::<Vec<_>>(),
         [Item::OakLog]
     );
     b.world.shutdown().await;
@@ -2543,8 +2614,11 @@ async fn the_editor_turns_a_command_block_into_a_repeating_one() {
 async fn a_dispenser_stands_an_armor_stand_up_in_front_of_it() {
     use tuff_vanilla_data::registry::EntityType;
     let dir = TestDir::new();
-    let (mut b, dispenser, button) =
-        dispenser_bench(dir.path(), vec![ItemStack::new(Item::ArmorStand, 1)]).await;
+    let (mut b, dispenser, button) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::ArmorStand, 1, MintReason::Test)],
+    )
+    .await;
     click(&mut b, button, 2).await;
     b.world.ticks(4).await;
     assert_eq!(dispenser_slot(&mut b, dispenser).await, None);

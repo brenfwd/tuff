@@ -19,7 +19,7 @@ use super::{illager, raider};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::entity::TickContext;
 use tuff_core::world::player::Difficulty;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 #[derive(Debug, Default)]
 pub struct Vindicator;
@@ -88,7 +88,7 @@ impl Species for Vindicator {
         if !core.raider.as_ref().is_some_and(|r| r.raid.is_some()) {
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::IronAxe, 1)),
+                Some(ItemStack::mint(Item::IronAxe, 1, MintReason::Spawn)),
             );
         }
         let difficulty = super::monster::LocalDifficulty::at(cx, core.base.position);

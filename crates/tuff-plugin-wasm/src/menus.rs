@@ -20,7 +20,7 @@ use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{
     HookFuture, PacketInterceptor, SessionHooks, SessionTick, Verdict,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, ItemView, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 use crate::abi;
@@ -37,19 +37,19 @@ const MAX_ROWS: u8 = 6;
 const PLAYER_SLOTS: std::ops::Range<usize> = 9..45;
 
 /// What a plugin asked of a player's menu.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum MenuOp {
     Open {
         player: u128,
         menu: String,
         rows: u8,
         title: String,
-        slots: Vec<(u8, ItemStack)>,
+        slots: Vec<(u8, ItemSnapshot)>,
     },
     Set {
         player: u128,
         slot: u8,
-        stack: Option<ItemStack>,
+        stack: Option<ItemSnapshot>,
     },
     Close {
         player: u128,
@@ -79,7 +79,7 @@ impl EntityFilter {
 struct Open {
     menu: String,
     rows: u8,
-    slots: Vec<Option<ItemStack>>,
+    slots: Vec<Option<ItemSnapshot>>,
     state_id: i32,
     shown: bool,
     title: String,
@@ -111,7 +111,8 @@ impl Menus {
                 title,
                 slots,
             } => {
-                let mut cells = vec![None; usize::from(rows) * 9];
+                let mut cells: Vec<Option<ItemSnapshot>> =
+                    (0..usize::from(rows) * 9).map(|_| None).collect();
                 for (slot, stack) in slots {
                     cells[usize::from(slot)] = Some(stack);
                 }
@@ -154,9 +155,11 @@ impl Menus {
     /// Opens the custom item catalog on `page` for a player.
     pub fn open_catalog(&self, player: u128, page: usize, content: &CustomContent) {
         let catalog = Catalog { page };
-        let mut cells = vec![None; usize::from(catalog::ROWS) * 9];
+        let mut cells: Vec<Option<ItemSnapshot>> =
+            (0..usize::from(catalog::ROWS) * 9).map(|_| None).collect();
         for (slot, stack) in catalog.slots(content) {
-            cells[usize::from(slot)] = Some(stack);
+            cells[usize::from(slot)] = Some(ItemSnapshot::of(&stack));
+            stack.burn(BurnReason::Template);
         }
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let entry = entries.entry(player).or_default();
@@ -206,7 +209,7 @@ impl Menus {
 
     /// The contents to resend after a click: the menu's slots then the
     /// player's. Bumps the state id.
-    fn contents(&self, player: u128) -> Option<(i32, Vec<Option<ItemStack>>)> {
+    fn contents(&self, player: u128) -> Option<(i32, Vec<Option<ItemSnapshot>>)> {
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let open = entries.get_mut(&player)?.open.as_mut()?;
         open.state_id += 1;
@@ -280,11 +283,11 @@ enum Due {
         rows: u8,
         title: String,
         state_id: i32,
-        slots: Vec<Option<ItemStack>>,
+        slots: Vec<Option<ItemSnapshot>>,
     },
     Update {
         state_id: i32,
-        changed: Vec<(u8, Option<ItemStack>)>,
+        changed: Vec<(u8, Option<ItemSnapshot>)>,
     },
     Close(String),
 }
@@ -298,7 +301,7 @@ fn component(text: &str) -> Tag {
 
 /// The stack a menu item describes, or `None` for an unknown item, bad
 /// SNBT or oversized text.
-pub fn build_stack(item: &MenuItem) -> Option<ItemStack> {
+pub fn build_stack(item: &MenuItem) -> Option<ItemSnapshot> {
     let too_long = |text: &str| text.len() > abi::MAX_GIVE_TEXT;
     if item.count == 0
         || item.lore.len() > abi::MAX_MENU_LORE
@@ -331,7 +334,10 @@ pub fn build_stack(item: &MenuItem) -> Option<ItemStack> {
     nbt.insert("id", Tag::String(kind.name().to_owned()));
     nbt.insert("count", Tag::Int(i32::from(item.count)));
     nbt.insert("components", Tag::Compound(components));
-    ItemStack::from_nbt(&nbt)
+    let stack = ItemStack::mint_from_nbt(&nbt, MintReason::Template)?;
+    let shown = ItemSnapshot::of(&stack);
+    stack.burn(BurnReason::Template);
+    Some(shown)
 }
 
 fn click_kind(mode: i32, button: i8) -> Option<MenuClickKind> {
@@ -350,23 +356,24 @@ fn click_kind(mode: i32, button: i8) -> Option<MenuClickKind> {
     })
 }
 
-fn window_contents(
-    session: &PlayerSession,
-    menu: Vec<Option<ItemStack>>,
-) -> Vec<Option<ItemStack>> {
-    let mut slots = menu;
-    slots.extend(session.inventory.slots()[PLAYER_SLOTS].iter().cloned());
-    slots
-}
-
-fn send_contents(session: &mut PlayerSession, state_id: i32, menu: Vec<Option<ItemStack>>) {
-    let slots = window_contents(session, menu);
-    session.send(&play::ContainerSetContent {
+fn send_contents(session: &mut PlayerSession, state_id: i32, menu: Vec<Option<ItemSnapshot>>) {
+    let slots: Vec<Option<ItemView<'_>>> = menu
+        .iter()
+        .map(|slot| slot.as_ref().map(ItemSnapshot::view))
+        .chain(
+            session.inventory.slots()[PLAYER_SLOTS]
+                .iter()
+                .map(|slot| slot.as_ref().map(ItemStack::view)),
+        )
+        .collect();
+    let packet = play::ContainerSetContent {
         window_id: WINDOW,
         state_id,
-        slots: &slots,
+        slots: slots.as_slice().into(),
         carried: None,
-    });
+    };
+    let bytes = tuff_core::world::framed(&packet);
+    session.send_raw(bytes);
 }
 
 /// Shows, updates and closes the menus plugins opened, once per session
@@ -412,7 +419,7 @@ impl SessionHooks for MenuSessions {
                             window_id: WINDOW,
                             state_id,
                             slot: i16::from(slot),
-                            item,
+                            item: item.as_ref().map(ItemSnapshot::view),
                         });
                     }
                 }

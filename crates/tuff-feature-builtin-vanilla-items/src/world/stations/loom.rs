@@ -2,14 +2,13 @@
 
 use tuff_core::world::loom::{MAX_LAYERS, layer_count, selectable_patterns};
 use tuff_core::world::stations::LoomRefresh as Refreshed;
-use tuff_item::item::ItemStack;
 use tuff_item::item::decor::BannerLayer;
+use tuff_item::item::{ItemStack, MintReason};
 
 /// One banner with `pattern` added in the dye's color.
 pub fn weave(banner: &ItemStack, dye: &ItemStack, pattern: &str) -> Option<ItemStack> {
-    let color = dye.item.dye()?;
-    let mut result = banner.clone();
-    result.count = 1;
+    let color = dye.item().dye()?;
+    let mut result = ItemStack::mint_like(banner, 1, MintReason::Crafting);
     result
         .components
         .banner_patterns
@@ -72,7 +71,7 @@ mod tests {
     use tuff_vanilla_data::Item;
 
     fn stack(item: Item) -> ItemStack {
-        ItemStack::new(item, 1)
+        ItemStack::mint(item, 1, MintReason::Test)
     }
 
     #[tuff_core::watchdog]

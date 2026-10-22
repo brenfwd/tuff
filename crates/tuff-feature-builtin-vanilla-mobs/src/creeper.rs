@@ -273,14 +273,14 @@ impl Species for Creeper {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if !tuff_datapack::tags::is(
             tuff_vanilla_data::tag::item::key::CREEPER_IGNITERS,
-            stack.item,
+            stack.item(),
         ) {
             return None;
         }
-        let sound = if stack.item == Item::FireCharge {
+        let sound = if stack.item() == Item::FireCharge {
             SoundEvent::ItemFirechargeUse
         } else {
             SoundEvent::ItemFlintandsteelUse

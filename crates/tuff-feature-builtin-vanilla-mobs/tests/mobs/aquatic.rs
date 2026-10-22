@@ -116,7 +116,7 @@ async fn axolotls_take_tropical_fish_buckets_and_give_the_water_back() {
         let HandEffect::ExchangeStack(stack) = effect else {
             panic!("expected the empty water bucket back, got {effect:?}");
         };
-        assert_eq!(stack.item, Item::WaterBucket);
+        assert_eq!(stack.item(), Item::WaterBucket);
     }
     wait_for(&world, &region, 600, |found| {
         found
@@ -353,7 +353,8 @@ async fn a_tamed_saddled_nautilus_goes_where_its_drivers_client_moves_it() {
         "equipment",
         Compound::new().with(
             "saddle",
-            tuff_item::item::ItemStack::new(Item::Saddle, 1).to_nbt(),
+            tuff_item::item::ItemStack::mint(Item::Saddle, 1, tuff_item::item::MintReason::Test)
+                .to_nbt(),
         ),
     );
     summon(&region, EntityType::Nautilus, nbt, start).await;

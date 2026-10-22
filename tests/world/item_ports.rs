@@ -25,18 +25,31 @@ struct Probe {
 struct TestPort(Arc<Probe>);
 
 impl ItemPort for TestPort {
-    fn offer(&self, _: &mut dyn RegionWorld, at: &PortAccess, _: &ItemStack) -> bool {
+    fn offer(
+        &self,
+        _: &mut dyn RegionWorld,
+        at: &PortAccess,
+        stack: ItemStack,
+    ) -> Result<(), ItemStack> {
         self.0.faces.lock().unwrap().push(at.face);
-        at.face == Some(tuff_vanilla_data::block::Facing::Up)
+        if at.face != Some(tuff_vanilla_data::block::Facing::Up) {
+            return Err(stack);
+        }
+        stack.burn(tuff_item::item::BurnReason::Test);
+        Ok(())
     }
 
-    fn peek(&self, _: &dyn RegionWorld, _: &PortAccess) -> Option<ItemStack> {
-        Some(ItemStack::new(Item::Stick, 1))
+    fn peek(&self, _: &dyn RegionWorld, _: &PortAccess) -> Option<tuff_item::item::ItemSnapshot> {
+        Some(tuff_item::item::ItemSnapshot::describe(
+            Item::Stick,
+            1,
+            Default::default(),
+        ))
     }
 
     fn take(&self, _: &mut dyn RegionWorld, _: &PortAccess) -> Option<ItemStack> {
         self.0.takes.fetch_add(1, Ordering::SeqCst);
-        Some(ItemStack::new(Item::Stick, 1))
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))
     }
 }
 
@@ -231,5 +244,36 @@ async fn a_full_hopper_does_not_trigger_a_take() {
     .await;
     world.ticks(30).await;
     assert!(probe.takes.load(Ordering::SeqCst) >= 1);
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_port_transfer_whose_check_fails_moves_nothing_and_quarantines_the_region() {
+    use crate::world::conservation::{Subject, Transfer};
+    let probe = Arc::new(Probe::default());
+    let (_dir, world, region) = start(vec![Box::new(PortFeature(probe.clone()))]).await;
+    set(&region, BlockPos::new(X, Y, Z), "minecraft:bookshelf", None).await;
+    world.shared.conservation.fail_next(Transfer::Port);
+    let top = BlockPos::new(X, Y + 1, Z);
+    set(
+        &region,
+        top,
+        "minecraft:hopper[facing=down]",
+        Some(items("minecraft:stick", 1, 1)),
+    )
+    .await;
+    world.ticks(20).await;
+    assert_eq!(hopper_slots(&region, top).await, 1, "the stick stays");
+    assert!(
+        probe.faces.lock().unwrap().is_empty(),
+        "nothing was offered"
+    );
+    assert!(
+        world
+            .shared
+            .conservation
+            .quarantined(Subject::Region(world.dimension(OVERWORLD), region.pos))
+    );
     world.shutdown().await;
 }

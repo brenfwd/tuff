@@ -13,9 +13,9 @@ use crate::world::interaction;
 use tuff_core::protocol::play;
 use tuff_core::world::game_event::{Context as GameContext, GameEvent};
 use tuff_core::world::growth::{BONEMEAL_EVENT, GrowthLevel};
-use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
+use tuff_core::world::region_api::{DispenseOutcome, Fired, RegionWorld};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::{ItemStack, PotionContents};
+use tuff_item::item::{ItemStack, MintReason, PotionContents};
 use tuff_vanilla_common::placement;
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::is_air;
@@ -31,10 +31,10 @@ pub fn dispense(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     facing: Facing,
-    stack: &ItemStack,
+    stack: &Fired,
 ) -> Option<DispenseOutcome> {
     let target = placement::step(pos, facing);
-    let item = stack.item;
+    let item = stack.item();
     if matches!(item, Item::CarvedPumpkin | Item::WitherSkeletonSkull) {
         return None;
     }
@@ -57,7 +57,7 @@ pub fn dispense(
                     target.center(),
                     GameContext::default(),
                 );
-                DispenseOutcome::Exchanged(ItemStack::new(filled, 1))
+                DispenseOutcome::Exchanged(ItemStack::mint(filled, 1, MintReason::Transform))
             }
             None => DispenseOutcome::Dropped,
         }),
@@ -99,7 +99,11 @@ pub fn dispense(
                     .get_compound("minecraft:bucket_entity_data")
                     .cloned();
                 world.release_bucket_mob(kind, target, data, Some(&stack.components.other), None);
-                Some(DispenseOutcome::Exchanged(ItemStack::new(Item::Bucket, 1)))
+                Some(DispenseOutcome::Exchanged(ItemStack::mint(
+                    Item::Bucket,
+                    1,
+                    MintReason::Transform,
+                )))
             }
             _ => None,
         },
@@ -120,9 +124,9 @@ pub fn dispense(
 fn swallow(
     world: &mut dyn RegionWorld,
     target: BlockPos,
-    stack: &ItemStack,
+    stack: &Fired,
 ) -> Option<DispenseOutcome> {
-    if !tuff_datapack::tags::is(tag::item::key::SULFUR_CUBE_SWALLOWABLE, stack.item) {
+    if !tuff_datapack::tags::is(tag::item::key::SULFUR_CUBE_SWALLOWABLE, stack.item()) {
         return None;
     }
     world.dispense_on_entity_in(target, stack)
@@ -192,7 +196,7 @@ fn pour(
     });
     world.pour_fluid(at, fluid, pour, mob, mob_data, None);
     world.game_event(GameEvent::FluidPlace, at.center(), GameContext::default());
-    DispenseOutcome::Exchanged(ItemStack::new(Item::Bucket, 1))
+    DispenseOutcome::Exchanged(ItemStack::mint(Item::Bucket, 1, MintReason::Transform))
 }
 
 fn pour_solid(
@@ -214,7 +218,7 @@ fn pour_solid(
         target.center(),
         GameContext::default(),
     );
-    DispenseOutcome::Exchanged(ItemStack::new(Item::Bucket, 1))
+    DispenseOutcome::Exchanged(ItemStack::mint(Item::Bucket, 1, MintReason::Transform))
 }
 
 fn bone_meal(world: &mut dyn RegionWorld, target: BlockPos, facing: Facing) -> DispenseOutcome {
@@ -237,7 +241,7 @@ fn is_water(state: BlockState) -> bool {
 }
 
 fn water_bottle() -> ItemStack {
-    let mut stack = ItemStack::new(Item::Potion, 1);
+    let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Transform);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Water),
         ..PotionContents::default()
@@ -289,7 +293,7 @@ fn water_to_mud(
     world.send_to_chunk(ChunkPos::of_block(pos), None, packets(splashes));
     world.play_sound(SoundEvent::ItemBottleEmpty, pos, 1.0, 1.0, None);
     world.put_block(target, Block::Mud.default_state());
-    DispenseOutcome::Exchanged(ItemStack::new(Item::GlassBottle, 1))
+    DispenseOutcome::Exchanged(ItemStack::mint(Item::GlassBottle, 1, MintReason::Transform))
 }
 
 fn wax(world: &mut dyn RegionWorld, target: BlockPos) -> DispenseOutcome {
@@ -323,7 +327,7 @@ fn ignite(
     world: &mut dyn RegionWorld,
     target: BlockPos,
     facing: Facing,
-    stack: &ItemStack,
+    stack: &Fired,
 ) -> DispenseOutcome {
     if let Some(outcome) = world.dispense_on_entity_in(target, stack) {
         return outcome;
@@ -367,7 +371,7 @@ fn place_shulker_box(
     facing: Facing,
     stack: &ItemStack,
 ) -> DispenseOutcome {
-    let Some(block) = stack.item.block() else {
+    let Some(block) = stack.item().block() else {
         return DispenseOutcome::Failed;
     };
     let below = placement::step(target, Facing::Down);

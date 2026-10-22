@@ -22,7 +22,7 @@ use tuff_core::world::entity::{
 };
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::projectile::{self, Launch, Owner, Shot, shot_velocity};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_common::placement;
 use tuff_world_model::BlockPos;
@@ -244,8 +244,8 @@ impl Species for IronGolem {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
-        if stack.item != Item::IronIngot || !core.is_alive() {
+        let stack = interaction.stack.as_deref()?;
+        if stack.item() != Item::IronIngot || !core.is_alive() {
             return None;
         }
         let before = core.health;
@@ -756,7 +756,7 @@ fn throw_snowball(core: &MobCore, target: &TargetView, cx: &mut TickContext) {
     let velocity = shot_velocity([dx, dy, dz], 1.6, 12.0, cx.rng);
     let id = cx.shared.next_entity_id();
     let owner = Owner::of(Culprit::entity(&core.base), None);
-    let item = ItemStack::new(Item::Snowball, 1);
+    let item = ItemStack::mint(Item::Snowball, 1, MintReason::Spawn);
     let shot = Shot::Thrown {
         kind: EntityType::Snowball,
         item,
@@ -887,8 +887,8 @@ impl Species for SnowGolem {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
-        if stack.item != Item::Shears {
+        let stack = interaction.stack.as_deref()?;
+        if stack.item() != Item::Shears {
             return None;
         }
         self.shear(core, cx).then_some(HandEffect::Damage(1))
@@ -1098,8 +1098,7 @@ impl CopperGolem {
         if !in_air || cx.rng.r#gen::<f32>() > STATUE_CHANCE {
             return;
         }
-        if let Some(stack) = core.equipment.get(EquipmentSlot::Mainhand).cloned() {
-            core.equipment.set(EquipmentSlot::Mainhand, None);
+        if let Some(stack) = core.equipment.take(EquipmentSlot::Mainhand) {
             core.drop_item(stack, 0.5, cx);
         }
         let facing = placement::from_yaw(core.base.yaw);
@@ -1153,13 +1152,18 @@ impl Species for CopperGolem {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         use tuff_core::protocol::play::level_event;
-        let stack = interaction.stack.as_ref()?;
-        if stack.item == Item::Shears
-            && let Some(antenna) = core.equipment.get(EquipmentSlot::Saddle).cloned()
-            && tuff_datapack::tags::is(
-                tuff_vanilla_data::tag::item::key::SHEARABLE_FROM_COPPER_GOLEM,
-                antenna.item,
-            )
+        let stack = interaction.stack.as_deref()?;
+        if stack.item() == Item::Shears
+            && core
+                .equipment
+                .get(EquipmentSlot::Saddle)
+                .is_some_and(|antenna| {
+                    tuff_datapack::tags::is(
+                        tuff_vanilla_data::tag::item::key::SHEARABLE_FROM_COPPER_GOLEM,
+                        antenna.item(),
+                    )
+                })
+            && let Some(antenna) = core.equipment.take(EquipmentSlot::Saddle)
         {
             core.sound_as(
                 SoundEvent::EntityCopperGolemShear,
@@ -1168,7 +1172,6 @@ impl Species for CopperGolem {
                 1.0,
                 cx,
             );
-            core.equipment.set(EquipmentSlot::Saddle, None);
             core.drop_item(antenna, 1.5, cx);
             cx.effects.push(Effect::GameEvent {
                 event: tuff_core::world::game_event::GameEvent::Shear,
@@ -1177,7 +1180,7 @@ impl Species for CopperGolem {
             });
             return Some(HandEffect::Damage(1));
         }
-        if stack.item == Item::Honeycomb && !self.waxed() {
+        if stack.item() == Item::Honeycomb && !self.waxed() {
             Self::level_event(core, level_event::PARTICLES_WAX_ON, cx);
             core.sound_as(
                 SoundEvent::ItemHoneycombWaxOn,
@@ -1189,7 +1192,7 @@ impl Species for CopperGolem {
             self.next_weather = WEATHER_WAXED;
             return Some(HandEffect::Consume(1));
         }
-        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::AXES, stack.item) {
+        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::AXES, stack.item()) {
             return None;
         }
         if self.waxed() {
@@ -1218,8 +1221,10 @@ impl Species for CopperGolem {
                 self.set_oxidation(core, previous);
             }
             Notice::Gifted(item) if core.equipment.get(EquipmentSlot::Saddle).is_none() => {
-                core.equipment
-                    .set(EquipmentSlot::Saddle, Some(ItemStack::new(item, 1)));
+                core.equipment.set(
+                    EquipmentSlot::Saddle,
+                    Some(ItemStack::mint(item, 1, MintReason::Spawn)),
+                );
                 core.equipment.set_drop_chance(EquipmentSlot::Saddle, 2.0);
             }
             _ => {}
@@ -1227,12 +1232,13 @@ impl Species for CopperGolem {
     }
 
     fn took_item(&mut self, core: &mut MobCore, stack: ItemStack) {
-        match core.equipment.get(EquipmentSlot::Mainhand) {
-            None => core.equipment.set(EquipmentSlot::Mainhand, Some(stack)),
+        match core.equipment.get_mut(EquipmentSlot::Mainhand) {
+            None => {
+                let none = core.equipment.replace(EquipmentSlot::Mainhand, Some(stack));
+                debug_assert!(none.is_none());
+            }
             Some(held) if held.stacks_with(&stack) => {
-                let mut held = held.clone();
-                held.count += stack.count;
-                core.equipment.set(EquipmentSlot::Mainhand, Some(held));
+                held.join_or_drop(stack, &mut self.overflow);
             }
             Some(_) => self.overflow.push(stack),
         }

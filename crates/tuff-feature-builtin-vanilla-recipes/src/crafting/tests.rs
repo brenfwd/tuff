@@ -7,15 +7,15 @@ use tuff_item::item::decor::{BannerLayer, Filterable, WrittenBook};
 use tuff_nbt::Tag;
 
 fn stack(item: Item, count: u8) -> Option<ItemStack> {
-    Some(ItemStack::new(item, count))
+    Some(ItemStack::mint(item, count, MintReason::Test))
 }
 
-fn grid3(cells: [Option<ItemStack>; 9]) -> CraftingInput {
-    CraftingInput::positioned(3, 3, &cells).input
+fn grid3(cells: [Option<ItemStack>; 9]) -> CraftingInput<'static> {
+    CraftingInput::positioned(3, 3, Vec::from(cells).leak()).input
 }
 
-fn grid2(cells: [Option<ItemStack>; 4]) -> CraftingInput {
-    CraftingInput::positioned(2, 2, &cells).input
+fn grid2(cells: [Option<ItemStack>; 4]) -> CraftingInput<'static> {
+    CraftingInput::positioned(2, 2, Vec::from(cells).leak()).input
 }
 
 struct Found {
@@ -49,7 +49,7 @@ fn found(input: &CraftingInput) -> (&'static str, ItemStack) {
 }
 
 fn pickaxe(damage: u32) -> ItemStack {
-    let mut stack = ItemStack::new(Item::DiamondPickaxe, 1);
+    let mut stack = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     stack.set_damage(damage);
     stack
 }
@@ -59,10 +59,10 @@ fn pickaxe(damage: u32) -> ItemStack {
 fn shaped_recipes_match_anywhere_in_the_grid_and_mirrored() {
     let (stick, coal) = (stack(Item::Stick, 1), stack(Item::Coal, 1));
     let top_left = grid3([
-        coal.clone(),
+        coal.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
         None,
-        stick.clone(),
+        stick.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
         None,
         None,
@@ -75,14 +75,17 @@ fn shaped_recipes_match_anywhere_in_the_grid_and_mirrored() {
         None,
         None,
         None,
-        coal.clone(),
+        coal.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
         None,
-        stick.clone(),
+        stick.as_ref().map(tuff_item::item::ItemStack::test_copy),
     ]);
     assert_eq!(
         found(&top_left),
-        ("minecraft:torch", ItemStack::new(Item::Torch, 4))
+        (
+            "minecraft:torch",
+            ItemStack::mint(Item::Torch, 4, MintReason::Test)
+        )
     );
     assert_eq!(found(&bottom_right).0, "minecraft:torch");
     let sideways = grid3([coal, stick, None, None, None, None, None, None, None]);
@@ -91,22 +94,22 @@ fn shaped_recipes_match_anywhere_in_the_grid_and_mirrored() {
     let (s, x) = (stack(Item::Stick, 1), stack(Item::String, 1));
     let bow = grid3([
         None,
-        s.clone(),
-        x.clone(),
-        s.clone(),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        x.clone(),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        s.clone(),
-        x.clone(),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
     ]);
     let mirrored = grid3([
-        x.clone(),
-        s.clone(),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        x.clone(),
+        x.as_ref().map(tuff_item::item::ItemStack::test_copy),
         None,
-        s.clone(),
+        s.as_ref().map(tuff_item::item::ItemStack::test_copy),
         x,
         s,
         None,
@@ -123,7 +126,10 @@ fn shapeless_recipes_ignore_position_and_accept_tag_members() {
     let planks = grid2([None, None, stack(Item::StrippedOakLog, 3), None]);
     assert_eq!(
         found(&planks),
-        ("minecraft:oak_planks", ItemStack::new(Item::OakPlanks, 4))
+        (
+            "minecraft:oak_planks",
+            ItemStack::mint(Item::OakPlanks, 4, MintReason::Test)
+        )
     );
     let mossy = grid3([
         None,
@@ -155,10 +161,10 @@ fn shapeless_recipes_ignore_position_and_accept_tag_members() {
 #[tuff_core::watchdog]
 #[test]
 fn transmute_keeps_components_and_counts_materials() {
-    let mut map = ItemStack::new(Item::FilledMap, 1);
+    let mut map = ItemStack::mint(Item::FilledMap, 1, MintReason::Test);
     map.components.map_id = Some(7);
     let cloning = grid3([
-        Some(map.clone()),
+        Some(map.test_copy()),
         stack(Item::Map, 1),
         stack(Item::Map, 1),
         None,
@@ -170,19 +176,24 @@ fn transmute_keeps_components_and_counts_materials() {
     ]);
     let (name, result) = found(&cloning);
     assert_eq!(name, "minecraft:map_cloning");
-    assert_eq!(result.item, Item::FilledMap);
-    assert_eq!(result.count, 3);
+    assert_eq!(result.item(), Item::FilledMap);
+    assert_eq!(result.count(), 3);
     assert_eq!(result.components, map.components);
 
-    let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
+    let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
     shulker.components.container = Some(vec![stack(Item::Apple, 3)]);
-    let dyed = grid2([Some(shulker.clone()), stack(Item::BlueDye, 1), None, None]);
+    let dyed = grid2([
+        Some(shulker.test_copy()),
+        stack(Item::BlueDye, 1),
+        None,
+        None,
+    ]);
     let (name, result) = found(&dyed);
     assert_eq!(name, "minecraft:blue_shulker_box");
-    assert_eq!(result.item, Item::BlueShulkerBox);
+    assert_eq!(result.item(), Item::BlueShulkerBox);
     assert_eq!(result.components.container, shulker.components.container);
     let same = grid2([
-        Some(ItemStack::new(Item::BlueShulkerBox, 1)),
+        Some(ItemStack::mint(Item::BlueShulkerBox, 1, MintReason::Test)),
         stack(Item::BlueDye, 1),
         None,
         None,
@@ -206,7 +217,7 @@ fn repair_combines_durability_and_keeps_only_curses() {
     let input = grid2([Some(first), None, None, Some(second)]);
     let (name, result) = found(&input);
     assert_eq!(name, "minecraft:repair_item");
-    assert_eq!(result.item, Item::DiamondPickaxe);
+    assert_eq!(result.item(), Item::DiamondPickaxe);
     let remaining = 561 + 361 + 1561 * 5 / 100;
     assert_eq!(result.damage(), 1561 - remaining);
     assert_eq!(result.components.max_damage, None);
@@ -218,8 +229,8 @@ fn repair_combines_durability_and_keeps_only_curses() {
         ]
     );
     let stacked = grid2([
-        Some(ItemStack::new(Item::Stick, 1)),
-        Some(ItemStack::new(Item::Stick, 1)),
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)),
         None,
         None,
     ]);
@@ -231,8 +242,8 @@ fn repair_combines_durability_and_keeps_only_curses() {
 #[tuff_core::watchdog]
 #[test]
 fn dye_recipes_mix_colors_into_the_target() {
-    let helmet = ItemStack::new(Item::LeatherHelmet, 1);
-    let red = grid2([Some(helmet.clone()), stack(Item::RedDye, 1), None, None]);
+    let helmet = ItemStack::mint(Item::LeatherHelmet, 1, MintReason::Test);
+    let red = grid2([Some(helmet.test_copy()), stack(Item::RedDye, 1), None, None]);
     let (name, result) = found(&red);
     assert_eq!(name, "minecraft:leather_helmet_dyed");
     assert_eq!(result.components.dyed_color, Some(0xB02E26));
@@ -254,7 +265,11 @@ fn dye_recipes_mix_colors_into_the_target() {
     let no_dye = grid2([Some(helmet), stack(Item::Stick, 1), None, None]);
     assert!(find_recipe(&no_dye).is_none());
     let horse = grid2([
-        Some(ItemStack::new(Item::LeatherHorseArmor, 1)),
+        Some(ItemStack::mint(
+            Item::LeatherHorseArmor,
+            1,
+            MintReason::Test,
+        )),
         stack(Item::LimeDye, 1),
         None,
         stack(Item::RedDye, 1),
@@ -313,11 +328,11 @@ fn taking_a_result_consumes_inputs_and_leaves_remainders() {
 #[tuff_core::watchdog]
 #[test]
 fn remainders_that_cannot_stay_go_to_the_player() {
-    let mut milk = ItemStack::new(Item::MilkBucket, 1);
+    let mut milk = ItemStack::mint(Item::MilkBucket, 1, MintReason::Test);
     milk.components.custom_name = Some(Box::new(tuff_item::text::TextComponent::new("Moo")));
     let mut grid = [
-        Some(milk.clone()),
-        Some(milk.clone()),
+        Some(milk.test_copy()),
+        Some(milk.test_copy()),
         Some(milk),
         stack(Item::Sugar, 1),
         stack(Item::Egg, 1),
@@ -342,14 +357,17 @@ fn remainders_that_cannot_stay_go_to_the_player() {
     let input = CraftingInput::positioned(3, 3, &two_deep).input;
     assert_eq!(input.crafting_remainders(), vec![stack(Item::Bucket, 1)]);
     let leftovers = take_result(&mut two_deep, 3, 3);
-    assert_eq!(leftovers, vec![ItemStack::new(Item::Bucket, 1)]);
+    assert_eq!(
+        leftovers,
+        vec![ItemStack::mint(Item::Bucket, 1, MintReason::Test)]
+    );
     assert_eq!(two_deep[0], stack(Item::MilkBucket, 1));
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn book_cloning_and_banners_copy_their_source() {
-    let mut book = ItemStack::new(Item::WrittenBook, 1);
+    let mut book = ItemStack::mint(Item::WrittenBook, 1, MintReason::Test);
     book.components.written_book = Some(Box::new(WrittenBook {
         title: Filterable::plain("Tale".into()),
         author: "Alex".into(),
@@ -358,7 +376,7 @@ fn book_cloning_and_banners_copy_their_source() {
         resolved: false,
     }));
     let input = grid3([
-        Some(book.clone()),
+        Some(book.test_copy()),
         stack(Item::WritableBook, 1),
         stack(Item::WritableBook, 1),
         None,
@@ -370,15 +388,15 @@ fn book_cloning_and_banners_copy_their_source() {
     ]);
     let (name, result) = found(&input);
     assert_eq!(name, "minecraft:book_cloning");
-    assert_eq!(result.count, 2);
+    assert_eq!(result.count(), 2);
     assert_eq!(
         result.components.written_book.as_ref().unwrap().generation,
         1
     );
     let remaining = recipe("minecraft:book_cloning").remainders(&input);
-    assert_eq!(remaining[0], Some(book.clone()));
+    assert_eq!(remaining[0], Some(book.test_copy()));
     assert_eq!(remaining[1], None);
-    let mut old = book.clone();
+    let mut old = book.test_copy();
     old.components.written_book.as_mut().unwrap().generation = 2;
     assert!(
         find_recipe(&grid2([
@@ -390,14 +408,14 @@ fn book_cloning_and_banners_copy_their_source() {
         .is_none()
     );
 
-    let mut patterned = ItemStack::new(Item::WhiteBanner, 1);
+    let mut patterned = ItemStack::mint(Item::WhiteBanner, 1, MintReason::Test);
     patterned.components.banner_patterns = Some(vec![BannerLayer {
         inline: None,
         pattern: "minecraft:stripe_bottom".into(),
         color: DyeColor::Lime,
     }]);
     let duplicate = grid2([
-        Some(patterned.clone()),
+        Some(patterned.test_copy()),
         None,
         stack(Item::WhiteBanner, 1),
         None,
@@ -409,19 +427,24 @@ fn book_cloning_and_banners_copy_their_source() {
         patterned.components.banner_patterns
     );
     let remaining = recipe("minecraft:white_banner_duplicate").remainders(&duplicate);
-    assert_eq!(remaining[0], Some(patterned.clone()));
+    assert_eq!(remaining[0], Some(patterned.test_copy()));
     let other_color = grid2([
-        Some(patterned.clone()),
+        Some(patterned.test_copy()),
         stack(Item::RedBanner, 1),
         None,
         None,
     ]);
     assert!(find_recipe(&other_color).is_none());
 
-    let shield = grid2([Some(patterned.clone()), stack(Item::Shield, 1), None, None]);
+    let shield = grid2([
+        Some(patterned.test_copy()),
+        stack(Item::Shield, 1),
+        None,
+        None,
+    ]);
     let (name, result) = found(&shield);
     assert_eq!(name, "minecraft:shield_decoration");
-    assert_eq!(result.item, Item::Shield);
+    assert_eq!(result.item(), Item::Shield);
     assert_eq!(result.components.base_color, Some(DyeColor::White));
     assert_eq!(
         result.components.banner_patterns,
@@ -433,7 +456,7 @@ fn book_cloning_and_banners_copy_their_source() {
 #[tuff_core::watchdog]
 #[test]
 fn fireworks_take_fuel_stars_and_dyes() {
-    let mut star = ItemStack::new(Item::FireworkStar, 1);
+    let mut star = ItemStack::mint(Item::FireworkStar, 1, MintReason::Test);
     star.components.firework_explosion = Some(Box::new(FireworkExplosion {
         shape: FireworkShape::Star,
         colors: vec![1],
@@ -443,7 +466,7 @@ fn fireworks_take_fuel_stars_and_dyes() {
         stack(Item::Paper, 1),
         stack(Item::Gunpowder, 1),
         stack(Item::Gunpowder, 1),
-        Some(star.clone()),
+        Some(star.test_copy()),
         None,
         None,
         None,
@@ -452,7 +475,7 @@ fn fireworks_take_fuel_stars_and_dyes() {
     ]);
     let (name, result) = found(&rocket);
     assert_eq!(name, "minecraft:firework_rocket");
-    assert_eq!(result.count, 3);
+    assert_eq!(result.count(), 3);
     let fireworks = result.components.fireworks.clone().unwrap();
     assert_eq!(fireworks.flight_duration, 2);
     assert_eq!(
@@ -490,7 +513,7 @@ fn fireworks_take_fuel_stars_and_dyes() {
     assert_eq!(explosion.colors, vec![DyeColor::Red.firework_color()]);
     assert!(explosion.has_trail && !explosion.has_twinkle);
 
-    let fade = grid2([Some(star.clone()), stack(Item::BlueDye, 1), None, None]);
+    let fade = grid2([Some(star.test_copy()), stack(Item::BlueDye, 1), None, None]);
     let (name, result) = found(&fade);
     assert_eq!(name, "minecraft:firework_star_fade");
     let explosion = result.components.firework_explosion.clone().unwrap();
@@ -501,7 +524,7 @@ fn fireworks_take_fuel_stars_and_dyes() {
 #[tuff_core::watchdog]
 #[test]
 fn imbue_copies_the_potion() {
-    let mut potion = ItemStack::new(Item::LingeringPotion, 1);
+    let mut potion = ItemStack::mint(Item::LingeringPotion, 1, MintReason::Test);
     potion.components.potion_contents = Some(Box::new(tuff_item::item::PotionContents {
         potion: Some(tuff_vanilla_data::registry::Potion::Swiftness),
         ..Default::default()
@@ -512,7 +535,7 @@ fn imbue_copies_the_potion() {
         arrow(),
         arrow(),
         arrow(),
-        Some(potion.clone()),
+        Some(potion.test_copy()),
         arrow(),
         arrow(),
         arrow(),
@@ -520,7 +543,7 @@ fn imbue_copies_the_potion() {
     ]);
     let (name, result) = found(&input);
     assert_eq!(name, "minecraft:tipped_arrow");
-    assert_eq!(result.count, 8);
+    assert_eq!(result.count(), 8);
     assert_eq!(
         result.components.potion_contents,
         potion.components.potion_contents
@@ -541,18 +564,18 @@ fn stonecutter_and_smithing_results() {
     assert!(!vanilla_set().stonecutter_accepts(Item::Dirt));
     assert!(vanilla_set().stonecutter_options(Item::Dirt).is_empty());
 
-    let mut sword = ItemStack::new(Item::DiamondSword, 1);
+    let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     sword.set_damage(10);
     sword.components.enchantments =
         Some(Enchantments::new([("minecraft:sharpness".to_owned(), 3)]));
-    let template = ItemStack::new(Item::NetheriteUpgradeSmithingTemplate, 1);
-    let ingot = ItemStack::new(Item::NetheriteIngot, 1);
+    let template = ItemStack::mint(Item::NetheriteUpgradeSmithingTemplate, 1, MintReason::Test);
+    let ingot = ItemStack::mint(Item::NetheriteIngot, 1, MintReason::Test);
     let (entry, result) = vanilla_set()
         .smithing(Some(&template), Some(&sword), Some(&ingot))
         .unwrap();
     assert_eq!(entry, "minecraft:netherite_sword_smithing");
     let result = result.unwrap();
-    assert_eq!(result.item, Item::NetheriteSword);
+    assert_eq!(result.item(), Item::NetheriteSword);
     assert_eq!(result.damage(), 10);
     assert_eq!(
         result.components.enchantments,
@@ -564,8 +587,8 @@ fn stonecutter_and_smithing_results() {
             .is_none()
     );
 
-    let coast = ItemStack::new(Item::CoastArmorTrimSmithingTemplate, 1);
-    let boots = ItemStack::new(Item::IronBoots, 1);
+    let coast = ItemStack::mint(Item::CoastArmorTrimSmithingTemplate, 1, MintReason::Test);
+    let boots = ItemStack::mint(Item::IronBoots, 1, MintReason::Test);
     let (entry, trimmed) = vanilla_set()
         .smithing(Some(&coast), Some(&boots), Some(&ingot))
         .unwrap();
@@ -626,7 +649,10 @@ fn displays_follow_the_game_shapes() {
         } => {
             assert_eq!((*width, *height), (1, 2));
             assert_eq!(ingredients.len(), 2);
-            assert_eq!(*result, SlotDisplay::Stack(ItemStack::new(Item::Torch, 4)));
+            assert_eq!(
+                *result,
+                SlotDisplay::template(ItemStack::mint(Item::Torch, 4, MintReason::Test))
+            );
             assert_eq!(*station, SlotDisplay::Item(Item::CraftingTable));
         }
         other => panic!("torch is shaped, got {other:?}"),
@@ -743,7 +769,7 @@ fn recipe_book_placement_moves_ingredients_and_reports_missing_ones() {
     let mut inventory = Inventory::default();
     inventory.set_slot(36, stack(Item::Coal, 5));
     inventory.set_slot(20, stack(Item::Stick, 3));
-    let mut grid = vec![None; 4];
+    let mut grid = (0..4).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     let mut drops = Vec::new();
     let outcome = place_recipe(
         torch,
@@ -822,17 +848,20 @@ fn recipe_book_placement_moves_ingredients_and_reports_missing_ones() {
         &mut drops,
     );
     assert_eq!(outcome, PostPlace::Ghost);
-    assert_eq!(grid, vec![None; 4]);
+    assert_eq!(
+        grid,
+        (0..4).map(|_| None).collect::<Vec<Option<ItemStack>>>()
+    );
     assert_eq!(inventory.slots()[36], stack(Item::Coal, 5));
     assert_eq!(inventory.slots()[37], stack(Item::Stick, 3));
     assert!(drops.is_empty());
 
-    let mut enchanted = ItemStack::new(Item::Stick, 1);
+    let mut enchanted = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     enchanted.components.custom_name = Some(Box::new(tuff_item::text::TextComponent::new("Rod")));
     let mut named = Inventory::default();
     named.set_slot(36, Some(enchanted));
     named.set_slot(37, stack(Item::Coal, 1));
-    let mut grid = vec![None; 4];
+    let mut grid = (0..4).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     let outcome = place_recipe(
         torch,
         &mut Grid {
@@ -890,7 +919,10 @@ fn placement_needs_room_to_clear_the_grid_unless_dropping_is_allowed() {
         &mut drops,
     );
     assert_eq!(outcome, PostPlace::Nothing);
-    assert_eq!(drops, vec![ItemStack::new(Item::Stone, 1)]);
+    assert_eq!(
+        drops,
+        vec![ItemStack::mint(Item::Stone, 1, MintReason::Test)]
+    );
     assert_eq!(
         grid,
         vec![stack(Item::Coal, 1), None, stack(Item::Stick, 1), None]
@@ -920,7 +952,7 @@ fn suspicious_stew_carries_its_flowers_effect() {
     ]);
     let (name, result) = found(&input);
     assert_eq!(name, "minecraft:suspicious_stew_from_poppy");
-    assert_eq!(result.item, Item::SuspiciousStew);
+    assert_eq!(result.item(), Item::SuspiciousStew);
     assert_eq!(
         result.components.suspicious_stew_effects,
         Some(vec![SuspiciousEffect {
@@ -946,7 +978,7 @@ fn decorated_pots_take_the_four_side_items() {
     ]);
     let (name, result) = found(&pot);
     assert_eq!(name, "minecraft:decorated_pot");
-    assert_eq!(result.item, Item::DecoratedPot);
+    assert_eq!(result.item(), Item::DecoratedPot);
     let sides = result
         .components
         .other
@@ -955,7 +987,7 @@ fn decorated_pots_take_the_four_side_items() {
         .unwrap();
     let items: Vec<_> = sides
         .iter()
-        .map(|side| side.as_ref().map(|s| s.item))
+        .map(|side| side.as_ref().map(|s| s.item()))
         .collect();
     assert_eq!(
         items,
@@ -983,14 +1015,14 @@ fn decorated_pots_take_the_four_side_items() {
 #[tuff_core::watchdog]
 #[test]
 fn extending_a_map_surrounds_it_with_paper() {
-    let mut map = ItemStack::new(Item::FilledMap, 1);
+    let mut map = ItemStack::mint(Item::FilledMap, 1, MintReason::Test);
     map.components.other.insert("minecraft:map_id", 7);
     let mut cells: [Option<ItemStack>; 9] = std::array::from_fn(|_| stack(Item::Paper, 1));
-    cells[4] = Some(map.clone());
+    cells[4] = Some(map.test_copy());
     let (name, result) = found(&grid3(cells));
     assert_eq!(name, "minecraft:map_extending");
-    assert_eq!(result.item, Item::FilledMap);
-    assert_eq!(result.count, 1);
+    assert_eq!(result.item(), Item::FilledMap);
+    assert_eq!(result.count(), 1);
     assert!(result.components.other.contains_key("minecraft:map_id"));
 }
 

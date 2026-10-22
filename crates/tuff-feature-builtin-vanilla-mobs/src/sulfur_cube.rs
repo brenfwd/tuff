@@ -7,6 +7,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::item::{EquipmentSlot, ModifierOperation};
 use tuff_vanilla_data::registry::{Attribute, EntityType, SoundEvent};
 use tuff_vanilla_data::sulfur_cube::{
@@ -27,7 +28,7 @@ use tuff_core::world::explosion::{BlockInteraction, Explosion};
 use tuff_core::world::game_event::GameEvent;
 use tuff_core::world::messages::{HandEffect, PlayerEvent};
 use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -229,7 +230,7 @@ pub struct SulfurCube {
     max_fuse: i32,
     from_bucket: bool,
     /// The body item whose archetypes are applied.
-    applied: Option<ItemStack>,
+    applied: Option<tuff_item::item::ItemSnapshot>,
     effects: Effects,
     tick_count: i32,
     /// Redstone powered it last tick; it primes at the start of this one.
@@ -294,10 +295,10 @@ impl SulfurCube {
     /// Follows a change of the swallowed block: its archetypes' modifiers
     /// and effects, and the goals it only has while empty.
     fn sync_body(&mut self, core: &mut MobCore) {
-        let current = body(core).cloned();
-        if current == self.applied {
+        if body(core) == self.applied.as_deref() {
             return;
         }
+        let current = body(core).map(tuff_item::item::ItemSnapshot::of);
         if current.is_some() {
             core.goals = GoalSelector::default();
             core.set_speed(0.0);
@@ -310,14 +311,14 @@ impl SulfurCube {
                 ..Hop::default()
             });
         }
-        for archetype in matching(self.applied.as_ref().map(|s| s.item)) {
+        for archetype in matching(self.applied.as_ref().map(|s| s.item())) {
             for modifier in archetype.attribute_modifiers {
                 core.put_modifier(modifier.attribute, modifier.id.into(), None, false);
             }
         }
         let mut effects = Effects::default();
         let mut contacts = 0;
-        for archetype in matching(current.as_ref().map(|s| s.item)) {
+        for archetype in matching(current.as_ref().map(|s| s.item())) {
             effects.floats |= archetype.buoyant;
             if archetype.explosion.is_some() {
                 effects.explosion = archetype.explosion;
@@ -353,17 +354,26 @@ impl SulfurCube {
 
     /// Swallows one of `stack`, spitting out a different block it held;
     /// false for a baby or the block it already holds.
-    fn equip(&mut self, core: &mut MobCore, stack: &ItemStack, cx: &mut TickContext) -> bool {
+    fn equip(
+        &mut self,
+        core: &mut MobCore,
+        item: Item,
+        one: impl FnOnce() -> Option<ItemStack>,
+        cx: &mut TickContext,
+    ) -> bool {
         if core.is_baby() {
             return false;
         }
-        if let Some(held) = body(core).cloned() {
-            if held.item == stack.item {
-                return false;
-            }
+        if body(core).is_some_and(|held| held.item() == item) {
+            return false;
+        }
+        let Some(one) = one() else {
+            return false;
+        };
+        if let Some(held) = core.equipment.take(EquipmentSlot::Body) {
             self.drop_at_top(core, held, cx);
         }
-        self.hold(core, stack.clone().with_count(1));
+        self.hold(core, one);
         core.persistence_required = true;
         core.sound(SoundEvent::EntitySulfurCubeAbsorb, 1.0, 1.0, cx);
         true
@@ -384,10 +394,9 @@ impl SulfurCube {
 
     /// Spits the block out; the cube leaves loose items alone for a while.
     fn eject(&mut self, core: &mut MobCore, category: i32, cx: &mut TickContext) -> bool {
-        let Some(held) = body(core).cloned() else {
+        let Some(held) = core.equipment.take(EquipmentSlot::Body) else {
             return false;
         };
-        core.equipment.set(EquipmentSlot::Body, None);
         self.sync_body(core);
         self.drop_at_top(core, held, cx);
         core.sound_as(SoundEvent::EntitySulfurCubeEject, category, 1.0, 1.0, cx);
@@ -685,16 +694,20 @@ impl SulfurCube {
             nbt.insert("age", age);
             nbt.insert("age_locked", locked);
         });
-        let mut bucket = ItemStack::new(Item::SulfurCubeBucket, 1);
+        let mut bucket = ItemStack::mint(Item::SulfurCubeBucket, 1, MintReason::Spawn);
         bucket
             .components
             .other
             .insert("minecraft:bucket_entity_data", Tag::Compound(nbt));
         if let Some(held) = body(core) {
-            bucket
-                .components
-                .other
-                .insert(CONTENT, Tag::Compound(held.clone().with_count(1).to_nbt()));
+            bucket.components.other.insert(
+                CONTENT,
+                Tag::Compound(
+                    tuff_item::item::ItemSnapshot::of(held)
+                        .with_count(1)
+                        .to_nbt(),
+                ),
+            );
         }
         bucket
     }
@@ -789,7 +802,7 @@ impl Species for SulfurCube {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        food(stack.item)
+        food(stack.item())
     }
 
     fn can_fall_in_love(&self, _core: &MobCore) -> bool {
@@ -802,11 +815,12 @@ impl Species for SulfurCube {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if core.is_baby() || self.is_primed() {
             return None;
         }
-        if self.can_explode(core) && matches!(stack.item, Item::FlintAndSteel | Item::FireCharge) {
+        if self.can_explode(core) && matches!(stack.item(), Item::FlintAndSteel | Item::FireCharge)
+        {
             if !cx.shared.rule_bool("tnt_explodes") {
                 cx.effects.push(Effect::TellPlayer {
                     player: interaction.player,
@@ -820,13 +834,13 @@ impl Species for SulfurCube {
                 return None;
             }
             self.prime(core, false, cx);
-            return Some(if stack.item == Item::FlintAndSteel {
+            return Some(if stack.item() == Item::FlintAndSteel {
                 HandEffect::Damage(1)
             } else {
                 HandEffect::Consume(1)
             });
         }
-        if stack.item == Item::Shears && body(core).is_some() {
+        if stack.item() == Item::Shears && body(core).is_some() {
             self.eject(core, play::sound_category::PLAYERS, cx);
             cx.effects.push(Effect::GameEvent {
                 event: GameEvent::Shear,
@@ -835,8 +849,8 @@ impl Species for SulfurCube {
             });
             return Some(HandEffect::Damage(1));
         }
-        if swallowable(stack.item) {
-            if !self.equip(core, stack, cx) {
+        if swallowable(stack.item()) {
+            if !self.equip(core, stack.item(), || interaction.hand.take(1), cx) {
                 return None;
             }
             cx.effects.push(Effect::GameEvent {
@@ -844,9 +858,9 @@ impl Species for SulfurCube {
                 position: core.base.position,
                 source: Some(interaction.player),
             });
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
-        if stack.item == Item::Bucket {
+        if stack.item() == Item::Bucket {
             let bucket = self.bucket(core);
             core.sound_as(
                 SoundEvent::ItemBucketFillSulfurCube,
@@ -869,25 +883,25 @@ impl Species for SulfurCube {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
-        if stack.item == Item::FlintAndSteel {
+        if stack.item() == Item::FlintAndSteel {
             if !self.can_explode(core) {
                 return None;
             }
             self.prime(core, false, cx);
             return Some(DispenseOutcome::Worn(1));
         }
-        if !swallowable(stack.item) || !self.equip(core, stack, cx) {
+        if !swallowable(stack.item()) || !self.equip(core, stack.item(), || stack.take(), cx) {
             return None;
         }
         Some(DispenseOutcome::Dispensed)
     }
 
     fn took_item(&mut self, core: &mut MobCore, stack: ItemStack) {
-        if body(core).is_none() && swallowable(stack.item) {
-            self.hold(core, stack.with_count(1));
+        if body(core).is_none() && swallowable(stack.item()) {
+            self.hold(core, stack.keep(1, BurnReason::Consumed));
             self.pending_absorb_sound = true;
         }
     }
@@ -1202,11 +1216,12 @@ pub fn from_bucket(
     let mut entity = super::load::<SulfurCube>(base, &mut nbt)?;
     let content = components
         .and_then(|c| c.get_compound(CONTENT))
-        .and_then(ItemStack::from_nbt);
+        .and_then(ItemStack::from_storage);
     if let Some(content) = content
         && let Some(mob) = entity.downcast_mut::<Mob<SulfurCube>>()
     {
-        mob.species.hold(&mut mob.core, content.with_count(1));
+        mob.species
+            .hold(&mut mob.core, content.keep(1, BurnReason::Destroyed));
     }
     Some(entity)
 }
@@ -1260,8 +1275,10 @@ mod tests {
     fn a_swallowed_block_brings_its_archetype() {
         let mut mob = cube();
         assert!(!mob.core.goals.is_empty());
-        mob.species
-            .hold(&mut mob.core, ItemStack::new(Item::OakPlanks, 1));
+        mob.species.hold(
+            &mut mob.core,
+            ItemStack::mint(Item::OakPlanks, 1, MintReason::Test),
+        );
         assert!(mob.core.goals.is_empty(), "a full cube does nothing itself");
         assert!(mob.core.omnidirectional_air);
         assert!((mob.core.attribute(Attribute::Bounciness) - 0.9).abs() < 1.0e-6);
@@ -1275,24 +1292,30 @@ mod tests {
         assert!(!mob.core.goals.is_empty());
         assert_eq!(mob.core.attribute(Attribute::Bounciness), 0.0);
         assert_eq!(mob.species.effects, Effects::default());
-        mob.species
-            .hold(&mut mob.core, ItemStack::new(Item::Tnt, 1));
+        mob.species.hold(
+            &mut mob.core,
+            ItemStack::mint(Item::Tnt, 1, MintReason::Test),
+        );
         assert_eq!(
             mob.species.effects.explosion.map(|e| e.fuse),
             Some(120),
             "TNT makes it explosive"
         );
         super::super::tests::with_context(|_, cx| {
-            let tnt = ItemStack::new(Item::Tnt, 1);
+            let tnt = ItemStack::mint(Item::Tnt, 1, MintReason::Test);
             assert!(
-                !mob.species.equip(&mut mob.core, &tnt, cx),
+                !mob.species
+                    .equip(&mut mob.core, Item::Tnt, || Some(tnt), cx),
                 "it holds TNT already"
             );
-            let magma = ItemStack::new(Item::MagmaBlock, 1);
-            assert!(mob.species.equip(&mut mob.core, &magma, cx));
+            let magma = ItemStack::mint(Item::MagmaBlock, 1, MintReason::Test);
+            assert!(
+                mob.species
+                    .equip(&mut mob.core, Item::MagmaBlock, || Some(magma), cx)
+            );
             assert!(
                 cx.effects.iter().any(
-                    |e| matches!(e, Effect::DropItem { stack, .. } if stack.item == Item::Tnt)
+                    |e| matches!(e, Effect::DropItem { stack, .. } if stack.item() == Item::Tnt)
                 ),
                 "the old block is spat out"
             );

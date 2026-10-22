@@ -1,4 +1,5 @@
 use super::*;
+use tuff_core::world::entity_slots::{ContainerSlots, ContainerSlotsMut};
 
 impl<S: Species> RegionEntity for Mob<S> {
     fn base(&self) -> &EntityBase {
@@ -366,18 +367,18 @@ impl<S: Species> RegionEntity for Mob<S> {
         })
     }
 
-    fn equipment(&self) -> Vec<(u8, Option<ItemStack>)> {
+    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> {
         self.core.equipment.visible()
     }
 
-    fn main_hand_item(&self) -> Option<Option<ItemStack>> {
-        Some(self.core.equipment.main_hand().cloned())
+    fn main_hand_item(&self) -> Option<Option<tuff_item::item::ItemView<'_>>> {
+        Some(self.core.equipment.main_hand().map(ItemStack::view))
     }
 
-    fn set_main_hand_item(&mut self, stack: Option<ItemStack>) {
+    fn replace_main_hand_item(&mut self, stack: Option<ItemStack>) -> Option<ItemStack> {
         self.core
             .equipment
-            .set(tuff_vanilla_data::item::EquipmentSlot::Mainhand, stack);
+            .replace(tuff_vanilla_data::item::EquipmentSlot::Mainhand, stack)
     }
 
     fn take_equipment_changed(&mut self) -> bool {
@@ -390,7 +391,7 @@ impl<S: Species> RegionEntity for Mob<S> {
 
     fn dispensed_on(
         &mut self,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         if !self.core.is_alive() {
@@ -419,9 +420,9 @@ impl<S: Species> RegionEntity for Mob<S> {
         if let Some(effect) = animal::interact(self, interaction, cx) {
             return Some(effect);
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         let name = stack.components.custom_name.as_ref()?;
-        if stack.item != tuff_vanilla_data::Item::NameTag {
+        if stack.item() != tuff_vanilla_data::Item::NameTag {
             return None;
         }
         self.core.base.custom_name = Some(name.to_nbt());
@@ -433,6 +434,7 @@ impl<S: Species> RegionEntity for Mob<S> {
 
     fn took_item(&mut self, stack: ItemStack) {
         if crate::raider::took_banner(&mut self.core, &stack) {
+            stack.burn(tuff_item::item::BurnReason::Transform);
             return;
         }
         self.species.took_item(&mut self.core, stack);
@@ -751,29 +753,62 @@ impl<S: Species> RegionEntity for Mob<S> {
     }
 
     fn mount_refused_by(&self, stack: Option<&ItemStack>) -> bool {
-        let shears = stack.is_some_and(|s| s.item == tuff_vanilla_data::Item::Shears)
+        let shears = stack.is_some_and(|s| s.item() == tuff_vanilla_data::Item::Shears)
             && SHEARABLE_SLOTS
                 .iter()
                 .any(|slot| shearable(self.core.equipment.get(*slot), true));
         shears || self.species.mount_refused(&self.core, stack)
     }
 
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
-        self.species.inventory().map(|(slots, _)| slots)
+    fn container(&self) -> Option<ContainerSlots<'_>> {
+        let (chest, _) = self.species.inventory()?;
+        Some(ContainerSlots::with_head(
+            self.core.equipment.mount_slots(),
+            chest,
+        ))
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        self.species.inventory_mut()
+    fn container_mut(&mut self) -> Option<ContainerSlotsMut<'_>> {
+        let chest = self.species.inventory_mut()?;
+        Some(ContainerSlotsMut::with_head(
+            self.core.equipment.mount_slots_mut(),
+            chest,
+        ))
     }
 
-    fn held_items(&self) -> Option<Vec<Option<ItemStack>>> {
-        Some(self.core.equipment.by_number())
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let mut items = self.species.take_items();
+        items.append(&mut self.core.piglin.inventory);
+        items.extend(self.core.equipment.take_all());
+        items
+    }
+
+    fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
+        Some(
+            self.core
+                .equipment
+                .by_number()
+                .into_iter()
+                .map(|stack| stack.map(ItemStack::view))
+                .collect(),
+        )
     }
 
     fn set_held_items(&mut self, slots: Vec<(usize, Option<ItemStack>)>) -> bool {
-        slots.into_iter().fold(false, |any, (slot, stack)| {
-            self.core.equipment.set_number(slot, stack) || any
-        })
+        let mut any = false;
+        for (slot, stack) in slots {
+            let replaced = match self.core.equipment.replace_number(slot, stack) {
+                Ok(old) => {
+                    any = true;
+                    old
+                }
+                Err(unused) => unused,
+            };
+            if let Some(gone) = replaced {
+                gone.burn(tuff_item::item::BurnReason::Plugin);
+            }
+        }
+        any
     }
 
     fn container_menu(&self) -> tuff_core::world::menu::MenuKind {

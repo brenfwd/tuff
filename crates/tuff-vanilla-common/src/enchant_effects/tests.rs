@@ -2,12 +2,13 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use tuff_core::world::predicate::PlayerFacts;
 use tuff_item::item::Enchantments;
+use tuff_item::item::MintReason;
 use tuff_vanilla_data::Item;
 
 use super::*;
 
 fn enchanted(item: Item, enchantments: &[(&str, i32)]) -> ItemStack {
-    let mut stack = ItemStack::new(item, 1);
+    let mut stack = ItemStack::mint(item, 1, MintReason::Test);
     stack.components.enchantments = Some(Enchantments::new(
         enchantments
             .iter()
@@ -278,7 +279,7 @@ fn flame_sets_spawned_arrows_alight() {
         &mut rng,
     );
     assert_eq!(spawned.fire, Some(100.0));
-    let plain = ItemStack::new(Item::Bow, 1);
+    let plain = ItemStack::mint(Item::Bow, 1, MintReason::Test);
     let spawned = projectile_spawned(
         &plain,
         EntityType::Arrow,

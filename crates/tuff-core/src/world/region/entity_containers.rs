@@ -6,14 +6,15 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 use super::*;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::block::Facing;
 
 use super::{HOPPER_SUCK_MAX_Y, HOPPER_SUCK_MIN_Y};
 use crate::world::block_entity::{self, ContainerKind};
 use crate::world::experience;
-use crate::world::messages::{EntitySlotChange, MenuOpen, MenuSource};
+use crate::world::menu::settle;
+use crate::world::messages::{EntitySlotChange, MenuOpen, MenuSource, holds};
 use crate::world::region_api::SlotEdit;
 
 impl RegionActor {
@@ -36,27 +37,44 @@ impl RegionActor {
             return;
         }
         let loot = self.shared.block_loot();
-        let mut explore = None;
         let tracked = self.ents.entities.get_mut(&target).expect("checked above");
         if let Some((table, seed)) = tracked.entity.take_loot_table() {
             if !spectator {
                 player.send(super::containers::loot_generated(table.clone()));
             }
-            let slots = tracked.entity.container().map_or(0, <[_]>::len);
+            let slots = tracked.entity.container().map_or(0, |slots| slots.len());
+            let [x, y, z] = tracked.entity.base().position;
+            let origin = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
             let items = if seed == 0 {
                 loot.container_loot(&table, slots, &mut self.rng)
             } else {
                 loot.container_loot(&table, slots, &mut StdRng::seed_from_u64(seed as u64))
             };
-            if let (Some(items), Some(container)) = (items, tracked.entity.container_mut()) {
-                for (slot, stack) in container.iter_mut().zip(items.iter().cloned()) {
-                    *slot = stack;
+            if let Some(items) = items {
+                self.explore_loot(
+                    super::exploring::ExploreTarget::Entity(target),
+                    origin,
+                    &items,
+                );
+                if let Some(mut container) = self
+                    .ents
+                    .entities
+                    .get_mut(&target)
+                    .and_then(|tracked| tracked.entity.container_mut())
+                {
+                    let mut items = items.into_iter();
+                    for (slot, stack) in container.iter_mut().zip(&mut items) {
+                        if let Some(old) = std::mem::replace(slot, stack) {
+                            old.burn(tuff_item::item::BurnReason::Loot);
+                        }
+                    }
+                    for extra in items.flatten() {
+                        extra.burn(tuff_item::item::BurnReason::Loot);
+                    }
                 }
-                let [x, y, z] = tracked.entity.base().position;
-                let origin = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
-                explore = Some((origin, items));
             }
         }
+        let tracked = self.ents.entities.get(&target).expect("checked above");
         let base = tracked.entity.base();
         let title = base
             .custom_name
@@ -66,15 +84,17 @@ impl RegionActor {
                 let (namespace, path) = base.kind.name().split_once(':').unwrap_or(("", ""));
                 TextComponent::translate(format!("entity.{namespace}.{path}"), [])
             });
-        let contents = tracked.entity.container().unwrap_or(&[]).to_vec();
+        let contents = tracked
+            .entity
+            .container()
+            .map(|slots| {
+                slots
+                    .iter()
+                    .map(|slot| slot.as_ref().map(ItemSnapshot::of))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let kind = tracked.entity.container_menu();
-        if let Some((origin, items)) = explore {
-            self.explore_loot(
-                super::exploring::ExploreTarget::Entity(target),
-                origin,
-                &items,
-            );
-        }
         if !spectator {
             let viewers = self.menus.entity_viewers.entry(target).or_default();
             if !viewers.iter().any(|v| v.id == player.id) {
@@ -182,8 +202,16 @@ impl RegionActor {
         window_id: i32,
         entity: i32,
         changes: Vec<EntitySlotChange>,
+        mut pool: Vec<ItemStack>,
     ) {
         let holder = self.entity_holder(entity);
+        let quarantined = self.quarantined();
+        let at = self
+            .ents
+            .entities
+            .get(&entity)
+            .map_or([0.0; 3], |tracked| tracked.entity.base().position)
+            .map(|axis| axis.floor() as i32);
         let viewing = self
             .menus
             .entity_viewers
@@ -194,47 +222,106 @@ impl RegionActor {
             .entities
             .get_mut(&entity)
             .and_then(|tracked| tracked.entity.container_mut());
-        let Some(container) = container.filter(|_| viewing) else {
-            player.send(PlayerEvent::EntityTransaction {
-                window_id,
-                accepted: false,
-                contents: Vec::new(),
-            });
+        let Some(mut container) = container.filter(|_| viewing) else {
+            self.answer_entity_transaction(&player, window_id, false, Vec::new(), pool);
             return;
         };
-        let valid = changes
-            .iter()
-            .all(|change| container.get(change.slot) == Some(&change.expected));
-        if !valid {
-            player.send(PlayerEvent::EntityTransaction {
-                window_id,
-                accepted: false,
-                contents: container.to_vec(),
+        let valid = !quarantined
+            && changes.iter().enumerate().all(|(index, change)| {
+                !changes[..index]
+                    .iter()
+                    .any(|other| other.slot == change.slot)
+                    && container
+                        .get(change.slot)
+                        .is_some_and(|slot| holds(slot.as_ref(), change.expected.as_ref()))
             });
+        let mut slots: Vec<Option<ItemStack>> = if valid {
+            changes
+                .iter()
+                .map(|change| container[change.slot].take())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let new: Vec<Option<ItemSnapshot>> = changes.iter().map(|c| c.new.clone()).collect();
+        let refuse = valid && self.shared.conservation.take_injected_failure();
+        let settled = if valid {
+            settle::apply(&mut slots, &new, &mut pool, refuse)
+        } else {
+            settle::Settled::Refused
+        };
+        let (applied, violated) = match settled {
+            settle::Settled::Applied => (true, None),
+            settle::Settled::Refused => (false, None),
+            settle::Settled::Violated { applied, detail } => (applied, Some(detail)),
+        };
+        let violation = violated.map(|detail| crate::world::conservation::ItemViolation {
+            operation: "entity container transaction",
+            player: Some(player.id),
+            pos: BlockPos::new(at[0], at[1], at[2]),
+            item: changes
+                .iter()
+                .find_map(|change| change.new.clone().or(change.expected.clone())),
+            detail,
+        });
+        if !applied {
+            for (change, stack) in changes.iter().zip(slots) {
+                container[change.slot] = stack;
+            }
+            let contents = container
+                .iter()
+                .map(|slot| slot.as_ref().map(ItemSnapshot::of))
+                .collect();
+            if let Some(violation) = violation {
+                self.item_violation(Some(&player), violation);
+            }
+            self.answer_entity_transaction(&player, window_id, false, contents, pool);
             return;
         }
-        let mut slots = Vec::with_capacity(changes.len());
+        let mut changed = Vec::with_capacity(changes.len());
         let mut edits = Vec::new();
-        for change in changes {
-            let old = std::mem::replace(&mut container[change.slot], change.new.clone());
+        for (change, stack) in changes.iter().zip(slots) {
             if holder.is_some() {
-                edits.push(SlotEdit {
-                    slot: change.slot,
-                    old,
-                    new: change.new.clone(),
-                });
+                edits.push(SlotEdit::of(
+                    change.slot,
+                    change.expected.as_deref(),
+                    stack.as_ref(),
+                ));
             }
-            slots.push((change.slot, change.new));
+            container[change.slot] = stack;
+            changed.push(change.slot);
         }
         if let Some(holder) = holder {
             self.report_container_edit(holder, edits);
         }
-        player.send(PlayerEvent::EntityTransaction {
+        if let Some(violation) = violation {
+            self.item_violation(Some(&player), violation);
+        }
+        self.answer_entity_transaction(&player, window_id, true, Vec::new(), pool);
+        self.entity_slots_changed(entity, &changed, Some(player.id));
+    }
+
+    /// Hands the pool back to the player; if their session is gone, what
+    /// it holds spills where they were.
+    fn answer_entity_transaction(
+        &mut self,
+        player: &PlayerHandle,
+        window_id: i32,
+        accepted: bool,
+        contents: Vec<Option<ItemSnapshot>>,
+        pool: Vec<ItemStack>,
+    ) {
+        let answer = PlayerEvent::EntityTransaction {
             window_id,
-            accepted: true,
-            contents: Vec::new(),
-        });
-        self.entity_slots_changed(entity, slots, Some(player.id));
+            accepted,
+            contents,
+            pool,
+        };
+        if let Err(answer) = player.try_send(answer)
+            && let PlayerEvent::EntityTransaction { pool, .. } = *answer
+        {
+            self.spill_pool(None, player.id, pool);
+        }
     }
 
     /// Marks the entity for saving and shows its changed slots to everyone
@@ -242,7 +329,7 @@ impl RegionActor {
     pub(super) fn entity_slots_changed(
         &mut self,
         entity: i32,
-        slots: Vec<(usize, Option<ItemStack>)>,
+        changed: &[usize],
         except: Option<PlayerId>,
     ) {
         if let Some(chunk) = self.ents.entities.get(&entity).map(|t| t.chunk())
@@ -251,6 +338,21 @@ impl RegionActor {
             column.entities_dirty = true;
         }
         let dimension = self.dimension;
+        if !self.menus.entity_viewers.contains_key(&entity) {
+            return;
+        }
+        let Some(items) = self
+            .ents
+            .entities
+            .get(&entity)
+            .and_then(|tracked| tracked.entity.container())
+        else {
+            return;
+        };
+        let slots: Vec<(usize, Option<ItemSnapshot>)> = changed
+            .iter()
+            .filter_map(|&slot| Some((slot, items.get(slot)?.as_ref().map(ItemSnapshot::of))))
+            .collect();
         if let Some(viewers) = self.menus.entity_viewers.get_mut(&entity) {
             viewers.retain(|viewer| {
                 Some(viewer.id) == except
@@ -294,6 +396,25 @@ impl RegionActor {
         self.container_entity_near([pos.x as f64 + 0.5, pos.y as f64 + 0.5, pos.z as f64 + 0.5])
     }
 
+    /// How many of `stack` [`Self::insert_into_entity`] would put into the
+    /// container of `entity`.
+    pub(super) fn entity_insert_room(&mut self, entity: i32, stack: &ItemStack) -> u8 {
+        let recipes = self.shared.recipes();
+        let Some(mut items) = self
+            .ents
+            .entities
+            .get_mut(&entity)
+            .and_then(|tracked| tracked.entity.container_mut())
+        else {
+            return 0;
+        };
+        let Some(items) = items.as_mut_slice() else {
+            return 0;
+        };
+        let kind = entity_container_kind(items.len());
+        block_entity::insert_room(&recipes, kind, items, None, stack, stack.count(), 0)
+    }
+
     /// Puts `stack` into the container of `entity` as a hopper would;
     /// returns what is left.
     pub(super) fn insert_into_entity(
@@ -311,83 +432,99 @@ impl RegionActor {
         else {
             return Some(stack);
         };
+        let mut items = items;
+        let Some(items) = items.as_mut_slice() else {
+            return Some(stack);
+        };
         let kind = entity_container_kind(items.len());
-        let before = holder.map(|_| items.to_vec());
+        let before = holder.map(|_| {
+            items
+                .iter()
+                .map(|stack| stack.as_ref().map(ItemSnapshot::of))
+                .collect::<Vec<_>>()
+        });
         let mut changed = Vec::new();
         let rest = block_entity::insert(&recipes, kind, items, None, stack, &mut changed, 0);
-        let slots = changed
-            .into_iter()
-            .map(|slot| (slot, items[slot].clone()))
-            .collect::<Vec<_>>();
         if let (Some(holder), Some(before)) = (holder, before) {
-            let edits = slots
+            let edits = changed
                 .iter()
-                .map(|(slot, new)| SlotEdit {
-                    slot: *slot,
-                    old: before[*slot].clone(),
-                    new: new.clone(),
+                .map(|&slot| SlotEdit {
+                    slot,
+                    old: before[slot].clone(),
+                    new: items[slot].as_ref().map(ItemSnapshot::of),
                 })
                 .collect();
             self.report_container_edit(holder, edits);
         }
-        if !slots.is_empty() {
-            self.entity_slots_changed(entity, slots, None);
+        if !changed.is_empty() {
+            self.entity_slots_changed(entity, &changed, None);
         }
         rest
     }
 
-    /// Takes one item out of the first non-empty slot of `entity`'s
-    /// container that `accept` takes whole.
+    /// Moves one item out of the first non-empty slot of `entity`'s
+    /// container that `accept` takes; a refused item goes back.
     pub(super) fn extract_from_entity(
         &mut self,
         entity: i32,
-        mut accept: impl FnMut(&mut Self, ItemStack) -> bool,
+        mut accept: impl FnMut(&mut Self, ItemStack) -> Result<(), ItemStack>,
     ) -> bool {
         let size = self
             .ents
             .entities
             .get(&entity)
             .and_then(|tracked| tracked.entity.container())
-            .map_or(0, <[_]>::len);
+            .map_or(0, |slots| slots.len());
+        let at = self
+            .ents
+            .entities
+            .get(&entity)
+            .map_or([0.0; 3], |tracked| tracked.entity.base().position);
         for slot in 0..size {
-            let Some(one) = self
-                .ents
-                .entities
-                .get(&entity)
-                .and_then(|tracked| tracked.entity.container()?[slot].clone())
-                .map(|stack| stack.with_count(1))
-            else {
-                continue;
-            };
-            if !accept(self, one) {
-                continue;
-            }
             let holder = self.entity_holder(entity);
-            let Some(items) = self
+            let Some(mut slots) = self
                 .ents
                 .entities
                 .get_mut(&entity)
                 .and_then(|tracked| tracked.entity.container_mut())
             else {
-                return true;
+                continue;
             };
-            let old = holder.and(items[slot].clone());
-            if let Some(stack) = items[slot].as_mut() {
-                stack.count -= 1;
-                if stack.count == 0 {
-                    items[slot] = None;
+            let Some(held) = slots.get_mut(slot) else {
+                continue;
+            };
+            let old = holder.and_then(|_| held.as_ref().map(ItemSnapshot::of));
+            let Some(one) = ItemStack::take_from(held, 1) else {
+                continue;
+            };
+            match accept(self, one) {
+                Ok(()) => {}
+                Err(one) => {
+                    if let Some(mut slots) = self
+                        .ents
+                        .entities
+                        .get_mut(&entity)
+                        .and_then(|tracked| tracked.entity.container_mut())
+                        && let Some(held) = slots.get_mut(slot)
+                    {
+                        ItemStack::put_back(held, one);
+                    } else {
+                        debug_assert!(false, "a container entity vanished mid-move");
+                        self.spawn_item_at(one, at, [0.0; 3], 0);
+                    }
+                    continue;
                 }
             }
-            let value = items[slot].clone();
             if let Some(holder) = holder {
-                let edit = SlotEdit {
-                    slot,
-                    old,
-                    new: value.clone(),
-                };
-                self.report_container_edit(holder, vec![edit]);
+                let new = self
+                    .ents
+                    .entities
+                    .get(&entity)
+                    .and_then(|tracked| tracked.entity.container()?.get(slot)?.as_ref())
+                    .map(ItemSnapshot::of);
+                self.report_container_edit(holder, vec![SlotEdit { slot, old, new }]);
             }
-            self.entity_slots_changed(entity, vec![(slot, value)], None);
+            self.entity_slots_changed(entity, &[slot], None);
             return true;
         }
         false
@@ -434,18 +571,22 @@ impl RegionActor {
                 continue;
             }
             for slot in kind.slots_for_face(face) {
-                let Some(one) = self
+                let extractable = self
                     .block_entity(part)
                     .and_then(|block| block.items[slot].as_ref())
-                    .filter(|stack| kind.can_extract(slot, stack, face))
-                    .map(|stack| stack.clone().with_count(1))
-                else {
-                    continue;
-                };
-                if self.insert_into_entity(entity, one).is_some() {
+                    .is_some_and(|stack| kind.can_extract(slot, stack, face));
+                if !extractable {
                     continue;
                 }
-                self.take_one(part, slot);
+                let Some(one) = self.take_one_out(part, slot) else {
+                    continue;
+                };
+                let shown = self.observes_containers().then(|| ItemSnapshot::of(&one));
+                if let Some(back) = self.insert_into_entity(entity, one) {
+                    self.return_one(part, slot, back);
+                    continue;
+                }
+                self.took_one(part, slot, shown.as_deref());
                 return true;
             }
         }
@@ -459,9 +600,10 @@ impl RegionActor {
         let [x, y, z] = tracked.entity.base().position;
         let bounds = tracked.entity.base().bounds();
         let full = tracked.entity.container().is_none_or(|items| {
-            items
-                .iter()
-                .all(|slot| slot.as_ref().is_some_and(|s| s.count >= s.max_stack_size()))
+            items.iter().all(|slot| {
+                slot.as_ref()
+                    .is_some_and(|s| s.count() >= s.max_stack_size())
+            })
         });
         if full {
             return false;
@@ -476,7 +618,7 @@ impl RegionActor {
                 .filter(|other| *other != id)
                 .map(|other| {
                     self.extract_from_entity(other, |region, one| {
-                        region.insert_into_entity(id, one).is_none()
+                        region.insert_into_entity(id, one).map_or(Ok(()), Err)
                     })
                 })
         };
@@ -511,20 +653,19 @@ impl RegionActor {
             bounds[5] + CART_REACH,
         ]));
         let mut seen = HashSet::new();
-        for (item, stack) in items {
+        for item in items {
             if !seen.insert(item) {
                 continue;
             }
-            match self.insert_into_entity(id, stack.clone()) {
-                Some(rest) if rest.count == stack.count => continue,
-                Some(rest) => {
-                    self.set_item_stack(item, rest);
-                    return true;
-                }
-                None => {
-                    self.remove_entity(item, &[]);
-                    return true;
-                }
+            let Some(stack) = self.take_item_stack(item) else {
+                continue;
+            };
+            let before = stack.count();
+            let rest = self.insert_into_entity(id, stack);
+            let left = rest.as_ref().map_or(0, ItemStack::count);
+            self.return_item_stack(item, rest, before);
+            if left != before {
+                return true;
             }
         }
         false

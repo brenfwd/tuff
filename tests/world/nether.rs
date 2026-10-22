@@ -216,7 +216,7 @@ async fn hoglins_and_piglins_zombify_outside_the_nether_only() {
             [4.5, SKY as f64 + 1.0, 4.5],
         )
         .await;
-        let sword = ItemStack::new(Item::GoldenSword, 1).to_nbt();
+        let sword = ItemStack::mint(Item::GoldenSword, 1, MintReason::Test).to_nbt();
         summon(
             region,
             EntityType::Piglin,
@@ -433,7 +433,7 @@ async fn wither_skeletons_hit_with_stone_swords_that_wither() {
     let hit = next_hit(&world, &mut events, 600).await;
     assert_eq!(hit.kind.name, "minecraft:mob_attack");
     assert_eq!(
-        hit.weapon.map(|w| w.item),
+        hit.weapon.map(|w| w.item()),
         Some(Item::StoneSword),
         "armed with a stone sword"
     );
@@ -503,10 +503,7 @@ async fn striders_can_be_saddled() {
     summon_fresh(&region, EntityType::Strider, [5.5, SKY as f64 + 1.0, 5.5]).await;
     let strider = mobs(&region, EntityType::Strider).await[0].id;
     let effect = interact(&region, &player, &mut events, strider, Item::Saddle).await;
-    assert!(matches!(
-        effect,
-        crate::world::messages::HandEffect::Consume(1)
-    ));
+    assert!(matches!(effect, crate::world::messages::HandEffect::None));
     world.shutdown().await;
 }
 

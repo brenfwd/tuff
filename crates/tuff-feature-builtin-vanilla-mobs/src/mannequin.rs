@@ -265,7 +265,10 @@ impl Species for Mannequin {
         let mut hit = EntityHit::new(melee.damage, &damage_type::PLAYER_ATTACK);
         hit.attacker = Some(Culprit::entity(&core.base));
         hit.position = Some(core.base.position);
-        hit.weapon = core.equipment.main_hand().cloned();
+        hit.weapon = core
+            .equipment
+            .main_hand()
+            .map(tuff_item::item::ItemSnapshot::of);
         let (dx, dz) = (
             (bounds[0] + bounds[3]) / 2.0 - core.base.position[0],
             (bounds[2] + bounds[5]) / 2.0 - core.base.position[2],
@@ -465,7 +468,7 @@ mod tests {
         assert_eq!(mob.species.description(), None);
         assert!(mob.core.base.custom_name.is_some() && mob.core.base.custom_name_visible);
         assert!(mob.core.base.no_gravity);
-        let worn = |slot| mob.core.equipment.get(slot).map(|s| s.item);
+        let worn = |slot| mob.core.equipment.get(slot).map(|s| s.item());
         assert_eq!(worn(EquipmentSlot::Head), Some(Item::LeatherHelmet));
         assert_eq!(worn(EquipmentSlot::Feet), Some(Item::LeatherBoots));
         assert_eq!(worn(EquipmentSlot::Mainhand), Some(Item::WoodenSword));

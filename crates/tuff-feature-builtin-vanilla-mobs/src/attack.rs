@@ -46,7 +46,10 @@ impl MobCore {
             .map(|p| p.name.to_string());
         hit.attacker = Some(attacker);
         hit.position = Some(self.base.position);
-        hit.weapon = self.equipment.main_hand().cloned();
+        hit.weapon = self
+            .equipment
+            .main_hand()
+            .map(tuff_item::item::ItemSnapshot::of);
         if knockback > 0.0 {
             hit.knockback = Some((
                 f64::from(knockback),

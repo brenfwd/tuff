@@ -24,12 +24,28 @@ use tuff_world_model::pos::ChunkPos;
 /// What is about to be written for one chunk. `blocks` is `Some` when the
 /// chunk record is being written (block entities live in the meta),
 /// `entities` when the entity record is.
-#[derive(Clone)]
 pub struct SaveView {
     pub dimension: String,
     pub pos: ChunkPos,
     pub blocks: Option<(Chunk, ChunkMeta<BlockEntity>)>,
     pub entities: Option<Vec<Compound>>,
+}
+
+/// A copy to fall back on when a normaliser fails: block entities this
+/// server models are copied as their saved form, which writes the same.
+impl Clone for SaveView {
+    fn clone(&self) -> Self {
+        use crate::world::block_entity::SavePicture as _;
+        Self {
+            dimension: self.dimension.clone(),
+            pos: self.pos,
+            blocks: self
+                .blocks
+                .as_ref()
+                .map(|(chunk, meta)| (chunk.clone(), meta.save_picture())),
+            entities: self.entities.clone(),
+        }
+    }
 }
 
 pub trait SaveNormaliser: Send + Sync {

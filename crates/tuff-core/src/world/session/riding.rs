@@ -1,6 +1,7 @@
 //! Riding vehicles: boats and other seated entities.
 
 use crate::world::messages::{GivenMotion, VehicleMotion, VehicleRequest};
+use tuff_item::item::MintReason;
 
 use tuff_vanilla_data::registry::EntityType;
 
@@ -320,8 +321,8 @@ impl PlayerSession {
                     pitch: self.pose.pitch,
                     sprinting: self.pose.sprinting,
                     jump_charge: self.sync.pending_jump.take(),
-                    main_hand: self.inventory.hand(false).map(|s| s.item),
-                    off_hand: self.inventory.hand(true).map(|s| s.item),
+                    main_hand: self.inventory.hand(false).map(|s| s.item()),
+                    off_hand: self.inventory.hand(true).map(|s| s.item()),
                 },
             }))
             .await;
@@ -367,14 +368,14 @@ impl PlayerSession {
         let Some(stack) = self.inventory.hand(off_hand) else {
             return false;
         };
-        let Some(kind) = stack.item.boat() else {
+        let Some(kind) = stack.item().boat() else {
             return false;
         };
         if self.is_dead() || self.mode.game_mode == GameMode::Spectator {
             return false;
         }
         let (item, name) = (
-            stack.item,
+            stack.item(),
             stack
                 .components
                 .custom_name
@@ -409,7 +410,7 @@ impl PlayerSession {
     /// Using a carrot or warped fungus on a stick on the pig or strider
     /// being ridden spurs it on; true when the use was this.
     pub async fn try_boost(&mut self, off_hand: bool) -> bool {
-        let Some(item) = self.inventory.hand(off_hand).map(|s| s.item) else {
+        let Some(item) = self.inventory.hand(off_hand).map(|s| s.item()) else {
             return false;
         };
         let Some(riding) = &self.ride.riding else {
@@ -442,14 +443,16 @@ impl PlayerSession {
         let Some(off_hand) = self.motion.boost_hand.take() else {
             return;
         };
-        let Some(item) = self.inventory.hand(off_hand).map(|s| s.item) else {
+        let Some(item) = self.inventory.hand(off_hand).map(|s| s.item()) else {
             return;
         };
         let wear = if item == Item::CarrotOnAStick { 7 } else { 1 };
         self.hurt_hand(off_hand, wear).await;
         if !self.mode.abilities.instabuild && self.inventory.hand(off_hand).is_none() {
-            self.inventory
-                .set_hand(off_hand, Some(ItemStack::new(Item::FishingRod, 1)));
+            self.inventory.set_hand(
+                off_hand,
+                Some(ItemStack::mint(Item::FishingRod, 1, MintReason::Transform)),
+            );
             self.send_inventory();
         }
     }

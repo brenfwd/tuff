@@ -147,7 +147,7 @@ impl PlayerSession {
             self.inventory.set_slot(slot, Some(stack));
         }
         self.inventory.set_selected(state.selected);
-        self.menus.ender_items = vec![None; ENDER_CHEST_SLOTS];
+        self.menus.ender_items = (0..ENDER_CHEST_SLOTS).map(|_| None).collect();
         for (slot, stack) in state.ender_items {
             self.menus.ender_items[slot] = Some(stack);
         }
@@ -180,11 +180,11 @@ impl PlayerSession {
         self.body.shoulders.entities = state.shoulders;
         self.body.effects = state.effects;
         self.body.attributes = state.attributes;
-        self.progress.last_inventory = self.inventory.slots().to_vec();
+        self.progress.last_inventory = tuff_item::item::snapshot_slots(self.inventory.slots());
         Ok(())
     }
 
-    pub fn state(&self) -> PlayerState {
+    pub fn state(&self) -> PlayerState<&ItemStack> {
         PlayerState {
             dimension: self.dimension().key.clone(),
             position: self.pose.position,
@@ -212,13 +212,13 @@ impl PlayerSession {
                 .slots()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| stack.clone().map(|s| (slot, s)))
+                .filter_map(|(slot, stack)| stack.as_ref().map(|s| (slot, s)))
                 .collect(),
             ender_items: self
                 .ender_items()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| stack.clone().map(|s| (slot, s)))
+                .filter_map(|(slot, stack)| stack.as_ref().map(|s| (slot, s)))
                 .collect(),
             game_mode: self.mode.game_mode,
             previous_game_mode: self.mode.previous_game_mode,
@@ -268,7 +268,36 @@ impl PlayerSession {
     }
 
     pub fn save_task(&self) -> tokio::task::JoinHandle<()> {
-        if self.fake.is_some() {
+        self.save_task_in(None)
+    }
+
+    /// Saves the player as part of the world save `ticket` belongs to (or
+    /// the one open now). A player quarantined after a refused item
+    /// operation keeps its last consistent save.
+    pub fn save_task_in(
+        &self,
+        ticket: Option<tuff_storage::journal::EpochTicket>,
+    ) -> tokio::task::JoinHandle<()> {
+        let ticket = ticket.or_else(|| {
+            self.shared
+                .backend
+                .save_journal()
+                .map(|journal| journal.ticket_now())
+        });
+        let quarantined = self
+            .shared
+            .conservation
+            .quarantined(crate::world::conservation::Subject::Player(self.id));
+        if self.fake.is_some() || quarantined {
+            if quarantined {
+                log::warn!(
+                    "not saving {}: quarantined after a refused item operation",
+                    self.profile.name
+                );
+            }
+            if let Some(ticket) = ticket {
+                ticket.landed();
+            }
             return tokio::spawn(async {});
         }
         let backend = self.shared.backend.clone();
@@ -283,17 +312,34 @@ impl PlayerSession {
             .collect();
         let name = self.profile.name.clone();
         tokio::task::spawn_blocking(move || {
-            for (document, root) in extra {
-                if let Err(err) = backend.documents().write(document, root) {
-                    log::error!("failed to save {document:?} for {name}: {err}");
+            let failed = || {
+                if let Some(ticket) = &ticket {
+                    ticket.fail();
                 }
+            };
+            let write = || {
+                for (document, root) in extra {
+                    if let Err(err) = backend.documents().write(document, root) {
+                        log::error!("failed to save {document:?} for {name}: {err}");
+                        failed();
+                    }
+                }
+                if let Err(err) = player_data::save(backend.documents(), uuid, root) {
+                    log::error!("failed to save player data for {name}: {err}");
+                    failed();
+                }
+                let document = tuff_storage::document::Document::Stats(uuid);
+                if let Err(err) = backend.documents().write(document, stats) {
+                    log::error!("failed to save statistics for {name}: {err}");
+                    failed();
+                }
+            };
+            match &ticket {
+                Some(ticket) => ticket.scope(write),
+                None => write(),
             }
-            if let Err(err) = player_data::save(backend.documents(), uuid, root) {
-                log::error!("failed to save player data for {name}: {err}");
-            }
-            let document = tuff_storage::document::Document::Stats(uuid);
-            if let Err(err) = backend.documents().write(document, stats) {
-                log::error!("failed to save statistics for {name}: {err}");
+            if let Some(ticket) = ticket {
+                ticket.landed();
             }
         })
     }
@@ -302,7 +348,7 @@ impl PlayerSession {
     /// regions have snapshotted (or a bound passes) so no container
     /// transaction can land between the two.
     pub(crate) async fn save_at_barrier(&mut self, barrier: crate::world::messages::SaveBarrier) {
-        let saving = self.save_task();
+        let saving = self.save_task_in(barrier.ticket);
         let _ = barrier.snapshotted.send(());
         let _ = tokio::time::timeout(SAVE_BARRIER_HOLD, barrier.release).await;
         if let Some(written) = barrier.written {

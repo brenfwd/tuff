@@ -1,3 +1,5 @@
+use tuff_item::item::BurnReason;
+use tuff_item::item::MintReason;
 use tuff_vanilla_data::item::EquipmentSlot;
 
 use tuff_core::world::region_api::RegionWorld;
@@ -38,19 +40,22 @@ pub fn equip(world: &mut dyn RegionWorld, table: &Compound, saved: &mut Compound
         .unwrap_or_default();
     for mut stack in world.shared().block_loot().roll(name, world.rng()) {
         let slot = stack
-            .item
+            .item()
             .equippable()
             .map_or(EquipmentSlot::Mainhand, |e| e.slot);
-        if used.contains(&slot) {
-            continue;
-        }
-        let Some((_, key)) = SLOT_NAMES.iter().find(|(s, _)| *s == slot) else {
+        let Some((_, key)) = SLOT_NAMES
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .filter(|_| !used.contains(&slot))
+        else {
+            stack.burn(BurnReason::Loot);
             continue;
         };
         if !matches!(slot, EquipmentSlot::Mainhand | EquipmentSlot::Offhand) {
-            stack.count = 1;
+            stack.resize(1, MintReason::Loot, BurnReason::Loot);
         }
         equipment.insert(*key, stack.to_nbt());
+        tuff_item::item::conservation::release(stack);
         let chance = match chances {
             Some(Tag::Compound(per_slot)) => per_slot.get(key).and_then(float_of),
             Some(single) => float_of(single),

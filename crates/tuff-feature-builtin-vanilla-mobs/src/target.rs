@@ -209,7 +209,7 @@ impl MobCore {
         let (max_reach, min_reach) = match self
             .equipment
             .main_hand()
-            .and_then(|stack| stack.item.attack_range())
+            .and_then(|stack| stack.item().attack_range())
         {
             Some(range) => (
                 f64::from(range.max_reach * range.mob_factor),
@@ -1087,9 +1087,10 @@ pub(crate) mod tests {
         assert!(!mob.within_melee_range(&far));
         mob.equipment.set(
             tuff_vanilla_data::item::EquipmentSlot::Mainhand,
-            Some(tuff_item::item::ItemStack::new(
+            Some(tuff_item::item::ItemStack::mint(
                 tuff_vanilla_data::Item::WoodenSpear,
                 1,
+                tuff_item::item::MintReason::Test,
             )),
         );
         assert!(!mob.within_melee_range(&near));

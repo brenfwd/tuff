@@ -15,7 +15,7 @@ use super::{MobCore, MobSounds, Species};
 use super::{illager, raider};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::entity::TickContext;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 const BOW_RANGE: f32 = 8.0;
 
@@ -33,14 +33,12 @@ impl Pillager {
     fn add(&mut self, stack: ItemStack) -> Option<ItemStack> {
         let mut stack = stack;
         for held in &mut self.inventory {
-            if held.item == stack.item && held.components == stack.components {
-                let room = held.max_stack_size().saturating_sub(held.count);
-                let moved = room.min(stack.count);
-                held.count += moved;
-                stack.count -= moved;
+            if held.item() == stack.item() && held.components == stack.components {
+                let room = held.max_stack_size().saturating_sub(held.count());
+                held.transfer(&mut stack, room);
             }
         }
-        if stack.count == 0 {
+        if stack.count() == 0 {
             return None;
         }
         if self.inventory.len() < INVENTORY_SLOTS {
@@ -55,7 +53,7 @@ impl Pillager {
             || self
                 .inventory
                 .iter()
-                .any(|held| held.item == item && held.count < held.max_stack_size())
+                .any(|held| held.item() == item && held.count() < held.max_stack_size())
     }
 
     fn takeable_banner(&self, core: &MobCore, cx: &mut TickContext) -> Option<(i32, u8)> {
@@ -76,6 +74,10 @@ impl Pillager {
 }
 
 impl Species for Pillager {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        std::mem::take(&mut self.inventory)
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }
@@ -84,7 +86,7 @@ impl Species for Pillager {
         if let Some(tuff_nbt::Tag::List(list)) = nbt.remove("Inventory") {
             self.inventory = list
                 .iter()
-                .filter_map(|tag| ItemStack::from_nbt(tag.as_compound()?))
+                .filter_map(|tag| ItemStack::from_storage(tag.as_compound()?))
                 .take(INVENTORY_SLOTS)
                 .collect();
         }
@@ -173,7 +175,7 @@ impl Species for Pillager {
         if !in_raid || core.equipment.get(EquipmentSlot::Mainhand).is_none() {
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::Crossbow, 1)),
+                Some(ItemStack::mint(Item::Crossbow, 1, MintReason::Spawn)),
             );
         }
         let difficulty = super::monster::LocalDifficulty::at(cx, core.base.position);
@@ -186,10 +188,12 @@ fn enchant_spawn_crossbow(core: &mut MobCore, rng: &mut StdRng) {
     if rng.gen_range(0..SPAWN_CROSSBOW_ENCHANT_ODDS) != 0 {
         return;
     }
-    let Some(weapon) = core.equipment.get(EquipmentSlot::Mainhand).cloned() else {
-        return;
-    };
-    if weapon.item == Item::Crossbow {
+    if core
+        .equipment
+        .get(EquipmentSlot::Mainhand)
+        .is_some_and(|weapon| weapon.item() == Item::Crossbow)
+        && let Some(weapon) = core.equipment.take(EquipmentSlot::Mainhand)
+    {
         let enchanted = tuff_item::item::enchanting::enchant_from_provider(
             weapon,
             "minecraft:pillager_spawn_crossbow",
@@ -213,14 +217,30 @@ mod tests {
     #[test]
     fn the_inventory_holds_five_stacks_and_merges_banners() {
         let mut pillager = Pillager::default();
-        assert!(pillager.add(ItemStack::new(Item::WhiteBanner, 1)).is_none());
-        assert!(pillager.add(ItemStack::new(Item::WhiteBanner, 1)).is_none());
+        assert!(
+            pillager
+                .add(ItemStack::mint(Item::WhiteBanner, 1, MintReason::Test))
+                .is_none()
+        );
+        assert!(
+            pillager
+                .add(ItemStack::mint(Item::WhiteBanner, 1, MintReason::Test))
+                .is_none()
+        );
         assert_eq!(pillager.inventory.len(), 1);
-        assert_eq!(pillager.inventory[0].count, 2);
+        assert_eq!(pillager.inventory[0].count(), 2);
         for item in [Item::Stick, Item::Apple, Item::Bread, Item::Coal] {
-            assert!(pillager.add(ItemStack::new(item, 1)).is_none());
+            assert!(
+                pillager
+                    .add(ItemStack::mint(item, 1, MintReason::Test))
+                    .is_none()
+            );
         }
-        assert!(pillager.add(ItemStack::new(Item::Bone, 1)).is_some());
+        assert!(
+            pillager
+                .add(ItemStack::mint(Item::Bone, 1, MintReason::Test))
+                .is_some()
+        );
         assert!(!pillager.can_add(Item::Bone));
         assert!(pillager.can_add(Item::WhiteBanner));
     }
@@ -234,7 +254,7 @@ mod tests {
             for _ in 0..30_000 {
                 core.equipment.set(
                     EquipmentSlot::Mainhand,
-                    Some(ItemStack::new(Item::Crossbow, 1)),
+                    Some(ItemStack::mint(Item::Crossbow, 1, MintReason::Test)),
                 );
                 enchant_spawn_crossbow(core, &mut rng);
                 let stack = core.equipment.get(EquipmentSlot::Mainhand).unwrap();

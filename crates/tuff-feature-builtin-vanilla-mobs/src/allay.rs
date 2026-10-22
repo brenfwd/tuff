@@ -257,13 +257,13 @@ impl Allay {
     /// Room left for `item` in its one slot, if it wants it at all.
     fn room_for(&self, core: &MobCore, item: Item) -> Option<u8> {
         let held = core.equipment.main_hand()?;
-        if held.item != item {
+        if held.item() != item {
             return None;
         }
         match &self.inventory {
             None => Some(held.max_stack_size()),
-            Some(stack) if stack.item == item => {
-                Some(stack.max_stack_size().saturating_sub(stack.count)).filter(|n| *n > 0)
+            Some(stack) if stack.item() == item => {
+                Some(stack.max_stack_size().saturating_sub(stack.count())).filter(|n| *n > 0)
             }
             Some(_) => None,
         }
@@ -344,9 +344,8 @@ impl Allay {
         let Some(stack) = self.inventory.as_mut() else {
             return;
         };
-        let one = stack.clone().with_count(1);
-        stack.count -= 1;
-        if stack.count == 0 {
+        let one = stack.take(1);
+        if stack.count() == 0 {
             self.inventory = None;
         }
         let aim = [deposit.point[0], deposit.point[1] + 1.0, deposit.point[2]];
@@ -355,7 +354,7 @@ impl Allay {
                 player,
                 event: Box::new(
                     tuff_core::world::messages::AdvancementEvent::AllayDropItemOnBlock {
-                        item: one.clone(),
+                        item: tuff_item::item::ItemSnapshot::of(&one),
                         location: tuff_core::world::predicate::LocationFacts {
                             position: [deposit.point[0], deposit.point[1] - 2.1, deposit.point[2]],
                             ..Default::default()
@@ -368,7 +367,7 @@ impl Allay {
                 player,
                 event: Box::new(
                     tuff_core::world::messages::AdvancementEvent::AllayDropItemOnBlock {
-                        item: one.clone(),
+                        item: tuff_item::item::ItemSnapshot::of(&one),
                         location: tuff_core::world::predicate::LocationFacts {
                             position: [deposit.point[0], deposit.point[1] - 1.0, deposit.point[2]],
                             ..Default::default()
@@ -543,6 +542,10 @@ fn memory_value<'a>(memories: &'a Compound, key: &str) -> Option<&'a Tag> {
 }
 
 impl Species for Allay {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.inventory.take().into_iter().collect()
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }
@@ -571,7 +574,7 @@ impl Species for Allay {
         if let Some(list) = take(nbt, "Inventory", |t| t.as_list().map(<[Tag]>::to_vec)) {
             self.inventory = list
                 .iter()
-                .find_map(|t| ItemStack::from_nbt(t.as_compound()?));
+                .find_map(|t| ItemStack::from_storage(t.as_compound()?));
         }
         let cooldown = take_number(nbt, "DuplicationCooldown").map_or(0, |v| v as i64);
         self.set_duplication_cooldown(core, cooldown);
@@ -700,11 +703,11 @@ impl Species for Allay {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref();
+        let stack = interaction.stack.as_deref();
         if let Some(stack) = stack
             && self.dancing
             && self.can_duplicate()
-            && tuff_datapack::tags::is(tag::item::key::DUPLICATES_ALLAYS, stack.item)
+            && tuff_datapack::tags::is(tag::item::key::DUPLICATES_ALLAYS, stack.item())
         {
             self.duplicate(core, cx);
             core.entity_event(HEART_EVENT, cx);
@@ -712,21 +715,21 @@ impl Species for Allay {
             return Some(HandEffect::Consume(1));
         }
         if let Some(stack) = stack
-            && stack.item == Item::NameTag
+            && stack.item() == Item::NameTag
             && stack.components.custom_name.is_some()
         {
             return None;
         }
-        match (core.equipment.main_hand().cloned(), stack) {
-            (None, Some(stack)) => {
-                core.equipment
-                    .set(EquipmentSlot::Mainhand, Some(stack.clone().with_count(1)));
+        match (core.equipment.main_hand().is_some(), stack) {
+            (false, Some(_)) => {
+                let one = interaction.hand.take(1)?;
+                core.equipment.set(EquipmentSlot::Mainhand, Some(one));
                 core.sound(SoundEvent::EntityAllayItemGiven, 2.0, 1.0, cx);
                 self.liked_player = Some(interaction.player_uuid);
-                Some(HandEffect::Consume(1))
+                Some(HandEffect::None)
             }
-            (Some(held), None) if !interaction.off_hand => {
-                core.equipment.set(EquipmentSlot::Mainhand, None);
+            (true, None) if !interaction.off_hand => {
+                let held = core.equipment.take(EquipmentSlot::Mainhand)?;
                 core.sound(SoundEvent::EntityAllayItemTaken, 2.0, 1.0, cx);
                 core.swing(cx);
                 if let Some(kept) = self.inventory.take() {
@@ -743,16 +746,15 @@ impl Species for Allay {
         let fits = core
             .equipment
             .main_hand()
-            .is_some_and(|held| held.item == stack.item && !has_potion_mismatch(held, &stack));
+            .is_some_and(|held| held.item() == stack.item() && !has_potion_mismatch(held, &stack));
         match &mut self.inventory {
             None if fits => self.inventory = Some(stack),
             Some(kept) if fits && kept.stacks_with(&stack) => {
-                let room = kept.max_stack_size().saturating_sub(kept.count);
-                let added = room.min(stack.count);
-                kept.count += added;
-                if stack.count > added {
-                    let left = stack.count - added;
-                    self.rejected.push(stack.with_count(left));
+                let room = kept.max_stack_size().saturating_sub(kept.count());
+                let mut stack = stack;
+                kept.transfer(&mut stack, room);
+                if stack.count() > 0 {
+                    self.rejected.push(stack);
                 }
             }
             _ => self.rejected.push(stack),
@@ -769,10 +771,12 @@ impl Species for Allay {
         if let Some(stack) = self.inventory.take() {
             core.drop_item(stack, 0.0, cx);
         }
-        if let Some(held) = core.equipment.main_hand().cloned()
-            && !super::equipment::prevents_drop(&held)
+        if core
+            .equipment
+            .main_hand()
+            .is_some_and(|held| !super::equipment::prevents_drop(held))
+            && let Some(held) = core.equipment.take(EquipmentSlot::Mainhand)
         {
-            core.equipment.set(EquipmentSlot::Mainhand, None);
             core.drop_item(held, 0.0, cx);
         }
     }
@@ -842,6 +846,7 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 mod tests {
     use super::*;
     use crate::tests::with_context;
+    use tuff_item::item::MintReason;
 
     fn interaction(player: u128, item: Option<Item>, off_hand: bool) -> EntityInteraction {
         EntityInteraction {
@@ -849,7 +854,15 @@ mod tests {
             player_uuid: player,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::new(item, 5)),
+            stack: item
+                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (item.map(|item| {
+                    tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())
+                }))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand,
             creative: false,
             sneaking: false,
@@ -877,10 +890,12 @@ mod tests {
         with_context(|core, cx| {
             Allay::configure(core);
             let mut allay = Allay::create(cx.rng);
-            let effect = allay.interact(core, &interaction(9, Some(Item::Cobblestone), false), cx);
-            assert!(matches!(effect, Some(HandEffect::Consume(1))));
+            let click = interaction(9, Some(Item::Cobblestone), false);
+            let effect = allay.interact(core, &click, cx);
+            assert!(matches!(effect, Some(HandEffect::None)));
+            assert_eq!(click.hand.into_inner().map(|left| left.count()), Some(4));
             assert_eq!(
-                core.equipment.main_hand().map(|s| (s.item, s.count)),
+                core.equipment.main_hand().map(|s| (s.item(), s.count())),
                 Some((Item::Cobblestone, 1))
             );
             assert_eq!(allay.liked_player(), Some(9));
@@ -896,11 +911,11 @@ mod tests {
                     .is_none(),
                 "only the main hand takes the item back"
             );
-            allay.inventory = Some(ItemStack::new(Item::Cobblestone, 3));
+            allay.inventory = Some(ItemStack::mint(Item::Cobblestone, 3, MintReason::Test));
             let effect = allay.interact(core, &interaction(9, None, false), cx);
             assert!(matches!(
                 effect,
-                Some(HandEffect::Replace(Some(ref stack))) if stack.item == Item::Cobblestone
+                Some(HandEffect::Replace(Some(ref stack))) if stack.item() == Item::Cobblestone
             ));
             assert!(core.equipment.main_hand().is_none());
             assert_eq!(allay.liked_player(), None);
@@ -908,7 +923,7 @@ mod tests {
             assert!(
                 cx.effects.iter().any(|e| matches!(
                     e,
-                    Effect::DropItem { stack, .. } if stack.item == Item::Cobblestone && stack.count == 3
+                    Effect::DropItem { stack, .. } if stack.item() == Item::Cobblestone && stack.count() == 3
                 )),
                 "what it gathered falls out"
             );

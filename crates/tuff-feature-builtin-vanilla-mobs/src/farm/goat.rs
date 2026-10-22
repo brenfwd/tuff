@@ -33,7 +33,7 @@ impl Goat {
         }
         let instruments = horn_instruments(self.screaming);
         let name = instruments[cx.rng.gen_range(0..instruments.len())];
-        let mut stack = ItemStack::new(Item::GoatHorn, 1);
+        let mut stack = ItemStack::mint(Item::GoatHorn, 1, MintReason::Spawn);
         stack.components.other.insert("minecraft:instrument", name);
         let [x, y, z] = core.base.position;
         let velocity = [
@@ -138,7 +138,7 @@ impl Species for Goat {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        goat_food(stack.item)
+        goat_food(stack.item())
     }
 
     fn eating_sound(&self, _core: &MobCore) -> Option<SoundEvent> {
@@ -155,8 +155,8 @@ impl Species for Goat {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
-        if stack.item != Item::Bucket || core.is_baby() {
+        let stack = interaction.stack.as_deref()?;
+        if stack.item() != Item::Bucket || core.is_baby() {
             return None;
         }
         core.sound_as(

@@ -21,7 +21,7 @@ use tuff_core::world::messages::{
     ActionOutcome, AnchorUse, BedUse, BucketUse, HandEffect, Igniter, Place, PlayerEvent,
     PlayerHandle, PlayerId, RegionInternal, RegionRequest, RespawnSpot, SessionTask,
 };
-use tuff_item::item::{ItemStack, LodestoneTracker};
+use tuff_item::item::{ItemStack, LodestoneTracker, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::block::{BedRuleAttribute, Part};
 use tuff_world_model::BlockPos;
@@ -195,30 +195,36 @@ pub trait Interact: RegionWorld + Rest {
             off_hand: place.off_hand,
         };
         let inserted = place.held.and_then(|item| {
-            let held = ItemStack::new(item, 1).with_components(place.components.clone());
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
-                .and_then(ItemStack::from_nbt);
-            let next = match &stored {
+                .and_then(ItemStack::picture_from_nbt);
+            if stored
+                .as_ref()
+                .is_some_and(|stored| stored.count() >= stored.item().max_stack_size())
+            {
+                return None;
+            }
+            let held = place.offer.keep_one(place.hand_slot)?;
+            let old = stored.as_ref().map(tuff_item::item::ItemSnapshot::of);
+            let next = match stored {
                 None => held,
-                Some(stored) => {
-                    if stored.item != held.item
-                        || stored.components != held.components
-                        || stored.count >= stored.item.max_stack_size()
-                    {
+                Some(stored) => match ItemStack::merge(stored, held) {
+                    Ok(next) => next,
+                    Err((_, held)) => {
+                        place.offer.unkeep(place.hand_slot, held);
                         return None;
                     }
-                    stored.clone().with_count(stored.count + 1)
-                }
+                },
             };
-            let ratio = f32::from(next.count) / next.item.max_stack_size() as f32;
+            let ratio = f32::from(next.count()) / next.item().max_stack_size() as f32;
             self.raw_block_entity_mut(pos)?
                 .insert("item", next.to_nbt());
             self.report_container_edit(
                 tuff_core::world::region_api::ContainerHolder::Block(pos),
-                &[(0, stored.as_ref(), Some(&next))],
+                &[(0, old.as_deref(), Some(&next))],
             );
+            tuff_item::item::conservation::release(next);
             Some((item, ratio))
         });
         let Some((item, ratio)) = inserted else {
@@ -250,7 +256,7 @@ pub trait Interact: RegionWorld + Rest {
         Some(ActionOutcome::Used {
             off_hand: place.off_hand,
             item,
-            effect: HandEffect::Consume(1),
+            effect: HandEffect::None,
         })
     }
 
@@ -268,22 +274,39 @@ pub trait Interact: RegionWorld + Rest {
             face: None,
             by: Porter::Player(Some(place.player.id)),
         };
-        let held = place
-            .held
-            .map(|item| {
-                tuff_item::item::ItemStack::new(item, 1).with_components(place.components.clone())
-            })
-            .filter(|stack| composter::compostable(stack).is_some());
-        if let Some(stack) = held.filter(|_| level < composter::READY) {
-            if !port.offer(self.as_dyn(), &at, &stack) {
+        let compostable = place.held.filter(|item| {
+            let shown = tuff_item::item::ItemSnapshot::describe_with(*item, 1, &place.components);
+            composter::compostable(&shown).is_some()
+        });
+        if let Some(item) = compostable {
+            let accepted = level < composter::READY
+                && place.offer.keep_one(place.hand_slot).is_some_and(|stack| {
+                    match port.offer(self.as_dyn(), &at, stack) {
+                        Ok(()) => true,
+                        Err(refused) => {
+                            place.offer.unkeep(place.hand_slot, refused);
+                            false
+                        }
+                    }
+                });
+            if level >= composter::READY {
+                if level > composter::READY {
+                    return None;
+                }
+                port.take(self.as_dyn(), &at);
+                return Some(ActionOutcome::Interacted {
+                    off_hand: place.off_hand,
+                });
+            }
+            if !accepted {
                 return Some(ActionOutcome::Interacted {
                     off_hand: place.off_hand,
                 });
             }
             return Some(ActionOutcome::Used {
                 off_hand: place.off_hand,
-                item: stack.item,
-                effect: HandEffect::Consume(1),
+                item,
+                effect: HandEffect::None,
             });
         }
         if level == composter::READY {
@@ -519,7 +542,7 @@ pub trait Interact: RegionWorld + Rest {
                 place
                     .player
                     .send(PlayerEvent::AwardStat(CustomStat::UseCauldron, 1));
-                let mut water = ItemStack::new(Item::Potion, 1);
+                let mut water = ItemStack::mint(Item::Potion, 1, MintReason::Transform);
                 water.components.potion_contents =
                     Some(Box::new(tuff_item::item::PotionContents {
                         potion: Some(tuff_vanilla_data::registry::Potion::Water),
@@ -531,7 +554,8 @@ pub trait Interact: RegionWorld + Rest {
             _ if tuff_datapack::tags::is(item_tags::key::BANNERS, item) => {
                 let mut layers = place.components.banner_patterns.clone()?;
                 layers.pop()?;
-                let mut cleaned = ItemStack::new(item, 1).with_components(place.components.clone());
+                let mut cleaned =
+                    ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
                 cleaned.components.banner_patterns = Some(layers);
                 self.lower_cauldron(pos, state);
                 place
@@ -542,8 +566,12 @@ pub trait Interact: RegionWorld + Rest {
             _ if item != Item::ShulkerBox
                 && tuff_datapack::tags::is(item_tags::key::SHULKER_BOXES, item) =>
             {
-                let cleaned =
-                    ItemStack::new(Item::ShulkerBox, 1).with_components(place.components.clone());
+                let cleaned = ItemStack::mint_with(
+                    Item::ShulkerBox,
+                    1,
+                    &place.components,
+                    MintReason::Transform,
+                );
                 self.lower_cauldron(pos, state);
                 place
                     .player
@@ -552,8 +580,12 @@ pub trait Interact: RegionWorld + Rest {
             }
             _ if tuff_datapack::tags::is(item_tags::key::CAULDRON_CAN_REMOVE_DYE, item) => {
                 place.components.dyed_color?;
-                let mut cleaned = ItemStack::new(item, place.held_count)
-                    .with_components(place.components.clone());
+                let mut cleaned = ItemStack::mint_with(
+                    item,
+                    place.held_count,
+                    &place.components,
+                    MintReason::Transform,
+                );
                 cleaned.components.dyed_color = None;
                 self.lower_cauldron(pos, state);
                 place
@@ -569,7 +601,6 @@ pub trait Interact: RegionWorld + Rest {
     /// empty or non-record hand takes the record back out.
     fn use_jukebox(&mut self, place: &Place, state: BlockState) -> Option<ActionOutcome> {
         use tuff_core::world::item_port::{PortAccess, Porter};
-        use tuff_item::item::ItemStack;
         let pos = place.target;
         let port = self.shared().item_ports.get(state.block())?.clone();
         let at = PortAccess {
@@ -601,8 +632,9 @@ pub trait Interact: RegionWorld + Rest {
             });
         }
         let item = place.held?;
-        let held = ItemStack::new(item, 1).with_components(place.components.clone());
-        if !port.offer(self.as_dyn(), &at, &held) {
+        let held = place.offer.keep_one(place.hand_slot)?;
+        if let Err(refused) = port.offer(self.as_dyn(), &at, held) {
+            place.offer.unkeep(place.hand_slot, refused);
             return None;
         }
         place.player.send(PlayerEvent::AwardStat(
@@ -612,7 +644,7 @@ pub trait Interact: RegionWorld + Rest {
         Some(ActionOutcome::Used {
             off_hand: place.off_hand,
             item,
-            effect: HandEffect::Consume(1),
+            effect: HandEffect::None,
         })
     }
 
@@ -649,7 +681,7 @@ pub trait Interact: RegionWorld + Rest {
             (Some(content), None) => {
                 if let Some(item) = content.item() {
                     place.player.send(PlayerEvent::ItemGranted {
-                        stack: ItemStack::new(item, 1),
+                        stack: ItemStack::mint(item, 1, MintReason::BlockDrop),
                         picked_up: false,
                     });
                 }
@@ -838,7 +870,7 @@ pub trait Interact: RegionWorld + Rest {
             let tracker =
                 LodestoneTracker::locked(&self.dimension_info().key, [pos.x, pos.y, pos.z]);
             let mut locked =
-                ItemStack::new(Item::Compass, 1).with_components(place.components.clone());
+                ItemStack::mint_with(Item::Compass, 1, &place.components, MintReason::Transform);
             locked
                 .components
                 .other
@@ -1406,7 +1438,7 @@ impl tuff_core::world::region_api::RegionHooks for InteractionHooks {
         pos: BlockPos,
         facing: Facing,
         _origin: [f64; 3],
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         super::dispense::dispense(world, pos, facing, stack)
     }

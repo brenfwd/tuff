@@ -96,7 +96,7 @@ pub enum RegionInternal {
     /// so hoppers, golems and comparators here can read the joined chest.
     HalfSnapshot {
         pos: BlockPos,
-        items: Option<Vec<Option<ItemStack>>>,
+        items: Option<Vec<Option<tuff_item::item::ItemSnapshot>>>,
     },
     /// Asks for [`Self::HalfSnapshot`] of the half at `pos`.
     HalfRequest {
@@ -114,7 +114,7 @@ pub enum RegionInternal {
     /// from the half at `pos`; the owner replies with `HalfDrained`.
     HalfDrain {
         pos: BlockPos,
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         golem: i32,
         at: BlockPos,
         reply: RegionHandle,
@@ -157,6 +157,8 @@ pub enum RegionInternal {
         done: Option<oneshot::Sender<()>>,
         /// Told once the dirty chunks were snapshotted for writing.
         snapshotted: Option<oneshot::Sender<()>>,
+        /// The world save these chunk writes belong to.
+        epoch: Option<tuff_storage::journal::BarrierHandle>,
     },
     /// A chunk the generation pipeline finished for this region.
     Generated {

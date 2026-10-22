@@ -12,7 +12,7 @@ use tuff_vanilla_data::registry::{Attribute, EntityType, MobEffect};
 
 use tuff_core::world::damage_type_in_tag;
 use tuff_core::world::player::Difficulty;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 use crate::enchant_effects::facts_of;
 use tuff_core::world::attributes::applies_in;
@@ -255,7 +255,7 @@ pub fn melee(attacker: &Attacker, victim: EntityType, rng: &mut impl Rng) -> Opt
         && weapon.is_some_and(|weapon| {
             tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::ENCHANTABLE_MACE,
-                weapon.item,
+                weapon.item(),
             )
         });
     let smash_bonus = if smashing {
@@ -274,7 +274,7 @@ pub fn melee(attacker: &Attacker, victim: EntityType, rng: &mut impl Rng) -> Opt
         && attacker.on_ground
         && attacker.known_speed_sq < max_sweep_speed * max_sweep_speed
         && weapon.is_some_and(|weapon| {
-            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::SWORDS, weapon.item)
+            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::SWORDS, weapon.item())
         });
     let sweep = sweeps.then(|| Sweep {
         damage: 1.0 + modifiers.value(Attribute::SweepingDamageRatio) as f32 * damage,
@@ -510,7 +510,7 @@ pub fn ammo_use(weapon: &ItemStack, ammo: Item, count: f32) -> f32 {
         for entry in &def.effects.ammo_use {
             let applies = enchantment::item_requirement(
                 entry.requirements.as_ref(),
-                &ItemStack::new(ammo, 1),
+                &ItemStack::mint(ammo, 1, MintReason::Template),
                 level,
                 &mut rng,
             );

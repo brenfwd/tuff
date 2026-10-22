@@ -2,7 +2,7 @@
 //! campfires), their menus, locks, loot tables and viewer bookkeeping.
 //! Called from region.rs's dispatch and from the block edit pipeline.
 
-use std::collections::HashMap;
+use tuff_item::item::ItemSnapshot;
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -105,7 +105,12 @@ impl RegionActor {
             Ok(entity) => {
                 column.meta.raw_block_entities.remove(&pos);
                 let ticks = entity.kind.ticks();
-                column.meta.block_entities.insert(pos, entity);
+                if let Some(mut replaced) = column.meta.block_entities.insert(pos, entity) {
+                    for stack in replaced.items.iter_mut().filter_map(Option::take) {
+                        stack.burn(tuff_item::item::BurnReason::Command);
+                    }
+                    tuff_item::item::conservation::release(replaced);
+                }
                 if ticks {
                     self.menus.ticking.insert(pos);
                 }
@@ -235,7 +240,7 @@ impl RegionActor {
             }
             return Some(nbt);
         }
-        let entity = column.meta.block_entities.remove(&pos)?;
+        let mut entity = column.meta.block_entities.remove(&pos)?;
         column.blocks_dirty = true;
         self.menus.ticking.remove(&pos);
         self.menus.hopper_ticks.remove(&pos);
@@ -251,15 +256,17 @@ impl RegionActor {
                 .orphans
                 .entry(key)
                 .or_default()
-                .push((pos, entity.items.clone()));
+                .push((pos, entity.items.iter_mut().map(Option::take).collect()));
         } else if spill.is_some() {
-            let stacks = block_entity::spilled(&entity);
+            let stacks = block_entity::spilled(&mut entity);
             let drops = block_entity::scatter(pos, stacks, &mut self.rng);
             for (stack, position, velocity) in drops {
                 self.spawn_item_at(stack, position, velocity, items::BLOCK_DROP_PICKUP_DELAY);
             }
         }
-        Some(entity.encode(pos))
+        let nbt = entity.encode(pos);
+        tuff_item::item::conservation::release(entity);
+        Some(nbt)
     }
 
     pub(super) fn spawn_item_at(
@@ -487,14 +494,12 @@ impl RegionActor {
                 TextComponent::translate(key, [])
             })
         };
-        let held = place.held.map(|item| ItemStack {
-            item,
-            count: 1,
-            components: place.components.clone(),
-        });
+        let held = place
+            .held
+            .map(|item| ItemSnapshot::describe_with(item, 1, &place.components));
         if parts
             .iter()
-            .any(|part| self.container_locked(*part, held.as_ref(), spectator))
+            .any(|part| self.container_locked(*part, held.as_deref(), spectator))
         {
             if !spectator {
                 self.notify_locked(&parts, place, title);
@@ -528,11 +533,20 @@ impl RegionActor {
         let mut data = Vec::new();
         for part in &parts {
             let entity = self.block_entity(*part).expect("ensured above");
-            contents.extend(entity.items.iter().cloned());
+            contents.extend(
+                entity
+                    .items
+                    .iter()
+                    .map(|slot| slot.as_ref().map(ItemSnapshot::of)),
+            );
             sized.push((*part, entity.items.len()));
             data.extend(entity.data());
             if kind == ContainerKind::Crafter {
-                contents.push(recipes.grid_result(&entity.items, 3, 3));
+                contents.push(
+                    recipes
+                        .grid_result(&entity.items, 3, 3)
+                        .map(ItemStack::into_template),
+                );
             }
         }
         if !spectator {
@@ -586,15 +600,13 @@ impl RegionActor {
         {
             return;
         }
-        let held = place.held.map(|item| ItemStack {
-            item,
-            count: 1,
-            components: place.components.clone(),
-        });
+        let held = place
+            .held
+            .map(|item| ItemSnapshot::describe_with(item, 1, &place.components));
         let custom_name = self
             .block_entity(pos)
             .and_then(|entity| entity.custom_name.clone());
-        if self.container_locked(pos, held.as_ref(), spectator) {
+        if self.container_locked(pos, held.as_deref(), spectator) {
             if !spectator {
                 let title = custom_name
                     .unwrap_or_else(|| TextComponent::translate("container.chestDouble", []));
@@ -613,7 +625,7 @@ impl RegionActor {
         }
         let contents = self
             .block_entity(pos)
-            .map(|entity| entity.items.clone())
+            .map(|entity| tuff_item::item::snapshot_slots(&entity.items))
             .unwrap_or_default();
         reply.internal(RegionInternal::HalfOpened {
             place,
@@ -654,7 +666,11 @@ impl RegionActor {
             self.add_viewer(pos, player.clone());
         }
         let entity = self.block_entity(pos).expect("ensured above");
-        let near = (pos, entity.items.clone(), entity.custom_name.clone());
+        let near = (
+            pos,
+            tuff_item::item::snapshot_slots(&entity.items),
+            entity.custom_name.clone(),
+        );
         let far = (half.pos, half.contents, half.custom_name);
         let ordered = if state.r#type() == Some(ChestType::Left) {
             [far, near]
@@ -669,7 +685,7 @@ impl RegionActor {
             .iter()
             .map(|(pos, items, _)| (*pos, items.len()))
             .collect();
-        let contents: Vec<Option<ItemStack>> = ordered
+        let contents: Vec<Option<ItemSnapshot>> = ordered
             .into_iter()
             .flat_map(|(_, items, _)| items)
             .collect();
@@ -740,14 +756,16 @@ impl RegionActor {
             }
             None => loot.container_loot(&table, slots, &mut self.rng),
         };
+        if let Some(items) = &items {
+            self.explore_loot(super::exploring::ExploreTarget::Block(pos), pos, items);
+        }
         let Some(entity) = self.block_entity_mut(pos) else {
             return;
         };
         entity.extra.remove(block_entity::raw::LOOT_TABLE);
         entity.extra.remove(block_entity::raw::LOOT_TABLE_SEED);
         if let Some(items) = items {
-            entity.items = items.clone();
-            self.explore_loot(super::exploring::ExploreTarget::Block(pos), pos, &items);
+            entity.items = items;
         }
         player.send(PlayerEvent::Advancement(Box::new(
             AdvancementEvent::GeneratedLoot(table),
@@ -998,17 +1016,25 @@ impl RegionActor {
 
     /// Tells everyone viewing the container at `pos` about its changed
     /// slots, forgetting viewers who have left.
-    pub(super) fn broadcast_slots(
-        &mut self,
-        pos: BlockPos,
-        slots: Vec<(usize, Option<ItemStack>)>,
-    ) {
-        if slots.is_empty() {
+    pub(super) fn broadcast_slots(&mut self, pos: BlockPos, changed: &[usize]) {
+        if changed.is_empty() || !self.menus.viewers.contains_key(&pos) {
             return;
         }
-        let mut slots = slots;
+        let Some(items) = self.block_entity(pos).map(|entity| &entity.items) else {
+            return;
+        };
+        let mut slots: Vec<(usize, Option<ItemSnapshot>)> = changed
+            .iter()
+            .filter_map(|&slot| Some((slot, items.get(slot)?.as_ref().map(ItemSnapshot::of))))
+            .collect();
         if let Some(preview) = self.crafter_preview(pos) {
-            slots.push((crate::world::menu::crafter::PREVIEW, preview));
+            slots.push((
+                crate::world::menu::crafter::PREVIEW,
+                preview.as_ref().map(ItemSnapshot::of),
+            ));
+            if let Some(preview) = preview {
+                preview.burn(tuff_item::item::BurnReason::Template);
+            }
         }
         let Some(viewers) = self.menus.viewers.get_mut(&pos) else {
             return;
@@ -1058,26 +1084,35 @@ impl RegionActor {
         pos: BlockPos,
         slot: usize,
         stack: Option<ItemStack>,
-    ) {
-        let recipes = self.shared.recipes();
+    ) -> Option<ItemStack> {
         let Some(entity) = self.block_entity(pos) else {
-            return;
+            return stack;
         };
         let kind = entity.kind;
         let same = match (&entity.items[slot], &stack) {
             (Some(old), Some(new)) => old.stacks_with(new),
             _ => false,
         };
-        self.write_container_slot(pos, slot, stack);
-        if kind.is_furnace()
-            && slot == furnace::INPUT
-            && !same
-            && let Some(entity) = self.block_entity_mut(pos)
+        let displaced = self
+            .write_container_slot(pos, slot, stack)
+            .unwrap_or_else(|stack| stack);
+        if kind.is_furnace() && slot == furnace::INPUT && !same {
+            self.furnace_input_changed(pos);
+        }
+        displaced
+    }
+
+    /// Restarts the furnace at `pos` after a new kind of input arrived.
+    pub(super) fn furnace_input_changed(&mut self, pos: BlockPos) {
+        let recipes = self.shared.recipes();
+        if let Some(entity) = self.block_entity_mut(pos)
+            && let Some(kind) = Some(entity.kind).filter(|kind| kind.is_furnace())
         {
-            let items = entity.items.clone();
+            let items = std::mem::take(&mut entity.items);
             let furnace = entity.furnace_mut().expect("a furnace");
             recipes.furnace_input_changed(kind, &items, furnace);
             let data = furnace.data();
+            entity.items = items;
             self.broadcast_data(
                 pos,
                 vec![
@@ -1116,220 +1151,6 @@ impl RegionActor {
         awarded
     }
 
-    pub(super) fn container_transaction(
-        &mut self,
-        player: PlayerHandle,
-        window_id: i32,
-        changes: Vec<ContainerChange>,
-        took_result: bool,
-    ) {
-        let valid = self.transaction_valid(player.id, &changes);
-        if !valid {
-            let contents = self.contents_of(&changes);
-            player.send(PlayerEvent::Transaction {
-                window_id,
-                accepted: false,
-                contents,
-            });
-            return;
-        }
-        player.send(PlayerEvent::Transaction {
-            window_id,
-            accepted: true,
-            contents: Vec::new(),
-        });
-        let positions = self.apply_container_changes(changes);
-        if !took_result {
-            return;
-        }
-        for pos in positions {
-            let Some(used) = self
-                .block_entity_mut(pos)
-                .and_then(|entity| entity.furnace_mut())
-                .map(|furnace| std::mem::take(&mut furnace.recipes_used))
-            else {
-                continue;
-            };
-            let at = self
-                .ents
-                .presence
-                .get(&player.id)
-                .map_or_else(|| pos.center(), |p| p.position);
-            let awarded = self.pop_furnace_experience(&used, at);
-            if !awarded.is_empty() {
-                player.send(PlayerEvent::RecipesAwarded(awarded));
-            }
-        }
-    }
-
-    /// Whether `player` views every container `changes` touch, none of them
-    /// is locked, every slot holds what the change expects, and nothing
-    /// goes into a disabled crafter slot.
-    fn transaction_valid(&self, player: PlayerId, changes: &[ContainerChange]) -> bool {
-        changes.iter().all(|change| {
-            !self.menus.container_locks.contains_key(&change.pos)
-                && !(change.new.is_some() && self.crafter_slot_disabled(change.pos, change.slot))
-                && self
-                    .menus
-                    .viewers
-                    .get(&change.pos)
-                    .is_some_and(|viewers| viewers.iter().any(|v| v.id == player))
-                && self
-                    .block_entity(change.pos)
-                    .and_then(|entity| entity.items.get(change.slot))
-                    .is_some_and(|current| *current == change.expected)
-        })
-    }
-
-    fn crafter_slot_disabled(&self, pos: BlockPos, slot: usize) -> bool {
-        self.block_entity(pos)
-            .and_then(|entity| entity.crafter())
-            .is_some_and(|crafter| slot < 16 && crafter.disabled & (1 << slot) != 0)
-    }
-
-    /// The current contents of every container `changes` touch.
-    fn contents_of(&self, changes: &[ContainerChange]) -> Vec<(BlockPos, Vec<Option<ItemStack>>)> {
-        let mut positions: Vec<BlockPos> = changes.iter().map(|c| c.pos).collect();
-        positions.sort_by_key(|p| (p.x, p.y, p.z));
-        positions.dedup();
-        positions
-            .into_iter()
-            .filter_map(|pos| Some((pos, self.block_entity(pos)?.items.clone())))
-            .collect()
-    }
-
-    /// Applies `changes` and tells the viewers, returning the positions
-    /// touched in order. A change to a container that is gone drops what
-    /// it would have added.
-    fn apply_container_changes(&mut self, changes: Vec<ContainerChange>) -> Vec<BlockPos> {
-        let mut by_pos: HashMap<BlockPos, Vec<(usize, Option<ItemStack>)>> = HashMap::new();
-        let mut positions = Vec::new();
-        for change in changes {
-            if self.block_entity(change.pos).is_none() {
-                let gained = match (&change.expected, &change.new) {
-                    (Some(old), Some(new)) if old.stacks_with(new) => {
-                        (new.count > old.count).then(|| {
-                            let mut extra = new.clone();
-                            extra.count = new.count - old.count;
-                            extra
-                        })
-                    }
-                    (_, new) => new.clone(),
-                };
-                if let Some(stack) = gained {
-                    self.spawn_item_at(
-                        stack,
-                        change.pos.center(),
-                        [0.0; 3],
-                        items::BLOCK_DROP_PICKUP_DELAY,
-                    );
-                }
-                continue;
-            }
-            self.set_container_slot(change.pos, change.slot, change.new.clone());
-            if !positions.contains(&change.pos) {
-                positions.push(change.pos);
-            }
-            by_pos
-                .entry(change.pos)
-                .or_default()
-                .push((change.slot, change.new));
-        }
-        for (pos, slots) in by_pos {
-            self.broadcast_slots(pos, slots);
-        }
-        positions
-    }
-
-    /// The first phase of a transaction over both halves of a double chest
-    /// split between regions: validate this region's share and lock it.
-    pub(super) fn prepare_transaction(
-        &mut self,
-        player: PlayerHandle,
-        window_id: i32,
-        txn: u64,
-        changes: Vec<ContainerChange>,
-    ) {
-        let prepared = self.transaction_valid(player.id, &changes);
-        let contents = self.contents_of(&changes);
-        if prepared {
-            for change in &changes {
-                self.menus
-                    .container_locks
-                    .insert(change.pos, (player.id, txn));
-            }
-            self.menus.prepared.insert((player.id, txn), changes);
-        }
-        player.send(PlayerEvent::TransactionPrepared {
-            window_id,
-            txn,
-            prepared,
-            contents,
-        });
-    }
-
-    fn spill_orphans(&mut self, orphans: Vec<(BlockPos, Vec<Option<ItemStack>>)>) {
-        for (pos, items) in orphans {
-            let drops = block_entity::scatter(pos, items.into_iter().flatten(), &mut self.rng);
-            for (stack, position, velocity) in drops {
-                self.spawn_item_at(stack, position, velocity, items::BLOCK_DROP_PICKUP_DELAY);
-            }
-        }
-    }
-
-    /// The second phase: applies or drops a prepared share and unlocks it.
-    /// Containers broken in between spill their contents with the share
-    /// applied (or not), so a commit neither duplicates nor loses items.
-    pub(super) fn resolve_transaction(&mut self, player: PlayerId, txn: u64, commit: bool) {
-        let Some(changes) = self.menus.prepared.remove(&(player, txn)) else {
-            return;
-        };
-        self.menus
-            .container_locks
-            .retain(|_, lock| *lock != (player, txn));
-        let mut orphans = self
-            .menus
-            .orphans
-            .remove(&(player, txn))
-            .unwrap_or_default();
-        let mut live = Vec::new();
-        for change in changes {
-            match orphans.iter_mut().find(|(pos, _)| *pos == change.pos) {
-                Some((_, items)) if commit => {
-                    if let Some(slot) = items.get_mut(change.slot) {
-                        *slot = change.new;
-                    }
-                }
-                Some(_) => {}
-                None => live.push(change),
-            }
-        }
-        if commit {
-            self.apply_container_changes(live);
-        }
-        self.spill_orphans(orphans);
-    }
-
-    /// Drops every prepared share of `player` (its menu closed).
-    pub(super) fn drop_prepared(&mut self, player: PlayerId) {
-        self.menus.prepared.retain(|(owner, _), _| *owner != player);
-        let keys: Vec<_> = self
-            .menus
-            .orphans
-            .keys()
-            .filter(|(owner, _)| *owner == player)
-            .copied()
-            .collect();
-        for key in keys {
-            if let Some(orphans) = self.menus.orphans.remove(&key) {
-                self.spill_orphans(orphans);
-            }
-        }
-        self.menus
-            .container_locks
-            .retain(|_, (owner, _)| *owner != player);
-    }
-
     /// Sends a viewer every slot of the container at `pos`.
     pub(super) fn refresh_container(&self, player: &PlayerHandle, pos: BlockPos) {
         let viewing = self
@@ -1343,7 +1164,12 @@ impl RegionActor {
         player.send(PlayerEvent::ContainerSlots {
             dimension: self.dimension,
             pos,
-            slots: entity.items.iter().cloned().enumerate().collect(),
+            slots: entity
+                .items
+                .iter()
+                .map(|stack| stack.as_ref().map(ItemSnapshot::of))
+                .enumerate()
+                .collect(),
         });
     }
 }
@@ -1390,6 +1216,7 @@ pub(super) fn spectator_cant_open(player: &PlayerHandle) {
     )])));
 }
 mod hoppers;
+mod transactions;
 
 /// A sound's variation seed from where and when it plays, so a replayed
 /// tick sends the same packets.

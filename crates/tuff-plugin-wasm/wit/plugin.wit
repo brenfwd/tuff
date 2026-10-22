@@ -1496,7 +1496,7 @@ interface host {
     use types.{attack-filter, damage-filter, title-spec, team-spec, rich-span};
     use types.{
         log-level, uuid, player, location, block-pos, vec3, command-tree, event-kinds,
-        register-error, click-filter, menu-item, menu-error, entity-filter, command-filter, chat-filter, item-filter, inventory-filter, state-filter, inventory, world-error, host-error, block-box, set-flags, property,
+        register-error, click-filter, menu-item, menu-error, entity-filter, command-filter, chat-filter, item-filter, inventory-filter, state-filter, inventory, item-stack, world-error, host-error, block-box, set-flags, property,
         traits, transform, entity, rotation, config-decl, config-value, resource-pack, item-details,
         panel-page, panel-api, panel-card, snbt-slot, game-mode, player-state,
         fake-spec, fake-input, fake-action, fake-state, break-tool, fake-error,
@@ -1770,6 +1770,37 @@ interface host {
     /// failed all-or-nothing take skips that player's later edits from
     /// the same call, so take-items then give-item is a safe exchange.
     take-items: func(player: uuid, item: string, count: u32, all-or-nothing: bool) -> result<_, world-error>;
+    /// A handle to items the plugin holds. The host keeps the stacks; the
+    /// plugin moves them only through the `stash-*`, `give-stash` and
+    /// `take-into-stash` calls, so it can make, move and use up items but
+    /// never copy one. Handles count from 1 and are never reused. A stash
+    /// still holding items when the plugin unloads or faults is used up.
+    type stash = u64;
+
+    /// A new, empty stash (at most 1024 at once).
+    stash-new: func() -> result<stash, world-error>;
+    /// Makes `count` (1 to 2304) new items into `stash`, as `give-item`
+    /// makes them. An unknown stash is invalid-state.
+    stash-mint: func(stash: stash, item: string, count: u32, custom-data: option<string>, custom-name: option<string>) -> result<_, world-error>;
+    /// Pictures of the stacks `stash` holds; none for an unknown stash.
+    stash-contents: func(stash: stash) -> option<list<item-stack>>;
+    /// Moves up to `count` of an item (of anything with none) out of
+    /// `stash` into a new stash.
+    stash-split: func(stash: stash, item: option<string>, count: u32) -> result<stash, world-error>;
+    /// Moves everything in `source` into `target`; `source` is gone after.
+    stash-merge: func(target: stash, source: stash) -> result<_, world-error>;
+    /// Uses up everything `stash` holds; it is gone after.
+    stash-burn: func(stash: stash) -> result<_, world-error>;
+    /// Queues moving everything in `stash` into an online player's
+    /// inventory, dropping what does not fit; the stash is gone after.
+    /// Ordered with the call's other inventory edits for that player. A
+    /// player who is offline when it runs is skipped and the items are
+    /// used up.
+    give-stash: func(player: uuid, stash: stash) -> result<_, world-error>;
+    /// `take-items`, but what is taken moves into `stash` instead of being
+    /// used up. The items arrive once the queued edits apply, after the
+    /// call; `stash-contents` shows them from the next call on.
+    take-into-stash: func(player: uuid, item: string, count: u32, all-or-nothing: bool, stash: stash) -> result<_, world-error>;
     /// Queues emptying an online player's inventory, armor, off hand and
     /// cursor included.
     clear-inventory: func(player: uuid) -> result<_, world-error>;

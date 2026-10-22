@@ -18,7 +18,7 @@ use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::{DispenseOutcome, SlotEdit};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -83,7 +83,7 @@ fn usable(slot: EquipmentSlot) -> bool {
 
 fn slot_for(stack: &ItemStack) -> EquipmentSlot {
     stack
-        .item
+        .item()
         .equippable()
         .map(|e| e.slot)
         .filter(|slot| usable(*slot))
@@ -181,16 +181,21 @@ impl ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let old = core.equipment.get(slot).cloned();
+        let old = core.equipment.get(slot).map(ItemSnapshot::of);
         let outcome = self.swap_slot(core, slot, interaction, cx);
-        let new = core.equipment.get(slot).cloned();
-        if old != new {
+        let new = core.equipment.get(slot);
+        let same = match (&old, new) {
+            (None, None) => true,
+            (Some(old), Some(new)) => old == new,
+            _ => false,
+        };
+        if !same {
             cx.effects.push(Effect::HeldItems {
                 player: Some(interaction.player),
                 slots: vec![SlotEdit {
                     slot: slot as usize,
                     old,
-                    new,
+                    new: new.map(ItemSnapshot::of),
                 }],
             });
         }
@@ -204,44 +209,54 @@ impl ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let current = core.equipment.get(slot).cloned();
-        if current.is_some() && self.bit(slot, REMOVE_ITEM_BIT) {
+        let current = core.equipment.get(slot).is_some();
+        if current && self.bit(slot, REMOVE_ITEM_BIT) {
             return None;
         }
-        if current.is_none() && self.bit(slot, PUT_ITEM_BIT) {
+        if !current && self.bit(slot, PUT_ITEM_BIT) {
             return None;
         }
-        let held = interaction.stack.as_ref();
+        let held = interaction.stack.as_deref();
         if interaction.creative
-            && current.is_none()
+            && !current
             && let Some(held) = held
         {
-            let one = held.clone().with_count(1);
+            let _ = held;
+            let one = interaction.hand.take(1)?;
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
             return Some(HandEffect::None);
         }
         if let Some(held) = held
-            && held.count > 1
+            && held.count() > 1
         {
-            if current.is_some() {
+            if current {
                 return None;
             }
-            let one = held.clone().with_count(1);
+            let one = interaction.hand.take(1)?;
             self.equip_sound(core, &one, cx);
             core.equipment.set(slot, Some(one));
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
-        if let Some(held) = held {
-            self.equip_sound(core, held, cx);
+        let given = match held {
+            Some(_) => Some(interaction.hand.take_all()?),
+            None => None,
+        };
+        if let Some(given) = &given {
+            self.equip_sound(core, given, cx);
         }
-        core.equipment.set(slot, held.cloned());
-        Some(HandEffect::Replace(current.map(Box::new)))
+        if let Some(current) = core.equipment.replace(slot, given)
+            && let Some(left) = interaction.hand.give_back(current)
+        {
+            core.drop_item(left, 0.0, cx);
+        }
+        Some(HandEffect::None)
     }
 
     fn pop(&self, core: &MobCore, at: BlockPos, stack: ItemStack, cx: &mut TickContext) {
         let _ = core;
         if !cx.shared.rule_bool("block_drops") {
+            stack.burn(BurnReason::Destroyed);
             return;
         }
         let spread = |rng: &mut StdRng| rng.gen_range(-0.25..0.25);
@@ -284,9 +299,10 @@ impl ArmorStand {
             EquipmentSlot::Chest,
             EquipmentSlot::Head,
         ] {
-            if let Some(stack) = core.equipment.get(slot).cloned() {
-                core.equipment.set(slot, None);
-                if !prevents_drop(&stack) {
+            if let Some(stack) = core.equipment.take(slot) {
+                if prevents_drop(&stack) {
+                    stack.burn(BurnReason::Destroyed);
+                } else {
                     self.pop(core, above, stack, cx);
                 }
             }
@@ -294,7 +310,7 @@ impl ArmorStand {
     }
 
     fn broken_by_player(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        let mut item = ItemStack::new(Item::ArmorStand, 1);
+        let mut item = ItemStack::mint(Item::ArmorStand, 1, MintReason::Spawn);
         if let Some(name) = core
             .base
             .custom_name
@@ -448,8 +464,8 @@ impl Species for ArmorStand {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let held = interaction.stack.as_ref();
-        if self.marker || held.is_some_and(|s| s.item == Item::NameTag) {
+        let held = interaction.stack.as_deref();
+        if self.marker || held.is_some_and(|s| s.item() == Item::NameTag) {
             return None;
         }
         let for_item = held.map_or(EquipmentSlot::Mainhand, slot_for);
@@ -479,7 +495,7 @@ impl Species for ArmorStand {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
         let equippable = stack.equippable()?;
@@ -492,8 +508,7 @@ impl Species for ArmorStand {
         {
             return None;
         }
-        core.equipment
-            .set(equippable.slot, Some(stack.clone().with_count(1)));
+        core.equipment.set(equippable.slot, Some(stack.take()?));
         core.sound(equippable.equip_sound, 1.0, 1.0, cx);
         Some(DispenseOutcome::Dispensed)
     }
@@ -625,7 +640,9 @@ mod tests {
             (EquipmentSlot::Legs, Item::IronLeggings),
             (EquipmentSlot::Feet, Item::IronBoots),
         ] {
-            mob.core.equipment.set(slot, Some(ItemStack::new(item, 1)));
+            mob.core
+                .equipment
+                .set(slot, Some(ItemStack::mint(item, 1, MintReason::Test)));
         }
         let at = |y| mob.species.clicked_slot(y, &mob.core);
         assert_eq!(at(1.8), EquipmentSlot::Head);

@@ -147,7 +147,20 @@ fn interaction(item: Item) -> EntityInteraction {
         player_uuid: 9,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: Some(ItemStack::new(item, 5)),
+        stack: Some(tuff_item::item::ItemSnapshot::describe(
+            item,
+            5,
+            Default::default(),
+        )),
+        hand: tuff_core::world::entity::HandOffer::new(
+            (Some(tuff_item::item::ItemSnapshot::describe(
+                item,
+                5,
+                Default::default(),
+            )))
+            .as_deref()
+            .map(tuff_item::item::ItemStack::test_copy),
+        ),
         off_hand: false,
         creative: false,
         sneaking: false,
@@ -174,7 +187,7 @@ fn a_brown_mooshroom_eats_a_flower_and_gives_suspicious_stew() {
         let Some(HandEffect::ExchangeStack(stew)) = stew else {
             panic!("a suspicious stew");
         };
-        assert_eq!(stew.item, Item::SuspiciousStew);
+        assert_eq!(stew.item(), Item::SuspiciousStew);
         assert_eq!(
             stew.components.suspicious_stew_effects,
             Some(vec![SuspiciousEffect {

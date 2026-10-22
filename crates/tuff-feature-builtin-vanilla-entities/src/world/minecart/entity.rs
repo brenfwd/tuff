@@ -50,12 +50,17 @@ impl RegionEntity for Minecart {
         }
     }
 
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
-        self.has_container().then_some(self.items.as_slice())
+    fn container(&self) -> Option<tuff_core::world::entity_slots::ContainerSlots<'_>> {
+        self.has_container().then(|| self.items.as_slice().into())
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        self.has_container().then_some(self.items.as_mut_slice())
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.items.iter_mut().filter_map(Option::take).collect()
+    }
+
+    fn container_mut(&mut self) -> Option<tuff_core::world::entity_slots::ContainerSlotsMut<'_>> {
+        self.has_container()
+            .then(|| self.items.as_mut_slice().into())
     }
 
     fn container_menu(&self) -> MenuKind {
@@ -293,10 +298,10 @@ impl RegionEntity for Minecart {
         if !self.is_furnace() {
             return None;
         }
-        let fuel = interaction.stack.as_ref().is_some_and(|stack| {
+        let fuel = interaction.stack.as_deref().is_some_and(|stack| {
             tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::FURNACE_MINECART_FUEL,
-                stack.item,
+                stack.item(),
             )
         });
         if !fuel || self.fuel + FUEL_TICKS_PER_ITEM > MAX_FUEL_TICKS {

@@ -10,7 +10,7 @@ pub use crate::world::block_entity::{BREW_TIME, BrewTick, Brewing, DEFAULT_FUEL_
 
 /// Whether `stack` is the item, and potion if any, `ingredient` asks for.
 pub fn accepts(ingredient: &PotionIngredient, stack: &ItemStack) -> bool {
-    if !ingredient.ingredient.matches(stack.item) {
+    if !ingredient.ingredient.matches(stack.item()) {
         return false;
     }
     let Some(potions) = &ingredient.potions else {

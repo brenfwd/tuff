@@ -168,6 +168,7 @@ enum JobResult {
         blocks: Option<Blob>,
         entities: EntityWrite,
         pois: EntityWrite,
+        ticket: Option<tuff_storage::journal::EpochTicket>,
     },
 }
 
@@ -327,6 +328,7 @@ mod beacon;
 mod blocks;
 mod boss_bar;
 mod command_block;
+mod conservation;
 mod container_edits;
 mod containers;
 mod crafter;
@@ -394,16 +396,18 @@ impl RegionActor {
         let tags = actor.current_tags();
         let enchantments = actor.current_enchantments();
         let registries = actor.shared.datapacks.contents().registries.clone();
-        tokio::spawn(tuff_datapack::tags::scope(
-            tags,
-            tuff_item::registries::scope(
-                registries,
-                tuff_item::enchantment::scope(enchantments, async move {
-                    if let Some(mut previous) = previous {
-                        let _ = previous.wait_for(|done| *done).await;
-                    }
-                    actor.supervise().await;
-                }),
+        tokio::spawn(tuff_item::item::conservation::actor(
+            tuff_datapack::tags::scope(
+                tags,
+                tuff_item::registries::scope(
+                    registries,
+                    tuff_item::enchantment::scope(enchantments, async move {
+                        if let Some(mut previous) = previous {
+                            let _ = previous.wait_for(|done| *done).await;
+                        }
+                        actor.supervise().await;
+                    }),
+                ),
             ),
         ));
         handle
@@ -552,6 +556,12 @@ impl RegionActor {
             };
             self.on_internal(message);
         }
+        self.drain_requests();
+    }
+
+    /// Applies the requests already queued, so a save snapshot taken next
+    /// includes what a session sent before its own barrier snapshot.
+    fn drain_requests(&mut self) {
         for _ in 0..self.requests.len() {
             let Ok(request) = self.requests.try_recv() else {
                 break;
@@ -801,7 +811,11 @@ impl RegionActor {
                 let mut item = crate::world::items::ItemEntity::new(
                     id,
                     uuid,
-                    stack,
+                    tuff_item::item::ItemStack::mint_like(
+                        &stack,
+                        stack.count(),
+                        tuff_item::item::MintReason::Template,
+                    ),
                     position,
                     [0.0; 3],
                     crate::world::items::NEVER_PICKUP,
@@ -836,8 +850,9 @@ impl RegionActor {
                 player,
                 window_id,
                 changes,
+                pool,
                 took_result,
-            } => self.container_transaction(player, window_id, changes, took_result),
+            } => self.container_transaction(player, window_id, changes, pool, took_result),
             RegionRequest::Blocks { op, reply } => {
                 let positions: Vec<BlockPos> = match &op {
                     BlockOp::Get { positions, .. } | BlockOp::Biomes { positions, .. } => {
@@ -1061,7 +1076,8 @@ impl RegionActor {
                 player,
                 txn,
                 commit,
-            } => self.resolve_transaction(player, txn, commit),
+                items,
+            } => self.resolve_transaction(player, txn, commit, items),
             RegionRequest::CommandBlockDone {
                 pos,
                 success,
@@ -1090,7 +1106,6 @@ impl RegionActor {
             } => self.set_beacon_effects(pos, primary, secondary),
             RegionRequest::RefreshContainer { player, pos } => self.refresh_container(&player, pos),
             RegionRequest::CloseContainer { player, positions } => {
-                self.drop_prepared(player);
                 for pos in positions {
                     self.remove_viewer(pos, player);
                 }
@@ -1100,7 +1115,8 @@ impl RegionActor {
                 window_id,
                 entity,
                 changes,
-            } => self.entity_transaction(player, window_id, entity, changes),
+                pool,
+            } => self.entity_transaction(player, window_id, entity, changes, pool),
             RegionRequest::CloseEntityContainer { player, entity } => {
                 let viewing = self
                     .menus

@@ -13,7 +13,7 @@ use tuff_core::world::entity::{
 use tuff_core::world::projectile::{
     Owner, block_hit, hit_source, lerp_rotation, margin, rotation_of, targets_along,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_world_model::BlockPos;
 
@@ -180,7 +180,11 @@ impl RegionEntity for SmallFireball {
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
         vec![(
             DATA_ITEM,
-            MetadataValue::Slot(Some(ItemStack::new(Item::FireCharge, 1))),
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&ItemStack::mint(
+                Item::FireCharge,
+                1,
+                MintReason::Template,
+            )))),
         )]
     }
 
@@ -397,7 +401,11 @@ impl RegionEntity for LargeFireball {
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
         vec![(
             DATA_ITEM,
-            MetadataValue::Slot(Some(ItemStack::new(Item::FireCharge, 1))),
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&ItemStack::mint(
+                Item::FireCharge,
+                1,
+                MintReason::Template,
+            )))),
         )]
     }
 

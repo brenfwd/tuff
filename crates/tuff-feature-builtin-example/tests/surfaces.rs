@@ -8,7 +8,7 @@ use tuff_core::world::crafting::RecipeSet;
 use tuff_feature_builtin_example::{
     DIAMOND_FROM_DIRT, DIAMOND_REPAIR, ExampleFeature, GOLD_DIGGER, greetings,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_storage::admin::PermissionLevel;
 use tuff_vanilla_data::Item;
 
@@ -100,13 +100,16 @@ fn commands_name_the_feature_entity_type_and_advancement() {
 }
 
 fn one_cell(item: Item) -> Vec<Option<ItemStack>> {
-    vec![Some(ItemStack::new(item, 1))]
+    vec![Some(ItemStack::mint(item, 1, MintReason::Test))]
 }
 
 fn damaged_pickaxe_and_diamond() -> Vec<Option<ItemStack>> {
-    let mut pickaxe = ItemStack::new(Item::IronPickaxe, 1);
+    let mut pickaxe = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     pickaxe.set_damage(100);
-    vec![Some(pickaxe), Some(ItemStack::new(Item::Diamond, 1))]
+    vec![
+        Some(pickaxe),
+        Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test)),
+    ]
 }
 
 #[tuff_core::watchdog]
@@ -116,11 +119,11 @@ fn recipes_are_added_beside_vanilla() {
     let recipes = RecipeSet::from_registry(&registries.recipe_entries);
     assert_eq!(
         recipes.grid_result(&one_cell(Item::Dirt), 1, 1),
-        Some(ItemStack::new(Item::Diamond, 1))
+        Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test))
     );
     assert_eq!(
         recipes.grid_result(&one_cell(Item::OakLog), 1, 1),
-        Some(ItemStack::new(Item::OakPlanks, 4)),
+        Some(ItemStack::mint(Item::OakPlanks, 4, MintReason::Test)),
         "vanilla recipes still craft"
     );
     let entry = &recipes.displays_for(DIAMOND_FROM_DIRT)[0];
@@ -132,7 +135,7 @@ fn recipes_are_added_beside_vanilla() {
     let grid = damaged_pickaxe_and_diamond();
     assert_eq!(recipes.grid_recipe(&grid, 2, 1), Some(DIAMOND_REPAIR));
     let repaired = recipes.grid_result(&grid, 2, 1).unwrap();
-    assert_eq!((repaired.item, repaired.damage()), (Item::IronPickaxe, 0));
+    assert_eq!((repaired.item(), repaired.damage()), (Item::IronPickaxe, 0));
     assert!(
         recipes.displays_for(DIAMOND_REPAIR).is_empty(),
         "code recipes stay out of the book"
@@ -143,9 +146,12 @@ fn recipes_are_added_beside_vanilla() {
 #[test]
 fn crafting_uses_up_the_ingredients() {
     let recipes = RecipeSet::from_registry(&with_vanilla().recipe_entries);
-    let mut grid = vec![Some(ItemStack::new(Item::Dirt, 2))];
+    let mut grid = vec![Some(ItemStack::mint(Item::Dirt, 2, MintReason::Test))];
     recipes.take_result(&mut grid, 1, 1);
-    assert_eq!(grid, vec![Some(ItemStack::new(Item::Dirt, 1))]);
+    assert_eq!(
+        grid,
+        vec![Some(ItemStack::mint(Item::Dirt, 1, MintReason::Test))]
+    );
     recipes.take_result(&mut grid, 1, 1);
     assert_eq!(grid, vec![None]);
     assert_eq!(recipes.grid_result(&grid, 1, 1), None);
@@ -179,7 +185,7 @@ fn custom_item_resolves_beside_vanilla() {
         .item(tuff_feature_builtin_example::GOLD_NUGGET_ITEM)
         .unwrap();
     let stack = charm.stack(1);
-    assert_eq!(stack.item, Item::GoldNugget);
+    assert_eq!(stack.item(), Item::GoldNugget);
     assert_eq!(
         content.item_of(&stack).map(|d| d.id.as_str()),
         Some(tuff_feature_builtin_example::GOLD_NUGGET_ITEM)

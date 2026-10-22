@@ -211,6 +211,90 @@ impl Db {
     }
 }
 
+/// The save journal of a server file, kept in two tables of its own so
+/// the server stays one file (see [`crate::journal`]).
+struct SqliteJournal {
+    db: Db,
+}
+
+const JOURNAL_TABLES: &str = "CREATE TABLE IF NOT EXISTS tuff_save_journal(\
+     seq INTEGER PRIMARY KEY, epoch INTEGER NOT NULL, record BLOB NOT NULL); \
+     CREATE TABLE IF NOT EXISTS tuff_save_committed(\
+     id INTEGER PRIMARY KEY CHECK (id = 0), epoch INTEGER NOT NULL);";
+
+impl SqliteJournal {
+    fn open(db: Db) -> io::Result<Self> {
+        db.run(|conn| conn.execute_batch(JOURNAL_TABLES))?;
+        Ok(Self { db })
+    }
+}
+
+impl crate::journal::JournalStore for SqliteJournal {
+    fn committed(&self) -> io::Result<u64> {
+        self.db.run(|conn| {
+            conn.prepare_cached("SELECT epoch FROM tuff_save_committed WHERE id = 0")?
+                .query_row([], |row| row.get::<_, i64>(0))
+                .optional()
+                .map(|epoch| epoch.unwrap_or(0) as u64)
+        })
+    }
+
+    fn set_committed(&self, epoch: u64) -> io::Result<()> {
+        self.db.run(move |conn| {
+            conn.prepare_cached(
+                "INSERT INTO tuff_save_committed(id, epoch) VALUES (0, ?1) \
+                 ON CONFLICT(id) DO UPDATE SET epoch = excluded.epoch",
+            )?
+            .execute(params![epoch as i64])
+            .map(drop)
+        })
+    }
+
+    fn epochs(&self) -> io::Result<Vec<u64>> {
+        self.db.run(|conn| {
+            let mut statement =
+                conn.prepare_cached("SELECT DISTINCT epoch FROM tuff_save_journal ORDER BY epoch")?;
+            let mut epochs = Vec::new();
+            for epoch in statement.query_map([], |row| row.get::<_, i64>(0))? {
+                epochs.push(epoch? as u64);
+            }
+            Ok(epochs)
+        })
+    }
+
+    fn append(&self, epoch: u64, record: &[u8]) -> io::Result<()> {
+        let record = record.to_vec();
+        self.db.run(move |conn| {
+            conn.prepare_cached("INSERT INTO tuff_save_journal(epoch, record) VALUES (?1, ?2)")?
+                .execute(params![epoch as i64, record])
+                .map(drop)
+        })
+    }
+
+    fn records(&self, epoch: u64) -> io::Result<Vec<u8>> {
+        self.db.run(move |conn| {
+            let mut statement = conn.prepare_cached(
+                "SELECT record FROM tuff_save_journal WHERE epoch = ?1 ORDER BY seq",
+            )?;
+            let mut bytes = Vec::new();
+            for record in
+                statement.query_map(params![epoch as i64], |row| row.get::<_, Vec<u8>>(0))?
+            {
+                bytes.extend_from_slice(&record?);
+            }
+            Ok(bytes)
+        })
+    }
+
+    fn remove(&self, epoch: u64) -> io::Result<()> {
+        self.db.run(move |conn| {
+            conn.prepare_cached("DELETE FROM tuff_save_journal WHERE epoch = ?1")?
+                .execute(params![epoch as i64])
+                .map(drop)
+        })
+    }
+}
+
 static IDLE_HOOK: std::sync::OnceLock<(std::time::Duration, fn())> = std::sync::OnceLock::new();
 
 /// Installs a function the database thread runs whenever it wakes, and
@@ -469,6 +553,15 @@ impl Documents for SqliteBackend {
         })
     }
 
+    fn remove(&self, document: Document<'_>) -> io::Result<()> {
+        let (kind, key) = document_key(document);
+        self.db.run(move |conn| {
+            conn.prepare_cached("DELETE FROM documents WHERE kind = ?1 AND key = ?2")?
+                .execute(params![kind, key])
+                .map(drop)
+        })
+    }
+
     fn exists(&self, document: Document<'_>) -> bool {
         let (kind, key) = document_key(document);
         self.db
@@ -516,6 +609,19 @@ impl WorldBackend for SqliteBackend {
             db: self.db.clone(),
             locked: self.locked.clone(),
         }))
+    }
+
+    fn journal_store(&self) -> Option<Box<dyn crate::journal::JournalStore>> {
+        if self.read_only {
+            return None;
+        }
+        match SqliteJournal::open(self.db.clone()) {
+            Ok(journal) => Some(Box::new(journal)),
+            Err(err) => {
+                log::error!("cannot open the save journal of the server file: {err}");
+                None
+            }
+        }
     }
 
     fn sql_console(&self) -> Option<console::SqlConsole> {

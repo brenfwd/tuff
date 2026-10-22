@@ -289,7 +289,7 @@ async fn frozen_entities_hold_still_while_players_see_each_other_move() {
     let start = [8.5, 150.0, 8.5];
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Dirt, 1),
+            stack: ItemStack::mint(Item::Dirt, 1, MintReason::Test),
             position: start,
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -487,7 +487,7 @@ async fn a_player_standing_on_a_plate_presses_it_while_frozen() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_map_in_hand_updates_while_frozen() {
     use tuff_core::world::inventory::Inventory;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
@@ -507,7 +507,7 @@ async fn a_map_in_hand_updates_while_frozen() {
     session.stand_at([8.5, 120.0, 8.5], false);
     session.update_view().await;
     let slot = Inventory::hotbar_slot(session.inventory().selected());
-    let mut stack = ItemStack::new(Item::FilledMap, 1);
+    let mut stack = ItemStack::mint(Item::FilledMap, 1, MintReason::Test);
     stack.components.map_id = Some(id);
     session.inventory_mut().set_slot(slot, Some(stack));
     let task = tokio::spawn(async move {

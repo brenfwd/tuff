@@ -6,7 +6,7 @@ use tuff_core::world::beacon;
 use tuff_core::world::menu::MenuKind;
 use tuff_core::world::messages::{MenuOpen, MenuSource};
 use tuff_core::world::session::PlayerSession;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::registry::MobEffect;
 
 async fn open_beacon(world: &TestWorld, session: &mut PlayerSession, levels: i32) {
@@ -29,7 +29,8 @@ async fn open_beacon(world: &TestWorld, session: &mut PlayerSession, levels: i32
 }
 
 fn pay(session: &mut PlayerSession) {
-    session.menus.menu.as_mut().unwrap().container[0] = Some(ItemStack::new(Item::Diamond, 1));
+    session.menus.menu.as_mut().unwrap().container[0] =
+        Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test));
 }
 
 fn id(effect: MobEffect) -> Option<i32> {

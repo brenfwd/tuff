@@ -17,7 +17,7 @@ use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::effects;
 use tuff_core::world::entity::{Culprit, TickContext};
 use tuff_core::world::projectile::{self, Launch, Owner, Shot, shot_velocity};
-use tuff_item::item::{ItemStack, PotionContents};
+use tuff_item::item::{ItemStack, MintReason, PotionContents};
 
 /// Witch data after the mob flags: celebrating (as a raider), drinking.
 const CELEBRATING: u8 = data::BABY;
@@ -112,7 +112,7 @@ impl Goal for ThrowPotion {
 
 /// A splash potion of `potion` as a fresh item stack.
 fn splash_stack(potion: Potion) -> ItemStack {
-    let mut stack = ItemStack::new(Item::SplashPotion, 1);
+    let mut stack = ItemStack::mint(Item::SplashPotion, 1, MintReason::Spawn);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(potion),
         ..Default::default()
@@ -297,13 +297,13 @@ impl Witch {
     }
 
     fn start_drinking(&mut self, core: &mut MobCore, potion: Potion, cx: &mut TickContext) {
-        let mut stack = ItemStack::new(Item::Potion, 1);
+        let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Spawn);
         stack.components.potion_contents = Some(Box::new(PotionContents {
             potion: Some(potion),
             ..Default::default()
         }));
         self.using_time = stack
-            .item
+            .item()
             .consumable()
             .map_or(DEFAULT_DRINK_TICKS, |c| (c.consume_seconds * 20.0) as i32);
         core.equipment.set(EquipmentSlot::Mainhand, Some(stack));
@@ -325,25 +325,25 @@ impl Witch {
         self.drinking = false;
         core.signal = 0;
         core.changed(DRINKING);
-        let drunk = core.equipment.get(EquipmentSlot::Mainhand).cloned();
-        core.equipment.set(EquipmentSlot::Mainhand, None);
-        if let Some(stack) = drunk
-            && stack.item == Item::Potion
-            && let Some(contents) = &stack.components.potion_contents
-        {
-            let scale = stack.item.potion_duration_scale();
-            for effect in effects::potion_effects(contents, scale) {
-                if effect.effect.is_instantaneous() {
-                    // Only instant effect witches ever drink is Healing.
-                    if let Some(effects::EffectAction::Heal(amount)) =
-                        effects::instant_action(effect.effect, effect.amplifier, 1.0)
-                    {
-                        core.heal(amount);
+        if let Some(stack) = core.equipment.take(EquipmentSlot::Mainhand) {
+            if stack.item() == Item::Potion
+                && let Some(contents) = &stack.components.potion_contents
+            {
+                let scale = stack.item().potion_duration_scale();
+                for effect in effects::potion_effects(contents, scale) {
+                    if effect.effect.is_instantaneous() {
+                        // Only instant effect witches ever drink is Healing.
+                        if let Some(effects::EffectAction::Heal(amount)) =
+                            effects::instant_action(effect.effect, effect.amplifier, 1.0)
+                        {
+                            core.heal(amount);
+                        }
+                    } else {
+                        core.effects.add(effect);
                     }
-                } else {
-                    core.effects.add(effect);
                 }
             }
+            stack.burn(tuff_item::item::BurnReason::Consumed);
         }
         core.set_modifier(Attribute::MovementSpeed, DRINKING_SPEED_ID, None);
     }

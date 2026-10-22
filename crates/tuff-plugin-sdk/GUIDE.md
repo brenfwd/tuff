@@ -213,6 +213,28 @@ colours, vibration, shriek, sculk charge, trail, geyser, dragon breath,
 spell). Options the particle rejects, as `/particle` would, return
 `invalid-state`. The call needs no grant; one call may queue 256 effects.
 
+## Items a plugin holds
+
+A plugin never owns an item: it holds handles. `items::Stash` names stacks
+the server keeps for the plugin, and every change is a host call that moves
+them, makes them or uses them up, so a plugin cannot copy an item. `Stash` is
+not `Clone` either.
+
+```rust
+let vault = Stash::new()?;
+vault.take_from(player.uuid, "minecraft:diamond", 3, true)?; // arrives after the call
+vault.mint("minecraft:apple", 2)?;                           // made for the plugin
+let half = vault.split(Some("minecraft:apple"), 1)?;
+vault.absorb(half)?;
+vault.give(player.uuid)?;                                    // moved, not made
+```
+
+`stash-contents` shows pictures of what a stash holds. Whatever a stash still
+holds when the plugin unloads, faults or is reloaded is used up, as are items
+given to a player who left before the call's edits ran. All stash calls but
+`stash-contents` need the player-write grant. `examples/rust-vault/` keeps a
+vault per player.
+
 ## Call groups that need a grant
 
 Five groups of host calls are closed until the plugin requests them in its

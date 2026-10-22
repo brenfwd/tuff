@@ -4,7 +4,7 @@ use super::*;
 use crate::protocol::play::{self, GameMode, PlayerActionStatus};
 use rand::Rng;
 use tokio::sync::oneshot;
-use tuff_item::item::{ItemStack, LodestoneTracker, StackCooldown};
+use tuff_item::item::{BurnReason, ItemStack, LodestoneTracker, MintReason, StackCooldown};
 use tuff_storage::admin::PermissionLevel;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -32,7 +32,7 @@ impl PlayerSession {
         let is_book = self
             .inventory
             .hand(off_hand)
-            .is_some_and(|s| matches!(s.item, Item::WritableBook | Item::WrittenBook));
+            .is_some_and(|s| matches!(s.item(), Item::WritableBook | Item::WrittenBook));
         if is_book {
             self.send(&play::OpenBook { off_hand });
         }
@@ -175,7 +175,10 @@ impl PlayerSession {
         match self.region_of(position) {
             Some(handle) if self.may_destroy(position) => {
                 let player = self.conn.handle.clone();
-                let tool = self.inventory.hand(false).cloned();
+                let tool = self
+                    .inventory
+                    .hand(false)
+                    .map(tuff_item::item::ItemSnapshot::of);
                 let request = if self.mode.abilities.may_build {
                     RegionRequest::Break {
                         player,
@@ -270,7 +273,7 @@ impl PlayerSession {
         let held = self
             .inventory
             .hand(off_hand)
-            .map(|stack| stack.item)
+            .map(|stack| stack.item())
             .filter(|_| {
                 self.mode.abilities.may_build || self.adventure_tool(off_hand, CAN_PLACE_ON)
             });
@@ -297,10 +300,11 @@ impl PlayerSession {
                     && !self.under_spawn_protection(target)
                     && self.dimension().block_within_border(target) =>
             {
-                let place = self.place_request(
+                let mut place = self.place_request(
                     off_hand, target, face, cursor, sequence, held, item, interact,
                 );
-                region.request(RegionRequest::Place(place)).await;
+                place.offer = self.place_offer(&region, off_hand, target, held).await;
+                self.send_place(&region, RegionRequest::Place(place)).await;
             }
             _ => {
                 self.send_inventory();
@@ -316,7 +320,7 @@ impl PlayerSession {
         let Some(item) = self
             .inventory
             .hand(off_hand)
-            .map(|stack| stack.item)
+            .map(|stack| stack.item())
             .filter(|item| self.shared.block_rules.places_on_water(*item))
         else {
             return false;
@@ -339,7 +343,8 @@ impl PlayerSession {
             Some(item),
             false,
         );
-        region.request(RegionRequest::PlaceOnWater(place)).await;
+        self.send_place(&region, RegionRequest::PlaceOnWater(place))
+            .await;
         true
     }
 
@@ -369,14 +374,17 @@ impl PlayerSession {
             components: self
                 .inventory
                 .hand(off_hand)
-                .map(|stack| stack.components.clone())
+                .map(|stack| tuff_item::item::ComponentsSnapshot::of(&stack.components))
                 .unwrap_or_default(),
-            held_count: self.inventory.hand(off_hand).map_or(0, |stack| stack.count),
+            held_count: self
+                .inventory
+                .hand(off_hand)
+                .map_or(0, |stack| stack.count()),
             off_hand,
             off_hand_item: self
                 .inventory
                 .hand(true)
-                .map(|stack| stack.item)
+                .map(|stack| stack.item())
                 .filter(|_| self.mode.abilities.may_build),
             sequence,
             interact,
@@ -387,22 +395,14 @@ impl PlayerSession {
             off_hand_blocks: self
                 .inventory
                 .hand(true)
-                .is_some_and(|stack| stack.item.blocks_attacks().is_some())
+                .is_some_and(|stack| stack.item().blocks_attacks().is_some())
                 && !self.pose.sneaking,
-            hotbar: (0..9)
-                .map(|i| {
-                    self.inventory
-                        .slots()
-                        .get(Inventory::hotbar_slot(i))
-                        .cloned()
-                        .flatten()
-                })
-                .collect(),
-            selected: self.inventory.selected(),
             may_build: self.mode.abilities.may_build,
             game_master: self.mode.game_mode == GameMode::Creative
                 && self.mode.permission >= PermissionLevel::Gamemasters,
             context: None,
+            offer: Default::default(),
+            hand_slot: self.inventory.hand_slot(off_hand),
         }
     }
 
@@ -413,7 +413,7 @@ impl PlayerSession {
         let Some(stack) = self.inventory.hand(off_hand) else {
             return false;
         };
-        let item = stack.item;
+        let item = stack.item();
         let egg = item.spawns_entity().is_some();
         let (fluid, mob) = match item.bucket() {
             Some(tuff_vanilla_data::item::Bucket::Fluid { fluid, mob }) => (fluid, mob),
@@ -481,7 +481,7 @@ impl PlayerSession {
         stack
             .use_cooldown()
             .and_then(|cooldown| cooldown.group)
-            .unwrap_or_else(|| stack.item.name().to_owned())
+            .unwrap_or_else(|| stack.item().name().to_owned())
     }
 
     pub fn stack_on_cooldown(&self, stack: &ItemStack) -> bool {
@@ -685,7 +685,7 @@ impl PlayerSession {
         let key = self.dimension().key.clone();
         let mut checks = Vec::new();
         for (slot, stack) in self.inventory.slots().iter().enumerate() {
-            let Some(stack) = stack.as_ref().filter(|s| s.item == Item::Compass) else {
+            let Some(stack) = stack.as_ref().filter(|s| s.item() == Item::Compass) else {
                 continue;
             };
             let Some(tracker) = stack
@@ -719,7 +719,7 @@ impl PlayerSession {
             if !gone {
                 continue;
             }
-            let Some(mut stack) = self.inventory.slots().get(slot).cloned().flatten() else {
+            let Some(stack) = self.inventory.slot_mut(slot).as_mut() else {
                 continue;
             };
             stack.components.other.insert(
@@ -730,7 +730,6 @@ impl PlayerSession {
                 }
                 .to_nbt(),
             );
-            self.inventory.set_slot(slot, Some(stack));
         }
     }
 
@@ -804,7 +803,7 @@ impl PlayerSession {
             return;
         }
         if let Some(item) = picked_entity_item(kind) {
-            self.try_pick(ItemStack::new(item, 1));
+            self.try_pick(ItemStack::mint(item, 1, MintReason::Transform));
         }
     }
 
@@ -873,7 +872,8 @@ impl PlayerSession {
             .request(RegionRequest::EntityData { id: entity, reply })
             .await;
         let data = answer.await.ok()??;
-        data.get_compound("Item").and_then(ItemStack::from_nbt)
+        data.get_compound("Item")
+            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Creative))
     }
 
     fn try_pick(&mut self, stack: ItemStack) {
@@ -889,7 +889,7 @@ impl PlayerSession {
             HandEffect::None => {}
             HandEffect::Consume(count) => {
                 if !creative {
-                    self.inventory.take_from_hand(off_hand, count);
+                    self.inventory.consume_from_hand(off_hand, count);
                 }
             }
             HandEffect::Damage(amount) => self.hurt_hand(off_hand, amount).await,
@@ -900,19 +900,29 @@ impl PlayerSession {
                     } else {
                         Inventory::hotbar_slot(self.inventory.selected())
                     };
-                    self.inventory
-                        .set_slot(slot, Some(ItemStack::new(result, 1)));
+                    self.inventory.set_slot(
+                        slot,
+                        Some(ItemStack::mint(result, 1, MintReason::Transform)),
+                    );
                 }
             }
             HandEffect::Exchange(result) => {
-                self.apply_exchange(off_hand, creative, ItemStack::new(result, 1))
-                    .await;
+                self.apply_exchange(
+                    off_hand,
+                    creative,
+                    ItemStack::mint(result, 1, MintReason::Transform),
+                )
+                .await;
             }
             HandEffect::ExchangeStack(result) => {
                 self.apply_exchange(off_hand, creative, *result).await;
             }
             HandEffect::Split(result) => {
-                let lone = !creative && self.inventory.hand(off_hand).is_some_and(|h| h.count == 1);
+                let lone = !creative
+                    && self
+                        .inventory
+                        .hand(off_hand)
+                        .is_some_and(|h| h.count() == 1);
                 if lone {
                     let slot = if off_hand {
                         Inventory::OFFHAND_SLOT
@@ -922,7 +932,7 @@ impl PlayerSession {
                     self.inventory.set_slot(slot, Some(*result));
                 } else {
                     if !creative {
-                        self.inventory.take_from_hand(off_hand, 1);
+                        self.inventory.consume_from_hand(off_hand, 1);
                     }
                     if let Some(extra) = self.inventory.add(*result) {
                         self.throw_item(extra).await;
@@ -943,12 +953,16 @@ impl PlayerSession {
     /// Shared body of [`HandEffect::Exchange`] and [`HandEffect::ExchangeStack`].
     pub async fn apply_exchange(&mut self, off_hand: bool, creative: bool, result: ItemStack) {
         if creative {
-            if self.inventory.find_item(result.item).is_none() {
-                let _ = self.inventory.add(result);
+            let spare = match self.inventory.find_item(result.item()) {
+                None => self.inventory.add(result),
+                Some(_) => Some(result),
+            };
+            if let Some(spare) = spare {
+                spare.burn(BurnReason::Creative);
             }
             return;
         }
-        self.inventory.take_from_hand(off_hand, 1);
+        self.inventory.consume_from_hand(off_hand, 1);
         if self.inventory.hand(off_hand).is_none() {
             let slot = if off_hand {
                 Inventory::OFFHAND_SLOT
@@ -975,19 +989,148 @@ impl PlayerSession {
         ];
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.3, eye[2]];
-        let kept = stack.clone();
-        let item = self.thrown_item(stack, position, velocity);
         let region = ChunkPos::of_position(position).region();
-        let spawned = match self.region(region).await {
-            Some(handle) => handle.request(RegionRequest::SpawnEntity(item)).await,
-            None => false,
+        let handle = self.region(region).await;
+        if let Some(handle) = &handle
+            && !self.may_drop_into(handle, &stack, position)
+        {
+            self.keep_unspawned(stack);
+            return;
+        }
+        let mut item = self.thrown_item(stack, position, velocity);
+        let back = match handle {
+            Some(handle) => match handle.try_request(RegionRequest::SpawnEntity(item)).await {
+                Ok(()) => Vec::new(),
+                Err(request) => match *request {
+                    RegionRequest::SpawnEntity(mut item) => item.take_items(),
+                    _ => Vec::new(),
+                },
+            },
+            None => item.take_items(),
         };
-        if !spawned {
-            self.keep_unspawned(kept);
+        for stack in back {
+            self.keep_unspawned(stack);
         }
     }
 
     /// Puts back a stack whose item entity could not be spawned.
+    /// Whether items may be dropped into the region behind `to`: not
+    /// while it or this player is quarantined, so nothing reaches state
+    /// that will not be saved. An injected failure is a violation: the
+    /// player and the region are quarantined and the player is kicked.
+    fn may_drop_into(&mut self, to: &RegionHandle, stack: &ItemStack, position: [f64; 3]) -> bool {
+        use crate::world::conservation::Transfer;
+        self.may_transfer(
+            Transfer::Drop,
+            Some((to.dimension, to.pos)),
+            BlockPos::containing(position),
+            Some(stack),
+        )
+    }
+
+    /// Whether a `transfer` between this player and the region `region`
+    /// (or only this player) may run: not while a side is quarantined.
+    /// An injected failure is a violation quarantining both sides and
+    /// kicking the player. Refused, nothing moves.
+    pub(crate) fn may_transfer(
+        &mut self,
+        transfer: crate::world::conservation::Transfer,
+        region: Option<(DimensionId, RegionPos)>,
+        pos: BlockPos,
+        stack: Option<&ItemStack>,
+    ) -> bool {
+        use crate::world::conservation::Subject;
+        let conservation = &self.shared.conservation;
+        let region = region.map(|(dimension, pos)| (dimension, Subject::Region(dimension, pos)));
+        if conservation.quarantined(Subject::Player(self.id))
+            || region.is_some_and(|(_, region)| conservation.quarantined(region))
+        {
+            return false;
+        }
+        if !conservation.take_injected(transfer) {
+            return true;
+        }
+        self.transfer_violation(
+            transfer,
+            region,
+            pos,
+            stack,
+            "the transfer check was made to fail".to_owned(),
+        );
+        false
+    }
+
+    /// The release check of a `transfer` from this player's side: the
+    /// items held `before` plus those `received` equal those held `after`
+    /// plus those `sent` on. A mismatch is a violation; the moves already
+    /// ran, so the player is quarantined and kicked and the answer is false.
+    pub(crate) fn transfer_balanced(
+        &mut self,
+        transfer: crate::world::conservation::Transfer,
+        before: u64,
+        received: u64,
+        after: u64,
+        sent: u64,
+    ) -> bool {
+        if before + received == after + sent || !tuff_item::item::conservation::checks() {
+            return true;
+        }
+        self.transfer_violation(
+            transfer,
+            None,
+            BlockPos::containing(self.pose.position),
+            None,
+            format!("held {before} and received {received}, but holds {after} and sent {sent}"),
+        );
+        false
+    }
+
+    fn transfer_violation(
+        &mut self,
+        transfer: crate::world::conservation::Transfer,
+        region: Option<(DimensionId, crate::world::conservation::Subject)>,
+        pos: BlockPos,
+        stack: Option<&ItemStack>,
+        detail: String,
+    ) {
+        use crate::world::conservation::{ItemViolation, Subject};
+        let violation = ItemViolation {
+            operation: transfer.operation(),
+            player: Some(self.id),
+            pos,
+            item: stack.map(tuff_item::item::ItemSnapshot::of),
+            detail,
+        };
+        tuff_item::item::conservation::violation(
+            violation.operation,
+            format_args!("player {:?}: {}", self.id, violation.detail),
+        );
+        let dimension = region.map_or(self.dimension, |(dimension, _)| dimension);
+        self.shared.services.item_violation(
+            crate::world::services::ViolationCulprit::Player {
+                uuid: self.profile.id,
+                name: &self.profile.name,
+            },
+            dimension,
+            &violation,
+        );
+        let conservation = &self.shared.conservation;
+        if let Some((_, region)) = region {
+            conservation.quarantine(region);
+        }
+        conservation.quarantine(Subject::Player(self.id));
+        let kick = self
+            .shared
+            .config
+            .get_bool(crate::config::ITEMS_CONSERVATION_KICK)
+            .unwrap_or(true);
+        if kick {
+            self.kick(tuff_item::text::TextComponent::from(
+                "An item operation was refused; reconnect to reload your inventory",
+            ));
+        }
+    }
+
     fn keep_unspawned(&mut self, stack: ItemStack) {
         if let Some(lost) = self.inventory.add(stack) {
             log::warn!(
@@ -1028,22 +1171,27 @@ impl PlayerSession {
         pickup_delay: u32,
     ) {
         let region = ChunkPos::of_position(position).region();
-        let kept = stack.clone();
-        let spawned = match self.region(region).await {
+        let back = match self.region(region).await {
+            Some(handle) if !self.may_drop_into(&handle, &stack, position) => Some(stack),
             Some(handle) => {
-                handle
-                    .request(RegionRequest::SpawnItem {
-                        stack,
-                        position,
-                        velocity,
-                        pickup_delay,
-                    })
-                    .await
+                let request = RegionRequest::SpawnItem {
+                    stack,
+                    position,
+                    velocity,
+                    pickup_delay,
+                };
+                match handle.try_request(request).await {
+                    Ok(()) => None,
+                    Err(request) => match *request {
+                        RegionRequest::SpawnItem { stack, .. } => Some(stack),
+                        _ => None,
+                    },
+                }
             }
-            None => false,
+            None => Some(stack),
         };
-        if !spawned {
-            self.keep_unspawned(kept);
+        if let Some(stack) = back {
+            self.keep_unspawned(stack);
         }
     }
 
@@ -1130,7 +1278,10 @@ impl PlayerSession {
                 event,
                 data,
                 ticks: destroying.ticks(self.tick),
-                tool: self.inventory.hand(false).cloned(),
+                tool: self
+                    .inventory
+                    .hand(false)
+                    .map(tuff_item::item::ItemSnapshot::of),
                 miner: self.miner(),
                 eye: self.eye(),
             })))
@@ -1214,7 +1365,7 @@ pub fn picked_block_stack(
             components.insert(key, value.clone());
         }
     }
-    let stack = ItemStack::new(item, 1);
+    let stack = ItemStack::mint(item, 1, MintReason::Transform);
     if components.is_empty() {
         return Some(stack);
     }
@@ -1250,178 +1401,5 @@ pub fn picked_entity_item(kind: tuff_vanilla_data::registry::EntityType) -> Opti
 }
 
 #[cfg(test)]
-mod pick_tests {
-    use super::*;
-    use crate::world::block_entity::raw;
-    use tuff_vanilla_data::Block;
-    use tuff_vanilla_data::registry::{BlockEntityType, EntityType};
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn block_reach_measures_to_the_nearest_face() {
-        let block = BlockPos::new(0, 0, 0);
-        assert_eq!(distance_sq_to_block([0.5, 0.5, 0.5], block), 0.0);
-        assert_eq!(distance_sq_to_block([3.0, 0.5, 0.5], block), 4.0);
-        assert_eq!(distance_sq_to_block([-1.0, 3.0, 0.5], block), 5.0);
-    }
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn picked_blocks_copy_block_entity_data_only_when_asked() {
-        let pos = BlockPos::new(1, 2, 3);
-        let state = Block::OakSign.default_state();
-        let mut sign = raw::new(BlockEntityType::Sign, pos);
-        sign.insert("is_waxed", true);
-        let plain = picked_block_stack(state, Some(&sign), false).unwrap();
-        assert_eq!(plain, ItemStack::new(Item::OakSign, 1));
-        let waxed = picked_block_stack(state, Some(&sign), true).unwrap();
-        let stored = waxed.components.to_nbt();
-        assert!(stored.contains_key("minecraft:waxed"));
-        assert!(!stored.contains_key("minecraft:block_entity_data"));
-        let spawner = raw::new(BlockEntityType::MobSpawner, pos);
-        let data =
-            picked_block_stack(Block::Spawner.default_state(), Some(&spawner), true).unwrap();
-        let stored = data.components.to_nbt();
-        let entity = stored.get_compound("minecraft:block_entity_data").unwrap();
-        assert_eq!(entity.get_str("id"), Some("minecraft:mob_spawner"));
-        assert!(entity.get("Delay").is_some());
-        assert!(entity.get("x").is_none() && entity.get("keepPacked").is_none());
-        let wall = Block::OakWallSign.default_state();
-        assert_eq!(
-            picked_block_stack(wall, None, true).unwrap().item,
-            Item::OakSign
-        );
-    }
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn picked_shulker_boxes_carry_their_contents_as_components() {
-        let pos = BlockPos::new(0, 0, 0);
-        let mut entity = crate::world::block_entity::BlockEntity::new(
-            crate::world::block_entity::ContainerKind::ShulkerBox,
-        );
-        entity.items[3] = Some(ItemStack::new(Item::Stone, 4));
-        let saved = entity.encode(pos);
-        let state = Block::ShulkerBox.default_state();
-        let stack = picked_block_stack(state, Some(&saved), true).unwrap();
-        let container = stack.components.container.as_ref().unwrap();
-        assert_eq!(container[3], Some(ItemStack::new(Item::Stone, 4)));
-    }
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn picked_entities_give_eggs_boats_and_placing_items() {
-        assert_eq!(
-            picked_entity_item(EntityType::Zombie),
-            Some(Item::ZombieSpawnEgg)
-        );
-        assert_eq!(picked_entity_item(EntityType::OakBoat), Some(Item::OakBoat));
-        assert_eq!(
-            picked_entity_item(EntityType::ChestMinecart),
-            Some(Item::ChestMinecart)
-        );
-        assert_eq!(picked_entity_item(EntityType::LeashKnot), Some(Item::Lead));
-        assert_eq!(picked_entity_item(EntityType::Item), None);
-    }
-
-    fn block_state_of(stack: &ItemStack) -> Option<tuff_nbt::Compound> {
-        stack
-            .components
-            .to_nbt()
-            .get_compound("minecraft:block_state")
-            .cloned()
-    }
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn plants_and_technical_blocks_pick_what_the_game_gives() {
-        let pick = |block: Block| picked_block_stack(block.default_state(), None, false);
-        assert_eq!(pick(Block::Wheat).unwrap().item, Item::WheatSeeds);
-        assert_eq!(pick(Block::PumpkinStem).unwrap().item, Item::PumpkinSeeds);
-        assert_eq!(
-            pick(Block::AttachedMelonStem).unwrap().item,
-            Item::MelonSeeds
-        );
-        assert_eq!(pick(Block::CaveVinesPlant).unwrap().item, Item::GlowBerries);
-        assert_eq!(pick(Block::KelpPlant).unwrap().item, Item::Kelp);
-        assert_eq!(pick(Block::TallSeagrass).unwrap().item, Item::Seagrass);
-        assert_eq!(pick(Block::PottedPoppy).unwrap().item, Item::Poppy);
-        assert_eq!(pick(Block::CandleCake).unwrap().item, Item::Cake);
-        assert_eq!(
-            pick(Block::SweetBerryBush).unwrap().item,
-            Item::SweetBerries
-        );
-        assert!(pick(Block::FrostedIce).is_none());
-        assert!(pick(Block::NetherPortal).is_none());
-        let sticky = Block::PistonHead
-            .default_state()
-            .with("type", "sticky")
-            .unwrap();
-        assert_eq!(
-            picked_block_stack(sticky, None, false).unwrap().item,
-            Item::StickyPiston
-        );
-    }
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn picked_light_and_hives_record_their_state() {
-        let dim = Block::Light.default_state().with("level", "7").unwrap();
-        let light = picked_block_stack(dim, None, false).unwrap();
-        assert_eq!(block_state_of(&light).unwrap().get_str("level"), Some("7"));
-        let placed = light
-            .components
-            .apply_block_state(Block::Light.default_state());
-        assert_eq!(placed, dim);
-        let bright = picked_block_stack(Block::Light.default_state(), None, false).unwrap();
-        assert_eq!(block_state_of(&bright), None);
-
-        let full = Block::Beehive
-            .default_state()
-            .with("honey_level", "5")
-            .unwrap();
-        assert_eq!(
-            block_state_of(&picked_block_stack(full, None, false).unwrap()),
-            None
-        );
-        let data = picked_block_stack(full, None, true).unwrap();
-        assert_eq!(
-            block_state_of(&data).unwrap().get_str("honey_level"),
-            Some("5")
-        );
-    }
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn statues_pots_and_banners_carry_their_looks_without_data() {
-        let pos = BlockPos::new(0, 0, 0);
-        let statue_state = Block::CopperGolemStatue
-            .default_state()
-            .with("copper_golem_pose", "star")
-            .unwrap();
-        let statue = raw::new(BlockEntityType::CopperGolemStatue, pos);
-        let picked = picked_block_stack(statue_state, Some(&statue), false).unwrap();
-        assert_eq!(
-            block_state_of(&picked)
-                .unwrap()
-                .get_str("copper_golem_pose"),
-            Some("star")
-        );
-
-        let mut pot = raw::new(BlockEntityType::DecoratedPot, pos);
-        pot.insert(
-            "sherds",
-            tuff_nbt::Tag::List(vec![
-                "minecraft:angler_pottery_sherd".into(),
-                "minecraft:brick".into(),
-                "minecraft:brick".into(),
-                "minecraft:brick".into(),
-            ]),
-        );
-        let picked =
-            picked_block_stack(Block::DecoratedPot.default_state(), Some(&pot), false).unwrap();
-        let stored = picked.components.to_nbt();
-        assert!(stored.contains_key("minecraft:pot_decorations"));
-        assert!(!stored.contains_key("minecraft:block_entity_data"));
-    }
-}
+#[path = "hands_pick_tests.rs"]
+mod pick_tests;

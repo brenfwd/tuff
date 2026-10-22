@@ -4,6 +4,7 @@
 use rand::Rng;
 use rand::seq::SliceRandom;
 use serde_json::Value;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::loot_table::{
     LootCondition, LootEntry, LootEntryKind, LootFunction, LootPool, LootTable, NumberProvider,
 };
@@ -12,7 +13,7 @@ use tuff_vanilla_data::{Block, BlockState, Item};
 use std::cell::RefCell;
 
 use tuff_datapack::loot::LootTables;
-use tuff_item::item::{Components, Enchantments, ItemStack};
+use tuff_item::item::{Components, Enchantments, ItemStack, MintReason};
 use tuff_vanilla_data::registry::Potion;
 
 use tuff_core::world::block_entity::raw;
@@ -67,7 +68,8 @@ fn decay(drops: &mut [ItemStack], radius: Option<f32>, rng: &mut impl Rng) {
         return;
     }
     for stack in drops {
-        stack.count = (0..stack.count).filter(|_| survives(radius, rng)).count() as u8;
+        let kept = (0..stack.count()).filter(|_| survives(radius, rng)).count() as u8;
+        stack.resize(kept, MintReason::Loot, BurnReason::Destroyed);
     }
 }
 
@@ -156,7 +158,7 @@ pub fn entity_drops(name: &str, facts: &EntityFacts, rng: &mut impl Rng) -> Vec<
         visiting: RefCell::default(),
         state: Block::Air.default_state(),
         entity: Some(facts),
-        tool: facts.attacker_weapon.as_ref(),
+        tool: facts.attacker_weapon.as_deref(),
         explosion_radius: None,
         block_entity: None,
         location: facts.origin.as_ref(),
@@ -164,7 +166,7 @@ pub fn entity_drops(name: &str, facts: &EntityFacts, rng: &mut impl Rng) -> Vec<
     };
     let mut drops = Vec::new();
     roll_table(table, &context, rng, &mut drops);
-    drops.retain(|stack| stack.count > 0);
+    drops.retain(|stack| stack.count() > 0);
     drops
 }
 
@@ -199,7 +201,7 @@ pub fn fishing_drops(
     };
     let mut drops = Vec::new();
     roll_table(table, &context, rng, &mut drops);
-    drops.retain(|stack| stack.count > 0);
+    drops.retain(|stack| stack.count() > 0);
     drops
 }
 
@@ -237,7 +239,7 @@ pub fn exploded_drops_in(
     };
     let mut drops = Vec::new();
     roll_table(table, &context, rng, &mut drops);
-    drops.retain(|stack| stack.count > 0);
+    drops.retain(|stack| stack.count() > 0);
     drops
 }
 
@@ -262,7 +264,7 @@ pub fn table_drops_in(
     let Some(table) = tables.get(name) else {
         return Vec::new();
     };
-    let tool = tool.map(|item| ItemStack::new(item, 1));
+    let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Template));
     let context = Context {
         tables,
         visiting: RefCell::default(),
@@ -303,7 +305,7 @@ pub fn roll_in(tables: &LootTables, name: &str, rng: &mut impl Rng) -> Vec<ItemS
     };
     let mut drops = Vec::new();
     roll_table(table, &context, rng, &mut drops);
-    drops.retain(|stack| stack.count > 0);
+    drops.retain(|stack| stack.count() > 0);
     drops
 }
 
@@ -367,7 +369,7 @@ pub fn container_loot_in(
     };
     let mut drops = Vec::new();
     roll_table(table, &context, rng, &mut drops);
-    drops.retain(|stack| stack.count > 0);
+    drops.retain(|stack| stack.count() > 0);
     Some(fill_container_slots(drops, slots, rng))
 }
 
@@ -381,7 +383,7 @@ fn fill_container_slots(
     let mut singles = Vec::new();
     let mut splittable = Vec::new();
     for stack in drops {
-        if stack.count > 1 {
+        if stack.count() > 1 {
             splittable.push(stack);
         } else {
             singles.push(stack);
@@ -390,17 +392,15 @@ fn fill_container_slots(
     while slots.saturating_sub(singles.len() + splittable.len()) > 0 && !splittable.is_empty() {
         let index = rng.gen_range(0..splittable.len());
         let mut stack = splittable.remove(index);
-        let half = (stack.count / 2).max(1);
+        let half = (stack.count() / 2).max(1);
         let taken = rng.gen_range(1..=half);
-        let mut piece = stack.clone();
-        piece.count = taken;
-        stack.count -= taken;
-        if stack.count > 1 && rng.r#gen::<bool>() {
+        let piece = stack.take(taken);
+        if stack.count() > 1 && rng.r#gen::<bool>() {
             splittable.push(stack);
         } else {
             singles.push(stack);
         }
-        if piece.count > 1 && rng.r#gen::<bool>() {
+        if piece.count() > 1 && rng.r#gen::<bool>() {
             splittable.push(piece);
         } else {
             singles.push(piece);
@@ -410,7 +410,7 @@ fn fill_container_slots(
     singles.shuffle(rng);
     let mut available: Vec<usize> = (0..slots).collect();
     available.shuffle(rng);
-    let mut result = vec![None; slots];
+    let mut result: Vec<Option<ItemStack>> = (0..slots).map(|_| None).collect();
     for stack in singles {
         let Some(slot) = available.pop() else {
             break;
@@ -428,14 +428,14 @@ pub fn lock_admits(lock: &Compound, stack: Option<&ItemStack>) -> bool {
         let Some(stack) = stack else {
             return false;
         };
-        if !nbt_in_list(items, stack.item.name(), |tag| {
-            in_tag("minecraft:item", tag, stack.item.name())
+        if !nbt_in_list(items, stack.item().name(), |tag| {
+            in_tag("minecraft:item", tag, stack.item().name())
         }) {
             return false;
         }
     }
     if let Some(count) = lock.get("count")
-        && !nbt_int_in_range(count, stack.map_or(0, |s| s.count as i64))
+        && !nbt_int_in_range(count, stack.map_or(0, |s| s.count() as i64))
     {
         return false;
     }
@@ -537,36 +537,50 @@ fn modify_stack(
         "minecraft:set_count" => {
             if let Some(value) = json_int(&params["count"], rng, context.scores().as_ref()) {
                 let count = if params["add"].as_bool() == Some(true) {
-                    i64::from(stack.count) + value
+                    i64::from(stack.count()) + value
                 } else {
                     value
                 };
-                stack.count = count.clamp(0, 255) as u8;
+                stack.resize(
+                    count.clamp(0, 255) as u8,
+                    MintReason::Loot,
+                    BurnReason::Loot,
+                );
             }
         }
         "minecraft:limit_count" => {
-            let count = limit_count(&params["limit"], i64::from(stack.count), rng);
-            stack.count = count.clamp(0, 255) as u8;
+            let count = limit_count(&params["limit"], i64::from(stack.count()), rng);
+            stack.resize(
+                count.clamp(0, 255) as u8,
+                MintReason::Loot,
+                BurnReason::Loot,
+            );
         }
         "minecraft:apply_bonus" => {
             let level = tool_enchantment_level(params, context.tool);
-            let count = apply_bonus(params, i64::from(stack.count), level, rng);
-            stack.count = count.clamp(0, 255) as u8;
+            let count = apply_bonus(params, i64::from(stack.count()), level, rng);
+            stack.resize(
+                count.clamp(0, 255) as u8,
+                MintReason::Loot,
+                BurnReason::Loot,
+            );
         }
         "minecraft:set_item" => {
             if let Some(item) = params["item"].as_str().and_then(Item::from_name) {
-                stack = ItemStack::new(item, stack.count).with_components(stack.components);
+                let count = stack.count();
+                stack = stack.into_item(item, count, MintReason::Loot, BurnReason::Loot);
             }
         }
         "minecraft:furnace_smelt" => {
             let smelted = match context.entity.and_then(|e| e.recipes.as_deref()) {
                 Some(recipes) => recipes
-                    .cooking_recipe(CookingStation::Furnace, stack.item)
+                    .cooking_recipe(CookingStation::Furnace, stack.item())
                     .map(|(_, recipe)| recipe.result.item),
-                None => smelting_recipe(stack.item).map(|recipe| recipe.result.item),
+                None => smelting_recipe(stack.item()).map(|recipe| recipe.result.item),
             };
             if let Some(item) = smelted {
-                stack = ItemStack::new(item, stack.count).with_components(stack.components);
+                let count = stack.count();
+                stack = stack.into_item(item, count, MintReason::Loot, BurnReason::Loot);
             }
         }
         "minecraft:set_name" => {
@@ -616,11 +630,16 @@ fn modify_stack(
         }
         "minecraft:set_enchantments" => {
             let add = params["add"].as_bool() == Some(true);
-            if stack.item == Item::Book {
-                stack = ItemStack::new(Item::EnchantedBook, stack.count)
-                    .with_components(stack.components);
+            if stack.item() == Item::Book {
+                let count = stack.count();
+                stack = stack.into_item(
+                    Item::EnchantedBook,
+                    count,
+                    MintReason::Loot,
+                    BurnReason::Loot,
+                );
             }
-            let target = if stack.item == Item::EnchantedBook {
+            let target = if stack.item() == Item::EnchantedBook {
                 &mut stack.components.stored_enchantments
             } else {
                 &mut stack.components.enchantments
@@ -681,7 +700,7 @@ fn modify_stack(
         }
         "minecraft:set_stew_effect" => {
             let entries = params["effects"].as_array().filter(|e| !e.is_empty());
-            if let (Item::SuspiciousStew, Some(entries)) = (stack.item, entries) {
+            if let (Item::SuspiciousStew, Some(entries)) = (stack.item(), entries) {
                 let entry = &entries[rng.gen_range(0..entries.len())];
                 let effect = entry["type"]
                     .as_str()
@@ -714,7 +733,7 @@ fn modify_stack(
                     })
                     .collect();
                 let color = tuff_item::item::decor::apply_dyes(stack.components.dyed_color, &dyes);
-                stack.count = 1;
+                stack.resize(1, MintReason::Loot, BurnReason::Loot);
                 stack.components.dyed_color = Some(color);
             }
         }
@@ -748,7 +767,7 @@ fn potion_options(value: &serde_json::Value) -> Vec<Potion> {
 fn drop_emptied(drops: &mut Vec<ItemStack>, from: usize) {
     let mut position = 0;
     drops.retain(|stack| {
-        let keep = position < from || stack.count > 0;
+        let keep = position < from || stack.count() > 0;
         position += 1;
         keep
     });
@@ -774,7 +793,7 @@ fn modify_stacks(
             continue;
         }
         for stack in drops.iter_mut() {
-            let taken = std::mem::replace(stack, ItemStack::new(Item::Air, 0));
+            let taken = std::mem::replace(stack, ItemStack::empty());
             *stack = modify_stack(taken, &function.kind, &params, context, rng);
         }
     }
@@ -983,7 +1002,7 @@ fn create_entry_item(
     }
     let from = drops.len();
     match forced {
-        Some(item) => drops.push(ItemStack::new(item, 1)),
+        Some(item) => drops.push(ItemStack::mint(item, 1, MintReason::Loot)),
         None => create_entry_leaf(entry, context, rng, drops),
     }
     modify_stacks(&entry.functions, &mut drops[from..], context, rng);
@@ -1052,7 +1071,7 @@ fn create_entry_leaf(
                         };
                         let level = context
                             .entity
-                            .and_then(|e| e.attacker_weapon.as_ref())
+                            .and_then(|e| e.attacker_weapon.as_deref())
                             .map_or(0, |weapon| weapon.enchantment_level(enchantment));
                         if level > 0 {
                             let per_level =
@@ -1077,7 +1096,7 @@ fn create_entry_leaf(
             while count > 0 {
                 let chunk = count.min(max);
                 count -= chunk;
-                let mut stack = ItemStack::new(item, chunk as u8);
+                let mut stack = ItemStack::mint(item, chunk as u8, MintReason::Loot);
                 for (kind, params) in &stack_functions {
                     stack = modify_stack(stack, kind, params, context, rng);
                 }
@@ -1087,7 +1106,7 @@ fn create_entry_leaf(
                 }
                 copy_components(&entry.functions, &mut stack, context, rng);
                 let [stack] = stack;
-                if stack.count > 0 {
+                if stack.count() > 0 {
                     drops.push(stack);
                 }
             }
@@ -1111,7 +1130,9 @@ fn create_entry_leaf(
                         drops.extend([left, back, front, right].into_iter().flatten());
                     }
                 }
-                None => drops.extend((0..4).map(|_| ItemStack::new(Item::Brick, 1))),
+                None => {
+                    drops.extend((0..4).map(|_| ItemStack::mint(Item::Brick, 1, MintReason::Loot)))
+                }
             }
         }
         LootEntryKind::Tag { tag, expand, .. } => {
@@ -1126,7 +1147,11 @@ fn create_entry_leaf(
             } else {
                 items.to_vec()
             };
-            drops.extend(chosen.into_iter().map(|item| ItemStack::new(item, 1)));
+            drops.extend(
+                chosen
+                    .into_iter()
+                    .map(|item| ItemStack::mint(item, 1, MintReason::Loot)),
+            );
         }
         LootEntryKind::LootTable(name) => {
             if let Some(table) = context.tables.get(name) {

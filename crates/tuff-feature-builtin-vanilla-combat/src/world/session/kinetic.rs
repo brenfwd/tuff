@@ -51,10 +51,14 @@ impl KineticExt for PlayerSession {
         if self.is_dead() || self.mode.game_mode == GameMode::Spectator {
             return;
         }
-        let Some(stack) = self.inventory.hand(using.off_hand).cloned() else {
+        let Some(stack) = self
+            .inventory
+            .hand(using.off_hand)
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
             return;
         };
-        if using.item != stack.item {
+        if using.item != stack.item() {
             return;
         }
         let Some(kinetic) = stack.kinetic_weapon() else {
@@ -70,7 +74,7 @@ impl KineticExt for PlayerSession {
             return;
         }
         let used = used - kinetic.delay_ticks;
-        let Some(range) = stack.item.attack_range() else {
+        let Some(range) = stack.item().attack_range() else {
             return;
         };
         let forward = tuff_core::world::raycast::view_vector(self.pose.yaw, self.pose.pitch);
@@ -105,7 +109,7 @@ impl KineticExt for PlayerSession {
             return;
         }
         let kind = stack
-            .item
+            .item()
             .damage_type()
             .unwrap_or(&damage_type::PLAYER_ATTACK);
         let knockback_attribute = self.attribute(Attribute::AttackKnockback) as f32;
@@ -188,7 +192,7 @@ impl KineticExt for PlayerSession {
                             attacker: self.conn.handle.clone(),
                             attacker_name: self.profile.name.clone(),
                             attacker_uuid: self.profile.id,
-                            weapon: weapon.clone(),
+                            weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
                             attacker_position: self.pose.position,
                             attacker_yaw: self.pose.yaw,
                             damage,
@@ -229,7 +233,7 @@ impl KineticExt for PlayerSession {
                             attacker_pitch: self.pose.pitch,
                             damage,
                             knockback,
-                            weapon: weapon.clone(),
+                            weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
                             critical: false,
                             magic: false,
                             sweep: false,

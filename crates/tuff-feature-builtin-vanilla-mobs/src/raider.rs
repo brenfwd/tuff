@@ -14,8 +14,8 @@ use super::raid::{Raid, Raids};
 use super::{MobCore, random_pos};
 use tuff_core::world::entity::{Effect, RegionEntity, TickContext, take_bool, take_number};
 use tuff_core::world::poi::{Occupancy, PoiStore};
-use tuff_item::item::ItemStack;
 use tuff_item::item::decor::BannerLayer;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -140,12 +140,16 @@ pub fn save(state: &RaiderState, out: &mut Compound) {
 
 /// The banner raid and patrol leaders wear.
 pub fn ominous_banner() -> ItemStack {
+    ominous_banner_as(MintReason::Spawn)
+}
+
+fn ominous_banner_as(reason: MintReason) -> ItemStack {
     let layer = |pattern: &str, color: &str| BannerLayer {
         pattern: format!("minecraft:{pattern}"),
         inline: None,
         color: DyeColor::from_name(color).expect("a dye color"),
     };
-    let mut stack = ItemStack::new(Item::WhiteBanner, 1);
+    let mut stack = ItemStack::mint(Item::WhiteBanner, 1, reason);
     stack.components.banner_patterns = Some(vec![
         layer("rhombus", "cyan"),
         layer("stripe_bottom", "light_gray"),
@@ -173,8 +177,8 @@ pub fn ominous_banner() -> ItemStack {
 }
 
 pub fn is_ominous_banner(stack: &ItemStack) -> bool {
-    let banner = ominous_banner();
-    stack.item == banner.item && stack.components == banner.components
+    let banner = ominous_banner_as(MintReason::Template);
+    stack.item() == banner.item() && stack.components == banner.components
 }
 
 /// A leader wears the banner, which always drops.
@@ -396,7 +400,7 @@ pub fn apply_raid_buffs(core: &mut MobCore, wave: i32, omen_level: i32, rng: &mu
             };
             if enchant && let Some(provider) = provider {
                 let crossbow = tuff_item::item::enchanting::enchant_from_provider(
-                    ItemStack::new(Item::Crossbow, 1),
+                    ItemStack::mint(Item::Crossbow, 1, MintReason::Spawn),
                     provider,
                     0.0,
                     rng,
@@ -405,7 +409,7 @@ pub fn apply_raid_buffs(core: &mut MobCore, wave: i32, omen_level: i32, rng: &mu
             }
         }
         EntityType::Vindicator => {
-            let mut axe = ItemStack::new(Item::IronAxe, 1);
+            let mut axe = ItemStack::mint(Item::IronAxe, 1, MintReason::Spawn);
             if enchant {
                 let provider = if wave > 5 {
                     "minecraft:raid/vindicator_post_wave_5"
@@ -1114,7 +1118,7 @@ mod tests {
     #[test]
     fn the_ominous_banner_is_a_white_banner_with_eight_layers() {
         let banner = ominous_banner();
-        assert_eq!(banner.item, Item::WhiteBanner);
+        assert_eq!(banner.item(), Item::WhiteBanner);
         assert_eq!(banner.components.banner_patterns.as_ref().unwrap().len(), 8);
         assert!(
             banner
@@ -1126,7 +1130,11 @@ mod tests {
                 .all(BannerLayer::is_sendable)
         );
         assert!(is_ominous_banner(&banner));
-        assert!(!is_ominous_banner(&ItemStack::new(Item::WhiteBanner, 1)));
+        assert!(!is_ominous_banner(&ItemStack::mint(
+            Item::WhiteBanner,
+            1,
+            MintReason::Test
+        )));
     }
 
     #[tuff_core::watchdog]
@@ -1146,7 +1154,7 @@ mod banner_round_trip {
     #[test]
     fn the_ominous_banner_survives_saving() {
         let banner = ominous_banner();
-        let back = ItemStack::from_nbt(&banner.to_nbt()).unwrap();
+        let back = ItemStack::mint_from_nbt(&banner.to_nbt(), MintReason::Test).unwrap();
         assert_eq!(back.components, banner.components);
     }
 }

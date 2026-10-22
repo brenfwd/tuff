@@ -58,8 +58,14 @@ impl MobCore {
             if self.equipment.get(*slot).is_none()
                 && let Some(item) = tiers.get(tier)
             {
-                self.equipment
-                    .set(*slot, Some(tuff_item::item::ItemStack::new(*item, 1)));
+                self.equipment.set(
+                    *slot,
+                    Some(tuff_item::item::ItemStack::mint(
+                        *item,
+                        1,
+                        tuff_item::item::MintReason::Spawn,
+                    )),
+                );
             }
         }
     }
@@ -76,12 +82,12 @@ impl MobCore {
         ];
         let special = difficulty.special_multiplier();
         for (slot, chance) in SLOTS {
-            let Some(stack) = self.equipment.get(slot).cloned() else {
-                continue;
-            };
-            if rng.r#gen::<f32>() >= chance * special {
+            if self.equipment.get(slot).is_none() || rng.r#gen::<f32>() >= chance * special {
                 continue;
             }
+            let Some(stack) = self.equipment.take(slot) else {
+                continue;
+            };
             let stack = tuff_item::item::enchanting::enchant_from_provider(
                 stack,
                 "minecraft:mob_spawn_equipment",
@@ -130,16 +136,16 @@ impl MobCore {
         if !self.is_alive() || !self.sun_burn_tick(cx) {
             return;
         }
-        if let Some(helmet) = self.equipment.get(EquipmentSlot::Head).cloned() {
+        if let Some(helmet) = self.equipment.get(EquipmentSlot::Head) {
             if helmet.is_damageable() {
                 let wear = cx.rng.gen_range(0..2);
-                let mut helmet = helmet;
                 let damage = helmet.damage() + wear;
                 if helmet.max_damage().is_some_and(|max| damage >= max) {
-                    self.equipment.set(EquipmentSlot::Head, None);
-                } else {
+                    if let Some(helmet) = self.equipment.take(EquipmentSlot::Head) {
+                        helmet.burn(tuff_item::item::BurnReason::Broken);
+                    }
+                } else if let Some(helmet) = self.equipment.get_mut(EquipmentSlot::Head) {
                     helmet.set_damage(damage);
-                    self.equipment.set(EquipmentSlot::Head, Some(helmet));
                 }
             }
             return;
@@ -265,7 +271,7 @@ mod tests {
             for _ in 0..2000 {
                 mob.equipment = super::super::equipment::Equipment::default();
                 mob.populate_spawn_armor(hard, cx.rng);
-                let head = mob.equipment.get(EquipmentSlot::Head).map(|s| s.item);
+                let head = mob.equipment.get(EquipmentSlot::Head).map(|s| s.item());
                 let feet = mob.equipment.get(EquipmentSlot::Feet);
                 if feet.is_some() {
                     assert!(head.is_some(), "armor goes on from the head down");
@@ -310,7 +316,11 @@ mod tests {
             assert!(burned, "full daylight sets it alight within a few seconds");
             assert_eq!(mob.base.fire, 160);
             mob.base.fire = 0;
-            let helmet = tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::LeatherHelmet, 1);
+            let helmet = tuff_item::item::ItemStack::mint(
+                tuff_vanilla_data::Item::LeatherHelmet,
+                1,
+                tuff_item::item::MintReason::Test,
+            );
             mob.equipment.set(EquipmentSlot::Head, Some(helmet));
             for _ in 0..2000 {
                 mob.burn_in_daylight(cx);

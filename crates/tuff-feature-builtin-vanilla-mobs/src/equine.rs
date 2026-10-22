@@ -17,13 +17,14 @@ use super::goals::{
 use super::{Mob, MobCore, MobSounds, Species, animal, data, event};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::block_entity::{decode_items, encode_items};
+use tuff_core::world::entity::HandOffer;
 use tuff_core::world::entity::{
     Effect, EntityInteraction, InteractOutcome, RegionEntity, RiderInput, TickContext, take_bool,
     take_number,
 };
-use tuff_core::world::menu::{MenuKind, MountArmor, mount};
+use tuff_core::world::menu::{MenuKind, MountArmor};
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -167,6 +168,7 @@ fn ridden(core: &MobCore) -> bool {
 pub fn saddle_up(
     core: &mut MobCore,
     stack: &ItemStack,
+    hand: &HandOffer,
     sound: Option<SoundEvent>,
     cx: &mut TickContext,
 ) -> InteractOutcome {
@@ -177,10 +179,10 @@ pub fn saddle_up(
     if !eq.equip_on_interact || !matches!(eq.slot, EquipmentSlot::Saddle) {
         return None;
     }
-    core.equipment
-        .set(EquipmentSlot::Saddle, Some(stack.clone().with_count(1)));
+    let saddle = hand.take(1)?;
+    core.equipment.set(EquipmentSlot::Saddle, Some(saddle));
     core.sound(sound.unwrap_or(eq.equip_sound), 1.0, 1.0, cx);
-    Some(HandEffect::Consume(1))
+    Some(HandEffect::None)
 }
 
 /// Sneak-click equipping on a tamed adult (a nautilus): a saddle, and
@@ -188,6 +190,7 @@ pub fn saddle_up(
 pub fn try_equip(
     core: &mut MobCore,
     stack: &ItemStack,
+    hand: &HandOffer,
     allow_body: bool,
     cx: &mut TickContext,
 ) -> InteractOutcome {
@@ -201,10 +204,10 @@ pub fn try_equip(
     {
         return None;
     }
-    core.equipment
-        .set(eq.slot, Some(stack.clone().with_count(1)));
+    let one = hand.take(1)?;
+    core.equipment.set(eq.slot, Some(one));
     core.sound(eq.equip_sound, 1.0, 1.0, cx);
-    Some(HandEffect::Consume(1))
+    Some(HandEffect::None)
 }
 
 /// How a food item helps a horse: health, seconds of growing up, temper,
@@ -282,63 +285,50 @@ impl Profile {
     }
 }
 
-/// A mount's saddle, body armor and chest slots as its screen shows them.
-/// Slots 0 and 1 mirror the mob's saddle and body equipment: whichever
-/// side changed since the last sync wins.
-#[derive(Debug, Clone)]
+/// A mount's chest, behind the saddle and body slots its screen shows,
+/// which are the mob's own equipment (never a second copy of it).
+#[derive(Debug, Default)]
 pub struct MountInventory {
-    slots: Vec<Option<ItemStack>>,
-    mirror: [Option<ItemStack>; 2],
+    chest: Vec<Option<ItemStack>>,
+    worn: [Option<Item>; 2],
+    screen_touched: bool,
 }
 
-impl Default for MountInventory {
-    fn default() -> Self {
-        Self {
-            slots: vec![None; mount::CHEST],
-            mirror: [None, None],
-        }
-    }
-}
-
-const MIRRORED: [EquipmentSlot; 2] = [EquipmentSlot::Saddle, EquipmentSlot::Body];
+const WORN: [EquipmentSlot; 2] = [EquipmentSlot::Saddle, EquipmentSlot::Body];
 
 impl MountInventory {
-    pub fn slots(&self) -> &[Option<ItemStack>] {
-        &self.slots
-    }
-
-    pub fn slots_mut(&mut self) -> &mut [Option<ItemStack>] {
-        &mut self.slots
-    }
-
     pub fn chest(&self) -> &[Option<ItemStack>] {
-        &self.slots[mount::CHEST..]
+        &self.chest
+    }
+
+    /// The chest to change from the screen, which also may change the
+    /// worn slots: the next [`Self::sync`] reacts to what was put on.
+    pub fn chest_from_screen(&mut self) -> &mut [Option<ItemStack>] {
+        self.screen_touched = true;
+        &mut self.chest
     }
 
     pub fn columns(&self) -> u8 {
-        ((self.slots.len() - mount::CHEST) / 3) as u8
+        (self.chest.len() / 3) as u8
     }
 
     /// Resizes the chest to `columns`, keeping what still fits.
     pub fn resize(&mut self, columns: u8) {
-        self.slots.resize(mount::CHEST + columns as usize * 3, None);
+        self.chest.resize_with(columns as usize * 3, || None);
     }
 
     /// Empties the chest, returning what it held.
     pub fn take_chest(&mut self) -> Vec<ItemStack> {
-        self.slots[mount::CHEST..]
-            .iter_mut()
-            .filter_map(Option::take)
-            .collect()
+        self.chest.iter_mut().filter_map(Option::take).collect()
     }
 
     pub fn load_chest(&mut self, nbt: &mut Compound) {
         let Some(Tag::List(entries)) = nbt.remove("Items") else {
             return;
         };
-        let size = self.slots.len() - mount::CHEST;
+        let size = self.chest.len();
         for (slot, stack) in decode_items(&entries, size).into_iter().enumerate() {
-            self.slots[mount::CHEST + slot] = stack;
+            self.chest[slot] = stack;
         }
     }
 
@@ -346,33 +336,29 @@ impl MountInventory {
         out.insert("Items", encode_items(self.chest()));
     }
 
-    /// Reconciles slots 0 and 1 with the equipment; a screen change is
-    /// equipped (guaranteed to drop, with its equip sound).
+    /// Reacts to what the screen put on since the last sync: it is
+    /// guaranteed to drop and plays its equip sound.
     pub fn sync(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        for (index, slot) in MIRRORED.into_iter().enumerate() {
-            if self.slots[index] != self.mirror[index] {
-                let stack = self.slots[index].clone();
-                if let Some(stack) = &stack {
-                    core.equipment
-                        .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
-                    core.persistence_required = true;
-                    if let Some(sound) = equip_sound(slot, stack) {
-                        core.sound(sound, 1.0, 1.0, cx);
-                    }
+        let touched = std::mem::take(&mut self.screen_touched);
+        for (index, slot) in WORN.into_iter().enumerate() {
+            let worn = core.equipment.get(slot).map(|stack| stack.item());
+            if touched && worn.is_some() && worn != self.worn[index] {
+                core.equipment
+                    .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
+                core.persistence_required = true;
+                if let Some(sound) = core.equipment.get(slot).and_then(|s| equip_sound(slot, s)) {
+                    core.sound(sound, 1.0, 1.0, cx);
                 }
-                core.equipment.set(slot, stack);
-            } else if core.equipment.get(slot) != self.slots[index].as_ref() {
-                self.slots[index] = core.equipment.get(slot).cloned();
             }
-            self.mirror[index] = self.slots[index].clone();
+            self.worn[index] = worn;
         }
     }
 
     /// Takes the equipment as it is, without reacting to it.
     pub fn adopt(&mut self, core: &MobCore) {
-        for (index, slot) in MIRRORED.into_iter().enumerate() {
-            self.slots[index] = core.equipment.get(slot).cloned();
-            self.mirror[index] = self.slots[index].clone();
+        self.screen_touched = false;
+        for (index, slot) in WORN.into_iter().enumerate() {
+            self.worn[index] = core.equipment.get(slot).map(|stack| stack.item());
         }
     }
 }
@@ -385,7 +371,7 @@ fn equip_sound(slot: EquipmentSlot, stack: &ItemStack) -> Option<SoundEvent> {
 }
 
 /// The state every abstract horse shares.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct Equine {
     pub temper: i32,
     pub bred: bool,
@@ -571,7 +557,7 @@ impl Equine {
             && !core.is_baby()
             && !saddled(core)
             && stack
-                .item
+                .item()
                 .equippable()
                 .is_some_and(|eq| eq.equip_on_interact && eq.slot == EquipmentSlot::Saddle)
     }
@@ -581,11 +567,11 @@ impl Equine {
     }
 
     fn can_equip_chest(&self, core: &MobCore, profile: &Profile, stack: &ItemStack) -> bool {
-        profile.chested && !self.has_chest && stack.item == Item::Chest && is_tame(core)
+        profile.chested && !self.has_chest && stack.item() == Item::Chest && is_tame(core)
     }
 
-    fn equip(&mut self, core: &mut MobCore, slot: EquipmentSlot, stack: &ItemStack) {
-        core.equipment.set(slot, Some(stack.clone().with_count(1)));
+    fn equip(&mut self, core: &mut MobCore, slot: EquipmentSlot, one: ItemStack) {
+        core.equipment.set(slot, Some(one));
         core.equipment
             .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
         core.persistence_required = true;
@@ -612,13 +598,14 @@ impl Equine {
         let Some(stack) = stack else {
             return false;
         };
-        if core.is_baby() || (profile.fed_by_hand && (profile.food)(stack.item)) || !is_tame(core) {
+        if core.is_baby() || (profile.fed_by_hand && (profile.food)(stack.item())) || !is_tame(core)
+        {
             return true;
         }
         self.can_equip_chest(core, profile, stack)
             || self.can_equip_saddle(core, profile, stack)
             || self.can_equip_armor(core, profile, stack)
-            || (stack.item == Item::NameTag && stack.components.custom_name.is_some())
+            || (stack.item() == Item::NameTag && stack.components.custom_name.is_some())
     }
 
     /// A click that did not mount it. `None` leaves it to the shared
@@ -637,19 +624,19 @@ impl Equine {
         if profile.tame_to_touch && !tamed {
             return None;
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         let ridden = ridden(core);
         let baby = core.is_baby();
-        let dandelion = baby && stack.item == Item::GoldenDandelion;
+        let dandelion = baby && stack.item() == Item::GoldenDandelion;
         let opens = tamed && !baby && interaction.sneaking;
         if !profile.tame_to_touch && !ridden && !dandelion && !opens {
-            if profile.fed_by_hand && (profile.food)(stack.item) {
+            if profile.fed_by_hand && (profile.food)(stack.item()) {
                 return self
-                    .feed(core, profile, stack.item, interaction.player_uuid, cx)
+                    .feed(core, profile, stack.item(), interaction.player_uuid, cx)
                     .then_some(HandEffect::Consume(1));
             }
             if !tamed {
-                if matches!(stack.item, Item::NameTag | Item::Lead) {
+                if matches!(stack.item(), Item::NameTag | Item::Lead) {
                     return None;
                 }
                 self.make_mad(core, profile, cx);
@@ -666,16 +653,16 @@ impl Equine {
             return None;
         }
         if self.can_equip_saddle(core, profile, stack) {
-            self.equip(core, EquipmentSlot::Saddle, stack);
+            self.equip(core, EquipmentSlot::Saddle, interaction.hand.take(1)?);
             core.sound(SoundEvent::EntityHorseSaddle, 1.0, 1.0, cx);
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         if self.can_equip_armor(core, profile, stack) {
-            self.equip(core, EquipmentSlot::Body, stack);
+            self.equip(core, EquipmentSlot::Body, interaction.hand.take(1)?);
             if let Some(eq) = stack.equippable() {
                 core.sound(eq.equip_sound, 1.0, 1.0, cx);
             }
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         None
     }
@@ -844,7 +831,7 @@ impl Equine {
             core.drop_item(stack, 0.0, cx);
         }
         if std::mem::take(&mut self.has_chest) {
-            core.drop_item(ItemStack::new(Item::Chest, 1), 0.0, cx);
+            core.drop_item(ItemStack::mint(Item::Chest, 1, MintReason::Spawn), 0.0, cx);
             core.changed(FLAGS + 1);
         }
     }
@@ -1026,7 +1013,7 @@ macro_rules! equine_species {
         }
 
         fn is_food(&self, stack: &ItemStack) -> bool {
-            (Self::PROFILE.food)(stack.item)
+            (Self::PROFILE.food)(stack.item())
         }
 
         fn can_fall_in_love(&self, _core: &MobCore) -> bool {
@@ -1073,13 +1060,13 @@ macro_rules! equine_species {
 
         fn inventory(&self) -> Option<(&[Option<ItemStack>], tuff_core::world::menu::MenuKind)> {
             Some((
-                self.equine.inventory.slots(),
+                self.equine.inventory.chest(),
                 self.equine.menu(&Self::PROFILE),
             ))
         }
 
         fn inventory_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-            Some(self.equine.inventory.slots_mut())
+            Some(self.equine.inventory.chest_from_screen())
         }
 
         fn inventory_opens_for(&self, core: &MobCore, player: i32, sneaking: bool) -> bool {
@@ -1100,7 +1087,7 @@ macro_rules! equine_species {
         fn dispensed_on(
             &mut self,
             core: &mut MobCore,
-            stack: &ItemStack,
+            stack: &tuff_core::world::region_api::Fired,
             _cx: &mut TickContext,
         ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
             let columns = self.chest_columns();

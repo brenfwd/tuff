@@ -154,15 +154,20 @@ impl RegionActor {
                 .recipes()
                 .can_cook(ContainerKind::Campfire, item)
             {
-                let stack = ItemStack::new(item, 1).with_components(place.components.clone());
-                if !self.place_campfire_food(pos, stack) {
+                let stack = place.offer.keep_one(place.hand_slot)?;
+                if let Err(refused) = self.place_campfire_food(pos, stack) {
+                    place.offer.unkeep(place.hand_slot, refused);
                     return None;
                 }
                 place.player.send(PlayerEvent::AwardStat(
                     tuff_vanilla_data::registry::CustomStat::InteractWithCampfire,
                     1,
                 ));
-                return Some(outcome);
+                return Some(ActionOutcome::Used {
+                    off_hand: place.off_hand,
+                    item,
+                    effect: crate::world::messages::HandEffect::None,
+                });
             }
             if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::DOUSES_CAMPFIRES, item)
                 && state.get("lit") == Some("true")
@@ -245,24 +250,27 @@ impl RegionActor {
 
     /// Puts one of `stack` on the campfire at `pos`; false if it has no
     /// campfire recipe or no free slot.
-    pub(crate) fn place_campfire_food(&mut self, pos: BlockPos, stack: ItemStack) -> bool {
+    /// Puts one food item on a campfire; hands it back if there is no room.
+    pub(crate) fn place_campfire_food(
+        &mut self,
+        pos: BlockPos,
+        stack: ItemStack,
+    ) -> Result<(), ItemStack> {
         let recipes = self.shared.recipes();
         if !self.ensure_block_entity(pos, ContainerKind::Campfire) {
-            return false;
+            return Err(stack);
         }
         let placed = {
             let entity = self.block_entity_mut(pos).expect("ensured above");
             let mut items = std::mem::take(&mut entity.items);
             let campfire = entity.campfire_mut().expect("a campfire");
-            let placed = recipes.place_food(&mut items, campfire, &stack);
+            let placed = recipes.place_food(&mut items, campfire, stack);
             entity.items = items;
             placed
         };
-        if placed.is_none() {
-            return false;
-        }
+        placed?;
         self.send_block_entity_data(pos);
-        true
+        Ok(())
     }
 
     /// Sends a block entity's client data (a campfire's food) to the

@@ -26,6 +26,13 @@ pub trait Documents: Send + Sync {
     fn read(&self, document: Document<'_>) -> io::Result<Option<Compound>>;
     fn write(&self, document: Document<'_>, root: Compound) -> io::Result<()>;
     fn exists(&self, document: Document<'_>) -> bool;
+    /// Deletes a document (a missing one is fine).
+    fn remove(&self, document: Document<'_>) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!("this storage cannot delete {document:?}"),
+        ))
+    }
     /// Every document currently stored, in no particular order. Used by
     /// offline tools (world conversion) that must copy everything without
     /// knowing document identities ahead of time.
@@ -37,6 +44,18 @@ pub trait WorldLock: Send + Sync {}
 
 /// Chunk and entity blobs of one 32x32-chunk region. One store is owned by
 /// one region actor, so implementations need no internal locking.
+/// One chunk's upcoming writes, for [`RegionStore::prepare_writes`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PreparedWrite {
+    pub pos: ChunkPos,
+    /// The save epoch the writes belong to (their ticket's), or `None`
+    /// for writes without a ticket, which join the open epoch.
+    pub epoch: Option<u64>,
+    pub chunk: bool,
+    pub entities: bool,
+    pub pois: bool,
+}
+
 pub trait RegionStore: Send {
     fn read_chunk(&mut self, pos: ChunkPos) -> io::Result<Option<Vec<u8>>>;
     fn write_chunk(&mut self, pos: ChunkPos, blob: &[u8]) -> io::Result<()>;
@@ -57,6 +76,12 @@ pub trait RegionStore: Send {
     }
     /// `None` removes the chunk's point of interest record.
     fn write_pois(&mut self, _pos: ChunkPos, _blob: Option<&[u8]>) -> io::Result<()> {
+        Ok(())
+    }
+    /// Announces a batch of writes about to follow, so a journaling store
+    /// can record what they replace with one sync instead of one per
+    /// write. Only an optimisation: the writes stay safe without it.
+    fn prepare_writes(&mut self, _writes: &[PreparedWrite]) -> io::Result<()> {
         Ok(())
     }
     /// Makes everything written so far durable.
@@ -129,6 +154,16 @@ pub trait WorldBackend: Send + Sync + 'static {
         region: FileRegionPos,
     ) -> io::Result<Box<dyn RegionStore>>;
     fn blob_codec(&self) -> Arc<dyn BlobCodec>;
+    /// The journal that makes each world save land whole, for a backend
+    /// opened through [`crate::journal::JournaledBackend`].
+    fn save_journal(&self) -> Option<Arc<crate::journal::SaveJournal>> {
+        None
+    }
+    /// Where a backend keeping everything in one file keeps its save
+    /// journal; `None` puts it in a directory beside the world.
+    fn journal_store(&self) -> Option<Box<dyn crate::journal::JournalStore>> {
+        None
+    }
     /// Where the server keeps its configuration, for a backend that holds
     /// it alongside the world. `None` leaves it in the instance directory.
     fn config(&self) -> Option<Arc<dyn ConfigStore>> {

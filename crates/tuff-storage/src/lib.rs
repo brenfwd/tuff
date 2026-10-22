@@ -18,6 +18,7 @@ pub mod entities;
 pub mod error;
 pub mod files;
 pub mod gate;
+pub mod journal;
 pub use tuff_nbt::lz4;
 pub mod memory;
 pub mod migrate;

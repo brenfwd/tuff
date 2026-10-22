@@ -1094,7 +1094,7 @@ fn wand() -> Vec<u8> {
 async fn wand_clicks_are_cancelled_and_reported_until_unload() {
     use crate::protocol::play::PlayerActionStatus;
     use crate::world::inventory::Inventory;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
     use tuff_world_model::{BlockPos, Face};
 
@@ -1103,7 +1103,8 @@ async fn wand_clicks_are_cancelled_and_reported_until_unload() {
     let world = start(dir.path()).await;
     let mut client = Client::new(&world);
     let slot = Inventory::hotbar_slot(client.session.inventory.selected());
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Stick, 1));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test));
     let right = || Serverbound::UseItemOn {
         hand: 0,
         position: BlockPos::new(1, 64, 2),
@@ -1134,7 +1135,8 @@ async fn wand_clicks_are_cancelled_and_reported_until_unload() {
         Verdict::Allow,
         "the left click filter needs a tagged item"
     );
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Stone, 1));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Stone, 1, MintReason::Test));
     assert_eq!(
         bridge::Clicks
             .intercept(&mut client.session, &right())
@@ -1143,7 +1145,8 @@ async fn wand_clicks_are_cancelled_and_reported_until_unload() {
     );
     assert_eq!(announced(&world).await.len(), 1);
 
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Stick, 1));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test));
     console(&world, "tuff plugin unload wand").await;
     assert_eq!(
         bridge::Clicks
@@ -1263,7 +1266,7 @@ async fn plugins_hear_entity_events_and_query_entities_and_items() {
     use crate::world::region_api::RegionHooks;
     use crate::world::session::HurtResult;
     use crate::world::session::hooks::SessionHooks;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
     use tuff_vanilla_data::damage_type;
     use tuff_world_model::pos::RegionPos;
@@ -1277,7 +1280,7 @@ async fn plugins_hear_entity_events_and_query_entities_and_items() {
     let item = crate::world::items::ItemEntity::new(
         world.shared.next_entity_id(),
         4242,
-        ItemStack::new(Item::GoldIngot, 1),
+        ItemStack::mint(Item::GoldIngot, 1, MintReason::Test),
         at,
         [0.0; 3],
         0,
@@ -1335,8 +1338,9 @@ async fn plugins_hear_entity_events_and_query_entities_and_items() {
     assert_eq!(held.result, Ok(-1), "no inventory without a session");
     let mut client = Client::new(&world);
     let slot = crate::world::inventory::Inventory::hotbar_slot(client.session.inventory.selected());
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Stick, 3));
-    *client.session.inventory.slot_mut(0) = Some(ItemStack::new(Item::Stone, 9));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Stick, 3, MintReason::Test));
+    *client.session.inventory.slot_mut(0) = Some(ItemStack::mint(Item::Stone, 9, MintReason::Test));
     let items = tuff_plugin_wasm::sandbox::Items {
         held: Some(("minecraft:stick".to_owned(), 3)),
         slots: vec![(0, "minecraft:stone".to_owned(), 9)],

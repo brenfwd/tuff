@@ -265,7 +265,7 @@ mod screen {
         player.see_entity(track);
         player.inventory_mut().set_slot(
             Inventory::hotbar_slot(0),
-            Some(ItemStack::new(Item::Wheat, 40)),
+            Some(ItemStack::mint(Item::Wheat, 40, MintReason::Test)),
         );
         player
             .handle_packet(Serverbound::Interact {
@@ -287,24 +287,25 @@ mod screen {
         let window = player.window_id().expect("the screen is open");
 
         player.handle_packet(Serverbound::SelectTrade(0)).await;
-        let slots = player.menu_container().unwrap().to_vec();
+        let slots = player
+            .menu_container()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
+            .collect::<Vec<_>>();
         assert_eq!(
             slots[merchant::PAYMENT_A],
-            Some(ItemStack::new(Item::Wheat, 40))
+            Some(ItemStack::mint(Item::Wheat, 40, MintReason::Test))
         );
         assert_eq!(
             slots[merchant::RESULT],
-            Some(ItemStack::new(Item::Emerald, 1))
+            Some(ItemStack::mint(Item::Emerald, 1, MintReason::Test))
         );
         assert_eq!(player.inventory().hand(false), None, "the wheat moved over");
 
         player
             .handle_packet(click(window, merchant::RESULT as i16, 0))
             .await;
-        assert_eq!(
-            player.inventory().carried(),
-            Some(&ItemStack::new(Item::Emerald, 1))
-        );
         assert!(
             player
                 .handle_events_until(|e| matches!(
@@ -313,14 +314,24 @@ mod screen {
                 ))
                 .await
         );
-        let slots = player.menu_container().unwrap().to_vec();
+        assert_eq!(
+            player.inventory().carried(),
+            Some(&ItemStack::mint(Item::Emerald, 1, MintReason::Test)),
+            "the trade settles once the merchant agrees"
+        );
+        let slots = player
+            .menu_container()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
+            .collect::<Vec<_>>();
         assert_eq!(
             slots[merchant::PAYMENT_A],
-            Some(ItemStack::new(Item::Wheat, 20))
+            Some(ItemStack::mint(Item::Wheat, 20, MintReason::Test))
         );
         assert_eq!(
             slots[merchant::RESULT],
-            Some(ItemStack::new(Item::Emerald, 1))
+            Some(ItemStack::mint(Item::Emerald, 1, MintReason::Test))
         );
         assert_eq!(player.stat(Stat::custom(CustomStat::TradedWithVillager)), 1);
         assert_eq!(
@@ -342,7 +353,12 @@ mod screen {
                 ))
                 .await
         );
-        let slots = player.menu_container().unwrap().to_vec();
+        let slots = player
+            .menu_container()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
+            .collect::<Vec<_>>();
         assert_eq!(slots[merchant::PAYMENT_A], None, "all the wheat is spent");
         assert_eq!(slots[merchant::RESULT], None);
         assert_eq!(player.stat(Stat::custom(CustomStat::TradedWithVillager)), 2);
@@ -356,8 +372,8 @@ mod screen {
             .slots()
             .iter()
             .flatten()
-            .filter(|s| s.item == Item::Emerald)
-            .map(|s| s.count as u32)
+            .filter(|s| s.item() == Item::Emerald)
+            .map(|s| s.count() as u32)
             .sum();
         assert_eq!(emeralds, 2);
         world.shutdown().await;
@@ -388,7 +404,7 @@ mod screen {
         player.see_entity(track);
         player.inventory_mut().set_slot(
             Inventory::hotbar_slot(0),
-            Some(ItemStack::new(Item::Wheat, 20)),
+            Some(ItemStack::mint(Item::Wheat, 20, MintReason::Test)),
         );
         player
             .handle_packet(Serverbound::Interact {
@@ -428,14 +444,19 @@ mod screen {
                 .await
         );
         assert_eq!(player.inventory().carried(), None);
-        let slots = player.menu_container().unwrap().to_vec();
+        let slots = player
+            .menu_container()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_ref().map(tuff_item::item::ItemStack::test_copy))
+            .collect::<Vec<_>>();
         assert_eq!(
             slots[merchant::PAYMENT_A],
-            Some(ItemStack::new(Item::Wheat, 20))
+            Some(ItemStack::mint(Item::Wheat, 20, MintReason::Test))
         );
         assert_eq!(
             slots[merchant::RESULT],
-            Some(ItemStack::new(Item::Emerald, 1))
+            Some(ItemStack::mint(Item::Emerald, 1, MintReason::Test))
         );
         world.shutdown().await;
     }
@@ -1054,7 +1075,12 @@ mod behaviour {
             ));
         }
         place_blocks(&world, &region, blocks).await;
-        let fed = || jobless().with("Inventory", vec![ItemStack::new(Item::Bread, 3).to_nbt()]);
+        let fed = || {
+            jobless().with(
+                "Inventory",
+                vec![ItemStack::mint(Item::Bread, 3, MintReason::Test).to_nbt()],
+            )
+        };
         for x in [6.5, 8.5] {
             summon(
                 &region,
@@ -1106,7 +1132,10 @@ mod behaviour {
             &region,
             EntityType::Item,
             Compound::new()
-                .with("Item", ItemStack::new(Item::Bread, 3).to_nbt())
+                .with(
+                    "Item",
+                    ItemStack::mint(Item::Bread, 3, MintReason::Test).to_nbt(),
+                )
                 .with("PickupDelay", 0i16),
             [8.5, SKY as f64 + 1.0, 7.5],
         )
@@ -1339,13 +1368,15 @@ mod zombies {
             "without weakness the apple is refused"
         );
 
-        let potion = ItemStack::new(Item::SplashPotion, 1).to_nbt().with(
-            "components",
-            Compound::new().with(
-                "minecraft:potion_contents",
-                Compound::new().with("potion", "minecraft:weakness"),
-            ),
-        );
+        let potion = ItemStack::mint(Item::SplashPotion, 1, MintReason::Test)
+            .to_nbt()
+            .with(
+                "components",
+                Compound::new().with(
+                    "minecraft:potion_contents",
+                    Compound::new().with("potion", "minecraft:weakness"),
+                ),
+            );
         summon(
             &region,
             EntityType::SplashPotion,
@@ -1704,8 +1735,8 @@ async fn a_pack_trade_set_changes_a_farmers_first_offers() {
     .await;
     assert_eq!(view.offers.len(), 1, "the pack's set has one trade");
     let offer = &view.offers[0];
-    assert_eq!(offer.sell.item, tuff_vanilla_data::Item::GoldenCarrot);
-    assert_eq!(offer.sell.count, 2);
+    assert_eq!(offer.sell.item(), tuff_vanilla_data::Item::GoldenCarrot);
+    assert_eq!(offer.sell.count(), 2);
     assert_eq!(
         (offer.buy.item, offer.buy.count),
         (tuff_vanilla_data::Item::Emerald, 3)

@@ -26,7 +26,7 @@ const SPAWN_ITEM_EVENT: i32 = 3021;
 const BLAZE_FIREBALL_EVENT: i32 = 1018;
 const WIND_CHARGE_SHOOT_EVENT: i32 = 1051;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OminousItemSpawner {
     pub base: EntityBase,
     pub item: Option<ItemStack>,
@@ -55,7 +55,9 @@ impl OminousItemSpawner {
 }
 
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
-    let item = take(nbt, "item", |tag| ItemStack::from_nbt(tag.as_compound()?));
+    let item = take(nbt, "item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    });
     let spawn_after_ticks = take_number(nbt, "spawn_item_after_ticks").unwrap_or(0.0) as i64;
     Some(Box::new(OminousItemSpawner {
         base,
@@ -66,6 +68,10 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
 }
 
 impl RegionEntity for OminousItemSpawner {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.item.take().into_iter().collect()
+    }
+
     fn ignores_pistons(&self) -> bool {
         true
     }
@@ -86,7 +92,10 @@ impl RegionEntity for OminousItemSpawner {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        vec![(metadata::ITEM_STACK, MetadataValue::Slot(self.item.clone()))]
+        vec![(
+            metadata::ITEM_STACK,
+            MetadataValue::Slot(self.item.as_ref().map(tuff_item::item::ItemSnapshot::of)),
+        )]
     }
 
     fn display_name(&self) -> String {
@@ -138,18 +147,21 @@ impl OminousItemSpawner {
                 },
             )]))
         };
-        match item.item {
+        match item.item() {
             Item::FireCharge => cx.effects.push(level_event(BLAZE_FIREBALL_EVENT, 0)),
             Item::WindCharge => cx.effects.push(level_event(WIND_CHARGE_SHOOT_EVENT, 0)),
             _ => {}
         }
         let owner =
             projectile::Owner::of(tuff_core::world::entity::Culprit::entity(&self.base), None);
-        let shot = match item.item {
+        let shot = match item.item() {
             Item::Arrow | Item::TippedArrow | Item::SpectralArrow => {
                 let velocity =
                     projectile::shot_velocity(down, SHOT_POWER, SHOT_UNCERTAINTY, cx.rng);
-                let mut arrow = ArrowShot::new(item.clone().with_count(1), velocity);
+                let mut arrow = ArrowShot::new(
+                    ItemStack::mint_like(&item, 1, tuff_item::item::MintReason::Transform),
+                    velocity,
+                );
                 arrow.pickup = Some(Pickup::Allowed);
                 Some(Shot::Arrow(arrow))
             }
@@ -174,7 +186,11 @@ impl OminousItemSpawner {
                     };
                     Shot::Thrown {
                         kind,
-                        item: item.clone(),
+                        item: ItemStack::mint_like(
+                            &item,
+                            item.count(),
+                            tuff_item::item::MintReason::Transform,
+                        ),
                         velocity: projectile::shot_velocity(down, power, uncertainty, cx.rng),
                     }
                 }),
@@ -189,7 +205,10 @@ impl OminousItemSpawner {
             cx.shared.entity_types.launch(launch, cx.rng)
         });
         match launched {
-            Some(entity) => cx.effects.push(Effect::Spawn(entity)),
+            Some(entity) => {
+                item.burn(tuff_item::item::BurnReason::Transform);
+                cx.effects.push(Effect::Spawn(entity));
+            }
             None => cx.effects.push(Effect::DropItem {
                 stack: item,
                 position,
@@ -210,13 +229,19 @@ impl OminousItemSpawner {
 mod tests {
     use super::*;
     use tuff_feature_builtin_vanilla_combat::projectile::wind_charge::WindCharge;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     #[tuff_core::watchdog]
     #[test]
     fn drops_its_item_once_the_delay_elapses() {
-        let mut spawner =
-            OminousItemSpawner::new(1, 1, [0.5, 64.0, 0.5], ItemStack::new(Item::Diamond, 1), 5);
+        let mut spawner = OminousItemSpawner::new(
+            1,
+            1,
+            [0.5, 64.0, 0.5],
+            ItemStack::mint(Item::Diamond, 1, MintReason::Test),
+            5,
+        );
         tuff_test_support::with_tick_context(|cx| {
             for _ in 0..4 {
                 let tick = spawner.tick(cx);
@@ -241,7 +266,7 @@ mod tests {
             1,
             1,
             [0.5, 64.0, 0.5],
-            ItemStack::new(Item::FireCharge, 1),
+            ItemStack::mint(Item::FireCharge, 1, MintReason::Test),
             1,
         );
         tuff_test_support::with_tick_context(|cx| {
@@ -277,7 +302,7 @@ mod tests {
             1,
             1,
             [0.5, 64.0, 0.5],
-            ItemStack::new(Item::SpectralArrow, 1),
+            ItemStack::mint(Item::SpectralArrow, 1, MintReason::Test),
             1,
         );
         tuff_test_support::with_tick_context(|cx| {
@@ -292,8 +317,13 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn shoots_arrows_down_instead_of_dropping_them() {
-        let mut spawner =
-            OminousItemSpawner::new(1, 1, [0.5, 64.0, 0.5], ItemStack::new(Item::Arrow, 1), 1);
+        let mut spawner = OminousItemSpawner::new(
+            1,
+            1,
+            [0.5, 64.0, 0.5],
+            ItemStack::mint(Item::Arrow, 1, MintReason::Test),
+            1,
+        );
         tuff_test_support::with_tick_context(|cx| {
             assert!(matches!(spawner.tick(cx), Tick::Discard));
             assert!(
@@ -316,7 +346,7 @@ mod tests {
             1,
             9,
             [0.5, 64.0, 0.5],
-            ItemStack::new(Item::WindCharge, 1),
+            ItemStack::mint(Item::WindCharge, 1, MintReason::Test),
             1,
         );
         tuff_test_support::with_tick_context(|cx| {

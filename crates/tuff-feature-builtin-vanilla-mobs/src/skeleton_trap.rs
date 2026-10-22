@@ -16,7 +16,7 @@ use tuff_core::protocol::play;
 use tuff_core::world::entity::{Effect, RegionEntity, TickContext};
 use tuff_core::world::region_api::RegionWorld;
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_world_model::BlockPos;
 
 const TRIGGER_RANGE: f64 = 10.0;
@@ -75,6 +75,7 @@ pub fn spring(horse: &mut MobCore, cx: &mut TickContext) {
         let base = other.base_mut();
         base.passengers
             .push(tuff_core::world::entity::save(&*rider));
+        tuff_item::item::conservation::release(rider);
         for axis in 0..3 {
             base.velocity[axis] += push[axis];
         }
@@ -187,12 +188,12 @@ fn skeleton(
     if mob.core.equipment.get(EquipmentSlot::Head).is_none() {
         mob.core.equipment.set(
             EquipmentSlot::Head,
-            Some(ItemStack::new(Item::IronHelmet, 1)),
+            Some(ItemStack::mint(Item::IronHelmet, 1, MintReason::Spawn)),
         );
     }
     let special = difficulty.special_multiplier();
     for slot in [EquipmentSlot::Mainhand, EquipmentSlot::Head] {
-        let Some(mut stack) = mob.core.equipment.get(slot).cloned() else {
+        let Some(mut stack) = mob.core.equipment.take(slot) else {
             continue;
         };
         stack.components.enchantments = None;

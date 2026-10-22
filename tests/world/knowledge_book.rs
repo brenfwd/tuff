@@ -6,7 +6,7 @@ use crate::world::session::PlayerSession;
 use tuff_nbt::Tag;
 
 fn book(recipes: &[&str]) -> ItemStack {
-    let mut stack = ItemStack::new(Item::KnowledgeBook, 1);
+    let mut stack = ItemStack::mint(Item::KnowledgeBook, 1, MintReason::Test);
     stack.components.other.insert(
         "minecraft:recipes".to_owned(),
         Tag::List(
@@ -29,7 +29,9 @@ async fn read(player: &mut PlayerSession, stack: ItemStack) -> Option<ItemStack>
             sequence: 1,
         })
         .await;
-    player.inventory_mut().slots()[Inventory::hotbar_slot(0)].clone()
+    player.inventory_mut().slots()[Inventory::hotbar_slot(0)]
+        .as_ref()
+        .map(tuff_item::item::ItemStack::test_copy)
 }
 
 #[tuff_core::watchdog]

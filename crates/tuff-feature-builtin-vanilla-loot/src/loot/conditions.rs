@@ -280,7 +280,7 @@ pub(super) fn random_chance_with_enchanted_bonus(
     context: &Context,
     rng: &mut impl Rng,
 ) -> bool {
-    let weapon = context.entity.and_then(|e| e.attacker_weapon.as_ref());
+    let weapon = context.entity.and_then(|e| e.attacker_weapon.as_deref());
     let level = condition["enchantment"]
         .as_str()
         .map_or(0, |id| weapon.map_or(0, |w| w.enchantment_level(id)));

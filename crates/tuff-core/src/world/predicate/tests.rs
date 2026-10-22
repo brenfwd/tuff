@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::json;
 use tuff_item::item::Components;
+use tuff_item::item::MintReason;
 
 #[tuff_core::watchdog]
 #[test]
@@ -29,9 +30,9 @@ fn entity_component_predicates_read_variants_of_any_mob() {
 #[tuff_core::watchdog]
 #[test]
 fn damage_predicates_need_a_damageable_item() {
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     let check = |item, predicate: Value| {
-        let stack = ItemStack::new(item, 1);
+        let stack = ItemStack::mint(item, 1, MintReason::Test);
         item_sub_predicate("minecraft:damage", &predicate, &stack)
     };
     assert!(!check(Item::Stick, json!({"damage": {"min": 0}})));
@@ -95,7 +96,7 @@ fn player_at(position: [f64; 3]) -> EntityFacts {
 #[tuff_core::watchdog]
 #[test]
 fn item_predicates_check_ids_tags_counts_and_enchantments() {
-    let planks = ItemStack::new(Item::OakPlanks, 5);
+    let planks = ItemStack::mint(Item::OakPlanks, 5, MintReason::Test);
     assert!(item(&json!({"items": "minecraft:oak_planks"}), &planks));
     assert!(item(&json!({"items": "#minecraft:planks"}), &planks));
     assert!(item(
@@ -107,7 +108,7 @@ fn item_predicates_check_ids_tags_counts_and_enchantments() {
     assert!(!item(&json!({"count": {"min": 6}}), &planks));
     assert!(!item(&json!({"unknown": 1}), &planks));
 
-    let mut pick = ItemStack::new(Item::IronPickaxe, 1);
+    let mut pick = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     let silk = json!({"predicates": {"minecraft:enchantments": [
         {"enchantments": "minecraft:silk_touch", "levels": {"min": 1}}
     ]}});
@@ -122,7 +123,10 @@ fn item_predicates_check_ids_tags_counts_and_enchantments() {
 fn entity_predicates_check_type_distance_location_and_equipment() {
     let mut zombie = player_at([10.0, 64.0, 0.0]);
     zombie.kind = Some(EntityType::Zombie);
-    zombie.equipment = vec![(EquipmentSlot::Head, ItemStack::new(Item::IronHelmet, 1))];
+    zombie.equipment = vec![(
+        EquipmentSlot::Head,
+        tuff_item::item::ItemSnapshot::describe(Item::IronHelmet, 1, Default::default()),
+    )];
     let origin = [0.0, 64.0, 0.0];
     assert!(entity(
         &json!({"minecraft:entity_type": "minecraft:zombie"}),
@@ -417,7 +421,7 @@ fn bounds_accept_numbers_and_ranges() {
 #[tuff_core::watchdog]
 #[test]
 fn exact_components_fall_back_to_item_defaults() {
-    let stack = ItemStack::new(Item::IronPickaxe, 1);
+    let stack = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     assert!(item(
         &json!({"components": {"minecraft:max_stack_size": 1}}),
         &stack
@@ -426,7 +430,7 @@ fn exact_components_fall_back_to_item_defaults() {
         &json!({"components": {"minecraft:max_stack_size": 64}}),
         &stack
     ));
-    let planks = ItemStack::new(Item::OakPlanks, 1);
+    let planks = ItemStack::mint(Item::OakPlanks, 1, MintReason::Test);
     assert!(item(
         &json!({"components": {"minecraft:max_stack_size": 64}}),
         &planks
@@ -463,7 +467,8 @@ fn state_ranges_compare_enum_and_boolean_properties_by_order() {
 }
 
 fn stack_with(item: Item, key: &str, value: impl Into<Tag>) -> ItemStack {
-    ItemStack::new(item, 1).with_components(Components::from_nbt(&Compound::new().with(key, value)))
+    ItemStack::mint(item, 1, MintReason::Test)
+        .with_components(Components::from_nbt(&Compound::new().with(key, value)))
 }
 
 #[tuff_core::watchdog]
@@ -491,7 +496,10 @@ fn item_component_predicates_cover_fireworks_books_and_presence() {
         "explosions": {"contains": [{"shape": "burst"}]}
     }}});
     assert!(!item(&wrong, &rocket));
-    assert!(!item(&fireworks, &ItemStack::new(Item::FireworkRocket, 1)));
+    assert!(!item(
+        &fireworks,
+        &ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test)
+    ));
 
     let book = stack_with(
         Item::WritableBook,
@@ -509,7 +517,10 @@ fn item_component_predicates_cover_fireworks_books_and_presence() {
 
     let presence = json!({"predicates": {"minecraft:writable_book_content": {}}});
     assert!(item(&presence, &book));
-    assert!(!item(&presence, &ItemStack::new(Item::WritableBook, 1)));
+    assert!(!item(
+        &presence,
+        &ItemStack::mint(Item::WritableBook, 1, MintReason::Test)
+    ));
 }
 
 #[tuff_core::watchdog]

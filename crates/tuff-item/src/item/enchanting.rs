@@ -6,7 +6,7 @@ use serde_json::Value;
 use tuff_vanilla_data::Item;
 
 use crate::enchantment::{self, EnchantmentDef, EnchantmentRegistry};
-use crate::item::{Enchantments, ItemStack};
+use crate::item::{Enchantments, ItemStack, MintReason};
 
 /// One enchantment of a registry: its id and definition.
 pub type Choice<'a> = (&'a str, &'a EnchantmentDef);
@@ -52,7 +52,12 @@ pub fn enchant<S: AsRef<str>>(mut stack: ItemStack, chosen: &[(S, i32)]) -> Item
         return stack;
     }
     if stack.item == Item::Book {
-        stack = ItemStack::new(Item::EnchantedBook, stack.count);
+        let count = stack.count;
+        std::mem::replace(
+            &mut stack,
+            ItemStack::mint(Item::EnchantedBook, count, MintReason::Transform),
+        )
+        .burn(crate::item::BurnReason::Transform);
     }
     let target = if stack.item == Item::EnchantedBook {
         &mut stack.components.stored_enchantments
@@ -333,10 +338,10 @@ mod table_tests {
     #[test]
     fn nothing_is_offered_for_unenchantable_or_enchanted_items() {
         assert_eq!(
-            table_offers(&ItemStack::new(Item::Stick, 1), 7, 15),
+            table_offers(&ItemStack::mint(Item::Stick, 1, MintReason::Test), 7, 15),
             TableOffers::NONE
         );
-        let mut sword = ItemStack::new(Item::DiamondSword, 1);
+        let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         sword.components.enchantments =
             Some(Enchantments::new(vec![("minecraft:sharpness".into(), 1)]));
         assert_eq!(table_offers(&sword, 7, 15), TableOffers::NONE);
@@ -345,7 +350,7 @@ mod table_tests {
     #[tuff_core::watchdog]
     #[test]
     fn costs_scale_with_bookshelves_and_are_deterministic() {
-        let sword = ItemStack::new(Item::DiamondSword, 1);
+        let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         let none = table_offers(&sword, 12345, 0);
         assert_eq!(none, table_offers(&sword, 12345, 0));
         assert!(none.costs.iter().all(|c| *c <= 8));
@@ -357,7 +362,7 @@ mod table_tests {
     #[tuff_core::watchdog]
     #[test]
     fn the_clue_is_one_of_the_enchantments_the_button_applies() {
-        let sword = ItemStack::new(Item::DiamondSword, 1);
+        let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         for seed in 0..40 {
             let offers = table_offers(&sword, seed, 15);
             for slot in 0..3 {
@@ -376,7 +381,7 @@ mod table_tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_book_always_gets_an_enchantment_at_thirty_levels() {
-        let book = ItemStack::new(Item::Book, 1);
+        let book = ItemStack::mint(Item::Book, 1, MintReason::Test);
         for seed in 0..60 {
             let list = table_enchantments(&book, seed, 2, 30);
             assert!(!list.is_empty());

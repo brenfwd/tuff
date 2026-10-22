@@ -12,8 +12,10 @@ use std::time::Duration;
 use tokio::sync::{oneshot, watch};
 use tuff_core::config::ConfigStore;
 use tuff_core::world::Shared;
+use tuff_core::world::conservation::ItemViolation;
+use tuff_core::world::dimension::DimensionId;
 use tuff_core::world::dimension::Dimensions;
-use tuff_core::world::services::{ServiceFactory, WorldService};
+use tuff_core::world::services::{ItemViolations, ServiceFactory, ViolationCulprit, WorldService};
 
 use crate::actors::{Control, Handles, Read, Refused};
 use crate::filter::{Filter, parse_duration};
@@ -415,7 +417,31 @@ pub fn beside(world: &Path) -> PathBuf {
     }
 }
 
+impl ItemViolations for AuditLog {
+    fn violation(
+        &self,
+        culprit: ViolationCulprit<'_>,
+        dimension: DimensionId,
+        violation: &ItemViolation,
+    ) {
+        let who = match culprit {
+            ViolationCulprit::Player { uuid, name } => crate::record::Who::Player {
+                uuid,
+                name: name.into(),
+            },
+            ViolationCulprit::Plugin(plugin) => {
+                crate::record::Who::Cause(format!("#plugin:{plugin}"))
+            }
+        };
+        self.log(crate::hooks::violation_record(who, dimension, violation));
+    }
+}
+
 impl WorldService for AuditLog {
+    fn item_violations(&self) -> Option<&dyn ItemViolations> {
+        Some(self)
+    }
+
     fn start(&self, shared: &Arc<Shared>) {
         self.refresh(&shared.config);
         let Some(path) = self.location(shared) else {

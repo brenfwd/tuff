@@ -51,7 +51,10 @@ async fn drop_item(region: &RegionHandle, item: Item, count: u8, at: [f64; 3]) -
     summon(
         region,
         EntityType::Item,
-        Compound::new().with("Item", ItemStack::new(item, count).to_nbt()),
+        Compound::new().with(
+            "Item",
+            ItemStack::mint(item, count, MintReason::Test).to_nbt(),
+        ),
         at,
     )
     .await;
@@ -70,11 +73,14 @@ async fn items_of(region: &RegionHandle, item: Item) -> Vec<(i32, [f64; 3], u8)>
         let Some(nbt) = entity_nbt(region, snapshot.id).await else {
             continue;
         };
-        let Some(stack) = nbt.get_compound("Item").and_then(ItemStack::from_nbt) else {
+        let Some(stack) = nbt
+            .get_compound("Item")
+            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
+        else {
             continue;
         };
-        if stack.item == item {
-            found.push((snapshot.id, snapshot.position, stack.count));
+        if stack.item() == item {
+            found.push((snapshot.id, snapshot.position, stack.count()));
         }
     }
     found
@@ -108,7 +114,10 @@ async fn click(
 fn holding(item: Item) -> Compound {
     Compound::new().with(
         "equipment",
-        Compound::new().with("mainhand", ItemStack::new(item, 1).to_nbt()),
+        Compound::new().with(
+            "mainhand",
+            ItemStack::mint(item, 1, MintReason::Test).to_nbt(),
+        ),
     )
 }
 
@@ -149,7 +158,7 @@ async fn an_allay_gathers_matching_items_and_brings_them_to_the_player_who_gave_
         Item::Cobblestone,
     )
     .await;
-    assert_eq!(given, Some(HandEffect::Consume(1)));
+    assert_eq!(given, Some(HandEffect::None));
     let nbt = entity_nbt(&region, allay).await.unwrap();
     assert_eq!(
         memory(&memories(&nbt), "minecraft:liked_player").and_then(Tag::as_uuid),
@@ -174,7 +183,7 @@ async fn an_allay_gathers_matching_items_and_brings_them_to_the_player_who_gave_
             });
         if let Some(stack) = delivered {
             assert!(gathered, "it carried the items before handing them over");
-            assert_eq!(stack.item, Item::Cobblestone);
+            assert_eq!(stack.item(), Item::Cobblestone);
             assert!(
                 items_of(&region, Item::Cobblestone)
                     .await
@@ -384,7 +393,7 @@ async fn allay_memories_and_inventory_survive_saving_and_loading() {
         .with(
             "Inventory",
             Tag::List(vec![Tag::Compound(
-                ItemStack::new(Item::Cobblestone, 7).to_nbt(),
+                ItemStack::mint(Item::Cobblestone, 7, MintReason::Test).to_nbt(),
             )]),
         )
         .with("Brain", Compound::new().with("memories", memories_in));
@@ -419,8 +428,9 @@ async fn allay_memories_and_inventory_survive_saving_and_loading() {
     let Some(Tag::List(inventory)) = saved.get("Inventory") else {
         panic!("no inventory saved: {saved:?}");
     };
-    let kept = ItemStack::from_nbt(inventory[0].as_compound().unwrap()).unwrap();
-    assert_eq!((kept.item, kept.count), (Item::Cobblestone, 7));
+    let kept =
+        ItemStack::mint_from_nbt(inventory[0].as_compound().unwrap(), MintReason::Test).unwrap();
+    assert_eq!((kept.item(), kept.count()), (Item::Cobblestone, 7));
     world.shutdown().await;
 }
 

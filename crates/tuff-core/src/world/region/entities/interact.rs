@@ -218,28 +218,79 @@ impl RegionActor {
         target: i32,
         interaction: EntityInteraction,
     ) {
+        self.interact_entity_with(&player, target, &interaction);
+        self.return_hand(&player, &interaction);
+    }
+
+    /// Hands what is left of the clicking player's hand stack back, ahead
+    /// of the click's other answers, or drops it if the player is gone.
+    fn return_hand(&mut self, player: &PlayerHandle, interaction: &EntityInteraction) {
+        let Some(stack) = interaction
+            .hand
+            .take_all()
+            .filter(|stack| !stack.is_empty())
+        else {
+            return;
+        };
+        let creative = interaction.creative;
+        let pos = BlockPos::containing(interaction.position);
+        if !creative
+            && !self.may_transfer_with(
+                crate::world::conservation::Transfer::HandReturn,
+                pos,
+                player,
+                true,
+            )
+        {
+            self.spawn_item_at(stack, interaction.position, [0.0; 3], 0);
+            return;
+        }
+        if let Err(refused) = player.try_send(PlayerEvent::HandReturned {
+            slot: interaction.hand.slot,
+            stack,
+            creative,
+        }) && let PlayerEvent::HandReturned { stack, .. } = *refused
+        {
+            if creative {
+                stack.burn(tuff_item::item::BurnReason::Creative);
+            } else {
+                self.spawn_item_at(stack, interaction.position, [0.0; 3], 0);
+            }
+        }
+    }
+
+    fn interact_entity_with(
+        &mut self,
+        player: &PlayerHandle,
+        target: i32,
+        interaction: &EntityInteraction,
+    ) {
         let content = self.shared.custom.clone();
-        let (custom, hidden) = crate::custom::items::seen_by_entity(&content, &interaction);
-        let seen = hidden.as_ref().unwrap_or(&interaction);
+        let (custom, hidden) = crate::custom::items::seen_by_entity(&content, interaction);
+        let seen = hidden.as_ref().unwrap_or(interaction);
         if !self.ents.entities.contains_key(&target) {
             return;
         }
         let hooks = self.shared.region_hooks.clone();
         if let Some(effect) = hooks
             .iter()
-            .find_map(|hook| hook.interact_entity(self, &player, target, seen))
+            .find_map(|hook| hook.interact_entity(self, player, target, seen))
         {
+            self.return_hand(player, interaction);
             if let Some(facts) = self.ents.entities.get(&target).map(|t| t.entity.facts()) {
                 player.send(PlayerEvent::Advancement(Box::new(
                     crate::world::messages::AdvancementEvent::InteractedWithEntity {
-                        item: interaction.stack.clone(),
+                        item: interaction
+                            .stack
+                            .as_ref()
+                            .map(tuff_item::item::ItemSnapshot::of),
                         entity: facts,
                     },
                 )));
             }
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_ref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item()),
                 effect,
             });
             return;
@@ -248,10 +299,10 @@ impl RegionActor {
             return;
         };
         if tracked.entity.seats() > 0
-            && !tracked.entity.mount_refused_by(seen.stack.as_ref())
+            && !tracked.entity.mount_refused_by(seen.stack.as_deref())
             && !interaction.sneaking
             && !interaction.riding
-            && self.mount(&mut tracked, &player, interaction.player_uuid)
+            && self.mount(&mut tracked, player, interaction.player_uuid)
         {
             self.ents.entities.insert(target, tracked);
             return;
@@ -262,7 +313,8 @@ impl RegionActor {
                 .container_opens_for(player.id, interaction.sneaking)
         {
             self.ents.entities.insert(target, tracked);
-            self.open_entity_container(&player, target);
+            self.return_hand(player, interaction);
+            self.open_entity_container(player, target);
             return;
         }
         let summaries = self.entity_summaries();
@@ -270,6 +322,10 @@ impl RegionActor {
         let (outcome, effects) = self.with_context(&summaries, &mut budget, |cx| {
             tracked.entity.interact(seen, cx)
         });
+        let custom_behavior = custom.as_ref().is_some_and(|def| def.behavior.is_some());
+        if outcome.is_some() || !custom_behavior {
+            self.return_hand(player, interaction);
+        }
         let chunk = tracked.chunk();
         let facts = tracked.entity.facts();
         self.send_changed_data(&mut tracked);
@@ -277,7 +333,10 @@ impl RegionActor {
         if outcome.is_some() {
             player.send(PlayerEvent::Advancement(Box::new(
                 crate::world::messages::AdvancementEvent::InteractedWithEntity {
-                    item: interaction.stack.clone(),
+                    item: interaction
+                        .stack
+                        .as_ref()
+                        .map(tuff_item::item::ItemSnapshot::of),
                     entity: facts,
                 },
             )));
@@ -303,14 +362,14 @@ impl RegionActor {
         }
         let outcome = match (outcome, custom.and_then(|def| def.behavior.clone())) {
             (None, Some(behavior)) if !discard => {
-                behavior.0.use_on_entity(self, target, &interaction)
+                behavior.0.use_on_entity(self, target, interaction)
             }
             (outcome, _) => outcome,
         };
         if let Some(effect) = outcome {
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_ref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item()),
                 effect,
             });
         }

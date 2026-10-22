@@ -507,7 +507,7 @@ impl Species for Turtle {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        turtle_food(stack.item)
+        turtle_food(stack.item())
     }
 
     fn can_fall_in_love(&self, core: &MobCore) -> bool {

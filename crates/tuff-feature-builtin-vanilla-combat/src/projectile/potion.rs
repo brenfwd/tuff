@@ -187,7 +187,7 @@ pub fn land(
             .map(|e| (e.id, false, e.kind, e.bounds)),
     );
     if kind == EntityType::SplashPotion && has_effects {
-        let scale_duration = item.item.potion_duration_scale();
+        let scale_duration = item.item().potion_duration_scale();
         for (id, player, target_kind, target_bounds) in &targets {
             let grown = inflate(*target_bounds, [margin; 3]);
             let dist = distance_sq(bounds, grown);
@@ -265,7 +265,7 @@ pub fn land(
             struck.unwrap_or(position),
             owner,
             contents.clone(),
-            item.item.potion_duration_scale(),
+            item.item().potion_duration_scale(),
             cx.rng,
         );
         cx.effects.push(Effect::Spawn(Box::new(cloud)));

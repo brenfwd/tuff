@@ -7,7 +7,7 @@ use tuff_vanilla_data::BlockState;
 use tuff_vanilla_data::block::Facing;
 
 use crate::world::region_api::RegionWorld;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack};
 use tuff_world_model::BlockPos;
 
 /// Who moves the item.
@@ -30,11 +30,16 @@ pub struct PortAccess {
 }
 
 pub trait ItemPort: Send + Sync {
-    /// Takes one `stack` (count 1) if it fits; true when stored.
-    fn offer(&self, world: &mut dyn RegionWorld, at: &PortAccess, stack: &ItemStack) -> bool;
+    /// Keeps `stack` (count 1) if it fits; hands it back otherwise.
+    fn offer(
+        &self,
+        world: &mut dyn RegionWorld,
+        at: &PortAccess,
+        stack: ItemStack,
+    ) -> Result<(), ItemStack>;
 
     /// What a pull through `at.face` would take, without taking it.
-    fn peek(&self, world: &dyn RegionWorld, at: &PortAccess) -> Option<ItemStack>;
+    fn peek(&self, world: &dyn RegionWorld, at: &PortAccess) -> Option<ItemSnapshot>;
 
     /// Takes what `peek` showed; called only once the puller has room. A
     /// player or mob emptying a block by hand may have the item ejected

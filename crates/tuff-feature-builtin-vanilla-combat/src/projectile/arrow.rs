@@ -20,7 +20,7 @@ use tuff_core::world::projectile::{
     lerp_rotation, margin, rotation_of, targets_along,
 };
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_common::combat::{self, DamageContext};
 
@@ -55,7 +55,7 @@ const EVENT_POTION_PUFF: i8 = 0;
 /// What a bounced arrow keeps of its speed, reversed.
 const REBOUND_SPEED: f64 = -0.1;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Arrow {
     pub base: EntityBase,
     pub owner: Owner,
@@ -71,7 +71,7 @@ pub struct Arrow {
     /// What a pickup gives back.
     pub item: ItemStack,
     /// The bow it was shot from; its enchantments act on the hit.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     ticks: u32,
     pierced: Vec<i32>,
     changed: Vec<u8>,
@@ -88,7 +88,12 @@ pub struct Arrow {
     /// Set once a piercing arrow's failed hit sent a bounced copy back in
     /// its place; not saved.
     bounced: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// Where a piercing arrow leaves its item for the bounced copy that
+    /// came back in its place, which collects it; not saved.
+    handoff: Option<Handoff>,
 }
+
+type Handoff = std::sync::Arc<std::sync::Mutex<Option<ItemStack>>>;
 
 /// What a thrown trident adds to an arrow.
 #[derive(Debug, Clone, Default)]
@@ -106,36 +111,37 @@ pub struct Trident {
 }
 
 impl Arrow {
-    /// An arrow leaving `shooter`'s eyes (0.1 below them), owned by it.
+    /// A plain arrow minted for a shot that spends no item (mob ammo),
+    /// leaving `shooter`'s eyes (0.1 below them), owned by it.
     pub fn new(id: i32, position: [f64; 3], velocity: [f64; 3], owner: Owner) -> Self {
-        Self::of(EntityType::Arrow, id, position, velocity, owner)
+        let item = ItemStack::mint(Item::Arrow, 1, MintReason::EntityDrop);
+        Self::of(EntityType::Arrow, item, id, position, velocity, owner)
     }
 
     /// The arrow entity an arrow item flies as: spectral arrows are their
     /// own type; plain and tipped ones are arrows.
     pub fn from_item(
-        item: &ItemStack,
+        item: ItemStack,
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
         owner: Owner,
     ) -> Self {
-        let kind = if item.item == Item::SpectralArrow {
+        let kind = if item.item() == Item::SpectralArrow {
             EntityType::SpectralArrow
         } else {
             EntityType::Arrow
         };
-        let mut arrow = Self::of(kind, id, position, velocity, owner);
-        arrow.item = item.clone().with_count(1);
-        arrow
+        let item = item.keep(1, tuff_item::item::BurnReason::Template);
+        Self::of(kind, item, id, position, velocity, owner)
     }
 
     /// The arrow or trident `shot` describes.
     pub fn shot(id: i32, position: [f64; 3], owner: Owner, shot: ArrowShot) -> Self {
         let mut arrow = if shot.kind() == EntityType::Trident {
-            Self::trident(&shot.item, id, position, shot.velocity, owner)
+            Self::trident(shot.item, id, position, shot.velocity, owner)
         } else {
-            Self::from_item(&shot.item, id, position, shot.velocity, owner)
+            Self::from_item(shot.item, id, position, shot.velocity, owner)
         };
         if let Some(pickup) = shot.pickup {
             arrow.pickup = pickup;
@@ -160,32 +166,40 @@ impl Arrow {
 
     /// A trident `item` thrown along `velocity`.
     pub fn trident(
-        item: &ItemStack,
+        item: ItemStack,
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
         owner: Owner,
     ) -> Self {
-        let mut arrow = Self::of(EntityType::Trident, id, position, velocity, owner);
-        arrow.item = item.clone().with_count(1);
-        arrow.weapon = Some(arrow.item.clone());
-        arrow.trident = Some(Trident {
-            loyalty: tuff_vanilla_common::ranged::trident_loyalty(item),
-            foil: item
-                .components
-                .enchantments
-                .as_ref()
-                .is_some_and(|e| !e.entries().is_empty())
-                || item
-                    .components
-                    .other
-                    .get("minecraft:enchantment_glint_override")
-                    .is_some(),
-            ..Default::default()
-        });
+        let trident = trident_state(&item);
+        let item = item.keep(1, tuff_item::item::BurnReason::Template);
+        let mut arrow = Self::of(EntityType::Trident, item, id, position, velocity, owner);
+        arrow.trident = Some(trident);
+        arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));
         arrow
     }
+}
 
+/// The loyalty and glint a thrown trident `item` flies with.
+fn trident_state(item: &ItemStack) -> Trident {
+    Trident {
+        loyalty: tuff_vanilla_common::ranged::trident_loyalty(item),
+        foil: item
+            .components
+            .enchantments
+            .as_ref()
+            .is_some_and(|e| !e.entries().is_empty())
+            || item
+                .components
+                .other
+                .get("minecraft:enchantment_glint_override")
+                .is_some(),
+        ..Default::default()
+    }
+}
+
+impl Arrow {
     fn default_sound(kind: EntityType) -> SoundEvent {
         if kind == EntityType::Trident {
             SoundEvent::ItemTridentHitGround
@@ -194,7 +208,14 @@ impl Arrow {
         }
     }
 
-    fn of(kind: EntityType, id: i32, position: [f64; 3], velocity: [f64; 3], owner: Owner) -> Self {
+    fn of(
+        kind: EntityType,
+        item: ItemStack,
+        id: i32,
+        position: [f64; 3],
+        velocity: [f64; 3],
+        owner: Owner,
+    ) -> Self {
         let uuid = rand::random();
         let mut base = EntityBase::new(kind, id, uuid, position, velocity);
         let (yaw, pitch) = rotation_of(velocity);
@@ -217,14 +238,7 @@ impl Arrow {
             life: 0,
             in_block: None,
             sound: Self::default_sound(kind),
-            item: ItemStack::new(
-                match kind {
-                    EntityType::SpectralArrow => Item::SpectralArrow,
-                    EntityType::Trident => Item::Trident,
-                    _ => Item::Arrow,
-                },
-                1,
-            ),
+            item,
             weapon: None,
             ticks: 0,
             pierced: Vec::new(),
@@ -235,6 +249,7 @@ impl Arrow {
             glow_ticks: SPECTRAL_GLOW_TICKS,
             trident: (kind == EntityType::Trident).then(Trident::default),
             bounced: None,
+            handoff: None,
         }
     }
 
@@ -254,7 +269,7 @@ impl Arrow {
     fn hit_effects(&self) -> Vec<tuff_core::world::effects::ActiveEffect> {
         let mut effects = self.effects.clone();
         if let Some(contents) = &self.item.components.potion_contents {
-            let scale = self.item.item.potion_duration_scale();
+            let scale = self.item.item().potion_duration_scale();
             effects.extend(tuff_core::world::effects::potion_effects(contents, scale));
         }
         if self.base.kind == EntityType::SpectralArrow {
@@ -268,8 +283,40 @@ impl Arrow {
     }
 
     /// This arrow bounced back off a victim it failed to hurt.
-    fn rebounded(&self, cx: &mut TickContext) -> Self {
-        let mut arrow = self.clone();
+    /// It takes this arrow's item, or, for a piercing arrow flying on,
+    /// collects it once that arrow knows it bounced.
+    fn rebounded(&mut self, cx: &mut TickContext) -> Self {
+        let (item, handoff) = if self.pierce == 0 {
+            (std::mem::replace(&mut self.item, ItemStack::empty()), None)
+        } else {
+            let handoff = self.handoff.get_or_insert_with(Default::default).clone();
+            (ItemStack::empty(), Some(handoff))
+        };
+        let mut arrow = Self {
+            base: self.base.clone(),
+            owner: self.owner.clone(),
+            pickup: self.pickup,
+            damage: self.damage,
+            crit: self.crit,
+            pierce: self.pierce,
+            in_ground: self.in_ground,
+            shake: self.shake,
+            life: self.life,
+            in_block: self.in_block,
+            sound: self.sound,
+            item,
+            weapon: self.weapon.clone(),
+            ticks: self.ticks,
+            pierced: self.pierced.clone(),
+            changed: self.changed.clone(),
+            reserved: self.reserved,
+            refused_by: self.refused_by.clone(),
+            effects: self.effects.clone(),
+            glow_ticks: self.glow_ticks,
+            trident: self.trident.clone(),
+            bounced: self.bounced.clone(),
+            handoff,
+        };
         arrow.base.id = cx.shared.next_entity_id();
         arrow.base.uuid = cx.rng.r#gen();
         arrow.base.velocity = self.base.velocity.map(|c| c * REBOUND_SPEED);
@@ -278,6 +325,20 @@ impl Arrow {
         arrow.changed.clear();
         arrow.bounced = None;
         arrow
+    }
+
+    /// A bounced copy takes the item its piercing original left for it.
+    fn collect_handoff(&mut self) {
+        if !self.item.is_empty() || self.bounced.is_some() {
+            return;
+        }
+        let Some(handoff) = &self.handoff else {
+            return;
+        };
+        if let Some(item) = handoff.lock().ok().and_then(|mut left| left.take()) {
+            self.item = item;
+            self.handoff = None;
+        }
     }
 
     fn flags(&self) -> i8 {
@@ -507,7 +568,7 @@ impl Arrow {
             if !entity.living.is_some_and(|l| l.alive) {
                 if self.pickup == Pickup::Allowed {
                     cx.effects.push(Effect::DropItem {
-                        stack: self.item.clone(),
+                        stack: std::mem::replace(&mut self.item, ItemStack::empty()),
                         position: self.base.position,
                         velocity: [0.0; 3],
                         pickup_delay: 10,
@@ -709,12 +770,23 @@ impl Arrow {
 }
 
 impl RegionEntity for Arrow {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.collect_handoff();
+        let item = std::mem::replace(&mut self.item, ItemStack::empty());
+        if item.is_empty() {
+            Vec::new()
+        } else {
+            vec![item]
+        }
+    }
+
     fn ground_pickup(&mut self) -> Option<tuff_core::world::entity::GroundPickup<'_>> {
         let creative_only = self.creative_pickup();
-        let stack = self.pickup_stack().cloned();
-        if !creative_only && stack.is_none() {
+        let allowed = self.pickup_stack().is_some();
+        if !creative_only && !allowed {
             return None;
         }
+        let stack = allowed.then_some(&mut self.item);
         Some(tuff_core::world::entity::GroundPickup {
             bounds: self.base.bounds(),
             reserved: &mut self.reserved,
@@ -814,8 +886,15 @@ impl RegionEntity for Arrow {
             .as_ref()
             .is_some_and(|b| b.load(std::sync::atomic::Ordering::Acquire))
         {
+            if let Some(handoff) = self.handoff.take()
+                && std::sync::Arc::strong_count(&handoff) > 1
+                && let Ok(mut left) = handoff.lock()
+            {
+                *left = Some(std::mem::replace(&mut self.item, ItemStack::empty()));
+            }
             return Tick::Discard;
         }
+        self.collect_handoff();
         self.ticks += 1;
         self.owner.has_been_shot = true;
         if self.life > 4
@@ -865,7 +944,9 @@ impl RegionEntity for Arrow {
                             status: EVENT_POTION_PUFF,
                         },
                     )])));
-                    self.item = ItemStack::new(Item::Arrow, 1);
+                    std::mem::replace(&mut self.item, ItemStack::empty())
+                        .burn(tuff_item::item::BurnReason::Transform);
+                    self.item = ItemStack::mint(Item::Arrow, 1, MintReason::Transform);
                     self.changed.push(DATA_COLOR);
                 }
                 let kept = self.pickup == Pickup::Allowed
@@ -914,7 +995,25 @@ impl RegionEntity for Arrow {
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
     let position = base.position;
     let velocity = base.velocity;
-    let mut arrow = Arrow::of(base.kind, base.id, position, velocity, Owner::default());
+    let item = take(nbt, "item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    })
+    .unwrap_or_else(|| {
+        let item = match base.kind {
+            EntityType::SpectralArrow => Item::SpectralArrow,
+            EntityType::Trident => Item::Trident,
+            _ => Item::Arrow,
+        };
+        ItemStack::mint(item, 1, MintReason::EntityDrop)
+    });
+    let mut arrow = Arrow::of(
+        base.kind,
+        item,
+        base.id,
+        position,
+        velocity,
+        Owner::default(),
+    );
     arrow.base = base;
     arrow.owner.load(nbt);
     arrow.life = take_number(nbt, "life").map_or(0, |v| v as i16);
@@ -933,27 +1032,21 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     }) {
         arrow.sound = sound;
     }
-    if let Some(item) = take(nbt, "item", |tag| ItemStack::from_nbt(tag.as_compound()?)) {
-        arrow.item = item;
-    }
-    arrow.weapon = take(nbt, "weapon", |tag| ItemStack::from_nbt(tag.as_compound()?));
+    arrow.weapon = take(nbt, "weapon", |tag| {
+        let weapon = ItemStack::from_storage(tag.as_compound()?)?;
+        let snapshot = tuff_item::item::ItemSnapshot::of(&weapon);
+        weapon.burn(tuff_item::item::BurnReason::Template);
+        Some(snapshot)
+    });
     if let Some(ticks) = take_number(nbt, "Duration") {
         arrow.glow_ticks = ticks as i32;
     }
     if arrow.base.kind == EntityType::Trident {
         let dealt_damage = take_bool(nbt, "DealtDamage").unwrap_or(false);
-        let mut trident = Arrow::trident(
-            &arrow.item,
-            arrow.base.id,
-            arrow.base.position,
-            arrow.base.velocity,
-            Owner::default(),
-        )
-        .trident
-        .unwrap_or_default();
+        let mut trident = trident_state(&arrow.item);
         trident.dealt_damage = dealt_damage;
         arrow.trident = Some(trident);
-        arrow.weapon = Some(arrow.item.clone());
+        arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));
     }
     Some(Box::new(arrow))
 }

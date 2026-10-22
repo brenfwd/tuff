@@ -24,7 +24,7 @@ use crate::world::predicate::{
     self, Context as PredicateContext, EntityFacts, LocationFacts, PlayerFacts, PredicateWorld,
 };
 use crate::world::region_api::{RegionTask, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_world_model::BlockPos;
@@ -34,7 +34,7 @@ use super::Context;
 
 /// What a predicate is tested on: the `this` entity (if any) and the
 /// position and dimension it is tested at.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Subject {
     pub dimension: DimensionId,
     pub origin: [f64; 3],
@@ -44,7 +44,7 @@ pub struct Subject {
     pub at_block: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum This {
     /// Facts gathered already (players).
     Facts(Box<EntityFacts>),
@@ -818,13 +818,13 @@ fn crosshair_entity(
         .then(|| Box::new(facts))
 }
 
-fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, ItemStack)> {
+fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, tuff_item::item::ItemSnapshot)> {
     let mut equipment = Vec::new();
     if let Some(held) = saved
         .get_compound("SelectedItem")
-        .and_then(ItemStack::from_nbt)
+        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
     {
-        equipment.push((EquipmentSlot::Mainhand, held));
+        equipment.push((EquipmentSlot::Mainhand, snapshot_template(held)));
     }
     let slots = [
         ("offhand", EquipmentSlot::Offhand),
@@ -836,12 +836,21 @@ fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, ItemStack)> {
     ];
     if let Some(worn) = saved.get_compound("equipment") {
         for (name, slot) in slots {
-            if let Some(stack) = worn.get_compound(name).and_then(ItemStack::from_nbt) {
-                equipment.push((slot, stack));
+            if let Some(stack) = worn
+                .get_compound(name)
+                .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
+            {
+                equipment.push((slot, snapshot_template(stack)));
             }
         }
     }
     equipment
+}
+
+fn snapshot_template(stack: ItemStack) -> tuff_item::item::ItemSnapshot {
+    let snapshot = tuff_item::item::ItemSnapshot::of(&stack);
+    stack.burn(tuff_item::item::BurnReason::Template);
+    snapshot
 }
 
 /// A candidate's facts before its region adds what it knows.

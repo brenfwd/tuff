@@ -17,7 +17,7 @@ use tuff_core::world::entity::{
 };
 use tuff_core::world::physics::{self, Aabb, BlockLookup};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_common::dismount;
 use tuff_vanilla_common::shadow::{self, SHADOW_RANGE, distance};
@@ -142,7 +142,7 @@ impl Boat {
             bubble_column_down: false,
             broken: false,
             changed: Vec::new(),
-            items: vec![None; slots],
+            items: (0..slots).map(|_| None).collect(),
             loot_table: None,
             leash: None,
             shadow: None,
@@ -613,7 +613,7 @@ impl Boat {
 
     fn drop_item(&self) -> Option<ItemStack> {
         let item = Item::of_boat(self.base.kind)?;
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base
             .custom_name
@@ -799,12 +799,16 @@ impl RegionEntity for Boat {
         }
     }
 
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
-        has_chest(self.base.kind).then_some(self.items.as_slice())
+    fn container(&self) -> Option<tuff_core::world::entity_slots::ContainerSlots<'_>> {
+        has_chest(self.base.kind).then(|| self.items.as_slice().into())
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        has_chest(self.base.kind).then_some(self.items.as_mut_slice())
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.items.iter_mut().filter_map(Option::take).collect()
+    }
+
+    fn container_mut(&mut self) -> Option<tuff_core::world::entity_slots::ContainerSlotsMut<'_>> {
+        has_chest(self.base.kind).then(|| self.items.as_mut_slice().into())
     }
 
     fn take_loot_table(&mut self) -> Option<(String, i64)> {
@@ -1117,7 +1121,7 @@ mod tests {
     #[test]
     fn chest_boats_load_and_save_their_items_and_pending_loot() {
         let base = || EntityBase::new(EntityType::OakChestBoat, 1, 1, [0.0; 3], [0.0; 3]);
-        let stack = ItemStack::new(Item::Diamond, 2);
+        let stack = ItemStack::mint(Item::Diamond, 2, MintReason::Test);
         let mut nbt = Compound::new().with(
             ITEMS,
             Tag::List(vec![
@@ -1129,7 +1133,7 @@ mod tests {
         assert!(nbt.is_empty(), "the loader takes its keys");
         let items = boat.container().unwrap();
         assert_eq!(items.len(), CHEST_SLOTS);
-        assert_eq!(items[26], Some(stack.clone()));
+        assert_eq!(items[26], Some(stack.test_copy()));
         assert_eq!(items.iter().flatten().count(), 1, "slot 27 is out of range");
         let mut out = Compound::new();
         boat.save(&mut out);

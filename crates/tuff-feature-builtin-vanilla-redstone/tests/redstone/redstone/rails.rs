@@ -430,7 +430,7 @@ async fn a_comparator_reads_a_chest_minecart_on_a_detector_rail() {
         (0..3)
             .map(|slot| {
                 Tag::Compound(
-                    ItemStack::new(Item::Stone, 64)
+                    ItemStack::mint(Item::Stone, 64, MintReason::Test)
                         .to_nbt()
                         .with("Slot", slot as i8),
                 )
@@ -468,7 +468,9 @@ async fn a_hopper_under_two_carts_pulls_from_either_at_random() {
             Compound::new().with(
                 "Items",
                 Tag::List(vec![Tag::Compound(
-                    ItemStack::new(item, 64).to_nbt().with("Slot", 0i8),
+                    ItemStack::mint(item, 64, MintReason::Test)
+                        .to_nbt()
+                        .with("Slot", 0i8),
                 )]),
             ),
             [86.5, f64::from(FLOOR_Y + 2), 86.5],
@@ -488,7 +490,8 @@ async fn a_hopper_under_two_carts_pulls_from_either_at_random() {
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a hopper is a block container");
     };
-    let held: Vec<Item> = contents.into_iter().flatten().map(|s| s.item).collect();
+    let contents = stacks(&contents);
+    let held: Vec<Item> = contents.into_iter().flatten().map(|s| s.item()).collect();
     assert!(
         held.contains(&Item::Stone) && held.contains(&Item::Dirt),
         "pulled from both carts: {held:?}"

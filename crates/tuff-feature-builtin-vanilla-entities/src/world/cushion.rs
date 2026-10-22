@@ -16,7 +16,7 @@ use tuff_core::world::entity::{
 use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::physics::{self, Aabb};
 use tuff_core::world::{damage_type_in_tag, framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -231,7 +231,7 @@ impl Cushion {
     }
 
     fn stack(&self) -> ItemStack {
-        let mut stack = ItemStack::new(item_of(self.color), 1);
+        let mut stack = ItemStack::mint(item_of(self.color), 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base
             .custom_name
@@ -504,7 +504,7 @@ mod tests {
             assert!(matches!(cushion.tick(cx), Tick::Discard));
             assert!(cx.effects.iter().any(|e| matches!(
                 e,
-                Effect::DropItem { stack, .. } if stack.item == Item::BlueCushion
+                Effect::DropItem { stack, .. } if stack.item() == Item::BlueCushion
             )));
         });
     }

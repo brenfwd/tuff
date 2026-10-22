@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::MintReason;
 
 impl PlayerSession {
     pub async fn handle_event(&mut self, event: PlayerEvent) {
@@ -174,7 +175,7 @@ impl PlayerSession {
                 item,
                 effect,
             } => {
-                if self.inventory.hand(off_hand).map(|s| s.item) == item {
+                if self.inventory.hand(off_hand).map(|s| s.item()) == item {
                     self.apply_hand_effect(off_hand, effect).await;
                 }
                 self.send_inventory();
@@ -183,6 +184,27 @@ impl PlayerSession {
                     i32::from(off_hand),
                 ))]);
                 self.broadcast_entity(swing, false).await;
+            }
+            PlayerEvent::HandReturned {
+                slot,
+                stack,
+                creative,
+            } => {
+                if creative {
+                    stack.burn(tuff_item::item::BurnReason::Creative);
+                    return;
+                }
+                let leftover = if self.is_dead() {
+                    Some(stack)
+                } else {
+                    self.inventory.put_back(slot, stack)
+                };
+                self.send_inventory();
+                if let Some(leftover) = leftover {
+                    let at = self.pose.position;
+                    self.spawn_item(leftover, at, [0.0; 3], player::THROWN_PICKUP_DELAY)
+                        .await;
+                }
             }
             PlayerEvent::OfferItem {
                 item,
@@ -196,7 +218,7 @@ impl PlayerSession {
                     || region.dimension != self.dimension
                     || !hooks
                         .iter()
-                        .all(|hook| hook.allows_item_pickup(self, &stack))
+                        .all(|hook| hook.allows_item_pickup(self, stack.view()))
                 {
                     0
                 } else {
@@ -241,14 +263,14 @@ impl PlayerSession {
                 }
             }
             PlayerEvent::ItemGranted { stack, picked_up } => {
-                let item = stack.item;
-                let offered = stack.count;
+                let item = stack.item();
+                let offered = stack.count();
                 let leftover = if self.is_dead() {
                     Some(stack)
                 } else {
                     self.inventory.add(stack)
                 };
-                let taken = offered - leftover.as_ref().map_or(0, |l| l.count);
+                let taken = offered - leftover.as_ref().map_or(0, |l| l.count());
                 if taken > 0 {
                     self.send_inventory();
                     if picked_up {
@@ -542,10 +564,7 @@ impl PlayerSession {
             PlayerEvent::TradeAnswered {
                 window_id,
                 accepted,
-            } => {
-                self.transaction_answered(window_id, accepted, Vec::new())
-                    .await
-            }
+            } => self.trade_answered(window_id, accepted).await,
             PlayerEvent::AwardStat(stat, amount) => self.progress.stats.award_custom(stat, amount),
             PlayerEvent::WardenTracker(tracker) => self.progress.warden_tracker = tracker,
             PlayerEvent::WardenWarningLevel(Some(level)) => {
@@ -591,24 +610,27 @@ impl PlayerSession {
                 txn,
                 prepared,
                 contents,
+                taken,
             } => {
-                self.transaction_prepared(window_id, txn, prepared, contents)
+                self.transaction_prepared(window_id, txn, prepared, contents, taken)
                     .await
             }
             PlayerEvent::Transaction {
                 window_id,
                 accepted,
                 contents,
+                pool,
             } => {
-                self.transaction_answered(window_id, accepted, contents)
+                self.transaction_answered(window_id, accepted, contents, pool)
                     .await
             }
             PlayerEvent::EntityTransaction {
                 window_id,
                 accepted,
                 contents,
+                pool,
             } => {
-                self.entity_transaction_answered(window_id, accepted, contents)
+                self.entity_transaction_answered(window_id, accepted, contents, pool)
                     .await
             }
             PlayerEvent::EntitySlots {
@@ -719,12 +741,12 @@ impl PlayerSession {
                 let held = self
                     .inventory
                     .hand(off_hand)
-                    .filter(|s| s.item == item)
+                    .filter(|s| s.item() == item)
                     .map(|s| s.max_damage().is_some());
                 match held {
                     Some(true) => self.hurt_hand(off_hand, 1).await,
                     Some(false) if !self.mode.abilities.instabuild => {
-                        self.inventory.take_from_hand(off_hand, 1);
+                        self.inventory.consume_from_hand(off_hand, 1);
                     }
                     _ => {}
                 }
@@ -755,7 +777,7 @@ impl PlayerSession {
                 if item == Item::Bucket
                     && let HandEffect::Exchange(filled) = effect
                 {
-                    let filled = ItemStack::new(filled, 1);
+                    let filled = ItemStack::mint(filled, 1, MintReason::Transform);
                     self.fire(crate::world::advancement::trigger::Event::FilledBucket(
                         &filled,
                     ));
@@ -763,7 +785,7 @@ impl PlayerSession {
                 if self
                     .inventory
                     .hand(off_hand)
-                    .is_some_and(|s| s.item == item)
+                    .is_some_and(|s| s.item() == item)
                 {
                     self.apply_hand_effect(off_hand, effect).await;
                 }
@@ -772,21 +794,6 @@ impl PlayerSession {
                     self.id,
                     i32::from(off_hand),
                 ))]);
-                self.broadcast_entity(swing, false).await;
-            }
-            ActionOutcome::HotbarSwapped { slots, single } => {
-                let creative = self.mode.abilities.instabuild;
-                for (index, stack) in slots {
-                    if single && creative && stack.is_none() {
-                        continue;
-                    }
-                    self.inventory.set_slot(
-                        crate::world::inventory::Inventory::hotbar_slot(index),
-                        stack,
-                    );
-                }
-                self.send_inventory();
-                let swing = packets([framed(&play::SwingAnimation::whack(self.id, 0))]);
                 self.broadcast_entity(swing, false).await;
             }
             ActionOutcome::Interacted { off_hand } => {
@@ -808,7 +815,7 @@ impl PlayerSession {
                 if self
                     .inventory
                     .hand(off_hand)
-                    .is_some_and(|s| s.item == item)
+                    .is_some_and(|s| s.item() == item)
                 {
                     self.actions.using = Some(UsingItem::new(off_hand, item, ticks));
                     self.publish(false).await;

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use tuff_core::world::advancement::Id;
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_item::registries::codecs::json_to_nbt;
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::Frozen;
@@ -18,7 +18,7 @@ pub type Key = (Id, u16);
 pub const MAX_DEPTH: usize = 256;
 
 /// What the advancement screen shows of an advancement, decoded once.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Display {
     pub title: TextComponent,
     pub description: TextComponent,
@@ -206,5 +206,5 @@ fn icon_stack(icon: &data::Icon) -> ItemStack {
         .and_then(|value| json_to_nbt(&value))
         .and_then(|tag| tag.as_compound().map(Components::from_nbt))
         .unwrap_or_default();
-    ItemStack::new(icon.item, icon.count).with_components(components)
+    ItemStack::mint(icon.item, icon.count, MintReason::Template).with_components(components)
 }

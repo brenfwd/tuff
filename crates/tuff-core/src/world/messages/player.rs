@@ -8,7 +8,7 @@ use tuff_vanilla_data::registry::MobEffect;
 use tuff_vanilla_data::{BlockState, Item};
 
 use crate::world::dimension::DimensionId;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack};
 use tuff_item::text::TextComponent;
 use tuff_nbt::Compound;
 use tuff_storage::admin::PermissionLevel;
@@ -100,6 +100,12 @@ impl PlayerHandle {
     /// Returns false once the player has left.
     pub fn send(&self, event: PlayerEvent) -> bool {
         self.events.send(event).is_ok()
+    }
+
+    /// Like [`Self::send`], but hands the event back when the session is
+    /// gone, so the stacks it carries go back to their sender.
+    pub fn try_send(&self, event: PlayerEvent) -> Result<(), Box<PlayerEvent>> {
+        self.events.send(event).map_err(|error| Box::new(error.0))
     }
 
     pub fn is_connected(&self) -> bool {
@@ -237,7 +243,7 @@ pub enum PlayerEvent {
     OfferItem {
         item: i32,
         offer: u64,
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         region: RegionHandle,
     },
     /// What the region handed over for an accepted offer; the session
@@ -245,6 +251,13 @@ pub enum PlayerEvent {
     ItemGranted {
         stack: ItemStack,
         picked_up: bool,
+    },
+    /// What an entity left of the hand stack a click moved to it, back
+    /// for inventory `slot`; a creative copy is burned instead.
+    HandReturned {
+        slot: usize,
+        stack: ItemStack,
+        creative: bool,
     },
     /// A tamed parrot touching this player wants to land on its shoulder.
     /// The session answers with `RegionInternal::ShoulderTaken` naming
@@ -288,7 +301,7 @@ pub enum PlayerEvent {
     /// with wears, the attacker stops sprinting if it knocked the target
     /// back, and a sweep hits the players around the target.
     AttackLanded {
-        weapon: Option<ItemStack>,
+        weapon: Option<tuff_item::item::ItemSnapshot>,
         target: PlayerId,
         target_position: [f64; 3],
         knockback: bool,
@@ -485,7 +498,7 @@ pub enum PlayerEvent {
     ContainerSlots {
         dimension: DimensionId,
         pos: BlockPos,
-        slots: Vec<(usize, Option<ItemStack>)>,
+        slots: Vec<(usize, Option<tuff_item::item::ItemSnapshot>)>,
     },
     /// Container data (a furnace's burn and cook progress) of a block
     /// container this player is viewing changed, as `(property, value)`.
@@ -507,28 +520,32 @@ pub enum PlayerEvent {
         pos: BlockPos,
     },
     /// A region's vote on its share of a two-region transaction:
-    /// `prepared` says it validated and locked the slots. `contents` holds
-    /// the current contents of the containers it touched either way.
+    /// `prepared` says it validated and locked the slots and took out
+    /// `taken`, what they lose. `contents` pictures the containers it
+    /// touched either way.
     TransactionPrepared {
         window_id: i32,
         txn: u64,
         prepared: bool,
-        contents: Vec<(BlockPos, Vec<Option<ItemStack>>)>,
+        contents: Vec<(BlockPos, Vec<Option<ItemSnapshot>>)>,
+        taken: Vec<ItemStack>,
     },
-    /// The region's answer to a container transaction. `contents` holds
-    /// the current contents of the containers a rejected transaction
-    /// touched, keyed by block entity position.
+    /// The region's answer to a container transaction, handing back the
+    /// pool: what is left of it once accepted, all of it unchanged once
+    /// rejected. `contents` pictures the containers a rejected
+    /// transaction touched, keyed by block entity position.
     Transaction {
         window_id: i32,
         accepted: bool,
-        contents: Vec<(BlockPos, Vec<Option<ItemStack>>)>,
+        contents: Vec<(BlockPos, Vec<Option<ItemSnapshot>>)>,
+        pool: Vec<ItemStack>,
     },
     /// Slots of an entity's container (a chest boat) this player is
     /// viewing changed.
     EntitySlots {
         dimension: DimensionId,
         entity: i32,
-        slots: Vec<(usize, Option<ItemStack>)>,
+        slots: Vec<(usize, Option<tuff_item::item::ItemSnapshot>)>,
     },
     /// The entity whose container this player views is gone from its
     /// region (broken, unloaded, handed off); the menu must close.
@@ -542,12 +559,14 @@ pub enum PlayerEvent {
         dimension: DimensionId,
         entity: i32,
     },
-    /// The region's answer to an entity container transaction; a rejected
-    /// one carries the container's current contents.
+    /// The region's answer to an entity container transaction, handing
+    /// back the pool as [`Self::Transaction`] does; a rejected one
+    /// pictures the container's current contents.
     EntityTransaction {
         window_id: i32,
         accepted: bool,
-        contents: Vec<Option<ItemStack>>,
+        contents: Vec<Option<ItemSnapshot>>,
+        pool: Vec<ItemStack>,
     },
     /// A system chat message for this player.
     Message(TextComponent),
@@ -603,4 +622,6 @@ pub struct SaveBarrier {
     pub release: oneshot::Receiver<()>,
     /// Told once the player's data is written.
     pub written: Option<oneshot::Sender<()>>,
+    /// The world save the player's data belongs to.
+    pub ticket: Option<tuff_storage::journal::EpochTicket>,
 }

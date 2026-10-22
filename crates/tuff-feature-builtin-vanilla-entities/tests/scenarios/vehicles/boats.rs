@@ -179,7 +179,12 @@ async fn a_tamed_saddled_horse_goes_where_its_drivers_client_moves_it() {
         "equipment",
         Compound::new().with(
             "saddle",
-            tuff_item::item::ItemStack::new(tuff_vanilla_data::Item::Saddle, 1).to_nbt(),
+            tuff_item::item::ItemStack::mint(
+                tuff_vanilla_data::Item::Saddle,
+                1,
+                tuff_item::item::MintReason::Test,
+            )
+            .to_nbt(),
         ),
     );
     summon(&region, EntityType::Horse, nbt, start).await;

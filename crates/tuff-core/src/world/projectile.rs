@@ -497,7 +497,7 @@ pub fn thrown_kind(item: Item) -> Option<EntityType> {
 pub fn firework_flight(stack: &ItemStack) -> (u8, usize) {
     match &stack.components.fireworks {
         Some(fireworks) => (fireworks.flight_duration, fireworks.explosions.len()),
-        None if stack.item == Item::FireworkRocket => (1, 0),
+        None if stack.item() == Item::FireworkRocket => (1, 0),
         None => (0, 0),
     }
 }
@@ -509,7 +509,7 @@ pub fn firework_lifetime(stack: &ItemStack, rng: &mut impl Rng) -> i32 {
 }
 
 /// An arrow, spectral arrow or trident about to be shot.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ArrowShot {
     /// The arrow or trident item; a pickup gives it back.
     pub item: ItemStack,
@@ -522,7 +522,7 @@ pub struct ArrowShot {
     pub pierce: u8,
     pub fire_ticks: i16,
     /// The bow or crossbow it left; its enchantments act on the hit.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// The sound it lands with; `None` keeps the type's own.
     pub sound: Option<SoundEvent>,
     /// Effects it gives what it hits besides its item's potion.
@@ -548,7 +548,7 @@ impl ArrowShot {
     /// The entity its item flies as: tridents and spectral arrows are
     /// their own types; plain and tipped arrows are arrows.
     pub fn kind(&self) -> EntityType {
-        match self.item.item {
+        match self.item.item() {
             Item::Trident => EntityType::Trident,
             Item::SpectralArrow => EntityType::SpectralArrow,
             _ => EntityType::Arrow,
@@ -568,7 +568,7 @@ pub enum Flight {
 }
 
 /// What kind of projectile a [`Launch`] makes, with what only it needs.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Shot {
     Arrow(ArrowShot),
     /// A thrown item: snowball, egg, ender pearl, potion or experience
@@ -605,7 +605,7 @@ pub enum Shot {
     /// A fishing bobber cast from a rod along a yaw and pitch.
     Bobber {
         rotation: (f32, f32),
-        rod: ItemStack,
+        rod: tuff_item::item::ItemSnapshot,
         luck: f32,
     },
 }
@@ -628,7 +628,7 @@ impl Shot {
 
 /// A new projectile: its entity id, where it starts, who launched it and
 /// what it is.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Launch {
     pub id: i32,
     pub position: [f64; 3],
@@ -659,6 +659,7 @@ pub fn launch(launch: Launch, cx: &mut TickContext) -> bool {
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
+    use tuff_item::item::MintReason;
 
     use super::*;
 
@@ -684,7 +685,8 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn arrow_items_fly_as_their_own_entity_types() {
-        let kind = |item| ArrowShot::new(ItemStack::new(item, 1), [0.0; 3]).kind();
+        let kind =
+            |item| ArrowShot::new(ItemStack::mint(item, 1, MintReason::Test), [0.0; 3]).kind();
         assert_eq!(kind(Item::Arrow), EntityType::Arrow);
         assert_eq!(kind(Item::TippedArrow), EntityType::Arrow);
         assert_eq!(kind(Item::SpectralArrow), EntityType::SpectralArrow);

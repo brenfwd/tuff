@@ -404,14 +404,19 @@ async fn sheep_are_sheared_and_dyed_and_cows_milked() {
         })
         .await;
 
-    let mut tag = ItemStack::new(Item::NameTag, 1);
+    let mut tag = ItemStack::mint(Item::NameTag, 1, MintReason::Test);
     tag.components.custom_name = Some(Box::new(tuff_item::text::TextComponent::new("Dolly")));
     region
         .request(RegionRequest::InteractEntity {
             player: viewer.clone(),
             target: sheep[1].id,
             interaction: EntityInteraction {
-                stack: Some(tag),
+                stack: Some(tuff_item::item::ItemSnapshot::of(&tag)),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::of(&tag)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 ..interaction(&viewer, None)
             },
         })
@@ -1112,7 +1117,8 @@ async fn a_spawn_egg_on_a_spawner_changes_what_it_spawns() {
                 ),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     let egg = place(&player, spawner, Item::ZombieSpawnEgg, 2);
@@ -1250,7 +1256,7 @@ async fn magma_hurts_mobs_unless_fire_immune_or_frost_walking() {
     }
     place_blocks(&world, &region, blocks).await;
     let frail = || Compound::new().with("Health", 1.0f32).with("NoAI", true);
-    let mut boots = ItemStack::new(Item::LeatherBoots, 1);
+    let mut boots = ItemStack::mint(Item::LeatherBoots, 1, MintReason::Test);
     boots.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:frost_walker".to_owned(),
         1,
@@ -1305,7 +1311,7 @@ async fn a_mob_in_frost_walker_boots_freezes_the_water_beside_it() {
         }
     }
     place_blocks(&world, &region, blocks).await;
-    let mut boots = ItemStack::new(Item::LeatherBoots, 1);
+    let mut boots = ItemStack::mint(Item::LeatherBoots, 1, MintReason::Test);
     boots.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:frost_walker".to_owned(),
         1,
@@ -1514,7 +1520,7 @@ async fn fish_and_axolotl_buckets_capture_and_place_their_data() {
     let HandEffect::ExchangeStack(stack) = effect else {
         panic!("expected a filled cod bucket, got {effect:?}");
     };
-    assert_eq!(stack.item, Item::CodBucket);
+    assert_eq!(stack.item(), Item::CodBucket);
     assert!(
         mobs(&region, EntityType::Cod).await.is_empty(),
         "the captured cod leaves the world"
@@ -1574,7 +1580,7 @@ async fn fish_and_axolotl_buckets_capture_and_place_their_data() {
     let HandEffect::ExchangeStack(stack) = effect else {
         panic!("expected a filled tropical fish bucket, got {effect:?}");
     };
-    assert_eq!(stack.item, Item::TropicalFishBucket);
+    assert_eq!(stack.item(), Item::TropicalFishBucket);
     let data = bucket_entity_data(&stack).expect("bucket entity data");
     assert_eq!(data.get_int("Variant"), Some(variant));
 
@@ -1632,7 +1638,7 @@ async fn fish_and_axolotl_buckets_capture_and_place_their_data() {
     let HandEffect::ExchangeStack(stack) = effect else {
         panic!("expected a filled axolotl bucket, got {effect:?}");
     };
-    assert_eq!(stack.item, Item::AxolotlBucket);
+    assert_eq!(stack.item(), Item::AxolotlBucket);
     let data = bucket_entity_data(&stack).expect("bucket entity data");
     assert_eq!(data.get_int("Variant"), Some(3));
     assert!(

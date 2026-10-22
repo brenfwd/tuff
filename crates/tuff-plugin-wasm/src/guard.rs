@@ -721,14 +721,15 @@ fn use_in_air(session: &mut PlayerSession, sequence: i32) -> Verdict {
     if !host.listens(EventKinds::USE_ITEM) {
         return Verdict::Allow;
     }
-    let Some(held) =
-        session.inventory.slots()[Inventory::hotbar_slot(session.inventory.selected())].clone()
-    else {
+    let Some(held) = session.inventory.slots()
+        [Inventory::hotbar_slot(session.inventory.selected())]
+    .as_ref()
+    .map(tuff_item::item::ItemSnapshot::of) else {
         return Verdict::Allow;
     };
     let matched = host.intercepts(
         ClickKind::Air,
-        held.item.name(),
+        held.item().name(),
         |tag| {
             held.components
                 .other
@@ -744,7 +745,7 @@ fn use_in_air(session: &mut PlayerSession, sequence: i32) -> Verdict {
     let who: Player = crate::bridge::player(session);
     let use_ = ItemUse {
         player: who.to_wit(),
-        item: held.item.name().to_owned(),
+        item: held.item().name().to_owned(),
         dimension: session.shared.dimensions.get(session.dimension).key.clone(),
         rotation: Rotation {
             yaw: session.pose.yaw,

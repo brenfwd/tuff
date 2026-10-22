@@ -515,6 +515,7 @@ impl tuff_core::world::services::WorldService for WasmHost {
             stores: HashMap::new(),
             traffic: Default::default(),
             io_queue,
+            stash_fills: mpsc::unbounded_channel(),
             resolver: Arc::new(crate::caps::resolve::SystemResolver),
             hops: 0,
             flushed_at: 0,
@@ -599,6 +600,13 @@ struct Actor {
     stores: HashMap<String, Stored>,
     traffic: messaging::Traffic,
     io_queue: mpsc::UnboundedSender<crate::net::Delivery>,
+    /// Items taken from players for plugins' stashes, on their way back.
+    /// Unbounded: each fill answers an edit a call queued (at most
+    /// `MAX_INVENTORY_OPS` per call), and sessions never wait on the host.
+    stash_fills: (
+        mpsc::UnboundedSender<crate::stash::StashFill>,
+        mpsc::UnboundedReceiver<crate::stash::StashFill>,
+    ),
     resolver: Arc<dyn crate::caps::resolve::Resolver>,
     /// How deep the message being delivered is.
     hops: usize,
@@ -682,6 +690,9 @@ impl Actor {
             tokio::select! {
                 Some(finished) = self.file_done.1.recv() => {
                     self.file_finished(finished).await;
+                }
+                Some(fill) = self.stash_fills.1.recv() => {
+                    self.fill_stash(fill).await;
                 }
                 request = inbox.recv() => match request {
                     None => break,
@@ -1059,9 +1070,66 @@ impl Actor {
         Some(result)
     }
 
+    /// Points a take into a stash back at this host.
+    fn attach_stash(
+        &self,
+        plugin: &str,
+        generation: u64,
+        op: &mut tuff_core::world::session::plugin_inventory::InventoryOp,
+    ) {
+        let tuff_core::world::session::plugin_inventory::InventoryOp::TakeInto { sink, .. } = op
+        else {
+            return;
+        };
+        let fills = self.stash_fills.0.clone();
+        let plugin = plugin.to_owned();
+        let stash = sink.stash;
+        sink.attach(move |stacks| {
+            fills
+                .send(crate::stash::StashFill {
+                    plugin,
+                    generation,
+                    stash,
+                    stacks,
+                })
+                .map_err(|refused| refused.0.stacks)
+        });
+    }
+
+    /// Puts items taken for a stash into it; a plugin that is gone or was
+    /// reloaded in between lost the stash, and the items are used up.
+    async fn fill_stash(&mut self, fill: crate::stash::StashFill) {
+        let current = self
+            .plugins
+            .get(&fill.plugin)
+            .is_some_and(|plugin| plugin.generation == fill.generation && plugin.sandbox.is_some());
+        if !current {
+            if !fill.stacks.is_empty() {
+                log::warn!(
+                    "{}: items taken for a stash arrived after the plugin went; used up",
+                    fill.plugin
+                );
+            }
+            for stack in fill.stacks {
+                stack.burn(tuff_item::item::BurnReason::Plugin);
+            }
+            return;
+        }
+        let (stash, stacks) = (fill.stash, fill.stacks);
+        let _ = self
+            .call(&fill.plugin, move |sandbox| {
+                sandbox.fill_stash(stash, stacks);
+                Ok(())
+            })
+            .await;
+    }
+
     /// Carries out a call's effects and returns its replies.
     async fn apply(&mut self, id: &str, effects: Effects) -> Vec<String> {
         self.finish_routes(id, effects.responses);
+        if !effects.violations.is_empty() {
+            audit_stash_violations(&self.shared, id, effects.violations);
+        }
         if !effects.guard.is_empty()
             && let Some(plugin) = self.plugins.get_mut(id)
             && plugin.guard.apply(effects.guard, &mut self.guard_serial)
@@ -1102,12 +1170,20 @@ impl Actor {
                 .is_ok()
         });
         if player_write {
-            for (uuid, ops) in by_player(effects.inventory_ops) {
+            let generation = self.plugins.get(id).map_or(0, |plugin| plugin.generation);
+            for (uuid, mut ops) in by_player(effects.inventory_ops) {
+                for op in &mut ops {
+                    self.attach_stash(id, generation, op);
+                }
                 let _ = self
                     .shared
                     .coordinator
                     .send(CoordinatorMessage::PluginInventory { uuid, ops })
                     .await;
+            }
+        } else {
+            for (_, op) in effects.inventory_ops {
+                op.discard();
             }
         }
         crate::particles::apply(&self.shared, effects.particles, id).await;
@@ -1242,6 +1318,36 @@ fn by_player<T>(ops: Vec<(u128, T)>) -> Vec<(u128, Vec<T>)> {
         }
     }
     grouped
+}
+
+/// Writes a plugin's refused stash moves to the item violation recorders,
+/// in the overworld (stashes belong to no dimension).
+fn audit_stash_violations(
+    shared: &Shared,
+    plugin: &str,
+    violations: Vec<crate::stash::StashViolation>,
+) {
+    let Some(dimension) = shared
+        .dimensions
+        .by_key(tuff_core::world::dimension::OVERWORLD)
+        .or_else(|| shared.dimensions.iter().next())
+        .map(|dimension| dimension.id)
+    else {
+        return;
+    };
+    for violation in violations {
+        shared.services.item_violation(
+            tuff_core::world::services::ViolationCulprit::Plugin(plugin),
+            dimension,
+            &tuff_core::world::conservation::ItemViolation {
+                operation: violation.operation,
+                player: None,
+                pos: tuff_world_model::BlockPos::new(0, 0, 0),
+                item: None,
+                detail: violation.detail,
+            },
+        );
+    }
 }
 
 #[cfg(test)]

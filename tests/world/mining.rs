@@ -460,7 +460,7 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
     let ground = BlockPos::new(3, height, 3);
     let below = BlockPos::new(3, height - 1, 3);
     let deeper = BlockPos::new(3, height - 2, 3);
-    let pickaxe = || Some(ItemStack::new(Item::DiamondPickaxe, 1));
+    let pickaxe = || Some(ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test));
     let outcome = async |events: &mut mpsc::UnboundedReceiver<PlayerEvent>, seq: i32| {
         expect(events, |event| match event {
             PlayerEvent::ActionResult { sequence, outcome } if sequence == seq => Some(outcome),
@@ -480,7 +480,7 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: ground,
-            tool: pickaxe(),
+            tool: pickaxe().as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode: BreakMode::Finish,
             sequence: 1,
         })
@@ -498,7 +498,7 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: ground,
-            tool: pickaxe(),
+            tool: pickaxe().as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode: BreakMode::Start {
                 eye: [3.5, height as f64 + 1.62, 4.5],
                 miner: player::Miner::plain(true),
@@ -512,7 +512,7 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: below,
-            tool: pickaxe(),
+            tool: pickaxe().as_ref().map(tuff_item::item::ItemSnapshot::of),
             mode: BreakMode::Creative,
             sequence: 4,
         })
@@ -522,7 +522,11 @@ async fn survival_tools_wear_on_blocks_with_hardness_only() {
         .request(RegionRequest::Break {
             player: player.clone(),
             pos: deeper,
-            tool: Some(ItemStack::new(Item::Stick, 1)),
+            tool: Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Stick,
+                1,
+                Default::default(),
+            )),
             mode: BreakMode::Finish,
             sequence: 5,
         })
@@ -571,7 +575,7 @@ async fn creative_breaks_drop_nothing_and_spectators_collect_nothing() {
     region.request(spectating(1)).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: at,
             velocity: [0.0; 3],
             pickup_delay: 0,
@@ -596,7 +600,7 @@ async fn creative_breaks_drop_nothing_and_spectators_collect_nothing() {
         _ => None,
     })
     .await;
-    assert_eq!(stack, ItemStack::new(Item::Stone, 1));
+    assert_eq!(stack, ItemStack::mint(Item::Stone, 1, MintReason::Test));
     world.shutdown().await;
 }
 

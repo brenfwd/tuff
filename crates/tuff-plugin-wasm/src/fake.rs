@@ -216,8 +216,8 @@ impl Fakes {
         let observed = handle.observed.borrow();
         let body = &observed.body;
         let stack = |stack: &tuff_item::item::ItemStack| WitStack {
-            item: stack.item.name().to_owned(),
-            count: stack.count,
+            item: stack.item().name().to_owned(),
+            count: stack.count(),
         };
         let held = HOTBAR_START + body.selected_slot;
         Some(Inventory {
@@ -266,7 +266,7 @@ impl Fakes {
 fn best_tool(
     state: tuff_vanilla_data::BlockState,
     hardness: f32,
-    items: &[(u8, tuff_item::item::ItemStack)],
+    items: &[(u8, tuff_item::item::ItemSnapshot)],
     miner: &tuff_core::world::player::Miner,
     selected: u8,
 ) -> Option<BreakTool> {
@@ -275,7 +275,7 @@ fn best_tool(
         let tool = items
             .iter()
             .find(|(index, _)| *index == HOTBAR_START + slot)
-            .map(|(_, stack)| stack);
+            .map(|(_, stack)| &**stack);
         let progress = tuff_core::world::player::destroy_progress_at(
             state,
             Some(hardness),
@@ -348,7 +348,7 @@ fn face(direction: Direction) -> Face {
 #[cfg(test)]
 mod tests {
     use tuff_core::world::player::Miner;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
     use tuff_vanilla_data::{Block, Item};
 
     use super::*;
@@ -360,9 +360,18 @@ mod tests {
         let hardness = stone.destroy_speed().unwrap();
         let miner = Miner::plain(true);
         let items = vec![
-            (36, ItemStack::new(Item::Cobblestone, 10)),
-            (39, ItemStack::new(Item::IronPickaxe, 1)),
-            (40, ItemStack::new(Item::WoodenPickaxe, 1)),
+            (
+                36,
+                ItemSnapshot::of(&ItemStack::mint(Item::Cobblestone, 10, MintReason::Test)),
+            ),
+            (
+                39,
+                ItemSnapshot::of(&ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test)),
+            ),
+            (
+                40,
+                ItemSnapshot::of(&ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test)),
+            ),
         ];
         let best = best_tool(stone, hardness, &items, &miner, 0).unwrap();
         assert_eq!(best.slot, 3);

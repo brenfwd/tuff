@@ -147,7 +147,7 @@ impl Executor for Give {
                 Some(Value::Int(count)) => *count,
                 _ => 1,
             };
-            let stack = input.stack(1);
+            let stack = input.template(1);
             let max = i32::from(stack.max_stack_size()) * MAX_GIVE_STACKS;
             let name = item_name(input.item, &input.components);
             if count > max {

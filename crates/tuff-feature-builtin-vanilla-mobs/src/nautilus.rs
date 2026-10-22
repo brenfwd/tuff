@@ -29,7 +29,7 @@ use tuff_core::world::entity::{
     Culprit, Effect, EntityHit, EntityInteraction, InteractOutcome, RiderInput, TickContext,
 };
 use tuff_core::world::messages::HandEffect;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 const SWIM_SPEED: f64 = 1.0;
 const DRY_OUT_MAX: i16 = 300;
@@ -91,8 +91,12 @@ fn nautilus_taming_item(item: Item) -> bool {
 const NAUTILUS_FEED_HEAL: f32 = 2.0;
 
 fn food_effect(stack: &ItemStack) -> HandEffect {
-    if tuff_datapack::tags::is(tag::item::key::NAUTILUS_BUCKET_FOOD, stack.item) {
-        HandEffect::ExchangeStack(Box::new(ItemStack::new(Item::WaterBucket, 1)))
+    if tuff_datapack::tags::is(tag::item::key::NAUTILUS_BUCKET_FOOD, stack.item()) {
+        HandEffect::ExchangeStack(Box::new(ItemStack::mint(
+            Item::WaterBucket,
+            1,
+            MintReason::Spawn,
+        )))
     } else {
         HandEffect::Consume(1)
     }
@@ -511,7 +515,7 @@ impl Species for Nautilus {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        nautilus_food(stack.item)
+        nautilus_food(stack.item())
     }
 
     fn seats(&self, core: &MobCore) -> usize {
@@ -525,7 +529,7 @@ impl Species for Nautilus {
         if !tamed(core) || core.is_baby() {
             return false;
         }
-        nautilus_food(stack.item)
+        nautilus_food(stack.item())
             || stack.equippable().is_some_and(|eq| {
                 eq.equip_on_interact
                     && matches!(eq.slot, EquipmentSlot::Saddle | EquipmentSlot::Body)
@@ -535,7 +539,7 @@ impl Species for Nautilus {
 
     fn inventory(&self) -> Option<(&[Option<ItemStack>], MenuKind)> {
         Some((
-            self.inventory.slots(),
+            self.inventory.chest(),
             MenuKind::Mount {
                 columns: 0,
                 saddle: true,
@@ -545,7 +549,7 @@ impl Species for Nautilus {
     }
 
     fn inventory_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
-        Some(self.inventory.slots_mut())
+        Some(self.inventory.chest_from_screen())
     }
 
     fn inventory_opens_for(&self, core: &MobCore, player: i32, sneaking: bool) -> bool {
@@ -623,7 +627,7 @@ impl Species for Nautilus {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if core.is_baby() {
             return None;
         }
@@ -631,17 +635,17 @@ impl Species for Nautilus {
             if interaction.sneaking {
                 return None;
             }
-            if tuff_datapack::tags::is(tag::item::key::NAUTILUS_FOOD, stack.item)
+            if tuff_datapack::tags::is(tag::item::key::NAUTILUS_FOOD, stack.item())
                 && core.health < core.max_health()
             {
                 core.heal(NAUTILUS_FEED_HEAL);
                 return Some(food_effect(stack));
             }
-            let equipped = try_equip(core, stack, true, cx);
+            let equipped = try_equip(core, stack, &interaction.hand, true, cx);
             self.inventory.adopt(core);
             return equipped;
         }
-        if !nautilus_taming_item(stack.item) {
+        if !nautilus_taming_item(stack.item()) {
             return None;
         }
         core.try_tame(interaction.player_uuid, 1.0 / 3.0, cx);
@@ -795,7 +799,7 @@ impl Species for ZombieNautilus {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        nautilus_food(stack.item)
+        nautilus_food(stack.item())
     }
 
     fn seats(&self, core: &MobCore) -> usize {
@@ -899,7 +903,7 @@ mod tests {
             Nautilus::configure(core);
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Saddle,
-                Some(ItemStack::new(Item::Saddle, 1)),
+                Some(ItemStack::mint(Item::Saddle, 1, MintReason::Test)),
             );
             core.body.in_water = true;
             let mut dash = Dash::default();
@@ -943,7 +947,20 @@ mod tests {
                 player_uuid: 9,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::new(Item::Pufferfish, 1)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Pufferfish,
+                    1,
+                    Default::default(),
+                )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::Pufferfish,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -968,7 +985,20 @@ mod tests {
             player_uuid: 9,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::new(item, 1)),
+            stack: Some(tuff_item::item::ItemSnapshot::describe(
+                item,
+                1,
+                Default::default(),
+            )),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (Some(tuff_item::item::ItemSnapshot::describe(
+                    item,
+                    1,
+                    Default::default(),
+                )))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking,
@@ -994,7 +1024,7 @@ mod tests {
             assert!(nautilus.inventory_opens_for(core, 1, true));
             assert!(!nautilus.inventory_opens_for(core, 1, false));
             let (slots, kind) = nautilus.inventory().expect("a screen");
-            assert_eq!(slots.len(), 2);
+            assert!(slots.is_empty());
             assert_eq!(
                 kind,
                 MenuKind::Mount {
@@ -1003,11 +1033,24 @@ mod tests {
                     armor: MountArmor::Nautilus,
                 }
             );
-            nautilus.inventory_mut().unwrap()[0] = Some(ItemStack::new(Item::Saddle, 1));
+            nautilus.inventory_mut().unwrap();
+            core.equipment.mount_slots_mut()[0].replace(ItemStack::mint(
+                Item::Saddle,
+                1,
+                MintReason::Test,
+            ));
             nautilus.tick(core, cx);
             assert!(saddled(core), "a saddle placed in the screen is worn");
-            assert!(MountArmor::Nautilus.fits(&ItemStack::new(Item::CopperNautilusArmor, 1)));
-            assert!(!MountArmor::Nautilus.fits(&ItemStack::new(Item::Saddle, 1)));
+            assert!(MountArmor::Nautilus.fits(&ItemStack::mint(
+                Item::CopperNautilusArmor,
+                1,
+                MintReason::Test
+            )));
+            assert!(!MountArmor::Nautilus.fits(&ItemStack::mint(
+                Item::Saddle,
+                1,
+                MintReason::Test
+            )));
         });
     }
 
@@ -1023,13 +1066,13 @@ mod tests {
                 }
                 nautilus.interact(core, &click(Item::Pufferfish, false), cx);
             }
-            let saddle = ItemStack::new(Item::Saddle, 1);
+            let saddle = ItemStack::mint(Item::Saddle, 1, MintReason::Test);
             assert!(nautilus.mount_refused(core, Some(&saddle)));
             assert!(!nautilus.mount_refused(core, None));
             let outcome = nautilus.interact(core, &click(Item::Saddle, false), cx);
-            assert_eq!(outcome, Some(HandEffect::Consume(1)));
+            assert_eq!(outcome, Some(HandEffect::None));
             assert!(saddled(core));
-            assert!(nautilus.inventory().unwrap().0[0].is_some());
+            assert!(core.equipment.mount_slots()[0].is_some());
             assert!(!nautilus.mount_refused(core, Some(&saddle)), "slot taken");
         });
     }

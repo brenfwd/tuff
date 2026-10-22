@@ -14,8 +14,11 @@ pub use tokio::sync::{mpsc, oneshot, watch};
 pub use tuff_vanilla_data::{Block, Item};
 
 pub mod admin_client;
+mod clicks;
 pub mod placeholder;
+mod saves;
 pub mod scenario;
+pub use clicks::{offering, place};
 pub use scenario::*;
 
 pub use placeholder::Overworld;
@@ -37,7 +40,7 @@ pub use tuff_core::world::messages::{
 };
 pub use tuff_core::world::player::Difficulty;
 pub use tuff_core::world::*;
-pub use tuff_item::item::ItemStack;
+pub use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason};
 pub use tuff_item::text::TextComponent;
 pub use tuff_nbt::{Compound, NamedTag, NbtLimits, Tag};
 pub use tuff_storage::backend::WorldBackend;
@@ -50,7 +53,7 @@ pub use tuff_world_model::chunk_meta::Decoded;
 pub use tuff_world_model::light::{SectionLight, min_light_section};
 pub use tuff_world_model::pos::{ChunkPos, RegionPos};
 
-pub type TransactionAnswer = Option<(bool, Vec<(BlockPos, Vec<Option<ItemStack>>)>)>;
+pub type TransactionAnswer = Option<(bool, Vec<(BlockPos, Vec<Option<ItemSnapshot>>)>)>;
 
 /// The overworld's placeholder terrain with the test seed.
 pub struct Generator(Overworld);
@@ -156,6 +159,7 @@ pub fn bare_shared() -> Shared {
     let registries = vanilla_registries();
     let resolved = Resolved::from_registries(&registries);
     Shared {
+        conservation: Default::default(),
         stopwatches: Default::default(),
         random_sequences: Default::default(),
         server_list: std::sync::OnceLock::new(),
@@ -532,6 +536,7 @@ impl TestWorld {
         let stops = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let stopped = stops.clone();
         let regions = manager.clone();
+        let journal = backend.save_journal();
         let provider_context = tuff_core::world::custom_dimension::ProviderContext {
             config_store: backend.config().unwrap_or_else(detached_config_store),
             settings: config.clone(),
@@ -593,23 +598,9 @@ impl TestWorld {
                         stopped.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     }
                     CoordinatorMessage::SaveAll { flush, done } => {
-                        let regions = regions.clone();
-                        tokio::spawn(async move {
-                            let (saved, flushed) = oneshot::channel();
-                            let asked = regions
-                                .send(ManagerMessage::SaveAll {
-                                    done: flush.then_some(saved),
-                                    snapshotted: None,
-                                })
-                                .await
-                                .is_ok();
-                            if flush {
-                                let _ = flushed.await;
-                            }
-                            let _ = done.send(if asked { Ok(()) } else { Err("stopped".into()) });
-                        });
+                        saves::save_all(regions.clone(), journal.as_ref(), flush, done)
                     }
-                    _ => {}
+                    other => tuff_item::item::conservation::release(other),
                 }
             }
         });
@@ -711,6 +702,7 @@ impl TestWorld {
         );
         let dimension_names = dimensions.iter().map(|d| d.key.clone()).collect();
         let shared = Arc::new(Shared {
+            conservation: Default::default(),
             stopwatches: Default::default(),
             random_sequences: Default::default(),
             server_list: std::sync::OnceLock::new(),
@@ -918,6 +910,7 @@ impl TestWorld {
                 let _ = self.manager.try_send(ManagerMessage::SaveAll {
                     done: None,
                     snapshotted: None,
+                    epoch: None,
                 });
             }
             self.settle(tick).await;
@@ -970,6 +963,9 @@ impl TestWorld {
             .await
             .expect("every region closes")
             .unwrap();
+        if let Some(journal) = self.shared.backend.save_journal() {
+            journal.finish();
+        }
     }
 }
 
@@ -1050,46 +1046,6 @@ pub fn decode_stored(
 ) -> Result<Decoded<tuff_core::world::block_entity::BlockEntity>, tuff_storage::error::ChunkNbtError>
 {
     chunk_nbt::decode(root, pos, ChunkShape::OVERWORLD)
-}
-
-/// Uses `item` on the top of `target`, standing south of it looking down.
-pub fn place(player: &PlayerHandle, target: BlockPos, item: Item, sequence: i32) -> Place {
-    Place {
-        player: player.clone(),
-        eye: [
-            target.x as f64 + 0.5,
-            target.y as f64 + 2.62,
-            target.z as f64 + 1.5,
-        ],
-        target,
-        face: tuff_world_model::Face::Up,
-        cursor: [0.5, 1.0, 0.5],
-        yaw: 0.0,
-        pitch: 60.0,
-        sneaking: false,
-        item: item.block().map(|_| item),
-        held: Some(item),
-        components: Default::default(),
-        held_count: 1,
-        off_hand: false,
-        off_hand_item: None,
-        sequence,
-        interact: true,
-        can_eat: true,
-        name: "Tester".to_owned(),
-        uuid: u128::from(player.id as u32),
-        position: [
-            target.x as f64 + 0.5,
-            target.y as f64 + 1.0,
-            target.z as f64 + 1.5,
-        ],
-        off_hand_blocks: false,
-        hotbar: Vec::new(),
-        selected: 0,
-        may_build: true,
-        game_master: false,
-        context: None,
-    }
 }
 
 pub fn update(player: &PlayerHandle, seq: u64, position: [f64; 3]) -> RegionRequest {
@@ -1234,6 +1190,54 @@ pub fn transaction_answer(event: PlayerEvent) -> TransactionAnswer {
     }
 }
 
+/// Stacks for what `changes` add, as the player's side of a transaction
+/// gives them.
+pub fn pool_for(changes: &[ContainerChange]) -> Vec<ItemStack> {
+    gains(
+        changes
+            .iter()
+            .map(|c| (c.expected.as_ref(), c.new.as_ref())),
+    )
+}
+
+/// [`pool_for`] for an entity container.
+pub fn entity_pool_for(changes: &[tuff_core::world::messages::EntitySlotChange]) -> Vec<ItemStack> {
+    gains(
+        changes
+            .iter()
+            .map(|c| (c.expected.as_ref(), c.new.as_ref())),
+    )
+}
+
+fn gains<'a>(
+    changes: impl Iterator<Item = (Option<&'a ItemSnapshot>, Option<&'a ItemSnapshot>)>,
+) -> Vec<ItemStack> {
+    changes
+        .filter_map(|(expected, new)| {
+            tuff_core::world::menu::settle::delta(expected.map(|s| &**s), new.map(|s| &**s)).1
+        })
+        .map(|shown| ItemStack::mint_like(&shown, shown.count(), MintReason::Test))
+        .collect()
+}
+
+/// A picture of a test stack, for a transaction's expected or new slot.
+pub fn snap<S: std::borrow::Borrow<ItemStack>>(stack: Option<S>) -> Option<ItemSnapshot> {
+    stack.as_ref().map(|stack| ItemSnapshot::of(stack.borrow()))
+}
+
+/// Test stacks showing what `pictures` show, to compare with.
+pub fn stacks(pictures: &[Option<ItemSnapshot>]) -> Vec<Option<ItemStack>> {
+    pictures
+        .iter()
+        .map(|slot| {
+            slot.as_ref()
+                .map(|shown| ItemStack::mint_like(shown, shown.count(), MintReason::Test))
+        })
+        .collect()
+}
+
+/// A transaction changing one slot, from pictures of what it holds and
+/// should hold.
 pub fn set_slot(
     pos: BlockPos,
     slot: usize,
@@ -1243,8 +1247,8 @@ pub fn set_slot(
     vec![ContainerChange {
         pos,
         slot,
-        expected,
-        new,
+        expected: expected.as_ref().map(ItemSnapshot::of),
+        new: new.as_ref().map(ItemSnapshot::of),
     }]
 }
 

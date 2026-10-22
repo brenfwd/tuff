@@ -4,6 +4,7 @@
 //! that loses its wall (or has something in its way) falls off at the next
 //! 100-tick check.
 
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::damage_type::{self, DamageType};
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -18,7 +19,7 @@ use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::SlotEdit;
 use tuff_core::world::{damage_type_in_tag, framed, packets, physics};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -190,13 +191,21 @@ impl ItemFrame {
     }
 
     pub fn set_item(&mut self, item: Option<ItemStack>) {
-        let item = item.map(|stack| stack.with_count(1));
+        if let Some(old) = self.replace_item(item) {
+            old.burn(BurnReason::Template);
+        }
+    }
+
+    /// Puts `item` (one of it) in the frame and hands back what it held.
+    pub fn replace_item(&mut self, item: Option<ItemStack>) -> Option<ItemStack> {
+        let item = item.map(|stack| stack.keep(1, BurnReason::Template));
         let had_map = self.has_map();
-        self.item = item;
+        let old = std::mem::replace(&mut self.item, item);
         self.changed.push(DATA_ITEM);
         if had_map != self.has_map() {
             self.place();
         }
+        old
     }
 
     pub fn set_rotation(&mut self, rotation: u8) {
@@ -216,7 +225,7 @@ impl ItemFrame {
             .filter(|stack| {
                 tuff_datapack::tags::is(
                     tuff_vanilla_data::tag::item::key::CLONABLE_MAPS,
-                    stack.item,
+                    stack.item(),
                 )
             })
             .and_then(|stack| stack.components.map_id)
@@ -273,7 +282,7 @@ impl ItemFrame {
     }
 
     fn frame_stack(&self) -> ItemStack {
-        let mut stack = ItemStack::new(frame_item(self.base.kind), 1);
+        let mut stack = ItemStack::mint(frame_item(self.base.kind), 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base
             .custom_name
@@ -334,7 +343,7 @@ impl ItemFrame {
         let item = self.item.take();
         if item.is_some() {
             self.changed.push(DATA_ITEM);
-            report_item(item.clone(), None, by, cx);
+            report_item(item.as_ref(), None, by, cx);
         }
         self.release_map(item.as_ref(), cx);
         if !cx.shared.rule_bool("entity_drops") || creative {
@@ -421,8 +430,10 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         no_gravity: true,
         ..rest
     };
-    frame.item = take(nbt, "Item", |tag| ItemStack::from_nbt(tag.as_compound()?))
-        .filter(|stack| stack.count > 0);
+    frame.item = take(nbt, "Item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    })
+    .filter(|stack| stack.count() > 0);
     frame.rotation = take_number(nbt, "ItemRotation").map_or(0, |v| (v as i64).rem_euclid(8) as u8);
     frame.drop_chance = take_number(nbt, "ItemDropChance").map_or(1.0, |v| v as f32);
     frame.fixed = take_bool(nbt, "Fixed").unwrap_or(false);
@@ -444,16 +455,27 @@ impl RegionEntity for ItemFrame {
         &mut self.base
     }
 
-    fn held_items(&self) -> Option<Vec<Option<ItemStack>>> {
-        Some(vec![self.item.clone()])
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.item.take().into_iter().collect()
+    }
+
+    fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
+        Some(vec![self.item.as_ref().map(ItemStack::view)])
     }
 
     fn set_held_items(&mut self, slots: Vec<(usize, Option<ItemStack>)>) -> bool {
-        let Some((_, item)) = slots.into_iter().find(|(slot, _)| *slot == 0) else {
-            return false;
-        };
-        self.set_item(item);
-        true
+        let mut found = false;
+        for (slot, item) in slots {
+            if slot == 0 && !found {
+                found = true;
+                if let Some(old) = self.replace_item(item) {
+                    old.burn(BurnReason::Plugin);
+                }
+            } else if let Some(unused) = item {
+                unused.burn(BurnReason::Plugin);
+            }
+        }
+        found
     }
 
     fn save(&self, out: &mut Compound) {
@@ -483,7 +505,10 @@ impl RegionEntity for ItemFrame {
             MetadataValue::Direction(self.facing.id() as i32),
         ));
         if self.item.is_some() {
-            values.push((DATA_ITEM, MetadataValue::Slot(self.item.clone())));
+            values.push((
+                DATA_ITEM,
+                MetadataValue::Slot(self.item.as_ref().map(tuff_item::item::ItemSnapshot::of)),
+            ));
         }
         if self.rotation != 0 {
             values.push((DATA_ROTATION, MetadataValue::VarInt(self.rotation.into())));
@@ -498,7 +523,9 @@ impl RegionEntity for ItemFrame {
             .into_iter()
             .map(|index| {
                 let value = match index {
-                    DATA_ITEM => MetadataValue::Slot(self.item.clone()),
+                    DATA_ITEM => MetadataValue::Slot(
+                        self.item.as_ref().map(tuff_item::item::ItemSnapshot::of),
+                    ),
                     _ => MetadataValue::VarInt(self.rotation.into()),
                 };
                 (index, value)
@@ -585,11 +612,11 @@ impl RegionEntity for ItemFrame {
             return None;
         }
         if self.item.is_none() {
-            let stack = interaction.stack.as_ref()?;
-            self.set_item(Some(stack.clone()));
-            report_item(None, self.item.clone(), Some(interaction.player), cx);
+            let one = interaction.hand.take(1)?;
+            self.set_item(Some(one));
+            report_item(None, self.item.as_ref(), Some(interaction.player), cx);
             self.sound(SoundEvent::EntityItemFrameAddItem, cx);
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         self.sound(SoundEvent::EntityItemFrameRotateItem, cx);
         self.set_rotation(self.rotation + 1);
@@ -633,14 +660,14 @@ impl RegionEntity for ItemFrame {
 
 /// Tells container observers the frame's item went from `old` to `new`.
 fn report_item(
-    old: Option<ItemStack>,
-    new: Option<ItemStack>,
+    old: Option<&ItemStack>,
+    new: Option<&ItemStack>,
     player: Option<i32>,
     cx: &mut TickContext,
 ) {
     cx.effects.push(Effect::HeldItems {
         player,
-        slots: vec![SlotEdit { slot: 0, old, new }],
+        slots: vec![SlotEdit::of(0, old, new)],
     });
 }
 
@@ -664,7 +691,7 @@ mod tests {
     fn data_indices_match_the_dumped_layout() {
         for kind in [EntityType::ItemFrame, EntityType::GlowItemFrame] {
             let mut frame = ItemFrame::new(kind, 1, 1, BlockPos::new(0, 64, 0), Facing::North);
-            frame.set_item(Some(ItemStack::new(Item::Diamond, 1)));
+            frame.set_item(Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test)));
             frame.set_rotation(3);
             let layout = kind.data_layout();
             for (index, value) in frame.metadata() {
@@ -737,8 +764,8 @@ mod tests {
             Facing::South,
         );
         assert_eq!(frame.comparator_frame(), Some((Facing::South, 0)));
-        frame.set_item(Some(ItemStack::new(Item::Stick, 4)));
-        assert_eq!(frame.item().map(|s| s.count), Some(1));
+        frame.set_item(Some(ItemStack::mint(Item::Stick, 4, MintReason::Test)));
+        assert_eq!(frame.item().map(|s| s.count()), Some(1));
         assert_eq!(frame.comparator_frame(), Some((Facing::South, 1)));
         frame.set_rotation(7);
         assert_eq!(frame.comparator_frame(), Some((Facing::South, 8)));
@@ -758,7 +785,7 @@ mod tests {
             BlockPos::new(3, 70, -4),
             Facing::Up,
         );
-        frame.set_item(Some(ItemStack::new(Item::Compass, 1)));
+        frame.set_item(Some(ItemStack::mint(Item::Compass, 1, MintReason::Test)));
         frame.set_rotation(5);
         let nbt = tuff_core::world::entity::save(&frame).with("id", "minecraft:glow_item_frame");
         let loaded = registry.load(&nbt, 9).expect("loads");
@@ -766,7 +793,7 @@ mod tests {
         assert_eq!(loaded.block_pos, BlockPos::new(3, 70, -4));
         assert_eq!(loaded.facing, Facing::Up);
         assert_eq!(loaded.rotation(), 5);
-        assert_eq!(loaded.item().map(|s| s.item), Some(Item::Compass));
+        assert_eq!(loaded.item().map(|s| s.item()), Some(Item::Compass));
         assert_eq!(loaded.base.position, frame.base.position);
         assert_eq!(loaded.base.pitch, -90.0);
     }

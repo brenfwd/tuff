@@ -383,7 +383,7 @@ impl<G: Goal> Goal for BabyOnly<G> {
 }
 
 fn is_harness(stack: &tuff_item::item::ItemStack) -> bool {
-    stack.item.name().ends_with("_harness")
+    stack.item().name().ends_with("_harness")
 }
 
 fn harnessed(core: &MobCore) -> bool {
@@ -571,7 +571,7 @@ impl Species for HappyGhast {
     }
 
     fn is_food(&self, stack: &tuff_item::item::ItemStack) -> bool {
-        happy_ghast_food(stack.item)
+        happy_ghast_food(stack.item())
     }
 
     fn experience(&self, _core: &MobCore, rng: &mut StdRng) -> i32 {
@@ -663,14 +663,13 @@ impl Species for HappyGhast {
         if core.is_baby() {
             return None;
         }
-        let stack = interaction.stack.as_ref()?;
+        let stack = interaction.stack.as_deref()?;
         if is_harness(stack) && !harnessed(core) {
-            core.equipment.set(
-                tuff_vanilla_data::item::EquipmentSlot::Body,
-                Some(stack.clone().with_count(1)),
-            );
+            let harness = interaction.hand.take(1)?;
+            core.equipment
+                .set(tuff_vanilla_data::item::EquipmentSlot::Body, Some(harness));
             core.sound(SoundEvent::EntityHappyGhastEquip, 1.0, 1.0, cx);
-            return Some(HandEffect::Consume(1));
+            return Some(HandEffect::None);
         }
         None
     }
@@ -689,9 +688,9 @@ impl Species for HappyGhast {
 
     fn mount_refused(&self, core: &MobCore, stack: Option<&tuff_item::item::ItemStack>) -> bool {
         stack.is_some_and(|stack| {
-            happy_ghast_food(stack.item)
-                || stack.item == tuff_vanilla_data::Item::Shears
-                || stack.item == tuff_vanilla_data::Item::Lead
+            happy_ghast_food(stack.item())
+                || stack.item() == tuff_vanilla_data::Item::Shears
+                || stack.item() == tuff_vanilla_data::Item::Lead
                 || (is_harness(stack) && !harnessed(core))
         })
     }
@@ -818,7 +817,20 @@ mod tests {
             player_uuid: 7,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(tuff_item::item::ItemStack::new(stack, 1)),
+            stack: Some(tuff_item::item::ItemSnapshot::describe(
+                stack,
+                1,
+                Default::default(),
+            )),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (Some(tuff_item::item::ItemSnapshot::describe(
+                    stack,
+                    1,
+                    Default::default(),
+                )))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -851,13 +863,14 @@ mod tests {
             let mut ghast = happy_ghast();
             assert_eq!(ghast.seats(), 0);
             let outcome = ghast.interact(&click(tuff_vanilla_data::Item::BlueHarness), cx);
-            assert_eq!(outcome, Some(HandEffect::Consume(1)));
+            assert_eq!(outcome, Some(HandEffect::None));
             assert_eq!(ghast.seats(), 4);
             assert!(ghast.rideable_by_input() && ghast.flying_vehicle());
             assert!(
-                ghast.mount_refused_by(Some(&tuff_item::item::ItemStack::new(
+                ghast.mount_refused_by(Some(&tuff_item::item::ItemStack::mint(
                     tuff_vanilla_data::Item::Snowball,
-                    1
+                    1,
+                    tuff_item::item::MintReason::Test
                 )))
             );
             assert_eq!(

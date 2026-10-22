@@ -174,7 +174,7 @@ impl PlayerSession {
                 let mut hook = GridHook::new(MenuKind::Player, self.shared.recipes()).limited_to(
                     menus::crafting_gate(&self.shared, &self.progress.recipe_book),
                 );
-                let result_before = self.inventory.slots()[0].as_ref().map(|s| s.item);
+                let result_before = self.inventory.slots()[0].as_ref().map(|s| s.item());
                 let held_before = result_before.map(|item| self.held_count(item));
                 let drops = self.inventory.click(
                     slot,
@@ -187,7 +187,12 @@ impl PlayerSession {
                 if hook.took
                     && let (Some(item), Some(before)) = (result_before, held_before)
                 {
-                    self.count_crafted(item, before, &drops);
+                    let dropped: i32 = drops
+                        .iter()
+                        .filter(|stack| stack.item() == item)
+                        .map(|stack| i32::from(stack.count()))
+                        .sum();
+                    self.count_crafted(item, self.held_count(item) - before + dropped);
                 }
                 self.crafted_recipes(&hook.crafted);
                 self.refresh_inventory_result();
@@ -199,12 +204,12 @@ impl PlayerSession {
                         .is_some_and(|stack| {
                             crate::protocol::codec::HashedSlot::matches(
                                 view.as_ref(),
-                                stack.as_ref(),
+                                stack.as_ref().map(ItemStack::view),
                             )
                         })
                 }) && crate::protocol::codec::HashedSlot::matches(
                     carried.as_ref(),
-                    self.inventory.carried(),
+                    self.inventory.carried().map(ItemStack::view),
                 );
                 if !in_sync {
                     self.send_inventory();

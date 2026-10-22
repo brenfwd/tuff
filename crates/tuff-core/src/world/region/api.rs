@@ -302,7 +302,7 @@ impl RegionWorld for RegionActor {
     fn dispense_on_entity_in(
         &mut self,
         pos: BlockPos,
-        stack: &ItemStack,
+        stack: &crate::world::region_api::Fired,
     ) -> Option<crate::world::region_api::DispenseOutcome> {
         self.act_on_entities_in(pos, |entity, cx| entity.dispensed_on(stack, cx))
     }
@@ -449,7 +449,7 @@ impl RegionWorld for RegionActor {
             self.receive_entity(tracked.entity, seq);
             return;
         }
-        let handed = target.try_entity(tracked.entity, seq);
+        let handed = self.hand_entity(&target, tracked.entity, seq);
         if let Err(mut entity) = handed {
             let base = entity.base_mut();
             base.position = old_position;
@@ -486,6 +486,10 @@ impl RegionWorld for RegionActor {
 
     fn remove_entity(&mut self, id: i32) -> Option<TrackedEntity> {
         RegionActor::remove_entity(self, id, &[])
+    }
+
+    fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity> {
+        RegionActor::remove_entity_intact(self, id, &[])
     }
 
     fn remove_entity_kept(&mut self, id: i32) -> Option<TrackedEntity> {
@@ -779,11 +783,7 @@ impl RegionWorld for RegionActor {
         }
         let slots = slots
             .iter()
-            .map(|(slot, old, new)| crate::world::region_api::SlotEdit {
-                slot: *slot,
-                old: old.cloned(),
-                new: new.cloned(),
-            })
+            .map(|(slot, old, new)| crate::world::region_api::SlotEdit::of(*slot, *old, *new))
             .collect();
         RegionActor::report_container_edit(self, holder, slots);
     }
@@ -811,11 +811,31 @@ impl RegionWorld for RegionActor {
         self.set_container_items_for_plugin(pos, slots)
     }
 
-    fn entity_container_items(&self, uuid: u128) -> Option<&[Option<ItemStack>]> {
+    fn edit_container(
+        &mut self,
+        pos: BlockPos,
+        edit: &mut dyn FnMut(&mut [Option<ItemStack>]),
+    ) -> bool {
+        self.edit_container_for_feature(pos, edit)
+    }
+
+    fn edit_container_slot(
+        &mut self,
+        pos: BlockPos,
+        slot: usize,
+        edit: &mut dyn FnMut(&mut Option<ItemStack>),
+    ) -> bool {
+        self.edit_container_slot_for_feature(pos, slot, edit)
+    }
+
+    fn entity_container_items(
+        &self,
+        uuid: u128,
+    ) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         self.entity_container_items_by_uuid(uuid)
     }
 
-    fn entity_held_items(&self, uuid: u128) -> Option<Vec<Option<ItemStack>>> {
+    fn entity_held_items(&self, uuid: u128) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         self.entity_held_items_by_uuid(uuid)
     }
 

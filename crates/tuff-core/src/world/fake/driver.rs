@@ -112,7 +112,7 @@ impl PlayerSession {
             hotbar: std::array::from_fn(|i| {
                 self.inventory.slots()[crate::world::inventory::Inventory::hotbar_slot(i)]
                     .as_ref()
-                    .map(|stack| stack.item)
+                    .map(|stack| stack.item())
             }),
             dig_progress: driver.dig_progress(),
             alive: !self.is_dead(),
@@ -121,7 +121,12 @@ impl PlayerSession {
                 .slots()
                 .iter()
                 .enumerate()
-                .filter_map(|(slot, stack)| Some((slot as u8, stack.clone()?)))
+                .filter_map(|(slot, stack)| {
+                    Some((
+                        slot as u8,
+                        tuff_item::item::ItemSnapshot::of(stack.as_ref()?),
+                    ))
+                })
                 .collect(),
             miner: Some(self.miner()),
         };

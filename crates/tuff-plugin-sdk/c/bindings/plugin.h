@@ -2224,6 +2224,8 @@ typedef tuff_plugin_types_state_filter_t tuff_plugin_host_state_filter_t;
 
 typedef tuff_plugin_types_inventory_t tuff_plugin_host_inventory_t;
 
+typedef tuff_plugin_types_item_stack_t tuff_plugin_host_item_stack_t;
+
 typedef tuff_plugin_types_world_error_t tuff_plugin_host_world_error_t;
 
 typedef tuff_plugin_types_host_error_t tuff_plugin_host_host_error_t;
@@ -2313,6 +2315,13 @@ typedef struct tuff_plugin_host_entity_state_t {
   // Zero for an entity without health.
   float   health;
 } tuff_plugin_host_entity_state_t;
+
+// A handle to items the plugin holds. The host keeps the stacks; the
+// plugin moves them only through the `stash-*`, `give-stash` and
+// `take-into-stash` calls, so it can make, move and use up items but
+// never copy one. Handles count from 1 and are never reused. A stash
+// still holding items when the plugin unloads or faults is used up.
+typedef uint64_t tuff_plugin_host_stash_t;
 
 typedef struct {
   bool is_err;
@@ -2499,6 +2508,24 @@ typedef struct {
     tuff_plugin_host_world_error_t err;
   } val;
 } tuff_plugin_host_result_list_option_entity_state_world_error_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    tuff_plugin_host_stash_t ok;
+    tuff_plugin_host_world_error_t err;
+  } val;
+} tuff_plugin_host_result_stash_world_error_t;
+
+typedef struct {
+  tuff_plugin_host_item_stack_t *ptr;
+  size_t len;
+} tuff_plugin_host_list_item_stack_t;
+
+typedef struct {
+  bool is_some;
+  tuff_plugin_host_list_item_stack_t val;
+} tuff_plugin_host_option_list_item_stack_t;
 
 typedef struct {
   tuff_plugin_host_menu_item_t *ptr;
@@ -2948,6 +2975,30 @@ extern bool tuff_plugin_host_give_item_to(tuff_plugin_host_uuid_t *player, plugi
 // failed all-or-nothing take skips that player's later edits from
 // the same call, so take-items then give-item is a safe exchange.
 extern bool tuff_plugin_host_take_items(tuff_plugin_host_uuid_t *player, plugin_string_t *item, uint32_t count, bool all_or_nothing, tuff_plugin_host_world_error_t *err);
+// A new, empty stash (at most 1024 at once).
+extern bool tuff_plugin_host_stash_new(tuff_plugin_host_stash_t *ret, tuff_plugin_host_world_error_t *err);
+// Makes `count` (1 to 2304) new items into `stash`, as `give-item`
+// makes them. An unknown stash is invalid-state.
+extern bool tuff_plugin_host_stash_mint(tuff_plugin_host_stash_t stash, plugin_string_t *item, uint32_t count, plugin_string_t *maybe_custom_data, plugin_string_t *maybe_custom_name, tuff_plugin_host_world_error_t *err);
+// Pictures of the stacks `stash` holds; none for an unknown stash.
+extern bool tuff_plugin_host_stash_contents(tuff_plugin_host_stash_t stash, tuff_plugin_host_list_item_stack_t *ret);
+// Moves up to `count` of an item (of anything with none) out of
+// `stash` into a new stash.
+extern bool tuff_plugin_host_stash_split(tuff_plugin_host_stash_t stash, plugin_string_t *maybe_item, uint32_t count, tuff_plugin_host_stash_t *ret, tuff_plugin_host_world_error_t *err);
+// Moves everything in `source` into `target`; `source` is gone after.
+extern bool tuff_plugin_host_stash_merge(tuff_plugin_host_stash_t target, tuff_plugin_host_stash_t source, tuff_plugin_host_world_error_t *err);
+// Uses up everything `stash` holds; it is gone after.
+extern bool tuff_plugin_host_stash_burn(tuff_plugin_host_stash_t stash, tuff_plugin_host_world_error_t *err);
+// Queues moving everything in `stash` into an online player's
+// inventory, dropping what does not fit; the stash is gone after.
+// Ordered with the call's other inventory edits for that player. A
+// player who is offline when it runs is skipped and the items are
+// used up.
+extern bool tuff_plugin_host_give_stash(tuff_plugin_host_uuid_t *player, tuff_plugin_host_stash_t stash, tuff_plugin_host_world_error_t *err);
+// `take-items`, but what is taken moves into `stash` instead of being
+// used up. The items arrive once the queued edits apply, after the
+// call; `stash-contents` shows them from the next call on.
+extern bool tuff_plugin_host_take_into_stash(tuff_plugin_host_uuid_t *player, plugin_string_t *item, uint32_t count, bool all_or_nothing, tuff_plugin_host_stash_t stash, tuff_plugin_host_world_error_t *err);
 // Queues emptying an online player's inventory, armor, off hand and
 // cursor included.
 extern bool tuff_plugin_host_clear_inventory(tuff_plugin_host_uuid_t *player, tuff_plugin_host_world_error_t *err);
@@ -3560,6 +3611,8 @@ void tuff_plugin_host_state_filter_free(tuff_plugin_host_state_filter_t *ptr);
 
 void tuff_plugin_host_inventory_free(tuff_plugin_host_inventory_t *ptr);
 
+void tuff_plugin_host_item_stack_free(tuff_plugin_host_item_stack_t *ptr);
+
 void tuff_plugin_host_world_error_free(tuff_plugin_host_world_error_t *ptr);
 
 void tuff_plugin_host_host_error_free(tuff_plugin_host_host_error_t *ptr);
@@ -3673,6 +3726,12 @@ void tuff_plugin_host_option_entity_state_free(tuff_plugin_host_option_entity_st
 void tuff_plugin_host_list_option_entity_state_free(tuff_plugin_host_list_option_entity_state_t *ptr);
 
 void tuff_plugin_host_result_list_option_entity_state_world_error_free(tuff_plugin_host_result_list_option_entity_state_world_error_t *ptr);
+
+void tuff_plugin_host_result_stash_world_error_free(tuff_plugin_host_result_stash_world_error_t *ptr);
+
+void tuff_plugin_host_list_item_stack_free(tuff_plugin_host_list_item_stack_t *ptr);
+
+void tuff_plugin_host_option_list_item_stack_free(tuff_plugin_host_option_list_item_stack_t *ptr);
 
 void tuff_plugin_host_list_menu_item_free(tuff_plugin_host_list_menu_item_t *ptr);
 

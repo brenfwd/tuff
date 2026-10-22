@@ -21,9 +21,10 @@ use crate::world::entity::{EntityInteraction, InteractOutcome};
 use crate::world::messages::{ActionOutcome, Place};
 use crate::world::region_api::RegionWorld;
 use crate::world::session::PlayerSession;
+use tuff_item::item::ComponentsSnapshot;
 use tuff_item::item::display::{ModelData, full_identifier};
 use tuff_item::item::identity::{IDENTITY_KEY, ITEM_KEY, PRIVATE_KEY, client_custom_data};
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemSnapshot, ItemStack};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 
@@ -143,7 +144,10 @@ impl CustomItemDef {
     }
 
     fn with_other(mut self, kind: DataComponentType, value: impl Into<Tag>) -> Self {
-        self.components.other.insert(kind.name(), value);
+        let value = value.into();
+        self.components.edit(|components| {
+            components.other.insert(kind.name(), value);
+        });
         self
     }
 
@@ -176,14 +180,16 @@ impl CustomItemDef {
 
     /// Feature data every new stack starts with, beside the identity.
     pub fn with_data(mut self, data: Compound) -> Self {
-        let mut merged = match self.components.other.remove(CUSTOM_DATA) {
-            Some(Tag::Compound(existing)) => existing,
-            _ => Compound::new(),
-        };
-        for (key, value) in data.iter() {
-            merged.insert(key, value.clone());
-        }
-        self.components.other.insert(CUSTOM_DATA, merged);
+        self.components.edit(|components| {
+            let mut merged = match components.other.remove(CUSTOM_DATA) {
+                Some(Tag::Compound(existing)) => existing,
+                _ => Compound::new(),
+            };
+            for (key, value) in data.iter() {
+                merged.insert(key, value.clone());
+            }
+            components.other.insert(CUSTOM_DATA, merged);
+        });
         self
     }
 
@@ -286,24 +292,36 @@ pub fn seen_by_entity(
         return (None, None);
     };
     let hidden = (!def.inherit_behavior).then(|| EntityInteraction {
+        player: interaction.player,
+        player_uuid: interaction.player_uuid,
+        position: interaction.position,
+        location: interaction.location,
         stack: None,
-        ..interaction.clone()
+        hand: Default::default(),
+        off_hand: interaction.off_hand,
+        creative: interaction.creative,
+        sneaking: interaction.sneaking,
+        riding: interaction.riding,
+        hero: interaction.hero,
     });
     (Some(def), hidden)
 }
 
 /// Recently replaced creative stacks with private data, newest last.
 #[derive(Default)]
-struct PrivateStash(Vec<ItemStack>);
+struct PrivateStash(Vec<ItemSnapshot>);
 
-fn client_view(stack: &ItemStack) -> Components {
-    let mut components = stack.components.clone();
-    if let Some(view) = components
+fn client_view(stack: &ItemStack) -> ComponentsSnapshot {
+    let mut components = ComponentsSnapshot::of(&stack.components);
+    if let Some(view) = stack
+        .components
         .other
         .get(CUSTOM_DATA)
         .and_then(client_custom_data)
     {
-        components.other.insert(CUSTOM_DATA, view);
+        components.edit(|components| {
+            components.other.insert(CUSTOM_DATA, view);
+        });
     }
     components
 }
@@ -356,8 +374,9 @@ impl PlayerSession {
             return stack;
         }
         if let Some(previous) = slot
-            .and_then(|slot| self.inventory.slots().get(slot).cloned().flatten())
-            .filter(is_private)
+            .and_then(|slot| self.inventory.slots().get(slot).and_then(Option::as_ref))
+            .filter(|stack| is_private(stack))
+            .map(ItemSnapshot::of)
         {
             let stash = &mut self.ext.entry::<PrivateStash>().0;
             stash.retain(|stashed| *stashed != previous);
@@ -377,11 +396,11 @@ impl PlayerSession {
         let source = stash
             .and_then(|stash| {
                 stash.0.iter().rev().find(|stashed| {
-                    stashed.item == stack.item && client_view(stashed) == stack.components
+                    stashed.item() == stack.item() && *client_view(stashed) == stack.components
                 })
             })
             .cloned()
-            .unwrap_or_else(|| def.stack(1));
+            .unwrap_or_else(|| def.template());
         if let Some(data) = source.components.other.get(CUSTOM_DATA) {
             stack.components.other.insert(CUSTOM_DATA, data.clone());
         }
@@ -394,6 +413,7 @@ mod tests {
     use super::*;
     use crate::custom::Definitions;
     use crate::protocol::codec::HashedSlot;
+    use tuff_item::item::MintReason;
 
     fn content(defs: impl IntoIterator<Item = CustomItemDef>) -> Arc<CustomContent> {
         let mut definitions = Definitions::default();
@@ -482,12 +502,12 @@ mod tests {
             tuff_item::item::NetworkComponent::ClientData(expected.clone())
         );
         let hashed = HashedSlot {
-            item: stack.item.id(),
+            item: stack.item().id(),
             count: 1,
             added: added.iter().map(|c| (c.kind().id(), c.hash())).collect(),
             removed: Vec::new(),
         };
-        assert!(HashedSlot::matches(Some(&hashed), Some(&stack)));
+        assert!(HashedSlot::matches(Some(&hashed), Some(stack.view())));
 
         let public = CustomItemDef::new("ex:open", Item::Paper)
             .with_data(Compound::new().with("door", "vault"))
@@ -539,7 +559,7 @@ mod tests {
 
         let stack = charm.stack(1);
         let hashed = |removed: Vec<u32>| HashedSlot {
-            item: stack.item.id(),
+            item: stack.item().id(),
             count: 1,
             added: stack
                 .components
@@ -550,10 +570,10 @@ mod tests {
             removed,
         };
         let ids = vec![Kind::Consumable.id(), Kind::Food.id()];
-        assert!(HashedSlot::matches(Some(&hashed(ids)), Some(&stack)));
+        assert!(HashedSlot::matches(Some(&hashed(ids)), Some(stack.view())));
         assert!(!HashedSlot::matches(
             Some(&hashed(Vec::new())),
-            Some(&stack)
+            Some(stack.view())
         ));
         let saved = Components::from_nbt(&stack.components.to_nbt());
         assert_eq!(saved, stack.components, "the removal survives saves");
@@ -568,7 +588,7 @@ mod tests {
         ]);
         assert!(content.suppresses_base(&content.stack("ex:ruby", 1).unwrap()));
         assert!(!content.suppresses_base(&content.stack("ex:gem", 1).unwrap()));
-        assert!(!content.suppresses_base(&ItemStack::new(Item::Emerald, 1)));
+        assert!(!content.suppresses_base(&ItemStack::mint(Item::Emerald, 1, MintReason::Test)));
         assert!(content.stack("ex:missing", 1).is_none());
         assert_eq!(content.items().count(), 2);
     }

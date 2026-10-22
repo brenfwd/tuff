@@ -297,7 +297,11 @@ impl RegionManager {
                 chunks.sort_by_key(|c| (c.z, c.x));
                 let _ = reply.send(chunks);
             }
-            ManagerMessage::SaveAll { done, snapshotted } => {
+            ManagerMessage::SaveAll {
+                done,
+                snapshotted,
+                epoch,
+            } => {
                 self.start_ticket_save();
                 let mut saved = Vec::new();
                 let mut taken = Vec::new();
@@ -308,6 +312,7 @@ impl RegionManager {
                     entry.handle.internal(RegionInternal::SaveAll {
                         done: tx,
                         snapshotted: snapshotted.is_some().then_some(snap),
+                        epoch: epoch.clone(),
                     });
                     saved.push(rx);
                     taken.push(snap_rx);

@@ -141,7 +141,7 @@ pub struct Items {
     /// Every occupied slot: its index, item id and count.
     pub slots: Vec<(u8, String, u8)>,
     /// Every occupied slot's whole stack.
-    pub stacks: Vec<(u8, tuff_item::item::ItemStack)>,
+    pub stacks: Vec<(u8, tuff_item::item::ItemSnapshot)>,
 }
 
 impl Player {
@@ -248,6 +248,8 @@ pub struct Effects {
     /// Runtime dimensions discarded during the call, to clean up after
     /// its teleports.
     pub discards: Vec<tuff_core::world::dimension::DimensionId>,
+    /// Refused stash moves, for the audit log.
+    pub violations: Vec<crate::stash::StashViolation>,
 }
 
 impl Effects {
@@ -335,7 +337,9 @@ pub struct ItemFilter {
 }
 
 use declared::setting_value;
+mod event_kinds;
 pub use declared::{Pack, Setting, config_value};
+pub use event_kinds::kind_of;
 
 /// What a plugin claimed while registering.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -396,45 +400,6 @@ impl Registration {
     }
 }
 
-/// The kind of `event`, as the flag a plugin subscribes with.
-pub fn kind_of(event: &Event) -> EventKinds {
-    match event {
-        Event::Join(_) => EventKinds::JOIN,
-        Event::Leave(_) => EventKinds::LEAVE,
-        Event::Chat(_) => EventKinds::CHAT,
-        Event::BlockBreak(_) => EventKinds::BLOCK_BREAK,
-        Event::BlockPlace(_) => EventKinds::BLOCK_PLACE,
-        Event::LeftClick(_) => EventKinds::LEFT_CLICK,
-        Event::RightClick(_) => EventKinds::RIGHT_CLICK,
-        Event::EntitySpawn(_) => EventKinds::ENTITY_SPAWN,
-        Event::EntityDeath(_) => EventKinds::ENTITY_DEATH,
-        Event::EntityDamage(_) => EventKinds::ENTITY_DAMAGE,
-        Event::PlayerHurt(_) => EventKinds::PLAYER_HURT,
-        Event::PlayerDeath(_) => EventKinds::PLAYER_DEATH,
-        Event::InsideBlock(_) => EventKinds::INSIDE_BLOCK,
-        Event::ConfigChange(_) => EventKinds::CONFIG_CHANGE,
-        Event::Login(_) => EventKinds::LOGIN,
-        Event::MenuClick(_) => EventKinds::MENU_CLICK,
-        Event::MenuClose(_) => EventKinds::MENU_CLOSE,
-        Event::EntityInteract(_) => EventKinds::ENTITY_INTERACT,
-        Event::UseItem(_) => EventKinds::USE_ITEM,
-        Event::ProjectileHit(_) => EventKinds::PROJECTILE_HIT,
-        Event::PlayerAttack(_) => EventKinds::PLAYER_ATTACK,
-        Event::DamageFiltered(_) => EventKinds::DAMAGE_FILTERED,
-        Event::ItemDrop(_) => EventKinds::ITEM_DROP,
-        Event::ItemPickup(_) => EventKinds::ITEM_PICKUP,
-        Event::ItemSwap(_) => EventKinds::ITEM_SWAP,
-        Event::ItemCraft(_) => EventKinds::ITEM_CRAFT,
-        Event::ItemsTaken(_) => EventKinds::ITEMS_TAKEN,
-        Event::Explosion(_) => EventKinds::EXPLOSION,
-        Event::InventoryClick(_) => EventKinds::INVENTORY_CLICK,
-        Event::InventoryOpen(_) => EventKinds::INVENTORY_OPEN,
-        Event::InventoryClose(_) => EventKinds::INVENTORY_CLOSE,
-        Event::PlayerState(_) => EventKinds::PLAYER_STATE,
-        Event::Payload(_) => EventKinds::PAYLOAD,
-    }
-}
-
 /// Why guest code could not run or was stopped.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fault(pub String);
@@ -478,6 +443,7 @@ pub(crate) struct State {
     outstanding: std::collections::HashSet<Handle>,
     owed: std::collections::HashSet<u64>,
     fakes: crate::fake::Fakes,
+    stashes: crate::stash::Stashes,
 }
 
 impl State {
@@ -515,6 +481,7 @@ impl State {
             outstanding: Default::default(),
             owed: Default::default(),
             fakes: Default::default(),
+            stashes: Default::default(),
         }
     }
 
@@ -790,6 +757,68 @@ impl Imports for State {
         all_or_nothing: bool,
     ) -> value::Result<Result<(), WorldError>> {
         State::host_take_items(self, player, item, count, all_or_nothing)
+    }
+
+    fn host_stash_new(&mut self) -> value::Result<Result<u64, WorldError>> {
+        State::host_stash_new(self)
+    }
+
+    fn host_stash_mint(
+        &mut self,
+        stash: u64,
+        item: &str,
+        count: u32,
+        custom_data: Option<String>,
+        custom_name: Option<String>,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_stash_mint(self, stash, item, count, custom_data, custom_name)
+    }
+
+    fn host_stash_contents(
+        &mut self,
+        stash: u64,
+    ) -> value::Result<Option<Vec<crate::wit::bindings::types::ItemStack>>> {
+        State::host_stash_contents(self, stash)
+    }
+
+    fn host_stash_split(
+        &mut self,
+        stash: u64,
+        item: Option<String>,
+        count: u32,
+    ) -> value::Result<Result<u64, WorldError>> {
+        State::host_stash_split(self, stash, item, count)
+    }
+
+    fn host_stash_merge(
+        &mut self,
+        target: u64,
+        source: u64,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_stash_merge(self, target, source)
+    }
+
+    fn host_stash_burn(&mut self, stash: u64) -> value::Result<Result<(), WorldError>> {
+        State::host_stash_burn(self, stash)
+    }
+
+    fn host_give_stash(
+        &mut self,
+        player: Uuid,
+        stash: u64,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_give_stash(self, player, stash)
+    }
+
+    fn host_take_into_stash(
+        &mut self,
+        player: Uuid,
+        item: &str,
+        count: u32,
+        all_or_nothing: bool,
+        stash: u64,
+    ) -> value::Result<Result<(), WorldError>> {
+        State::host_take_into_stash(self, player, item, count, all_or_nothing, stash)
     }
 
     fn host_clear_inventory(&mut self, player: Uuid) -> value::Result<Result<(), WorldError>> {

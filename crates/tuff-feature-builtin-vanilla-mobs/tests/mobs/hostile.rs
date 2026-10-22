@@ -333,7 +333,7 @@ async fn arrows_stick_in_walls_and_players_pick_them_up() {
         _ => None,
     })
     .await;
-    assert_eq!(offered.item, Item::Arrow);
+    assert_eq!(offered.item(), Item::Arrow);
     world.shutdown().await;
 }
 
@@ -475,7 +475,8 @@ async fn skeletons_shoot_players_they_see() {
     let (player, mut events) = PlayerHandle::new(1000);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
-    let bow = tuff_item::item::ItemStack::new(Item::Bow, 1).to_nbt();
+    let bow =
+        tuff_item::item::ItemStack::mint(Item::Bow, 1, tuff_item::item::MintReason::Test).to_nbt();
     summon(
         &region,
         EntityType::Skeleton,
@@ -499,7 +500,10 @@ async fn skeletons_shoot_players_they_see() {
 async fn main_hand(region: &RegionHandle, id: i32) -> Option<tuff_item::item::ItemStack> {
     let nbt = entity_nbt(region, id).await?;
     let mainhand = nbt.get("equipment")?.as_compound()?.get("mainhand")?;
-    tuff_item::item::ItemStack::from_nbt(mainhand.as_compound()?)
+    tuff_item::item::ItemStack::mint_from_nbt(
+        mainhand.as_compound()?,
+        tuff_item::item::MintReason::Test,
+    )
 }
 
 #[tuff_core::watchdog]
@@ -567,10 +571,11 @@ async fn witches_throw_splash_potions_on_a_sixty_tick_cooldown() {
                 let nbt = entity_nbt(&region, s.id)
                     .await
                     .expect("the just-spawned potion is tracked");
-                let item = tuff_item::item::ItemStack::from_nbt(
+                let item = tuff_item::item::ItemStack::mint_from_nbt(
                     nbt.get("Item")
                         .and_then(tuff_nbt::Tag::as_compound)
                         .expect("a thrown potion carries its item"),
+                    tuff_item::item::MintReason::Test,
                 )
                 .expect("a valid item stack");
                 throws.push((tick, item));
@@ -588,7 +593,7 @@ async fn witches_throw_splash_potions_on_a_sixty_tick_cooldown() {
         "60-tick cooldown between throws, got {gap}"
     );
     for (_, item) in &throws {
-        assert_eq!(item.item, Item::SplashPotion);
+        assert_eq!(item.item(), Item::SplashPotion);
         assert_eq!(
             item.components
                 .potion_contents
@@ -623,7 +628,7 @@ async fn hurt_witches_drink_a_healing_potion() {
     let mut drank = false;
     for _ in 0..2000u32 {
         if let Some(stack) = main_hand(&region, id).await
-            && stack.item == Item::Potion
+            && stack.item() == Item::Potion
             && stack
                 .components
                 .potion_contents
@@ -663,7 +668,7 @@ async fn ender_pearls_carry_their_thrower_to_where_they_land() {
         world.shared.next_entity_id(),
         [3.5, SKY as f64 + 2.5, 7.5],
         [0.6, 0.3, 0.0],
-        tuff_item::item::ItemStack::new(Item::EnderPearl, 1),
+        tuff_item::item::ItemStack::mint(Item::EnderPearl, 1, tuff_item::item::MintReason::Test),
         player_owner(&player),
     );
     region
@@ -749,7 +754,7 @@ async fn random_teleport_gives_up_with_no_loaded_ground_nearby() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn splash_potions_affect_players_near_them_and_lingering_ones_leave_a_cloud() {
     use tuff_feature_builtin_vanilla_combat::projectile::thrown::Thrown;
-    use tuff_item::item::{ComponentPatch, ItemStack, PotionContents};
+    use tuff_item::item::{ComponentPatch, ItemStack, MintReason, PotionContents};
     use tuff_vanilla_data::registry::{MobEffect, Potion};
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
@@ -763,7 +768,7 @@ async fn splash_potions_affect_players_near_them_and_lingering_ones_leave_a_clou
         .request(player_at(&player, at, PlayerLooks::default()))
         .await;
     let potion = |item: Item, potion: Potion| {
-        ItemStack::new(item, 1).with_components(ComponentPatch {
+        ItemStack::mint(item, 1, MintReason::Test).with_components(ComponentPatch {
             potion_contents: Some(Box::new(PotionContents {
                 potion: Some(potion),
                 ..Default::default()
@@ -851,7 +856,7 @@ async fn mob_health(region: &RegionHandle, id: i32) -> f32 {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn splash_water_hurts_water_sensitive_mobs() {
     use tuff_feature_builtin_vanilla_combat::projectile::thrown::Thrown;
-    use tuff_item::item::{ComponentPatch, ItemStack, PotionContents};
+    use tuff_item::item::{ComponentPatch, ItemStack, MintReason, PotionContents};
     use tuff_vanilla_data::registry::Potion;
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
@@ -870,13 +875,14 @@ async fn splash_water_hurts_water_sensitive_mobs() {
     let blaze = mobs(&region, EntityType::Blaze).await;
     let id = blaze[0].id;
     let before = mob_health(&region, id).await;
-    let water = ItemStack::new(Item::SplashPotion, 1).with_components(ComponentPatch {
-        potion_contents: Some(Box::new(PotionContents {
-            potion: Some(Potion::Water),
+    let water =
+        ItemStack::mint(Item::SplashPotion, 1, MintReason::Test).with_components(ComponentPatch {
+            potion_contents: Some(Box::new(PotionContents {
+                potion: Some(Potion::Water),
+                ..Default::default()
+            })),
             ..Default::default()
-        })),
-        ..Default::default()
-    });
+        });
     let splash = Thrown::new(
         EntityType::SplashPotion,
         world.shared.next_entity_id(),
@@ -898,7 +904,7 @@ async fn splash_water_hurts_water_sensitive_mobs() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn splash_potions_give_mobs_lasting_effects_that_tick() {
     use tuff_feature_builtin_vanilla_combat::projectile::thrown::Thrown;
-    use tuff_item::item::{ComponentPatch, ItemStack, PotionContents};
+    use tuff_item::item::{ComponentPatch, ItemStack, MintReason, PotionContents};
     use tuff_vanilla_data::registry::Potion;
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
@@ -917,13 +923,14 @@ async fn splash_potions_give_mobs_lasting_effects_that_tick() {
     let pig = mobs(&region, EntityType::Pig).await;
     let id = pig[0].id;
     let before = mob_health(&region, id).await;
-    let poison = ItemStack::new(Item::SplashPotion, 1).with_components(ComponentPatch {
-        potion_contents: Some(Box::new(PotionContents {
-            potion: Some(Potion::Poison),
+    let poison =
+        ItemStack::mint(Item::SplashPotion, 1, MintReason::Test).with_components(ComponentPatch {
+            potion_contents: Some(Box::new(PotionContents {
+                potion: Some(Potion::Poison),
+                ..Default::default()
+            })),
             ..Default::default()
-        })),
-        ..Default::default()
-    });
+        });
     let splash = Thrown::new(
         EntityType::SplashPotion,
         world.shared.next_entity_id(),
@@ -963,7 +970,11 @@ async fn bottles_o_enchanting_break_into_experience_in_the_vanilla_range() {
         world.shared.next_entity_id(),
         [7.5, SKY as f64 + 1.5, 7.5],
         [0.0, 0.05, 0.0],
-        tuff_item::item::ItemStack::new(Item::ExperienceBottle, 1),
+        tuff_item::item::ItemStack::mint(
+            Item::ExperienceBottle,
+            1,
+            tuff_item::item::MintReason::Test,
+        ),
         tuff_core::world::projectile::Owner::default(),
     );
     region
@@ -1425,7 +1436,8 @@ async fn spawners_spawn_their_mob_while_players_are_near() {
                 .with("SpawnData", spawn_data),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     world.ticks(60).await;
@@ -1483,7 +1495,8 @@ async fn spawners_do_nothing_when_the_spawner_blocks_work_rule_is_off() {
                 .with("SpawnData", spawn_data),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     world.ticks(60).await;
@@ -1534,7 +1547,8 @@ async fn spawners_dress_their_mob_from_an_equipment_table() {
                 .with("SpawnData", Tag::Compound(spawn_data)),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     region
@@ -1619,7 +1633,8 @@ async fn spawners_follow_custom_spawn_rules_and_show_the_next_mob() {
                 ),
         ),
         ..Default::default()
-    });
+    })
+    .into();
     op.game_master = true;
     region.request(RegionRequest::Place(op)).await;
     world.ticks(2).await;
@@ -1758,10 +1773,7 @@ async fn piglins_barter_gold_and_spare_players_in_gold() {
     world.ticks(5).await;
     let piglin = mobs(&region, EntityType::Piglin).await[0].id;
     let effect = interact(&region, &player, &mut events, piglin, Item::GoldIngot).await;
-    assert!(matches!(
-        effect,
-        crate::world::messages::HandEffect::Consume(1)
-    ));
+    assert!(matches!(effect, crate::world::messages::HandEffect::None));
     wait_for(&world, &region, 200, |found| {
         found.iter().any(|s| s.kind == EntityType::Item)
     })
@@ -1915,7 +1927,7 @@ async fn infested_blocks_release_silverfish_unless_mined_with_silk_touch() {
     blocks.push((plain, Block::InfestedStone.default_state()));
     blocks.push((silky, Block::InfestedCobblestone.default_state()));
     place_blocks(&world, &region, blocks).await;
-    let mut silk = ItemStack::new(Item::DiamondPickaxe, 1);
+    let mut silk = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     silk.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:silk_touch".to_owned(),
         1,
@@ -1925,7 +1937,7 @@ async fn infested_blocks_release_silverfish_unless_mined_with_silk_touch() {
             .request(RegionRequest::Break {
                 player: player.clone(),
                 pos,
-                tool,
+                tool: tool.as_ref().map(tuff_item::item::ItemSnapshot::of),
                 mode: BreakMode::Finish,
                 sequence,
             })
@@ -2074,7 +2086,10 @@ async fn piglins_pick_up_dropped_gold_one_ingot_at_a_time_and_barter() {
     summon(
         &region,
         EntityType::Item,
-        Compound::new().with("Item", ItemStack::new(Item::GoldIngot, 2).to_nbt()),
+        Compound::new().with(
+            "Item",
+            ItemStack::mint(Item::GoldIngot, 2, MintReason::Test).to_nbt(),
+        ),
         [9.5, SKY as f64 + 1.0, 6.5],
     )
     .await;

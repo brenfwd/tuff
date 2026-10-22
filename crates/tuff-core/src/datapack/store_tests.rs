@@ -487,3 +487,49 @@ fn a_server_file_in_use_is_refused() {
     let server = SqliteBackend::open(&file).unwrap();
     assert_eq!(ids(&server), ["vanilla", "file/p"]);
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn an_offline_world_restores_the_last_complete_save_first() {
+    use tuff_storage::journal::{DirStore, JournaledBackend};
+    let dir = TestDir::new();
+    let world = dir.path().join("world");
+    level_dat(&world);
+    let player = |backend: &dyn WorldBackend| {
+        backend
+            .documents()
+            .read(Document::Player(7))
+            .unwrap()
+            .and_then(|root| root.get_int("value"))
+    };
+    let save = |value: i32, finish: bool| {
+        let backend = JournaledBackend::open(
+            Arc::new(VanillaBackend::new(&world)),
+            Box::new(DirStore::new(
+                world.join(tuff_storage::vanilla::JOURNAL_DIR),
+            )),
+        )
+        .unwrap();
+        let barrier = backend.journal().barrier();
+        let ticket = barrier.ticket();
+        let other = barrier.ticket();
+        barrier.seal();
+        ticket.scope(|| {
+            backend
+                .documents()
+                .write(Document::Player(7), Compound::new().with("value", value))
+                .unwrap();
+        });
+        ticket.landed();
+        if finish {
+            other.landed();
+        } else {
+            std::mem::forget(other);
+        }
+    };
+    save(1, true);
+    save(2, false);
+    assert_eq!(player(&VanillaBackend::new(&world)), Some(2));
+    let offline = OfflineWorld::open(&world).unwrap();
+    assert_eq!(player(offline.backend()), Some(1));
+}

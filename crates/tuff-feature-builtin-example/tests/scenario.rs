@@ -182,7 +182,7 @@ async fn picking_up_dirt_teaches_the_dirt_recipe_and_the_book_fills_the_grid() {
 
     player
         .inventory_mut()
-        .set_slot(36, Some(ItemStack::new(Item::Dirt, 3)));
+        .set_slot(36, Some(ItemStack::mint(Item::Dirt, 3, MintReason::Test)));
     player.run_tick().await;
     assert!(player.knows_recipe(DIAMOND_FROM_DIRT));
     assert!(player.advancement_done("example:recipes/diamond_from_dirt"));
@@ -198,11 +198,21 @@ async fn picking_up_dirt_teaches_the_dirt_recipe_and_the_book_fills_the_grid() {
         .await;
     let slots = player.inventory().slots();
     assert_eq!(
-        slots[1..5].iter().flatten().cloned().collect::<Vec<_>>(),
-        vec![ItemStack::new(Item::Dirt, 1)],
+        slots[1..5]
+            .iter()
+            .flatten()
+            .map(tuff_item::item::ItemStack::test_copy)
+            .collect::<Vec<_>>(),
+        vec![ItemStack::mint(Item::Dirt, 1, MintReason::Test)],
         "the book moved one dirt into the grid"
     );
-    assert_eq!(slots[0], Some(ItemStack::new(Item::Diamond, 1)));
-    assert_eq!(slots[36], Some(ItemStack::new(Item::Dirt, 2)));
+    assert_eq!(
+        slots[0],
+        Some(ItemStack::mint(Item::Diamond, 1, MintReason::Test))
+    );
+    assert_eq!(
+        slots[36],
+        Some(ItemStack::mint(Item::Dirt, 2, MintReason::Test))
+    );
     world.shutdown().await;
 }

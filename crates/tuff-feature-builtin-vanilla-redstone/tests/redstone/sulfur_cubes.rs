@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::world::messages::{BucketUse, HandEffect, PlayerLooks};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::registry::EntityType;
 
 const FLOOR: f64 = SKY as f64 + 1.0;
@@ -29,7 +29,7 @@ async fn pen_world() -> (
 fn holding(item: Item) -> Compound {
     Compound::new().with("Size", 1).with("NoAI", true).with(
         "equipment",
-        Compound::new().with("body", ItemStack::new(item, 1).to_nbt()),
+        Compound::new().with("body", ItemStack::mint(item, 1, MintReason::Test).to_nbt()),
     )
 }
 
@@ -43,7 +43,8 @@ async fn cube(region: &RegionHandle) -> i32 {
 
 fn body_item(nbt: &Compound) -> Option<String> {
     let body = nbt.get("equipment")?.as_compound()?.get("body")?;
-    ItemStack::from_nbt(body.as_compound()?).map(|s| s.item.name().to_owned())
+    ItemStack::mint_from_nbt(body.as_compound()?, MintReason::Test)
+        .map(|s| s.item().name().to_owned())
 }
 
 fn number(nbt: &Compound, key: &str) -> f64 {
@@ -64,7 +65,7 @@ async fn a_cube_swallows_a_block_from_a_player_and_shears_pop_it_out() {
     world.ticks(2).await;
     let id = cube(&region).await;
     let effect = interact(&region, &viewer, &mut events, id, Item::Tnt).await;
-    assert!(matches!(effect, HandEffect::Consume(1)), "{effect:?}");
+    assert!(matches!(effect, HandEffect::None), "{effect:?}");
     let nbt = entity_nbt(&region, id).await.unwrap();
     assert_eq!(body_item(&nbt).as_deref(), Some("minecraft:tnt"));
     let effect = interact(&region, &viewer, &mut events, id, Item::Shears).await;
@@ -90,7 +91,10 @@ async fn a_cube_swallows_a_loose_block_it_touches() {
         &region,
         EntityType::Item,
         Compound::new()
-            .with("Item", ItemStack::new(Item::MagmaBlock, 1).to_nbt())
+            .with(
+                "Item",
+                ItemStack::mint(Item::MagmaBlock, 1, MintReason::Test).to_nbt(),
+            )
             .with("PickupDelay", 0i16),
         [8.5, FLOOR, 8.5],
     )
@@ -302,14 +306,14 @@ async fn an_empty_bucket_scoops_up_a_cube_with_its_block_and_lets_it_out_again()
     let HandEffect::ExchangeStack(bucket) = effect else {
         panic!("not scooped: {effect:?}");
     };
-    assert_eq!(bucket.item, Item::SulfurCubeBucket);
+    assert_eq!(bucket.item(), Item::SulfurCubeBucket);
     let content = bucket
         .components
         .other
         .get_compound("minecraft:sulfur_cube_content")
-        .and_then(ItemStack::from_nbt)
+        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
         .expect("the bucket keeps the block");
-    assert_eq!(content.item, Item::Tnt);
+    assert_eq!(content.item(), Item::Tnt);
     wait_for(&world, &region, 5, |found| {
         !found.iter().any(|s| s.kind == EntityType::SulfurCube)
     })
@@ -385,7 +389,12 @@ async fn dispensing_at_a_cube(
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_feeds_tnt_to_a_cube_in_front_instead_of_lighting_it() {
     let dir = TestDir::new();
-    let (b, id) = dispensing_at_a_cube(&dir, ItemStack::new(Item::Tnt, 1), empty()).await;
+    let (b, id) = dispensing_at_a_cube(
+        &dir,
+        ItemStack::mint(Item::Tnt, 1, MintReason::Test),
+        empty(),
+    )
+    .await;
     let nbt = entity_nbt(&b.region, id).await.unwrap();
     assert_eq!(body_item(&nbt).as_deref(), Some("minecraft:tnt"));
     assert!(
@@ -406,7 +415,11 @@ async fn a_dispenser_feeds_tnt_to_a_cube_in_front_instead_of_lighting_it() {
 async fn a_dispensed_flint_and_steel_lights_a_cube_holding_tnt() {
     use super::redstone::{at, dispenser_bench, set};
     let dir = TestDir::new();
-    let (b, _, _) = dispenser_bench(dir.path(), vec![ItemStack::new(Item::FlintAndSteel, 1)]).await;
+    let (b, _, _) = dispenser_bench(
+        dir.path(),
+        vec![ItemStack::mint(Item::FlintAndSteel, 1, MintReason::Test)],
+    )
+    .await;
     let front = at(86, 1, 86);
     summon(
         &b.region,
@@ -432,10 +445,10 @@ async fn a_dispensed_flint_and_steel_lights_a_cube_holding_tnt() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_dispenser_empties_a_sulfur_cube_bucket() {
     use super::redstone::{at, click, dispenser_bench};
-    let mut bucket = ItemStack::new(Item::SulfurCubeBucket, 1);
+    let mut bucket = ItemStack::mint(Item::SulfurCubeBucket, 1, MintReason::Test);
     bucket.components.other.insert(
         "minecraft:sulfur_cube_content",
-        Tag::Compound(ItemStack::new(Item::SoulSand, 1).to_nbt()),
+        Tag::Compound(ItemStack::mint(Item::SoulSand, 1, MintReason::Test).to_nbt()),
     );
     let dir = TestDir::new();
     let (mut b, _, button) = dispenser_bench(dir.path(), vec![bucket]).await;

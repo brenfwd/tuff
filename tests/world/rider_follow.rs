@@ -6,7 +6,7 @@
 use super::anticheat::{Walker, walker};
 use super::*;
 use tuff_core::protocol::play::{Movement, Serverbound};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Tag;
 use tuff_vanilla_data::registry::EntityType;
 use tuff_vanilla_data::{Block, Item};
@@ -160,7 +160,10 @@ async fn a_pig_rider_without_a_lure_does_not_drive_it_and_follows_it() {
     place_blocks(&world, &region, floor).await;
     let nbt = Compound::new().with(
         "equipment",
-        Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+        Compound::new().with(
+            "saddle",
+            ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+        ),
     );
     summon(
         &region,
@@ -196,9 +199,10 @@ async fn a_pig_rider_without_a_lure_does_not_drive_it_and_follows_it() {
     assert!(pig[1] < flipped[1], "still falling: {pig:?} {flipped:?}");
     assert_eq!(vehicle_at(&w), pig, "the rider follows the falling pig");
 
-    w.session
-        .inventory
-        .set_hand(false, Some(ItemStack::new(Item::CarrotOnAStick, 1)));
+    w.session.inventory.set_hand(
+        false,
+        Some(ItemStack::mint(Item::CarrotOnAStick, 1, MintReason::Test)),
+    );
     w.session.tick_driving().await;
     for _ in 0..20 {
         world.ticks(1).await;

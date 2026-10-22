@@ -2,7 +2,7 @@
 //! post-processing mark (lock or zoom out) that becomes a new map once the
 //! player has taken it.
 
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Tag;
 use tuff_vanilla_data::Item;
 
@@ -43,24 +43,24 @@ pub fn cartography_result(
     additional: &ItemStack,
     data: &MapData,
 ) -> Option<ItemStack> {
-    match additional.item {
+    match additional.item() {
         Item::Paper
             if tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::EXTENDABLE_MAPS,
-                map.item,
+                map.item(),
             ) && !data.locked
                 && data.scale < MAX_SCALE =>
         {
             Some(with_post_processing(
-                map.clone().with_count(1),
+                ItemStack::mint_like(map, 1, MintReason::Crafting),
                 Derivation::ZoomOut,
             ))
         }
         Item::GlassPane if !data.locked => Some(with_post_processing(
-            map.clone().with_count(1),
+            ItemStack::mint_like(map, 1, MintReason::Crafting),
             Derivation::Lock,
         )),
-        Item::Map => Some(map.clone().with_count(2)),
+        Item::Map => Some(ItemStack::mint_like(map, 2, MintReason::Crafting)),
         _ => None,
     }
 }
@@ -74,9 +74,10 @@ pub fn extends(data: Option<&MapData>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::{BurnReason, MintReason};
 
     fn map(id: u32) -> ItemStack {
-        let mut stack = ItemStack::new(Item::FilledMap, 3);
+        let mut stack = ItemStack::mint(Item::FilledMap, 3, MintReason::Test);
         stack.components.map_id = Some(id);
         stack
     }
@@ -90,30 +91,30 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn paper_zooms_out_unlocked_maps_below_the_top_scale() {
-        let paper = ItemStack::new(Item::Paper, 1);
+        let paper = ItemStack::mint(Item::Paper, 1, MintReason::Test);
         let result = cartography_result(&map(4), &paper, &data(1, false)).unwrap();
-        assert_eq!(result.count, 1);
+        assert_eq!(result.count(), 1);
         assert_eq!(result.components.map_id, Some(4));
         assert_eq!(post_processing(&result), Some(Derivation::ZoomOut));
         assert!(cartography_result(&map(4), &paper, &data(MAX_SCALE, false)).is_none());
         assert!(cartography_result(&map(4), &paper, &data(0, true)).is_none());
         let mut explorer = map(4);
-        explorer.item = Item::WoodlandMansionMap;
+        explorer.transform(Item::WoodlandMansionMap, MintReason::Test, BurnReason::Test);
         assert!(cartography_result(&explorer, &paper, &data(0, false)).is_none());
     }
 
     #[tuff_core::watchdog]
     #[test]
     fn glass_locks_and_empty_maps_clone() {
-        let pane = ItemStack::new(Item::GlassPane, 1);
+        let pane = ItemStack::mint(Item::GlassPane, 1, MintReason::Test);
         let result = cartography_result(&map(2), &pane, &data(0, false)).unwrap();
         assert_eq!(post_processing(&result), Some(Derivation::Lock));
         assert!(cartography_result(&map(2), &pane, &data(0, true)).is_none());
-        let empty = ItemStack::new(Item::Map, 5);
+        let empty = ItemStack::mint(Item::Map, 5, MintReason::Test);
         let copies = cartography_result(&map(2), &empty, &data(0, true)).unwrap();
-        assert_eq!(copies.count, 2);
+        assert_eq!(copies.count(), 2);
         assert_eq!(post_processing(&copies), None);
-        let stone = ItemStack::new(Item::Stone, 1);
+        let stone = ItemStack::mint(Item::Stone, 1, MintReason::Test);
         assert!(cartography_result(&map(2), &stone, &data(0, false)).is_none());
     }
 

@@ -3,6 +3,7 @@
 //! advancements-adjacent state, abilities and the like
 //! survive untouched.
 
+use std::borrow::Borrow;
 use std::io;
 
 use tuff_vanilla_data::version::DATA_VERSION;
@@ -165,9 +166,10 @@ impl WardenTracker {
 /// Where the player file keeps the entities on the left and right shoulder.
 pub const SHOULDER_KEYS: [&str; 2] = ["ShoulderEntityLeft", "ShoulderEntityRight"];
 
-/// The fields of a player file this server simulates.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PlayerState {
+/// The fields of a player file this server simulates. A loaded state owns
+/// its stacks; a state being saved borrows them (`PlayerState<&ItemStack>`).
+#[derive(Debug, PartialEq)]
+pub struct PlayerState<S = ItemStack> {
     pub dimension: String,
     pub position: [f64; 3],
     pub yaw: f32,
@@ -191,9 +193,9 @@ pub struct PlayerState {
     pub food: FoodSave,
     pub selected: usize,
     /// `(window slot, stack)` in the survival inventory window's numbering.
-    pub slots: Vec<(usize, ItemStack)>,
+    pub slots: Vec<(usize, S)>,
     /// `(slot, stack)` of the player's ender chest, slots `0..27`.
-    pub ender_items: Vec<(usize, ItemStack)>,
+    pub ender_items: Vec<(usize, S)>,
     pub game_mode: GameMode,
     pub previous_game_mode: Option<GameMode>,
     pub flying: bool,
@@ -375,7 +377,7 @@ impl PlayerRecord {
             }
             let mut stack = entry.clone();
             stack.remove("Slot");
-            if let Some(stack) = ItemStack::from_nbt(&stack) {
+            if let Some(stack) = ItemStack::from_storage(&stack) {
                 ender_items.push((slot as usize, stack));
             }
         }
@@ -479,7 +481,7 @@ impl PlayerRecord {
         (Self { raw }, state)
     }
 
-    pub fn encode(&self, uuid: u128, state: &PlayerState) -> Compound {
+    pub fn encode<S: Borrow<ItemStack>>(&self, uuid: u128, state: &PlayerState<S>) -> Compound {
         let mut root = self.raw.clone();
         let (inventory, equipment) = slot_lists(&root, &state.slots);
         let ender_items: Vec<Compound> = state
@@ -487,7 +489,7 @@ impl PlayerRecord {
             .iter()
             .map(|(slot, stack)| {
                 let mut nbt = Compound::new().with("Slot", *slot as i8);
-                for (key, value) in stack.to_nbt() {
+                for (key, value) in stack.borrow().to_nbt() {
                     nbt.insert(key, value);
                 }
                 nbt
@@ -622,7 +624,7 @@ impl PlayerRecord {
 fn stored_slots(raw: &Compound) -> Vec<(usize, ItemStack)> {
     let mut slots = Vec::new();
     let mut take = |window: usize, nbt: &Compound| {
-        if let Some(stack) = ItemStack::from_nbt(nbt) {
+        if let Some(stack) = ItemStack::from_storage(nbt) {
             slots.push((window, stack));
         }
     };
@@ -649,7 +651,10 @@ fn stored_slots(raw: &Compound) -> Vec<(usize, ItemStack)> {
 
 /// The `Inventory` list and `equipment` compound storing `slots`, keeping
 /// equipment entries of `root` this server does not model.
-fn slot_lists(root: &Compound, slots: &[(usize, ItemStack)]) -> (Vec<Compound>, Compound) {
+fn slot_lists<S: Borrow<ItemStack>>(
+    root: &Compound,
+    slots: &[(usize, S)],
+) -> (Vec<Compound>, Compound) {
     let mut inventory = Vec::new();
     let mut equipment = root.get_compound("equipment").cloned().unwrap_or_default();
     for (key, _) in EQUIPMENT {
@@ -658,12 +663,12 @@ fn slot_lists(root: &Compound, slots: &[(usize, ItemStack)]) -> (Vec<Compound>, 
     for (window, stack) in slots {
         if let Some(slot) = list_slot(*window) {
             let mut nbt = Compound::new().with("Slot", slot as u8 as i8);
-            for (key, value) in stack.to_nbt() {
+            for (key, value) in stack.borrow().to_nbt() {
                 nbt.insert(key, value);
             }
             inventory.push(nbt);
         } else if let Some((key, _)) = EQUIPMENT.iter().find(|(_, w)| *w == *window) {
-            equipment.insert(*key, stack.to_nbt());
+            equipment.insert(*key, stack.borrow().to_nbt());
         }
     }
     (inventory, equipment)
@@ -672,6 +677,13 @@ fn slot_lists(root: &Compound, slots: &[(usize, ItemStack)]) -> (Vec<Compound>, 
 /// Runs `edit` on the inventory stored in `raw` and stores the result
 /// when it returns true.
 pub fn edit_inventory(
+    raw: &mut Compound,
+    edit: impl FnOnce(&mut crate::world::inventory::Inventory) -> bool,
+) -> bool {
+    tuff_item::item::conservation::releasing(|| edit_stored_inventory(raw, edit))
+}
+
+fn edit_stored_inventory(
     raw: &mut Compound,
     edit: impl FnOnce(&mut crate::world::inventory::Inventory) -> bool,
 ) -> bool {
@@ -692,7 +704,7 @@ pub fn edit_inventory(
         .slots()
         .iter()
         .enumerate()
-        .filter_map(|(slot, stack)| stack.clone().map(|s| (slot, s)))
+        .filter_map(|(slot, stack)| stack.as_ref().map(|s| (slot, s)))
         .collect();
     let (list, equipment) = slot_lists(raw, &slots);
     raw.insert("Inventory", Tag::from(list));
@@ -715,6 +727,7 @@ pub fn save(docs: &dyn Documents, uuid: u128, root: Compound) -> io::Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     fn defaults() -> PlayerState {
@@ -979,8 +992,14 @@ mod tests {
             .with(
                 "equipment",
                 Compound::new()
-                    .with("offhand", ItemStack::new(Item::Torch, 3).to_nbt())
-                    .with("body", ItemStack::new(Item::Saddle, 1).to_nbt()),
+                    .with(
+                        "offhand",
+                        ItemStack::mint(Item::Torch, 3, MintReason::Test).to_nbt(),
+                    )
+                    .with(
+                        "body",
+                        ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                    ),
             )
             .with(
                 "EnderItems",
@@ -998,23 +1017,34 @@ mod tests {
         let (record, mut state) = PlayerRecord::decode(raw, &defaults());
         assert_eq!(
             state.ender_items,
-            vec![(26, ItemStack::new(Item::Apple, 2))]
+            vec![(26, ItemStack::mint(Item::Apple, 2, MintReason::Test))]
         );
-        state.ender_items.push((0, ItemStack::new(Item::Stone, 4)));
+        state
+            .ender_items
+            .push((0, ItemStack::mint(Item::Stone, 4, MintReason::Test)));
         assert_eq!(state.position, [0.5, 70.0, 0.5]);
         let slot = |state: &PlayerState, window| {
             state
                 .slots
                 .iter()
                 .find(|(w, _)| *w == window)
-                .map(|(_, s)| s.clone())
+                .map(|(_, s)| s.test_copy())
         };
-        assert_eq!(slot(&state, 36), Some(ItemStack::new(Item::Dirt, 5)));
-        assert_eq!(slot(&state, 20), Some(ItemStack::new(Item::Stone, 1)));
+        assert_eq!(
+            slot(&state, 36),
+            Some(ItemStack::mint(Item::Dirt, 5, MintReason::Test))
+        );
+        assert_eq!(
+            slot(&state, 20),
+            Some(ItemStack::mint(Item::Stone, 1, MintReason::Test))
+        );
         let sword = slot(&state, 37).unwrap();
-        assert_eq!(sword.item, Item::DiamondSword);
+        assert_eq!(sword.item(), Item::DiamondSword);
         assert_eq!(sword.damage(), 3);
-        assert_eq!(slot(&state, 45), Some(ItemStack::new(Item::Torch, 3)));
+        assert_eq!(
+            slot(&state, 45),
+            Some(ItemStack::mint(Item::Torch, 3, MintReason::Test))
+        );
 
         state.position = [10.0, 64.0, -3.0];
         state.slots.retain(|(w, _)| *w != 20);
@@ -1062,7 +1092,7 @@ mod tests {
         assert!(
             reloaded
                 .ender_items
-                .contains(&(0, ItemStack::new(Item::Stone, 4)))
+                .contains(&(0, ItemStack::mint(Item::Stone, 4, MintReason::Test)))
         );
     }
 }

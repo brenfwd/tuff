@@ -17,7 +17,7 @@ use super::{
 };
 use crate::protocol::play;
 use crate::storage::normalise::SaveView;
-use crate::world::block_entity::{self};
+use crate::world::block_entity::{self, SavePicture as _};
 use crate::world::dimension::DimensionId;
 use crate::world::lighting::{LightChange, LightOp, Lighting};
 use crate::world::messages::{PlayerEvent, PlayerId, RegionInternal};
@@ -336,11 +336,13 @@ impl RegionActor {
                 blocks,
                 entities,
                 pois,
+                ticket,
             } => self.chunk_io.io_queue.push(IoOp::Write {
                 pos,
                 blocks,
                 entities,
                 pois,
+                ticket,
             }),
         }
     }
@@ -916,6 +918,40 @@ impl RegionActor {
     }
 
     pub(super) fn start_save(&mut self, pos: ChunkPos) {
+        self.start_save_in(pos, None);
+    }
+
+    /// Snapshots the chunk for writing as part of the world save `epoch`
+    /// (or of the save open now).
+    pub(super) fn start_save_in(
+        &mut self,
+        pos: ChunkPos,
+        epoch: Option<&tuff_storage::journal::BarrierHandle>,
+    ) {
+        if self.quarantined() {
+            if let Some(column) = self.columns.get_mut(&pos) {
+                column.blocks_dirty = false;
+                column.entities_dirty = false;
+                column.pois_dirty = false;
+            }
+            log::warn!(
+                "not saving chunk {pos:?} of {}: its region is quarantined after a refused item \
+                 operation",
+                self.dimension().key
+            );
+            return;
+        }
+        if !self.columns.contains_key(&pos) {
+            return;
+        }
+        let ticket = match epoch {
+            Some(epoch) => Some(epoch.ticket()),
+            None => self
+                .shared
+                .backend
+                .save_journal()
+                .map(|journal| journal.ticket_now()),
+        };
         let entities = self
             .columns
             .get(&pos)
@@ -941,7 +977,7 @@ impl RegionActor {
             if !(column.lit && light_idle) {
                 chunk.set_light(None);
             }
-            let mut meta = column.meta.clone();
+            let mut meta = column.meta.save_picture();
             ticks::store(
                 &mut meta.extra,
                 "block_ticks",
@@ -980,10 +1016,16 @@ impl RegionActor {
         let codec = self.shared.backend.chunk_codec();
         let biomes = self.shared.dimensions.biomes().clone();
         self.spawn_job(Stage::Save, pos, move || {
+            let lost = |what: &str, err: &dyn std::fmt::Display| {
+                log::error!("failed to serialize {what} {pos:?}: {err}");
+                if let Some(ticket) = &ticket {
+                    ticket.fail();
+                }
+            };
             let blocks = blocks.and_then(|(chunk, meta)| {
                 codec
                     .encode_chunk_in(&chunk, &meta, pos, tick, &biomes)
-                    .map_err(|err| log::error!("failed to serialize chunk {pos:?}: {err}"))
+                    .map_err(|err| lost("chunk", &err))
                     .ok()
             });
             let entities = match entities {
@@ -992,7 +1034,7 @@ impl RegionActor {
                     Ok(Some(blob)) => EntityWrite::Write(blob),
                     Ok(None) => EntityWrite::Clear,
                     Err(err) => {
-                        log::error!("failed to serialize entities {pos:?}: {err}");
+                        lost("entities", &err);
                         EntityWrite::Keep
                     }
                 },
@@ -1003,7 +1045,7 @@ impl RegionActor {
                     Ok(Some(blob)) => EntityWrite::Write(blob),
                     Ok(None) => EntityWrite::Clear,
                     Err(err) => {
-                        log::error!("failed to serialize points of interest {pos:?}: {err}");
+                        lost("points of interest", &err);
                         EntityWrite::Keep
                     }
                 },
@@ -1013,6 +1055,7 @@ impl RegionActor {
                 blocks,
                 entities,
                 pois,
+                ticket,
             }
         });
     }

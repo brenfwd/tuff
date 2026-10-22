@@ -805,7 +805,7 @@ impl Species for TraderLlama {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         self.0.dispensed_on(core, stack, cx)
@@ -882,6 +882,7 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
+    use tuff_item::item::MintReason;
 
     use super::*;
     use tuff_core::world::entity::EntityBase;
@@ -903,7 +904,10 @@ mod tests {
         let base = EntityBase::new(EntityType::Llama, 1, 1, [0.0; 3], [0.0; 3]);
         let mut nbt = Compound::new().with("Owner", Tag::uuid(9)).with(
             "equipment",
-            Compound::new().with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt()),
+            Compound::new().with(
+                "saddle",
+                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            ),
         );
         let entity = super::super::load::<Llama>(base, &mut nbt).expect("loads");
         assert!(entity.rideable_by_input());
@@ -923,28 +927,75 @@ mod tests {
                 player_uuid: 77,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::new(Item::Chest, 1)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Chest,
+                    1,
+                    Default::default(),
+                )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::Chest,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
                 riding: false,
                 hero: None,
             };
-            assert!(llama.mount_refused_by(chest.stack.as_ref()));
+            assert!(llama.mount_refused_by(chest.stack.as_deref()));
             llama.interact(&chest, cx);
             assert_eq!(llama.container().unwrap().len(), 2 + 4 * 3);
             let carpet = EntityInteraction {
-                stack: Some(ItemStack::new(Item::RedCarpet, 1)),
-                ..chest.clone()
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::RedCarpet,
+                    1,
+                    Default::default(),
+                )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::RedCarpet,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
+                player: chest.player,
+                player_uuid: chest.player_uuid,
+                position: chest.position,
+                location: chest.location,
+                off_hand: chest.off_hand,
+                creative: chest.creative,
+                sneaking: chest.sneaking,
+                riding: chest.riding,
+                hero: chest.hero,
             };
-            assert!(llama.mount_refused_by(carpet.stack.as_ref()));
+            assert!(llama.mount_refused_by(carpet.stack.as_deref()));
             assert!(llama.interact(&carpet, cx).is_some());
             let saddle = EntityInteraction {
-                stack: Some(ItemStack::new(Item::Saddle, 1)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Saddle,
+                    1,
+                    Default::default(),
+                )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::Saddle,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 ..chest
             };
             assert!(
-                !llama.mount_refused_by(saddle.stack.as_ref()),
+                !llama.mount_refused_by(saddle.stack.as_deref()),
                 "llamas take no saddle"
             );
         });

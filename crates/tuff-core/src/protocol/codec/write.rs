@@ -1,7 +1,7 @@
 use super::*;
 use tuff_world_model::BlockPos;
 
-fn write_component_patch(w: &mut PacketWriter, stack: &ItemStack) {
+fn write_component_patch(w: &mut PacketWriter, stack: ItemView<'_>) {
     let added = stack.components.network_added();
     let removed = stack.components.network_removed();
     w.write_var_int(added.len() as i32);
@@ -54,19 +54,19 @@ impl WriteExt for PacketWriter {
         }
     }
 
-    fn write_slot(&mut self, stack: Option<&ItemStack>) {
+    fn write_slot(&mut self, stack: Option<ItemView<'_>>) {
         let Some(stack) = stack else {
             self.write_var_int(0);
             return;
         };
-        self.write_var_int(stack.count as i32);
-        self.write_var_int(stack.item.id() as i32);
+        self.write_var_int(stack.count() as i32);
+        self.write_var_int(stack.item().id() as i32);
         write_component_patch(self, stack);
     }
 
-    fn write_item_template(&mut self, stack: &ItemStack) {
-        self.write_var_int(stack.item.id() as i32);
-        self.write_var_int(stack.count as i32);
+    fn write_item_template(&mut self, stack: ItemView<'_>) {
+        self.write_var_int(stack.item().id() as i32);
+        self.write_var_int(stack.count() as i32);
         write_component_patch(self, stack);
     }
 
@@ -119,7 +119,7 @@ impl WriteExt for PacketWriter {
                 }
                 self.write_bool(tracker.tracked);
             }
-            NetworkComponent::Template(_, stack) => self.write_item_template(stack),
+            NetworkComponent::Template(_, stack) => self.write_item_template(stack.view()),
             NetworkComponent::Unbreakable => {}
             NetworkComponent::CustomName(name) => self.write_text(name),
             NetworkComponent::Enchantments(e) | NetworkComponent::StoredEnchantments(e) => {
@@ -160,20 +160,20 @@ impl WriteExt for PacketWriter {
                 for stack in *contents {
                     self.write_bool(stack.is_some());
                     if let Some(stack) = stack {
-                        self.write_item_template(stack);
+                        self.write_item_template(stack.view());
                     }
                 }
             }
             NetworkComponent::ChargedProjectiles(projectiles) => {
                 self.write_var_int(projectiles.len() as i32);
                 for stack in *projectiles {
-                    self.write_item_template(stack);
+                    self.write_item_template(stack.view());
                 }
             }
             NetworkComponent::BundleContents(contents) => {
                 self.write_var_int(contents.len() as i32);
                 for stack in contents.items() {
-                    self.write_item_template(stack);
+                    self.write_item_template(stack.view());
                 }
             }
             NetworkComponent::DyedColor(rgb) => self.write_int(*rgb),
@@ -315,7 +315,7 @@ impl WriteExt for PacketWriter {
                 for side in sides.iter() {
                     self.write_bool(side.is_some());
                     if let Some(stack) = side {
-                        self.write_item_template(stack);
+                        self.write_item_template(stack.view());
                     }
                 }
             }

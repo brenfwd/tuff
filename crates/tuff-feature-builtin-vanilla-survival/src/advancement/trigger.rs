@@ -188,7 +188,7 @@ fn loot_tables(conditions: &Value, table: &str) -> bool {
     })
 }
 
-fn slots_match(slots: &Value, inventory: &[Option<ItemStack>]) -> bool {
+fn slots_match(slots: &Value, inventory: &[Option<tuff_item::item::ItemView<'_>>]) -> bool {
     let Some(fields) = slots.as_object() else {
         return false;
     };
@@ -200,7 +200,7 @@ fn slots_match(slots: &Value, inventory: &[Option<ItemStack>]) -> bool {
             None => empty += 1,
             Some(stack) => {
                 occupied += 1;
-                if stack.count >= stack.max_stack_size() {
+                if stack.count() >= stack.max_stack_size() {
                     full += 1;
                 }
             }
@@ -233,7 +233,7 @@ fn inventory_changed(conditions: &Value, event: &Event<'_>, _: &EntityFacts) -> 
         _ => {
             let mut remaining: Vec<&Value> = items.iter().collect();
             for stack in inventory.iter().flatten() {
-                remaining.retain(|predicate| !predicate::item(predicate, stack));
+                remaining.retain(|predicate| !predicate::item(predicate, stack.get()));
                 if remaining.is_empty() {
                     break;
                 }
@@ -254,7 +254,7 @@ fn recipe_crafted(conditions: &Value, event: &Event<'_>, _: &EntityFacts) -> boo
     if !id_field(conditions, "recipes", recipe) {
         return false;
     }
-    let mut remaining: Vec<&ItemStack> = ingredients.iter().collect();
+    let mut remaining: Vec<&ItemStack> = ingredients.iter().map(|s| &**s).collect();
     conditions
         .get("ingredients")
         .and_then(Value::as_array)
@@ -585,6 +585,7 @@ fn builtin(kind: TriggerType) -> Handler {
 mod tests {
     use super::*;
     use serde_json::json;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     fn player() -> EntityFacts {
@@ -635,7 +636,7 @@ mod tests {
             },
             ..player()
         };
-        let tnt = ItemStack::new(Item::Tnt, 1);
+        let tnt = ItemStack::mint(Item::Tnt, 1, MintReason::Test);
         let fed = |entity: &EntityFacts| {
             registry.matches(
                 criterion.trigger,
@@ -665,25 +666,33 @@ mod tests {
             .expect("the cod criterion");
         let conditions: Value = serde_json::from_str(criterion.conditions.unwrap()).unwrap();
         let registry = builtin_registry();
-        let rod = ItemStack::new(Item::FishingRod, 1);
+        let rod = ItemStack::mint(Item::FishingRod, 1, MintReason::Test);
         let hook = EntityFacts {
             kind: Some(tuff_vanilla_data::registry::EntityType::FishingBobber),
             ..player()
         };
         let reeled = |items: &[ItemStack]| {
+            let items: Vec<_> = items
+                .iter()
+                .map(tuff_item::item::ItemSnapshot::of)
+                .collect();
             registry.matches(
                 criterion.trigger,
                 &conditions,
                 &Event::FishingRodHooked {
                     rod: &rod,
                     entity: &hook,
-                    items,
+                    items: &items,
                 },
                 &player(),
             )
         };
-        assert!(reeled(&[ItemStack::new(Item::Cod, 1)]));
-        assert!(!reeled(&[ItemStack::new(Item::Salmon, 1)]));
+        assert!(reeled(&[ItemStack::mint(Item::Cod, 1, MintReason::Test)]));
+        assert!(!reeled(&[ItemStack::mint(
+            Item::Salmon,
+            1,
+            MintReason::Test
+        )]));
         assert!(!reeled(&[]));
     }
 
@@ -703,13 +712,13 @@ mod tests {
             kind: Some(tuff_vanilla_data::registry::EntityType::Wolf),
             ..player()
         };
-        let armor = ItemStack::new(Item::WolfArmor, 1);
+        let armor = ItemStack::mint(Item::WolfArmor, 1, MintReason::Test);
         let event = Event::PlayerShearedEquipment {
             item: &armor,
             entity: &wolf,
         };
         assert!(registry.matches(criterion.trigger, &conditions, &event, &player()));
-        let saddle = ItemStack::new(Item::Saddle, 1);
+        let saddle = ItemStack::mint(Item::Saddle, 1, MintReason::Test);
         let other = Event::PlayerShearedEquipment {
             item: &saddle,
             entity: &wolf,
@@ -722,8 +731,8 @@ mod tests {
     fn inventory_changed_tests_the_changed_item_or_the_whole_inventory() {
         let registry = builtin_registry();
         let trigger = TriggerType::InventoryChanged.name();
-        let iron = ItemStack::new(Item::IronIngot, 1);
-        let inventory = vec![Some(iron.clone()), None];
+        let iron = ItemStack::mint(Item::IronIngot, 1, MintReason::Test);
+        let inventory = vec![Some(iron.view()), None];
         let event = Event::InventoryChanged {
             changed: Some(&iron),
             inventory: &inventory,
@@ -753,8 +762,8 @@ mod tests {
             "predicate": {"minecraft:entity_type": "minecraft:phantom"}});
         let two = json!({"victims": [phantom.clone(), phantom.clone()],
             "fired_from_weapon": {"items": "minecraft:crossbow"}});
-        let crossbow = ItemStack::new(Item::Crossbow, 1);
-        let bow = ItemStack::new(Item::Bow, 1);
+        let crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
+        let bow = ItemStack::mint(Item::Bow, 1, MintReason::Test);
         let both = [of(EntityType::Phantom), of(EntityType::Phantom)];
         let event =
             |victims: &'static [EntityFacts], weapon| Event::KilledByArrow { victims, weapon };
@@ -874,7 +883,7 @@ mod tests {
         let event = Event::DefaultBlockUse { location: &lever };
         assert!(registry.matches(default, &powered, &event, &player()));
         assert!(!registry.matches(default, &unpowered, &event, &player()));
-        let stick = ItemStack::new(Item::Stick, 1);
+        let stick = ItemStack::mint(Item::Stick, 1, MintReason::Test);
         let holding = json!({"location": {"type": "minecraft:match_tool",
             "predicate": {"items": "minecraft:stick"}}});
         let any = TriggerType::AnyBlockUse.name();
@@ -926,7 +935,7 @@ mod tests {
         let nest = TriggerType::BeeNestDestroyed.name();
         let silk = json!({"blocks": "minecraft:bee_nest", "num_bees_inside": 3,
             "item": {"items": "minecraft:shears"}});
-        let shears = ItemStack::new(Item::Shears, 1);
+        let shears = ItemStack::mint(Item::Shears, 1, MintReason::Test);
         let destroyed = |block: tuff_vanilla_data::Block, bees| Event::BeeNestDestroyed {
             block: block.default_state(),
             item: Some(&shears),
@@ -1030,7 +1039,7 @@ mod tests {
     #[test]
     fn allay_drop_tests_the_item_and_location_and_not_item_use() {
         let registry = builtin_registry();
-        let gold = ItemStack::new(Item::GoldIngot, 1);
+        let gold = ItemStack::mint(Item::GoldIngot, 1, MintReason::Test);
         let location = LocationFacts::default();
         let name = TriggerType::AllayDropItemOnBlock.name();
         let conditions = json!({"item": {"items": "minecraft:gold_ingot"}});
@@ -1055,8 +1064,8 @@ mod tests {
             kind: Some(EntityType::Piglin),
             ..EntityFacts::default()
         };
-        let gold = ItemStack::new(Item::GoldIngot, 1);
-        let iron = ItemStack::new(Item::IronIngot, 1);
+        let gold = ItemStack::mint(Item::GoldIngot, 1, MintReason::Test);
+        let iron = ItemStack::mint(Item::IronIngot, 1, MintReason::Test);
         let distract = json!({"item": {"items": "minecraft:gold_ingot"}, "entity": {"type":
             "minecraft:entity_properties", "entity": "this", "predicate": {"minecraft:entity_type": "minecraft:piglin"}}});
         let by_entity = TriggerType::ThrownItemPickedUpByEntity.name();

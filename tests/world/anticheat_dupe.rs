@@ -50,7 +50,7 @@ fn player(world: &TestWorld, id: i32) -> PlayerSession {
 fn stone_in_hotbar(session: &mut PlayerSession) {
     session.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Stone, 10)),
+        Some(ItemStack::mint(Item::Stone, 10, MintReason::Test)),
     );
 }
 
@@ -76,7 +76,7 @@ async fn a_click_claiming_more_items_than_it_touched_is_undone() {
     assert!(!session.disconnected);
     assert_eq!(
         session.inventory().slots()[hotbar],
-        Some(ItemStack::new(Item::Stone, 10)),
+        Some(ItemStack::mint(Item::Stone, 10, MintReason::Test)),
         "the dupe click never ran"
     );
     assert_eq!(session.inventory().carried(), None);
@@ -94,7 +94,7 @@ async fn a_click_claiming_more_items_than_it_touched_is_undone() {
     assert_eq!(session.inventory().slots()[hotbar], None);
     assert_eq!(
         session.inventory().carried(),
-        Some(&ItemStack::new(Item::Stone, 10)),
+        Some(&ItemStack::mint(Item::Stone, 10, MintReason::Test)),
         "an honest pickup goes through"
     );
     world.shutdown().await;
@@ -188,7 +188,7 @@ async fn impossible_stack_counts_in_a_click_are_undone() {
         .await;
     assert_eq!(
         session.inventory().slots()[Inventory::hotbar_slot(0)],
-        Some(ItemStack::new(Item::Stone, 10))
+        Some(ItemStack::mint(Item::Stone, 10, MintReason::Test))
     );
     world.shutdown().await;
 }
@@ -199,7 +199,7 @@ async fn an_ender_chest_click_cannot_conjure_items() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let mut session = player(&world, 1);
-    session.menus.ender_items[0] = Some(ItemStack::new(Item::Diamond, 5));
+    session.menus.ender_items[0] = Some(ItemStack::mint(Item::Diamond, 5, MintReason::Test));
     let [x, y, z] = session.pose.position.map(|c| c.floor() as i32);
     let pos = BlockPos::new(x + 1, y, z);
     let region = world.region(ChunkPos::new(x >> 4, z >> 4).region()).await;
@@ -228,7 +228,7 @@ async fn an_ender_chest_click_cannot_conjure_items() {
         .await;
     assert_eq!(
         session.menu_container().unwrap()[0],
-        Some(ItemStack::new(Item::Diamond, 5))
+        Some(ItemStack::mint(Item::Diamond, 5, MintReason::Test))
     );
     assert_eq!(session.inventory().carried(), None);
 
@@ -245,7 +245,7 @@ async fn an_ender_chest_click_cannot_conjure_items() {
     assert_eq!(session.menu_container().unwrap()[0], None);
     assert_eq!(
         session.inventory().carried(),
-        Some(&ItemStack::new(Item::Diamond, 5))
+        Some(&ItemStack::mint(Item::Diamond, 5, MintReason::Test))
     );
     world.shutdown().await;
 }
@@ -270,30 +270,42 @@ async fn tampered_creative_stacks_never_reach_the_inventory() {
         stack,
     };
 
-    let mut bomb = ItemStack::new(Item::Stick, 1);
+    let mut bomb = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     bomb.components
         .other
         .insert("minecraft:custom_data", deep(200));
-    session.handle_packet(set(CreativeSlot::Stack(bomb))).await;
+    session
+        .handle_packet(set(CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(
+            &bomb,
+        ))))
+        .await;
     assert_eq!(session.inventory().slots()[hotbar], None);
 
     session.handle_packet(set(CreativeSlot::Invalid)).await;
     assert_eq!(session.inventory().slots()[hotbar], None);
 
-    let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
-    shulker.components.container = Some(vec![Some(ItemStack::new(Item::Dirt, 90))]);
+    let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
+    shulker.components.container = Some(vec![Some(ItemStack::mint(
+        Item::Dirt,
+        90,
+        MintReason::Test,
+    ))]);
     session
-        .handle_packet(set(CreativeSlot::Stack(shulker)))
+        .handle_packet(set(CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(
+            &shulker,
+        ))))
         .await;
     assert_eq!(session.inventory().slots()[hotbar], None);
 
-    let mut named = ItemStack::new(Item::Stick, 1);
+    let mut named = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     named
         .components
         .other
         .insert("minecraft:custom_data", deep(8));
     session
-        .handle_packet(set(CreativeSlot::Stack(named.clone())))
+        .handle_packet(set(CreativeSlot::Stack(tuff_item::item::ItemSnapshot::of(
+            &named.test_copy(),
+        ))))
         .await;
     assert_eq!(session.inventory().slots()[hotbar], Some(named));
     assert!(!session.disconnected);

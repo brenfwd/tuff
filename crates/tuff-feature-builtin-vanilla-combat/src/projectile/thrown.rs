@@ -5,6 +5,7 @@
 
 use rand::Rng;
 use tuff_core::world::block_contact;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
@@ -18,7 +19,7 @@ use tuff_core::world::projectile::{
     Owner, block_hit, hit_source, lerp_rotation, margin, rotation_of, targets_along,
 };
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -60,7 +61,7 @@ impl Thrown {
         Self {
             base,
             owner,
-            item: item.with_count(1),
+            item: item.keep(1, BurnReason::Template),
             ticks: 0,
         }
     }
@@ -274,6 +275,15 @@ impl Thrown {
 }
 
 impl RegionEntity for Thrown {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let item = std::mem::replace(&mut self.item, ItemStack::empty());
+        if item.is_empty() {
+            Vec::new()
+        } else {
+            vec![item]
+        }
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }
@@ -288,7 +298,10 @@ impl RegionEntity for Thrown {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        vec![(DATA_ITEM, MetadataValue::Slot(Some(self.item.clone())))]
+        vec![(
+            DATA_ITEM,
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&self.item))),
+        )]
     }
 
     fn spawn_data(&self) -> i32 {
@@ -376,8 +389,10 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         EntityType::ExperienceBottle => Item::ExperienceBottle,
         _ => Item::EnderPearl,
     };
-    let item = take(nbt, "Item", |tag| ItemStack::from_nbt(tag.as_compound()?))
-        .unwrap_or_else(|| ItemStack::new(default, 1));
+    let item = take(nbt, "Item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    })
+    .unwrap_or_else(|| ItemStack::mint(default, 1, MintReason::Template));
     let mut owner = Owner::default();
     owner.load(nbt);
     Some(Box::new(Thrown {

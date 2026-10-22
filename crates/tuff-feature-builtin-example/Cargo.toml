@@ -17,6 +17,7 @@ tuff-vanilla-data = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+tuff-item = { workspace = true, features = ["test-support"] }
 bytes = { workspace = true }
 tuff = { path = "../..", default-features = false }
 tuff-test-support = { workspace = true }

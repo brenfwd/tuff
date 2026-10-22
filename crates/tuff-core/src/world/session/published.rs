@@ -31,7 +31,8 @@ pub struct Published {
     pub last_score: i32,
     pub last_stuck_arrows: i32,
     /// The equipment as others last saw it, by [`EQUIPMENT_SLOTS`].
-    pub last_equipment: [Option<ItemStack>; 6],
+    pub last_equipment: [Option<tuff_item::item::ItemSnapshot>; 6],
+    pub last_feet: Option<tuff_item::item::ItemSnapshot>,
     /// The synced attribute values last sent to this player, by
     /// [`attributes::synced_attributes`] order.
     pub last_synced_attributes: Vec<f64>,
@@ -73,6 +74,7 @@ impl Default for Published {
             last_score: 0,
             last_stuck_arrows: 0,
             last_equipment: Default::default(),
+            last_feet: None,
             last_synced_attributes: Vec::new(),
             last_blast_state: (0.0, false),
             last_looks: crate::world::messages::PlayerLooks::default(),
@@ -241,8 +243,12 @@ impl PlayerSession {
                 }),
                 framed(&play::SetEquipment {
                     entity_id: self.id,
-                    items: &EQUIPMENT_SLOTS
-                        .map(|slot| (equipment_slot_id(slot), self.inventory.equipped(slot))),
+                    items: &EQUIPMENT_SLOTS.map(|slot| {
+                        (
+                            equipment_slot_id(slot),
+                            self.inventory.equipped(slot).map(ItemStack::view),
+                        )
+                    }),
                 }),
                 framed(&play::RotateHead {
                     entity_id: self.id,
@@ -267,15 +273,15 @@ impl PlayerSession {
             EquipmentSlot::Chest,
             EquipmentSlot::Head,
         ]
-        .map(|slot| self.inventory.equipped(slot).map(|s| s.item));
+        .map(|slot| self.inventory.equipped(slot).map(|s| s.item()));
         crate::world::messages::PlayerLooks {
             yaw: self.pose.yaw,
             pitch: self.pose.pitch,
             eye_height: self.eye()[1] - self.pose.position[1],
             height: self.height(),
             held: [
-                self.inventory.hand(false).map(|s| s.item),
-                self.inventory.hand(true).map(|s| s.item),
+                self.inventory.hand(false).map(|s| s.item()),
+                self.inventory.hand(true).map(|s| s.item()),
             ],
             creative: self.mode.game_mode == GameMode::Creative,
             sneaking: self.pose.sneaking,
@@ -442,15 +448,24 @@ impl PlayerSession {
             self.send_raw(data.clone());
             update.push(data);
         }
-        let equipment = self.equipment_snapshot();
         let mut blast_state = self.published.last_blast_state;
         blast_state.1 = self.mode.abilities.flying && self.mode.abilities.instabuild;
-        if self.published.last_equipment != equipment || force {
+        let equipment_changed = EQUIPMENT_SLOTS
+            .into_iter()
+            .zip(&self.published.last_equipment)
+            .any(|(slot, last)| self.inventory.equipped(slot) != last.as_deref());
+        if equipment_changed || force {
+            let equipment = self.equipment_snapshot();
             blast_state.0 = self.attribute(Attribute::ExplosionKnockbackResistance);
-            let items: Vec<(u8, Option<&ItemStack>)> = EQUIPMENT_SLOTS
+            let items: Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> = EQUIPMENT_SLOTS
                 .into_iter()
                 .zip(&equipment)
-                .map(|(slot, stack)| (equipment_slot_id(slot), stack.as_ref()))
+                .map(|(slot, stack)| {
+                    (
+                        equipment_slot_id(slot),
+                        stack.as_ref().map(tuff_item::item::ItemSnapshot::view),
+                    )
+                })
                 .collect();
             update.push(framed(&play::SetEquipment {
                 entity_id: self.id,
@@ -467,7 +482,7 @@ impl PlayerSession {
                     // sound; a component-only mutation of the item already
                     // worn (armor durability, enchantments, ...) must not,
                     // or every hit that damages worn armor would replay it.
-                    let same = old.as_ref().is_some_and(|old| old.item == new.item);
+                    let same = old.as_ref().is_some_and(|old| old.item() == new.item());
                     let equippable = new.equippable()?;
                     (equippable.slot == slot && !same && !spectator)
                         .then_some(equippable.equip_sound)
@@ -512,7 +527,11 @@ impl PlayerSession {
         self.published.last_looks = looks;
         self.published.seq += 1;
         let grounded = self.pose.on_ground && !self.is_dead() && self.ride.riding.is_none();
-        let feet = self.inventory.equipped(EquipmentSlot::Feet).cloned();
+        let feet_now = self.inventory.equipped(EquipmentSlot::Feet);
+        if feet_now != self.published.last_feet.as_deref() {
+            self.published.last_feet = feet_now.map(tuff_item::item::ItemSnapshot::of);
+        }
+        let feet = self.published.last_feet.clone();
         let moves = relative.then(|| {
             movement
                 .into_iter()
@@ -568,11 +587,7 @@ impl PlayerSession {
     /// changed (equipment, enchantments or effects), or unconditionally
     /// when `force` (login, respawn).
     pub async fn sync_attributes(&mut self, force: bool) {
-        let equipment = self.equipment();
-        let worn: Vec<attributes::Equipped> = equipment
-            .iter()
-            .map(|(slot, stack)| (*slot, stack))
-            .collect();
+        let worn = self.worn();
         let effects = self.effect_levels();
         let modifiers = attributes::Modifiers {
             equipment: &worn,

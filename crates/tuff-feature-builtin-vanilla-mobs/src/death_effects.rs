@@ -8,7 +8,7 @@ use rand::Rng;
 use tuff_core::world::entity::{Culprit, Effect, EntityBase, EntitySummary, TickContext};
 use tuff_core::world::explosion::{BlockInteraction, Explosion, WindBurst};
 use tuff_core::world::region_api::{PlayerEffectEvent, PlayerEffectTrigger};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::block::{Facing, Support};
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::{EntityType, MobEffect, SoundEvent};
@@ -114,7 +114,11 @@ pub fn wither_rose(core: &MobCore, cx: &mut TickContext) {
     if plants {
         cx.effects.push(Effect::SetBlock { pos, state });
     } else {
-        core.drop_item(ItemStack::new(Item::WitherRose, 1), 0.0, cx);
+        core.drop_item(
+            ItemStack::mint(Item::WitherRose, 1, MintReason::Spawn),
+            0.0,
+            cx,
+        );
     }
 }
 

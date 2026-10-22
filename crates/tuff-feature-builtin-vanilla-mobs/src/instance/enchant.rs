@@ -2,6 +2,7 @@
 //! tick and `location_changed` when it changes block or gear.
 
 use std::collections::BTreeSet;
+use tuff_item::item::ItemSnapshot;
 
 use tuff_core::world::entity::TickContext;
 use tuff_core::world::predicate::EntityFacts;
@@ -35,14 +36,14 @@ impl<S: Species> Mob<S> {
         if !enchanted && core.enchanted_location.is_none() {
             return;
         }
-        let gear: Vec<(EquipmentSlot, ItemStack)> = core
+        let gear: Vec<(EquipmentSlot, ItemSnapshot)> = core
             .equipment
             .worn()
             .into_iter()
-            .map(|(slot, stack)| (slot, stack.clone()))
+            .map(|(slot, stack)| (slot, ItemSnapshot::of(stack)))
             .collect();
         let worn: Vec<(EquipmentSlot, &ItemStack)> =
-            gear.iter().map(|(slot, stack)| (*slot, stack)).collect();
+            gear.iter().map(|(slot, stack)| (*slot, &**stack)).collect();
         let facts = EntityFacts {
             kind: Some(core.base.kind),
             entity_id: Some(core.base.id),
@@ -76,7 +77,7 @@ impl<S: Species> Mob<S> {
         );
         let signature: Vec<(EquipmentSlot, Item, Option<Enchantments>)> = gear
             .iter()
-            .map(|(slot, stack)| (*slot, stack.item, stack.components.enchantments.clone()))
+            .map(|(slot, stack)| (*slot, stack.item(), stack.components.enchantments.clone()))
             .collect();
         let mut fired = {
             let world = TickWorld { cx };
@@ -156,13 +157,12 @@ impl<S: Species> Mob<S> {
                     self.hurt_by(&Damage::of(kind), amount, cx);
                 }
                 Action::ItemDamage(amount) => {
-                    if let Some(mut stack) = self.core.equipment.get(slot).cloned() {
-                        let rng = &mut *cx.rng;
-                        if stack.hurt(amount, rng) == tuff_item::item::Hurt::Broken {
-                            self.core.equipment.set(slot, None);
-                        } else {
-                            self.core.equipment.set(slot, Some(stack));
-                        }
+                    let rng = &mut *cx.rng;
+                    if self.core.equipment.get_mut(slot).is_some_and(|stack| {
+                        stack.hurt(amount, rng) == tuff_item::item::Hurt::Broken
+                    }) && let Some(broken) = self.core.equipment.take(slot)
+                    {
+                        broken.burn(tuff_item::item::BurnReason::Broken);
                     }
                 }
                 Action::MobEffect {

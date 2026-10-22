@@ -267,7 +267,7 @@ impl PlayerSession {
         let weapon = self
             .inventory
             .hand(false)
-            .and_then(|stack| stack.item.attack_range())
+            .and_then(|stack| stack.item().attack_range())
             .map_or(0.0, |reach| {
                 f64::from(reach.reach(creative).1) + f64::from(reach.hitbox_margin)
             });

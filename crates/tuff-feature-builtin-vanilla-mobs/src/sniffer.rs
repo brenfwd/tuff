@@ -17,7 +17,7 @@ use super::{MobCore, MobSounds, Species, data};
 use tuff_core::protocol::play::MetadataValue;
 use tuff_core::world::dimension::DimensionId;
 use tuff_core::world::entity::{Effect, RegionEntity, TickContext};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_world_model::BlockPos;
 
 const DROP_SEED_AT_TICK: u8 = data::SPECIES + 1;
@@ -357,7 +357,7 @@ impl Species for Sniffer {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        sniffer_food(stack.item)
+        sniffer_food(stack.item())
     }
 
     fn offspring(&self, _partner: &Self, _rng: &mut StdRng) -> Self {
@@ -408,7 +408,7 @@ impl Species for Sniffer {
         mob.core
             .sound(SoundEvent::BlockSnifferEggPlop, 1.0, pitch, cx);
         cx.effects.push(Effect::DropItem {
-            stack: ItemStack::new(Item::SnifferEgg, 1),
+            stack: ItemStack::mint(Item::SnifferEgg, 1, MintReason::Spawn),
             position: mob.core.base.position,
             velocity: [0.0; 3],
             pickup_delay: 10,
@@ -502,7 +502,7 @@ mod tests {
             let eggs = cx
                 .effects
                 .iter()
-                .filter(|e| matches!(e, Effect::DropItem { stack, .. } if stack.item == Item::SnifferEgg))
+                .filter(|e| matches!(e, Effect::DropItem { stack, .. } if stack.item() == Item::SnifferEgg))
                 .count();
             assert_eq!(eggs, 1);
             assert!(!a.core.love.as_ref().unwrap().is_in_love());

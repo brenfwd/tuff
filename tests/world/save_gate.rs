@@ -262,12 +262,55 @@ async fn save_all_saves_even_with_saving_off_and_flush_waits_for_the_writes() {
         .send(ManagerMessage::SaveAll {
             done: Some(done),
             snapshotted: None,
+            epoch: None,
         })
         .await
         .unwrap();
     flushed.await.unwrap();
     assert!(chunk_writes(&writes) > 0);
     assert_eq!(stored_block(dir.path(), 0), Some(Block::Air));
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_save_includes_requests_queued_before_it() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let (viewer, mut events) = PlayerHandle::new(1000);
+    let region = view(&world, &viewer, &mut events).await;
+
+    let (resume, paused) = std::sync::mpsc::channel::<()>();
+    assert!(region.internal(RegionInternal::Run(
+        tuff_core::world::region_api::RegionTask::new(move |_| {
+            let _ = paused.recv();
+        })
+    )));
+    let height = Generator::new(1).height(1, 1);
+    assert!(
+        region
+            .request(RegionRequest::Break {
+                player: viewer.clone(),
+                pos: BlockPos::new(1, height, 1),
+                tool: None,
+                mode: BreakMode::Finish,
+                sequence: 0,
+            })
+            .await
+    );
+    let (done, flushed) = oneshot::channel();
+    assert!(region.internal(RegionInternal::SaveAll {
+        done: Some(done),
+        snapshotted: None,
+        epoch: None,
+    }));
+    resume.send(()).unwrap();
+    flushed.await.unwrap();
+    assert_eq!(
+        stored_block(dir.path(), 0),
+        Some(Block::Air),
+        "the break queued ahead of the save is in it"
+    );
     world.shutdown().await;
 }
 
@@ -306,6 +349,7 @@ async fn a_hold_keeps_storage_untouched_until_released() {
         .send(ManagerMessage::SaveAll {
             done: Some(done),
             snapshotted: None,
+            epoch: None,
         })
         .await
         .unwrap();

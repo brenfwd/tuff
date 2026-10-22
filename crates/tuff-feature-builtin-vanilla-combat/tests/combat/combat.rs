@@ -55,7 +55,8 @@ fn hit(damage: f32, from: [f64; 3], weapon: Option<Item>) -> PlayerEvent {
         attacker,
         attacker_name: "Attacker".to_owned(),
         attacker_uuid: 0,
-        weapon: weapon.map(|item| ItemStack::new(item, 1)),
+        weapon: weapon
+            .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
         attacker_position: from,
         attacker_yaw: 180.0,
         damage,
@@ -78,12 +79,12 @@ const BEHIND: [f64; 3] = [0.0, 0.0, -3.0];
 async fn raised_shields_block_hits_from_the_front_and_wear() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
-    let shield = ItemStack::new(Item::Shield, 1);
+    let shield = ItemStack::mint(Item::Shield, 1, MintReason::Test);
 
     let mut lowered = session(&world, 1);
     lowered
         .inventory_mut()
-        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.clone()));
+        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.test_copy()));
     lowered.hold_up(true, 2);
     lowered.handle_event(hit(5.0, FRONT, None)).await;
     assert_eq!(lowered.health(), 15.0, "not raised long enough");
@@ -91,7 +92,7 @@ async fn raised_shields_block_hits_from_the_front_and_wear() {
     let mut raised = session(&world, 2);
     raised
         .inventory_mut()
-        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.clone()));
+        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.test_copy()));
     raised.hold_up(true, 10);
     raised.handle_event(hit(5.0, FRONT, None)).await;
     assert_eq!(raised.health(), 20.0);
@@ -101,7 +102,7 @@ async fn raised_shields_block_hits_from_the_front_and_wear() {
     let mut turned = session(&world, 3);
     turned
         .inventory_mut()
-        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.clone()));
+        .set_slot(Inventory::OFFHAND_SLOT, Some(shield.test_copy()));
     turned.hold_up(true, 10);
     turned.handle_event(hit(5.0, BEHIND, None)).await;
     assert_eq!(turned.health(), 15.0, "shields only cover the front");
@@ -128,9 +129,14 @@ async fn armor_and_protection_reduce_damage_and_wear() {
     let chest_slot = Inventory::armor_slot(EquipmentSlot::Chest).unwrap();
 
     let mut armored = session(&world, 1);
-    armored
-        .inventory_mut()
-        .set_slot(chest_slot, Some(ItemStack::new(Item::DiamondChestplate, 1)));
+    armored.inventory_mut().set_slot(
+        chest_slot,
+        Some(ItemStack::mint(
+            Item::DiamondChestplate,
+            1,
+            MintReason::Test,
+        )),
+    );
     armored.handle_event(hit(10.0, FRONT, None)).await;
     assert!((armored.health() - (20.0 - 8.4)).abs() < 1e-4);
     let worn = armored.inventory().slots()[chest_slot].as_ref().unwrap();
@@ -153,7 +159,7 @@ async fn armor_and_protection_reduce_damage_and_wear() {
     plain.handle_event(blast(&damage_type::EXPLOSION)).await;
     assert_eq!(plain.health(), 10.0);
     let mut protected = session(&world, 3);
-    let mut chest = ItemStack::new(Item::LeatherChestplate, 1);
+    let mut chest = ItemStack::mint(Item::LeatherChestplate, 1, MintReason::Test);
     chest.components.enchantments = Some(Enchantments::new([(
         "minecraft:blast_protection".to_owned(),
         4,
@@ -228,7 +234,7 @@ async fn beds_set_the_spawn_and_sleepers_wake_up() {
 }
 
 fn enchanted(item: Item, enchantments: &[(&str, i32)]) -> ItemStack {
-    let mut stack = ItemStack::new(item, 1);
+    let mut stack = ItemStack::mint(item, 1, MintReason::Test);
     stack.components.enchantments = Some(Enchantments::new(
         enchantments
             .iter()
@@ -249,7 +255,7 @@ fn direct(attacker: &PlayerHandle, damage: f32, weapon: Option<ItemStack>) -> Pl
         attacker: attacker.clone(),
         attacker_name: "Attacker".to_owned(),
         attacker_uuid: 0,
-        weapon,
+        weapon: weapon.as_ref().map(tuff_item::item::ItemSnapshot::of),
         attacker_position: FRONT,
         attacker_yaw: 180.0,
         damage,
@@ -322,7 +328,7 @@ async fn players_kill_and_milk_mobs_through_their_regions() {
     }
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::DiamondSword, 1)),
+        Some(ItemStack::mint(Item::DiamondSword, 1, MintReason::Test)),
     );
     player.run_tick().await;
     for _ in 0..2 {
@@ -346,7 +352,7 @@ async fn players_kill_and_milk_mobs_through_their_regions() {
     player.stand_at([11.5, 151.0, 6.5], true);
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Bucket, 1)),
+        Some(ItemStack::mint(Item::Bucket, 1, MintReason::Test)),
     );
     player
         .handle_packet(Serverbound::Interact {
@@ -362,7 +368,7 @@ async fn players_kill_and_milk_mobs_through_their_regions() {
             .await
     );
     assert_eq!(
-        player.inventory().hand(false).unwrap().item,
+        player.inventory().hand(false).unwrap().item(),
         Item::MilkBucket
     );
     world.shutdown().await;
@@ -376,7 +382,7 @@ async fn weapon_attacks_follow_the_cooldown_which_an_item_change_resets() {
     let mut attacker = session(&world, 1);
     attacker.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::DiamondSword, 1)),
+        Some(ItemStack::mint(Item::DiamondSword, 1, MintReason::Test)),
     );
     let (victim, mut victim_events) = PlayerHandle::new(2);
     attacker.stand_at([0.5, 64.0, 0.5], true);
@@ -395,7 +401,7 @@ async fn weapon_attacks_follow_the_cooldown_which_an_item_change_resets() {
             ..
         }
     ));
-    assert_eq!(strong.weapon.unwrap().item, Item::DiamondSword);
+    assert_eq!(strong.weapon.unwrap().item(), Item::DiamondSword);
 
     attacker.handle_packet(Serverbound::Attack(2)).await;
     let spam = attacked(&mut victim_events).unwrap();
@@ -434,7 +440,7 @@ async fn landed_sweeps_hit_players_beside_the_target_and_wear_the_sword() {
     let sword = enchanted(Item::IronSword, &[("sweeping_edge", 3)]);
     attacker
         .inventory_mut()
-        .set_slot(Inventory::hotbar_slot(0), Some(sword.clone()));
+        .set_slot(Inventory::hotbar_slot(0), Some(sword.test_copy()));
     attacker.stand_at([0.5, 64.0, 0.5], true);
     attacker.set_sprinting(true);
     let target = [0.5, 64.0, 2.5];
@@ -444,7 +450,7 @@ async fn landed_sweeps_hit_players_beside_the_target_and_wear_the_sword() {
     attacker.see_player(&far, [3.5, 64.0, 2.5]);
     attacker
         .handle_event(PlayerEvent::AttackLanded {
-            weapon: Some(sword.clone()),
+            weapon: Some(tuff_item::item::ItemSnapshot::of(&sword)),
             target: 2,
             target_position: target,
             knockback: true,
@@ -510,7 +516,7 @@ async fn a_stacks_own_weapon_component_disables_shields_and_sets_its_wear() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let (attacker, _attacker_events) = PlayerHandle::new(999);
-    let mut club = ItemStack::new(Item::Stick, 1);
+    let mut club = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     club.components.weapon = Some(tuff_vanilla_data::item::Weapon {
         item_damage_per_attack: 4,
         disable_blocking_for_seconds: 5.0,
@@ -518,24 +524,24 @@ async fn a_stacks_own_weapon_component_disables_shields_and_sets_its_wear() {
     let mut blocker = session(&world, 1);
     blocker.inventory_mut().set_slot(
         Inventory::OFFHAND_SLOT,
-        Some(ItemStack::new(Item::Shield, 1)),
+        Some(ItemStack::mint(Item::Shield, 1, MintReason::Test)),
     );
     blocker.hold_up(true, 10);
     blocker
-        .handle_event(direct(&attacker, 5.0, Some(club.clone())))
+        .handle_event(direct(&attacker, 5.0, Some(club.test_copy())))
         .await;
     assert!(!blocker.is_using(), "the club knocks the shield down");
     assert!(blocker.item_on_cooldown(Item::Shield));
 
-    let mut hammer = ItemStack::new(Item::IronPickaxe, 1);
+    let mut hammer = ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test);
     hammer.components.weapon = club.components.weapon;
     let mut wielder = session(&world, 2);
     wielder
         .inventory_mut()
-        .set_slot(Inventory::hotbar_slot(0), Some(hammer.clone()));
+        .set_slot(Inventory::hotbar_slot(0), Some(hammer.test_copy()));
     wielder
         .handle_event(PlayerEvent::AttackLanded {
-            weapon: Some(hammer),
+            weapon: Some(tuff_item::item::ItemSnapshot::of(&hammer)),
             target: 1,
             target_position: FRONT,
             knockback: false,
@@ -590,7 +596,7 @@ async fn hits_push_the_victim_further_with_knockback() {
     ] {
         heavy.inventory_mut().set_slot(
             Inventory::armor_slot(slot).unwrap(),
-            Some(ItemStack::new(item, 1)),
+            Some(ItemStack::mint(item, 1, MintReason::Test)),
         );
     }
     heavy.handle_event(direct(&attacker, 2.0, None)).await;
@@ -609,7 +615,7 @@ async fn fire_aspect_burns_the_victim_until_water_puts_it_out() {
     let mut victim = session(&world, 1);
     victim.make_hungry();
     victim
-        .handle_event(direct(&attacker, 1.0, Some(fiery.clone())))
+        .handle_event(direct(&attacker, 1.0, Some(fiery.test_copy())))
         .await;
     assert_eq!(victim.fire_ticks(), 160);
     assert_eq!(victim.health(), 19.0);
@@ -642,7 +648,7 @@ async fn fire_aspect_burns_the_victim_until_water_puts_it_out() {
     assert!(victim.fire_ticks() <= 0);
 
     let mut protected = session(&world, 2);
-    let mut chest = ItemStack::new(Item::IronChestplate, 1);
+    let mut chest = ItemStack::mint(Item::IronChestplate, 1, MintReason::Test);
     chest.components.enchantments = Some(Enchantments::new([(
         "minecraft:fire_protection".to_owned(),
         4,
@@ -672,13 +678,14 @@ async fn fire_resistance_potions_keep_lava_off_and_milk_clears_them() {
     let world = TestWorld::start(dir.path());
     let mut player = session(&world, 1000);
     player.make_hungry();
-    let potion = ItemStack::new(Item::Potion, 1).with_components(ComponentPatch {
-        potion_contents: Some(Box::new(PotionContents {
-            potion: Some(Potion::FireResistance),
+    let potion =
+        ItemStack::mint(Item::Potion, 1, MintReason::Test).with_components(ComponentPatch {
+            potion_contents: Some(Box::new(PotionContents {
+                potion: Some(Potion::FireResistance),
+                ..Default::default()
+            })),
             ..Default::default()
-        })),
-        ..Default::default()
-    });
+        });
     player
         .inventory_mut()
         .set_slot(Inventory::hotbar_slot(0), Some(potion));
@@ -694,7 +701,7 @@ async fn fire_resistance_potions_keep_lava_off_and_milk_clears_them() {
     assert!(!player.is_using());
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::GlassBottle, 1))
+        Some(&ItemStack::mint(Item::GlassBottle, 1, MintReason::Test))
     );
     assert_eq!(
         player.effect_duration(MobEffect::FireResistance),
@@ -726,7 +733,7 @@ async fn fire_resistance_potions_keep_lava_off_and_milk_clears_them() {
 
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::MilkBucket, 1)),
+        Some(ItemStack::mint(Item::MilkBucket, 1, MintReason::Test)),
     );
     player.handle_packet(drink).await;
     for _ in 0..32 {
@@ -735,7 +742,7 @@ async fn fire_resistance_potions_keep_lava_off_and_milk_clears_them() {
     assert_eq!(player.effect_duration(MobEffect::FireResistance), None);
     assert_eq!(
         player.inventory().hand(false),
-        Some(&ItemStack::new(Item::Bucket, 1))
+        Some(&ItemStack::mint(Item::Bucket, 1, MintReason::Test))
     );
     world.shutdown().await;
 }
@@ -869,7 +876,7 @@ async fn statistics_count_time_moves_jumps_and_crafts_and_are_saved() {
 
     player
         .inventory_mut()
-        .set_carried(Some(ItemStack::new(Item::OakLog, 1)));
+        .set_carried(Some(ItemStack::mint(Item::OakLog, 1, MintReason::Test)));
     let click = |slot: i16, mode: i32| Serverbound::ContainerClick {
         window_id: 0,
         state_id: 0,
@@ -1456,7 +1463,11 @@ async fn suffocation_hurts_a_player_whose_eyes_are_inside_a_block() {
     let mut armored = session(&world, 1001);
     armored.inventory_mut().set_slot(
         Inventory::armor_slot(EquipmentSlot::Chest).unwrap(),
-        Some(ItemStack::new(Item::DiamondChestplate, 1)),
+        Some(ItemStack::mint(
+            Item::DiamondChestplate,
+            1,
+            MintReason::Test,
+        )),
     );
     assert_eq!(
         health_after(&mut armored, trapped, 1).await,
@@ -1626,7 +1637,7 @@ async fn login_syncs_worn_armor_attributes_to_the_wearer() {
     ] {
         player.inventory_mut().set_slot(
             Inventory::armor_slot(slot).unwrap(),
-            Some(ItemStack::new(item, 1)),
+            Some(ItemStack::mint(item, 1, MintReason::Test)),
         );
     }
     player.run_tick().await;
@@ -1649,7 +1660,11 @@ async fn equipping_and_removing_armor_resyncs_its_attributes() {
     let chest_slot = Inventory::armor_slot(EquipmentSlot::Chest).unwrap();
     player.inventory_mut().set_slot(
         chest_slot,
-        Some(ItemStack::new(Item::NetheriteChestplate, 1)),
+        Some(ItemStack::mint(
+            Item::NetheriteChestplate,
+            1,
+            MintReason::Test,
+        )),
     );
     player.run_tick().await;
     let frames = drain(&mut out);
@@ -1658,9 +1673,10 @@ async fn equipping_and_removing_armor_resyncs_its_attributes() {
     assert_eq!(values.get(&Attribute::Armor), Some(&8.0));
     assert_eq!(values.get(&Attribute::ArmorToughness), Some(&3.0));
 
-    player
-        .inventory_mut()
-        .set_slot(chest_slot, Some(ItemStack::new(Item::IronChestplate, 1)));
+    player.inventory_mut().set_slot(
+        chest_slot,
+        Some(ItemStack::mint(Item::IronChestplate, 1, MintReason::Test)),
+    );
     player.run_tick().await;
     let frames = drain(&mut out);
     assert!(has_sound(&frames), "swapping to a different item plays it");
@@ -1684,9 +1700,10 @@ async fn armor_damaged_by_a_hit_resyncs_attributes_without_the_equip_sound() {
     let (attacker, _attacker_events) = PlayerHandle::new(999);
     let (mut victim, mut out) = session_with_outbound(&world, 1);
     let chest_slot = Inventory::armor_slot(EquipmentSlot::Chest).unwrap();
-    victim
-        .inventory_mut()
-        .set_slot(chest_slot, Some(ItemStack::new(Item::IronChestplate, 1)));
+    victim.inventory_mut().set_slot(
+        chest_slot,
+        Some(ItemStack::mint(Item::IronChestplate, 1, MintReason::Test)),
+    );
     victim.run_tick().await;
     let frames = drain(&mut out);
     assert!(has_sound(&frames), "first equip still plays the sound");
@@ -1745,10 +1762,10 @@ async fn drawn_bows_shoot_arrows_that_infinity_makes_free() {
     let arrows_in = |player: &PlayerSession| {
         player.inventory().slots()[Inventory::hotbar_slot(1)]
             .as_ref()
-            .map_or(0, |s| s.count)
+            .map_or(0, |s| s.count())
     };
     for (bow, spent) in [
-        (ItemStack::new(Item::Bow, 1), 1),
+        (ItemStack::mint(Item::Bow, 1, MintReason::Test), 1),
         (enchanted(Item::Bow, &[("infinity", 1), ("power", 5)]), 0),
     ] {
         let mut player = session(&world, 1000);
@@ -1758,7 +1775,7 @@ async fn drawn_bows_shoot_arrows_that_infinity_makes_free() {
             .set_slot(Inventory::hotbar_slot(0), Some(bow));
         player.inventory_mut().set_slot(
             Inventory::hotbar_slot(1),
-            Some(ItemStack::new(Item::Arrow, 2)),
+            Some(ItemStack::mint(Item::Arrow, 2, MintReason::Test)),
         );
         player
             .handle_packet(Serverbound::UseItem {
@@ -1829,7 +1846,7 @@ async fn thrown_wind_charges_fly_from_the_eyes_and_cool_down() {
     player.stand_at([4.5, 151.0, 6.5], true);
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::WindCharge, 2)),
+        Some(ItemStack::mint(Item::WindCharge, 2, MintReason::Test)),
     );
     for sequence in 1..=2 {
         player
@@ -1840,7 +1857,7 @@ async fn thrown_wind_charges_fly_from_the_eyes_and_cool_down() {
             .await;
     }
     assert_eq!(
-        player.inventory().hand(false).map(|s| s.count),
+        player.inventory().hand(false).map(|s| s.count()),
         Some(1),
         "the second throw waits out the cooldown"
     );
@@ -1929,7 +1946,7 @@ async fn a_fresh_wind_charge_resists_deflection_and_a_gone_thrower_ends_it() {
     thrower.stand_at([20.5, 151.0, 20.5], true);
     thrower.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::WindCharge, 1)),
+        Some(ItemStack::mint(Item::WindCharge, 1, MintReason::Test)),
     );
     thrower
         .handle_packet(Serverbound::UseItem {
@@ -2498,7 +2515,7 @@ async fn elytra_flight_starts_only_while_falling_and_wears_the_elytra_every_twen
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let chest_slot = Inventory::armor_slot(EquipmentSlot::Chest).unwrap();
-    let elytra = || Some(ItemStack::new(Item::Elytra, 1));
+    let elytra = || Some(ItemStack::mint(Item::Elytra, 1, MintReason::Test));
 
     let mut grounded = session(&world, 1);
     grounded.inventory_mut().set_slot(chest_slot, elytra());
@@ -2578,10 +2595,11 @@ async fn firework_rockets_are_consumed_and_boost_a_gliding_player() {
     let world = TestWorld::start(dir.path());
     let chest_slot = Inventory::armor_slot(EquipmentSlot::Chest).unwrap();
     let (mut player, mut outbound) = session_with_outbound(&world, 1);
-    player
-        .inventory_mut()
-        .set_slot(chest_slot, Some(ItemStack::new(Item::Elytra, 1)));
-    let mut rocket = ItemStack::new(Item::FireworkRocket, 3);
+    player.inventory_mut().set_slot(
+        chest_slot,
+        Some(ItemStack::mint(Item::Elytra, 1, MintReason::Test)),
+    );
+    let mut rocket = ItemStack::mint(Item::FireworkRocket, 3, MintReason::Test);
     rocket.components.fireworks = Some(Box::new(tuff_item::item::decor::Fireworks {
         flight_duration: 1,
         explosions: Vec::new(),
@@ -2600,7 +2618,7 @@ async fn firework_rockets_are_consumed_and_boost_a_gliding_player() {
         })
         .await;
     let held = player.inventory().hand(false).expect("rockets remain");
-    assert_eq!(held.count, 2, "using one consumes it");
+    assert_eq!(held.count(), 2, "using one consumes it");
 
     player.run_tick().await;
     let sent = drain(&mut outbound);
@@ -2612,7 +2630,7 @@ async fn firework_rockets_are_consumed_and_boost_a_gliding_player() {
     let mut grounded = session(&world, 2);
     grounded.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::FireworkRocket, 1)),
+        Some(ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test)),
     );
     grounded.stand_at([0.5, 100.0, 0.5], true);
     grounded
@@ -2622,7 +2640,7 @@ async fn firework_rockets_are_consumed_and_boost_a_gliding_player() {
         })
         .await;
     assert_eq!(
-        grounded.inventory().hand(false).unwrap().count,
+        grounded.inventory().hand(false).unwrap().count(),
         1,
         "not gliding: the rocket is not a boost, just held"
     );
@@ -2752,7 +2770,7 @@ async fn eating_completes_with_exactly_one_completion_chew() {
     player.make_hungry();
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Apple, 1)),
+        Some(ItemStack::mint(Item::Apple, 1, MintReason::Test)),
     );
 
     let consumable = Item::Apple.consumable().unwrap();
@@ -2842,13 +2860,15 @@ async fn eating_suspicious_stew_applies_its_effects() {
     let world = TestWorld::start(dir.path());
     let mut player = session(&world, 1);
     player.make_hungry();
-    let stew = ItemStack::new(Item::SuspiciousStew, 1).with_components(ComponentPatch {
-        suspicious_stew_effects: Some(vec![SuspiciousEffect {
-            effect: MobEffect::NightVision,
-            duration: 100,
-        }]),
-        ..Default::default()
-    });
+    let stew = ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Test).with_components(
+        ComponentPatch {
+            suspicious_stew_effects: Some(vec![SuspiciousEffect {
+                effect: MobEffect::NightVision,
+                duration: 100,
+            }]),
+            ..Default::default()
+        },
+    );
     player
         .inventory_mut()
         .set_slot(Inventory::hotbar_slot(0), Some(stew));
@@ -2885,7 +2905,7 @@ async fn full_hunger_rejects_a_new_bite_while_holding_right_click() {
     player.set_food_level(player::MAX_FOOD);
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Apple, 2)),
+        Some(ItemStack::mint(Item::Apple, 2, MintReason::Test)),
     );
 
     for sequence in 1..=5 {
@@ -2901,7 +2921,7 @@ async fn full_hunger_rejects_a_new_bite_while_holding_right_click() {
         );
     }
     assert_eq!(
-        player.inventory().hand(false).unwrap().count,
+        player.inventory().hand(false).unwrap().count(),
         2,
         "no food was actually consumed"
     );
@@ -2922,7 +2942,7 @@ async fn a_bite_in_progress_finishes_even_as_hunger_fills_then_blocks_the_next_o
     player.set_food_level(player::MAX_FOOD - apple.nutrition as i32);
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Apple, 2)),
+        Some(ItemStack::mint(Item::Apple, 2, MintReason::Test)),
     );
 
     player
@@ -2942,7 +2962,7 @@ async fn a_bite_in_progress_finishes_even_as_hunger_fills_then_blocks_the_next_o
     assert!(!player.is_using(), "the in-progress bite completes");
     assert_eq!(player.food_level(), player::MAX_FOOD, "hunger is now full");
     assert_eq!(
-        player.inventory().hand(false).unwrap().count,
+        player.inventory().hand(false).unwrap().count(),
         1,
         "the in-progress bite consumed exactly one apple"
     );
@@ -2958,7 +2978,7 @@ async fn a_bite_in_progress_finishes_even_as_hunger_fills_then_blocks_the_next_o
         "the next bite is rejected now that hunger is full"
     );
     assert_eq!(
-        player.inventory().hand(false).unwrap().count,
+        player.inventory().hand(false).unwrap().count(),
         1,
         "no second apple was consumed"
     );
@@ -3064,7 +3084,7 @@ async fn shields_resistance_and_absorption_count_towards_damage_statistics() {
     let mut blocker = session(&world, 1);
     blocker.inventory_mut().set_slot(
         Inventory::OFFHAND_SLOT,
-        Some(ItemStack::new(Item::Shield, 1)),
+        Some(ItemStack::mint(Item::Shield, 1, MintReason::Test)),
     );
     blocker.hold_up(true, 10);
     blocker.handle_event(hit(5.0, FRONT, None)).await;
@@ -3165,7 +3185,7 @@ async fn the_eater_hears_no_server_chews_and_gets_the_use_complete_event() {
     player.make_hungry();
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::Apple, 1)),
+        Some(ItemStack::mint(Item::Apple, 1, MintReason::Test)),
     );
     let total = Item::Apple.consumable().unwrap().consume_ticks();
     let consumable_sound = Item::Apple.consumable().unwrap().sound.id();
@@ -3238,7 +3258,7 @@ async fn ominous_bottles_give_bad_omen_at_their_amplifier_without_particles() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let mut player = session(&world, 1000);
-    let mut bottle = ItemStack::new(Item::OminousBottle, 1);
+    let mut bottle = ItemStack::mint(Item::OminousBottle, 1, MintReason::Test);
     bottle.set_ominous_bottle_amplifier(3);
     player
         .inventory_mut()
@@ -3355,7 +3375,7 @@ async fn a_turtle_helmet_gives_water_breathing_out_of_the_water_only() {
     player.handle_event(submerged(&player, false, false)).await;
     player.inventory_mut().set_slot(
         Inventory::armor_slot(EquipmentSlot::Head).unwrap(),
-        Some(ItemStack::new(Item::TurtleHelmet, 1)),
+        Some(ItemStack::mint(Item::TurtleHelmet, 1, MintReason::Test)),
     );
     player.run_tick().await;
     assert_eq!(player.effect_duration(MobEffect::WaterBreathing), Some(199));
@@ -3433,11 +3453,11 @@ async fn a_totem_in_hand_cheats_a_fatal_hit() {
     let mut player = session(&world, 1);
     player.inventory_mut().set_slot(
         Inventory::OFFHAND_SLOT,
-        Some(ItemStack::new(Item::TotemOfUndying, 2)),
+        Some(ItemStack::mint(Item::TotemOfUndying, 2, MintReason::Test)),
     );
     player.handle_event(hit(50.0, FRONT, None)).await;
     assert_eq!(player.health(), 1.0);
-    assert_eq!(player.inventory().hand(true).unwrap().count, 1);
+    assert_eq!(player.inventory().hand(true).unwrap().count(), 1);
     for _ in 0..25 {
         player.run_tick().await;
     }
@@ -3460,7 +3480,7 @@ async fn a_charging_spear_hits_what_it_runs_into_once_per_contact_cooldown() {
     let mut attacker = session(&world, 1);
     attacker.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::IronSpear, 1)),
+        Some(ItemStack::mint(Item::IronSpear, 1, MintReason::Test)),
     );
     attacker.stand_at([0.5, 64.0, 0.5], true);
     let (victim, mut victim_events) = PlayerHandle::new(2);
@@ -3503,7 +3523,7 @@ async fn spear_hit_damage(
     let mut attacker = session(&world, 1);
     attacker.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::IronSpear, 1)),
+        Some(ItemStack::mint(Item::IronSpear, 1, MintReason::Test)),
     );
     attacker.stand_at([0.5, 64.0, 0.5], true);
     if wall {

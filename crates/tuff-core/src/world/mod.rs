@@ -27,6 +27,7 @@ pub mod clock;
 pub mod command_storage;
 pub mod commands;
 pub mod config_actor;
+pub mod conservation;
 pub mod contact;
 pub mod coordinator;
 pub mod crafting;
@@ -37,6 +38,7 @@ pub mod dimension;
 pub mod drops;
 pub mod effects;
 pub mod entity;
+pub mod entity_slots;
 pub mod exploration;
 pub mod explosion;
 pub mod fake;
@@ -197,6 +199,8 @@ pub struct WorldConfig {
 
 /// Context shared by every actor.
 pub struct Shared {
+    /// Actors quarantined after a refused item operation.
+    pub conservation: conservation::Conservation,
     pub stopwatches: commands::session_state::Stopwatches,
     pub random_sequences: commands::session_state::RandomSequences,
     /// The server-list state, set once the status actor exists; read for the
@@ -581,6 +585,7 @@ impl World {
                 let backend = storage.open_with(&directory, options)?;
                 let lock = backend.lock()?;
                 backend.upgrade()?;
+                let backend = crate::storage::journaled(backend, &directory)?;
                 Ok((backend, lock))
             })
             .await
@@ -893,6 +898,7 @@ impl World {
         );
         live_settings.set_max_chained_neighbor_updates(properties.max_chained_neighbor_updates());
         let shared = Arc::new(Shared {
+            conservation: Default::default(),
             stopwatches: commands::session_state::Stopwatches::load(backend.clone()),
             random_sequences: commands::session_state::RandomSequences::load(backend.clone()),
             server_list: std::sync::OnceLock::new(),
@@ -1012,6 +1018,12 @@ impl World {
             ),
             pregen: pregen::Pregen::spawn(),
         });
+        tuff_item::item::conservation::set_checks(
+            shared
+                .config
+                .get_bool(crate::config::ITEMS_CONSERVATION_CHECKS)
+                .unwrap_or(true),
+        );
         shared.backups.attach(&shared);
         shared.services.start(&shared);
         {

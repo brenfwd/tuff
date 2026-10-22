@@ -4,6 +4,7 @@
 
 use rand::Rng;
 use serde_json::Value;
+use tuff_item::item::BurnReason;
 use tuff_item::registries::trades::{Cost, IdSet, Trade, TradeSet, Trades};
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::DyeColor;
@@ -12,7 +13,7 @@ use tuff_vanilla_data::registry::{MobEffect, Potion, VillagerType};
 use tuff_item::item::enchanting::{
     enchant, enchant_randomly, enchantment_options, select_enchantments,
 };
-use tuff_item::item::{ItemStack, SuspiciousEffect};
+use tuff_item::item::{ItemStack, MintReason, SuspiciousEffect};
 
 pub use tuff_core::world::trading::*;
 
@@ -73,7 +74,11 @@ pub fn offer_from_trade(
     {
         return None;
     }
-    let mut result = ItemStack::new(trade.gives, trade.gives_count.clamp(1, 99) as u8);
+    let mut result = ItemStack::mint(
+        trade.gives,
+        trade.gives_count.clamp(1, 99) as u8,
+        MintReason::Spawn,
+    );
     let mut additional = 0;
     if let Some(modifier) = &trade.modifier {
         let (stack, cost) = apply_modifier(result, modifier, rng)?;
@@ -192,10 +197,10 @@ fn apply_function(
         }
         "minecraft:set_enchantments" => {
             let add = function["add"].as_bool().unwrap_or(false);
-            if stack.item == Item::Book {
-                stack = ItemStack::new(Item::EnchantedBook, stack.count);
+            if stack.item() == Item::Book {
+                stack = ItemStack::mint(Item::EnchantedBook, stack.count(), MintReason::Spawn);
             }
-            let target = if stack.item == Item::EnchantedBook {
+            let target = if stack.item() == Item::EnchantedBook {
                 &mut stack.components.stored_enchantments
             } else {
                 &mut stack.components.enchantments
@@ -236,7 +241,7 @@ fn apply_function(
         }
         "minecraft:set_stew_effect" => {
             let effects = function["effects"].as_array()?;
-            if stack.item != Item::SuspiciousStew || effects.is_empty() {
+            if stack.item() != Item::SuspiciousStew || effects.is_empty() {
                 return Some((stack, None));
             }
             let entry = &effects[rng.gen_range(0..effects.len())];
@@ -261,7 +266,7 @@ fn apply_function(
                 .map(|_| DyeColor::ALL[rng.gen_range(0..DyeColor::ALL.len())])
                 .collect();
             let color = tuff_item::item::decor::apply_dyes(stack.components.dyed_color, &dyes);
-            stack.count = 1;
+            stack.resize(1, MintReason::Trade, BurnReason::Template);
             stack.components.dyed_color = Some(color);
             Some((stack, None))
         }
@@ -298,7 +303,7 @@ fn potion_options(value: &Value) -> Vec<Potion> {
 /// fails.
 fn filter_passes(stack: &ItemStack, filter: &Value) -> bool {
     if let Some(items) = filter.get("items") {
-        let name = stack.item.name();
+        let name = stack.item().name();
         let listed = match items {
             Value::String(s) => match s.strip_prefix('#') {
                 Some(tag) => {
@@ -419,7 +424,7 @@ mod tests {
         let mut offer = MerchantOffer::new(
             ItemCost::new(Item::Wheat, 20),
             None,
-            ItemStack::new(Item::Emerald, 1),
+            ItemStack::mint(Item::Emerald, 1, MintReason::Test),
         );
         offer.max_uses = 16;
         offer.price_multiplier = 0.05;
@@ -443,20 +448,20 @@ mod tests {
         let offer = MerchantOffer::new(
             ItemCost::new(Item::Emerald, 5),
             Some(ItemCost::new(Item::Book, 1)),
-            ItemStack::new(Item::EnchantedBook, 1),
+            ItemStack::mint(Item::EnchantedBook, 1, MintReason::Test),
         );
-        let emeralds = ItemStack::new(Item::Emerald, 7);
-        let book = ItemStack::new(Item::Book, 1);
+        let emeralds = ItemStack::mint(Item::Emerald, 7, MintReason::Test);
+        let book = ItemStack::mint(Item::Book, 1, MintReason::Test);
         assert!(offer.satisfied_by(Some(&emeralds), Some(&book)));
         assert!(!offer.satisfied_by(Some(&book), Some(&emeralds)));
         assert!(!offer.satisfied_by(Some(&emeralds), None));
         let (mut a, mut b) = (Some(emeralds), Some(book));
         assert!(offer.take(&mut a, &mut b));
-        assert_eq!(a.map(|s| s.count), Some(2));
+        assert_eq!(a.map(|s| s.count()), Some(2));
         assert_eq!(b, None);
         let offers = [offer];
-        let pay = ItemStack::new(Item::Emerald, 5);
-        let book = ItemStack::new(Item::Book, 1);
+        let pay = ItemStack::mint(Item::Emerald, 5, MintReason::Test);
+        let book = ItemStack::mint(Item::Book, 1, MintReason::Test);
         assert_eq!(recipe_for(&offers, Some(&pay), Some(&book), 0), Some(0));
         assert_eq!(recipe_for(&offers, Some(&pay), None, 0), None);
     }
@@ -467,7 +472,7 @@ mod tests {
         let mut offer = MerchantOffer::new(
             ItemCost::new(Item::Emerald, 1),
             None,
-            ItemStack::new(Item::Bread, 6),
+            ItemStack::mint(Item::Bread, 6, MintReason::Test),
         );
         offer.max_uses = 16;
         offer.price_multiplier = 0.05;
@@ -488,13 +493,17 @@ mod tests {
     fn water_bottle_costs_need_the_potion() {
         let trade = Trade::builtin("minecraft:wandering_trader/water_bottle_emerald").unwrap();
         let offer = offer_from_trade(trade, None, &mut rng()).unwrap();
-        let mut water = ItemStack::new(Item::Potion, 1);
+        let mut water = ItemStack::mint(Item::Potion, 1, MintReason::Test);
         set_potion(&mut water, Potion::Water);
-        let mut awkward = ItemStack::new(Item::Potion, 1);
+        let mut awkward = ItemStack::mint(Item::Potion, 1, MintReason::Test);
         set_potion(&mut awkward, Potion::Awkward);
         assert!(offer.buy.matches(&water));
         assert!(!offer.buy.matches(&awkward));
-        assert!(!offer.buy.matches(&ItemStack::new(Item::Potion, 1)));
+        assert!(
+            !offer
+                .buy
+                .matches(&ItemStack::mint(Item::Potion, 1, MintReason::Test))
+        );
     }
 
     #[tuff_core::watchdog]
@@ -522,7 +531,7 @@ mod tests {
             Trade::builtin("minecraft:librarian/1/emerald_and_book_enchanted_book").unwrap();
         for seed in 0..50 {
             let offer = offer_from_trade(trade, None, &mut StdRng::seed_from_u64(seed)).unwrap();
-            assert_eq!(offer.sell.item, Item::EnchantedBook);
+            assert_eq!(offer.sell.item(), Item::EnchantedBook);
             let stored = offer.sell.components.stored_enchantments.as_ref().unwrap();
             let (id, level) = &stored.entries()[0];
             assert!(tuff_datapack::tags::has(
@@ -642,7 +651,7 @@ mod tests {
             })
             .unwrap();
         let offer = offer_from_trade(trade, None, &mut rng()).unwrap();
-        assert_eq!(offer.sell.item, Item::WoodlandMansionMap);
+        assert_eq!(offer.sell.item(), Item::WoodlandMansionMap);
         let spec = tuff_core::world::exploration::pending(&offer.sell).unwrap();
         assert_eq!(spec.destination, "#minecraft:on_woodland_mansion_maps");
         assert_eq!(spec.search_radius, 100);

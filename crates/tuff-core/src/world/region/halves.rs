@@ -3,7 +3,6 @@
 //! joined chest from the pair; changes to the far half travel back as
 //! messages the owner applies, so no region ever awaits another.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 
 use tuff_vanilla_data::BlockState;
@@ -11,9 +10,10 @@ use tuff_vanilla_data::block::{Facing, Type as ChestType};
 
 use super::{Column, RegionActor, block_at};
 use crate::world::block_entity::{self, ContainerKind};
+use crate::world::conservation::Transfer;
 use crate::world::messages::{RegionHandle, RegionInternal};
 use crate::world::placement;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason, SlotsCow};
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::Chunk;
 use tuff_world_model::pos::{ChunkMap, ChunkPos};
@@ -44,7 +44,7 @@ pub(super) fn merged_view<'a>(
     halo: &ChunkMap<Chunk>,
     far: &'a Snapshots,
     pos: BlockPos,
-) -> Option<Cow<'a, [Option<ItemStack>]>> {
+) -> Option<SlotsCow<'a>> {
     let own = columns
         .get(&ChunkPos::of_block(pos))?
         .meta
@@ -53,28 +53,24 @@ pub(super) fn merged_view<'a>(
         .items
         .as_slice();
     let Some(state) = block_at(columns, halo, pos) else {
-        return Some(Cow::Borrowed(own));
+        return Some(SlotsCow::Borrowed(own));
     };
     let block = |p| block_at(columns, halo, p);
     let Some(partner) = verified_partner(&block, pos, state) else {
-        return Some(Cow::Borrowed(own));
+        return Some(SlotsCow::Borrowed(own));
     };
     let other = match columns.get(&ChunkPos::of_block(partner)) {
         Some(column) => column.meta.block_entities.get(&partner).map(|e| &e.items),
         None => far.get(&partner).and_then(Option::as_ref),
     };
     let Some(other) = other else {
-        return Some(Cow::Borrowed(own));
+        return Some(SlotsCow::Borrowed(own));
     };
-    let mut joined = Vec::with_capacity(own.len() + other.len());
     if state.r#type() == Some(ChestType::Left) {
-        joined.extend(other.iter().cloned());
-        joined.extend(own.iter().cloned());
+        Some(SlotsCow::Joined(other, own))
     } else {
-        joined.extend(own.iter().cloned());
-        joined.extend(other.iter().cloned());
+        Some(SlotsCow::Joined(own, other))
     }
-    Some(Cow::Owned(joined))
 }
 
 impl RegionActor {
@@ -160,7 +156,7 @@ impl RegionActor {
                     let Some(entity) = self.block_entity(*pos) else {
                         continue;
                     };
-                    let items = entity.items.clone();
+                    let items = tuff_item::item::snapshot_slots(&entity.items);
                     if let Some(neighbour) = self.border.region_of_neighbour(partner) {
                         neighbour.internal(RegionInternal::HalfSnapshot {
                             pos: *pos,
@@ -190,8 +186,24 @@ impl RegionActor {
         }
     }
 
-    pub(super) fn half_snapshot(&mut self, pos: BlockPos, items: Option<Vec<Option<ItemStack>>>) {
-        self.sim.redstone.far_halves.insert(pos, items);
+    /// Keeps a far half's pictured contents as template stacks hoppers,
+    /// golems and comparators here read; they are never real items.
+    pub(super) fn half_snapshot(
+        &mut self,
+        pos: BlockPos,
+        items: Option<Vec<Option<ItemSnapshot>>>,
+    ) {
+        let mirror = items.map(|items| {
+            items
+                .iter()
+                .map(|slot| {
+                    slot.as_ref().map(|shown| {
+                        ItemStack::mint_like(shown, shown.count(), MintReason::Template)
+                    })
+                })
+                .collect()
+        });
+        self.sim.redstone.far_halves.insert(pos, mirror);
         for near in Self::horizontal_neighbours(pos) {
             if self.owns(near) {
                 self.sim.redstone.container_changes.insert(near);
@@ -202,7 +214,10 @@ impl RegionActor {
     pub(super) fn half_requested(&mut self, pos: BlockPos, reply: RegionHandle) {
         let items = self
             .owns(pos)
-            .then(|| self.block_entity(pos).map(|entity| entity.items.clone()))
+            .then(|| {
+                self.block_entity(pos)
+                    .map(|entity| tuff_item::item::snapshot_slots(&entity.items))
+            })
             .flatten();
         reply.internal(RegionInternal::HalfSnapshot { pos, items });
     }
@@ -212,15 +227,19 @@ impl RegionActor {
     }
 
     pub(super) fn half_inserted(&mut self, pos: BlockPos, face: Option<Facing>, stack: ItemStack) {
+        let (before, received) = (self.held_at(pos), u64::from(stack.count()));
         let rest = match (self.half_kind(pos), self.owns(pos)) {
             (Some(kind), true) if self.block_entity(pos).is_some() => {
                 self.insert_into(kind, &[pos], face, stack, None)
             }
             _ => Some(stack),
         };
+        let spilled = rest.as_ref().map_or(0, |rest| u64::from(rest.count()));
         if let Some(rest) = rest {
             self.spill_stack(pos, rest);
         }
+        let after = self.held_at(pos);
+        self.transfer_balanced(Transfer::Hopper, pos, before, received, after, spilled);
     }
 
     pub(super) fn spill_stack(&mut self, pos: BlockPos, stack: ItemStack) {
@@ -255,44 +274,53 @@ impl RegionActor {
     pub(super) fn half_drained(
         &mut self,
         pos: BlockPos,
-        stack: ItemStack,
+        stack: ItemSnapshot,
         golem: i32,
         at: BlockPos,
         reply: RegionHandle,
     ) {
-        if !self.owns(pos) {
+        if !self.owns(pos) || !self.may_transfer(Transfer::Hopper, pos, Some(reply.pos)) {
             return;
         }
         let Some((slot, taken)) = self.drain_local(pos, &stack) else {
             return;
         };
-        if !reply.internal(RegionInternal::HalfDrained {
+        if let Err(message) = reply.try_internal(RegionInternal::HalfDrained {
             golem,
             at,
-            stack: taken.clone(),
-        }) {
-            self.undrain(pos, slot, taken);
+            stack: taken,
+        }) && let RegionInternal::HalfDrained { stack, .. } = *message
+        {
+            self.undrain(pos, slot, stack);
         }
     }
 
     /// Puts back what a drain removed when its taker cannot be reached.
     pub(super) fn undrain(&mut self, pos: BlockPos, slot: usize, stack: ItemStack) {
-        let current = self
-            .block_entity(pos)
-            .and_then(|entity| entity.items.get(slot).cloned())
-            .flatten();
-        match current {
+        let observed = self.observes_containers();
+        let Some(held) = self
+            .block_entity_mut(pos)
+            .and_then(|entity| entity.items.get_mut(slot))
+        else {
+            self.spill_stack(pos, stack);
+            return;
+        };
+        let old = observed.then(|| held.as_ref().map(ItemSnapshot::of));
+        let rest = match held {
             None => {
-                self.write_container_slot(pos, slot, Some(stack.clone()));
-                self.broadcast_slots(pos, vec![(slot, Some(stack))]);
+                *held = Some(stack);
+                None
             }
-            Some(mut held) if held.stacks_with(&stack) => {
-                held.count = held.count.saturating_add(stack.count);
-                self.write_container_slot(pos, slot, Some(held.clone()));
-                self.broadcast_slots(pos, vec![(slot, Some(held))]);
-            }
-            Some(_) => self.spill_stack(pos, stack),
+            Some(held) => held.join(stack).err(),
+        };
+        if let Some(rest) = rest {
+            self.spill_stack(pos, rest);
+            return;
         }
+        if let Some(old) = old {
+            self.report_slot(pos, slot, old);
+        }
+        self.broadcast_slots(pos, &[slot]);
     }
 
     pub(super) fn half_pulled_from(
@@ -315,28 +343,38 @@ impl RegionActor {
         else {
             return;
         };
-        if !kind.can_extract(slot, stack, face) {
+        if !kind.can_extract(slot, stack, face)
+            || !self.may_transfer(Transfer::Hopper, pos, Some(reply.pos))
+        {
             return;
         }
-        let one = stack.clone().with_count(1);
-        self.take_one(pos, slot);
-        if !reply.internal(RegionInternal::HalfPulled {
-            hopper,
-            stack: one.clone(),
-        }) {
-            self.undrain(pos, slot, one);
+        let Some(one) = self.take_one_out(pos, slot) else {
+            return;
+        };
+        let shown = self.observes_containers().then(|| ItemSnapshot::of(&one));
+        match reply.try_internal(RegionInternal::HalfPulled { hopper, stack: one }) {
+            Ok(()) => self.took_one(pos, slot, shown.as_deref()),
+            Err(message) => {
+                if let RegionInternal::HalfPulled { stack, .. } = *message {
+                    self.return_one(pos, slot, stack);
+                }
+            }
         }
     }
 
     pub(super) fn half_arrived(&mut self, hopper: BlockPos, stack: ItemStack) {
+        let (before, received) = (self.held_at(hopper), u64::from(stack.count()));
         let rest = if self.owns(hopper) && self.block_entity(hopper).is_some() {
             self.insert_into(ContainerKind::Hopper, &[hopper], None, stack, None)
         } else {
             Some(stack)
         };
+        let spilled = rest.as_ref().map_or(0, |rest| u64::from(rest.count()));
         if let Some(rest) = rest {
             self.spill_stack(hopper, rest);
         }
+        let after = self.held_at(hopper);
+        self.transfer_balanced(Transfer::Hopper, hopper, before, received, after, spilled);
     }
 
     /// Whether `stack` would fit into the part of a container at `part`.
@@ -346,26 +384,24 @@ impl RegionActor {
         part: BlockPos,
         face: Option<Facing>,
         stack: &ItemStack,
+        count: u8,
     ) -> bool {
         let Some(items) = self.part_items(part) else {
             return false;
         };
-        let mut items = items.to_vec();
-        let mut changed = Vec::new();
         let disabled = self
             .block_entity(part)
             .and_then(|entity| entity.crafter())
             .map_or(0, |crafter| crafter.disabled);
-        block_entity::insert(
+        block_entity::insert_room(
             &self.shared.recipes(),
             kind,
-            &mut items,
+            items,
             face,
-            stack.clone(),
-            &mut changed,
+            stack,
+            count,
             disabled,
-        )
-        .is_none()
+        ) == count
     }
 
     /// A copper golem's take from the parts of a joined container: the
@@ -396,14 +432,15 @@ impl RegionActor {
                 if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(part)
                     && let Some(held) = items[slot].as_mut()
                 {
-                    held.count = held.count.saturating_sub(stack.count);
-                    if held.count == 0 {
+                    let left = held.count().saturating_sub(stack.count());
+                    held.resize(left, MintReason::Template, BurnReason::Template);
+                    if left == 0 {
                         items[slot] = None;
                     }
                 }
                 neighbour.internal(RegionInternal::HalfDrain {
                     pos: *part,
-                    stack: stack.clone(),
+                    stack: ItemSnapshot::of(stack),
                     golem,
                     at,
                     reply: self.handle.clone(),
@@ -414,8 +451,8 @@ impl RegionActor {
         }
     }
 
-    /// Inserts into a far half from its snapshot and tells the owner;
-    /// returns what did not fit.
+    /// Inserts into a far half as its snapshot shows it and sends the
+    /// owner what goes in; returns what did not fit.
     pub(super) fn insert_far(
         &mut self,
         kind: ContainerKind,
@@ -426,34 +463,49 @@ impl RegionActor {
         let Some(neighbour) = self.border.region_of_neighbour(part).cloned() else {
             return Some(stack);
         };
+        if !self.may_transfer(Transfer::Hopper, part, Some(neighbour.pos)) {
+            return Some(stack);
+        }
         let Some(Some(items)) = self.sim.redstone.far_halves.get(&part) else {
             return Some(stack);
         };
-        let mut items = items.clone();
-        let before = stack.count;
-        let mut changed = Vec::new();
-        let rest = block_entity::insert(
-            &self.shared.recipes(),
-            kind,
-            &mut items,
-            face,
-            stack.clone(),
-            &mut changed,
-            0,
-        );
-        let inserted = before - rest.as_ref().map_or(0, |rest| rest.count);
+        let recipes = self.shared.recipes();
+        let inserted =
+            block_entity::insert_room(&recipes, kind, items, face, &stack, stack.count(), 0);
         if inserted == 0 {
-            return rest;
-        }
-        if !neighbour.internal(RegionInternal::HalfInsert {
-            pos: part,
-            face,
-            stack: stack.clone().with_count(inserted),
-            cause: self.sim.cause,
-        }) {
             return Some(stack);
         }
-        self.sim.redstone.far_halves.insert(part, Some(items));
+        let (moving, rest) = stack.split(inserted);
+        let shown = ItemStack::mint_like(&moving, moving.count(), MintReason::Template);
+        if let Err(message) = neighbour.try_internal(RegionInternal::HalfInsert {
+            pos: part,
+            face,
+            stack: moving,
+            cause: self.sim.cause,
+        }) {
+            shown.burn(BurnReason::Template);
+            let RegionInternal::HalfInsert { stack: back, .. } = *message else {
+                return rest;
+            };
+            return Some(match rest {
+                None => back,
+                Some(rest) => match ItemStack::merge(back, rest) {
+                    Ok(merged) => merged,
+                    Err((back, rest)) => {
+                        self.spill_stack(part, rest);
+                        back
+                    }
+                },
+            });
+        }
+        if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(&part) {
+            let mut changed = Vec::new();
+            if let Some(left) =
+                block_entity::insert(&recipes, kind, items, face, shown, &mut changed, 0)
+            {
+                left.burn(BurnReason::Template);
+            }
+        }
         rest
     }
 
@@ -462,8 +514,9 @@ impl RegionActor {
         if let Some(Some(items)) = self.sim.redstone.far_halves.get_mut(&part)
             && let Some(stack) = items[slot].as_mut()
         {
-            stack.count -= 1;
-            if stack.count == 0 {
+            let left = stack.count().saturating_sub(1);
+            stack.resize(left, MintReason::Template, BurnReason::Template);
+            if left == 0 {
                 items[slot] = None;
             }
         }

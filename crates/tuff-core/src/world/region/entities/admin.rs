@@ -114,9 +114,14 @@ impl RegionActor {
         let Some(stack) = held else {
             return Some(EnchantAnswer::Itemless);
         };
-        Some(match enchant_stack(&stack, enchantment, level) {
-            Ok(updated) => {
-                tracked.entity.set_main_hand_item(Some(updated));
+        Some(match enchant_stack(stack.get(), enchantment, level) {
+            Ok(enchantments) => {
+                if let Some(mut stack) = tracked.entity.replace_main_hand_item(None) {
+                    stack.components.enchantments = enchantments;
+                    if let Some(other) = tracked.entity.replace_main_hand_item(Some(stack)) {
+                        other.burn(tuff_item::item::BurnReason::Transform);
+                    }
+                }
                 EnchantAnswer::Done
             }
             Err(answer) => answer,
@@ -282,6 +287,14 @@ impl RegionActor {
         id: i32,
         teleport: &Teleport,
     ) -> Option<Compound> {
+        let at = self.ents.entities.get(&id)?.entity.base().position;
+        if !self.may_transfer(
+            crate::world::conservation::Transfer::EntityHandOff,
+            BlockPos::containing(at),
+            None,
+        ) {
+            return None;
+        }
         self.chunk_io.pois.forget_holder(id);
         let mut tracked = self.remove_entity_kept(id, &[])?;
         place_teleported(&mut *tracked.entity, teleport);
@@ -370,15 +383,18 @@ impl RegionActor {
         self.send_to_viewers(&[from, to], || PlayerEvent::Track(track.clone()));
         if !self.pos.contains(to) {
             let seq = tracked.seq;
-            let handed = match self.border.neighbors.get(&to.region()) {
-                Some(neighbor) => neighbor.try_entity(tracked.entity, seq),
+            let handed = match self.border.neighbors.get(&to.region()).cloned() {
+                Some(neighbor) => self
+                    .hand_entity(&neighbor, tracked.entity, seq)
+                    .map(|()| neighbor),
                 None => Err(tracked.entity),
             };
-            let Err(mut entity) = handed else {
-                if let Some(neighbor) = self.border.neighbors.get(&to.region()).cloned() {
+            let mut entity = match handed {
+                Ok(neighbor) => {
                     self.hand_off_viewers(id, &neighbor);
+                    return true;
                 }
-                return true;
+                Err(entity) => entity,
             };
             let base = entity.base_mut();
             base.position = before;

@@ -13,7 +13,7 @@ pub struct Progress {
     /// leaves the nether.
     pub entered_nether: Option<[f64; 3]>,
     /// The inventory as of the last unlock scan.
-    pub last_inventory: Vec<Option<ItemStack>>,
+    pub last_inventory: Vec<Option<tuff_item::item::ItemSnapshot>>,
     pub stats: Box<crate::world::stats::Stats>,
     /// Where the current fall and levitation (with its first tick)
     /// began, for advancements.
@@ -27,7 +27,7 @@ pub struct Progress {
     /// Arrow kills credited since the last tick, with the firing weapon.
     pub arrow_kills: Vec<(
         crate::world::predicate::EntityFacts,
-        Option<ItemStack>,
+        Option<tuff_item::item::ItemSnapshot>,
         Option<i32>,
     )>,
     /// The credits were shown once; later exits from the end skip them.

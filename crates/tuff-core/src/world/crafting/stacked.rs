@@ -39,8 +39,8 @@ impl StackedContents {
 
     /// Counts a stack up to its stack limit, as the recipe book does.
     pub fn account_stack(&mut self, stack: &ItemStack) {
-        let count = stack.count.min(stack.max_stack_size());
-        self.account(stack.item, count as u32);
+        let count = stack.count().min(stack.max_stack_size());
+        self.account(stack.item(), count as u32);
     }
 
     pub fn account_simple(&mut self, stack: &ItemStack) {

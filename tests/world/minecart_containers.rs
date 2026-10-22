@@ -59,7 +59,7 @@ async fn open_cart(
     match open.source {
         MenuSource::Entity { entity, contents } => {
             assert_eq!(entity, cart);
-            (open.kind, contents)
+            (open.kind, stacks(&contents))
         }
         other => panic!("not an entity menu: {other:?}"),
     }
@@ -104,20 +104,26 @@ async fn container_minecarts_place_on_rails_open_as_menus_and_spill_when_broken(
     let chest = mobs(&region, EntityType::ChestMinecart).await[0].id;
     let (kind, contents) = open_cart(&region, &player, &mut events, chest).await;
     assert_eq!(kind, MenuKind::Generic { rows: 3 });
-    assert_eq!(contents, vec![None; 27]);
+    assert_eq!(
+        contents,
+        (0..27).map(|_| None).collect::<Vec<Option<ItemStack>>>()
+    );
 
-    let gold = ItemStack::new(Item::GoldIngot, 7);
+    let gold = ItemStack::mint(Item::GoldIngot, 7, MintReason::Test);
     summon(
         &region,
         EntityType::HopperMinecart,
-        items_nbt(&[(2, gold.clone())]).with("Enabled", false),
+        items_nbt(&[(2, gold.test_copy())]).with("Enabled", false),
         [9.5, SKY as f64 + 1.0, 9.5],
     )
     .await;
     let hopper = mobs(&region, EntityType::HopperMinecart).await[0].id;
     let (kind, contents) = open_cart(&region, &player, &mut events, hopper).await;
     assert_eq!(kind, MenuKind::Hopper);
-    assert_eq!(contents, vec![None, None, Some(gold.clone()), None, None]);
+    assert_eq!(
+        contents,
+        vec![None, None, Some(gold.test_copy()), None, None]
+    );
     let data = entity_data(&region, hopper).await;
     assert_eq!(data.get_byte("Enabled"), Some(0));
     assert_eq!(data.get_list("Items").map(<[_]>::len), Some(1));
@@ -184,7 +190,18 @@ async fn items_flow_from_a_chest_through_a_hopper_minecart_into_a_hopper_below()
         .request(RegionRequest::ContainerTransaction {
             player: player.clone(),
             window_id: 1,
-            changes: set_slot(top, 0, None, Some(ItemStack::new(Item::Stone, 3))),
+            changes: set_slot(
+                top,
+                0,
+                None,
+                Some(ItemStack::mint(Item::Stone, 3, MintReason::Test)),
+            ),
+            pool: pool_for(&set_slot(
+                top,
+                0,
+                None,
+                Some(ItemStack::mint(Item::Stone, 3, MintReason::Test)),
+            )),
             took_result: false,
         })
         .await;
@@ -205,7 +222,7 @@ async fn items_flow_from_a_chest_through_a_hopper_minecart_into_a_hopper_below()
     .await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Apple, 2),
+            stack: ItemStack::mint(Item::Apple, 2, MintReason::Test),
             position: [6.5, SKY as f64 + 1.3, 6.5],
             velocity: [0.0; 3],
             pickup_delay: 0,
@@ -220,13 +237,14 @@ async fn items_flow_from_a_chest_through_a_hopper_minecart_into_a_hopper_below()
     let MenuSource::Blocks { contents, .. } = open.source else {
         panic!("a chest is a block container");
     };
+    let contents = stacks(&contents);
     let moved: Vec<ItemStack> = contents.into_iter().flatten().collect();
     assert!(
-        moved.contains(&ItemStack::new(Item::Stone, 3)),
+        moved.contains(&ItemStack::mint(Item::Stone, 3, MintReason::Test)),
         "the chest emptied into the cart and on down: {moved:?}"
     );
     assert!(
-        moved.contains(&ItemStack::new(Item::Apple, 2)),
+        moved.contains(&ItemStack::mint(Item::Apple, 2, MintReason::Test)),
         "the cart picked up the dropped apples: {moved:?}"
     );
     let cart = mobs(&region, EntityType::HopperMinecart).await[0].id;
@@ -270,7 +288,7 @@ async fn a_powered_activator_rail_stops_a_hopper_minecart_collecting() {
     .await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Apple, 1),
+            stack: ItemStack::mint(Item::Apple, 1, MintReason::Test),
             position: [6.5, SKY as f64 + 1.1, 6.5],
             velocity: [0.0; 3],
             pickup_delay: 40,
@@ -308,7 +326,8 @@ async fn a_broken_container_minecart_keeps_its_contents_without_entity_drops() {
     summon(
         &region,
         EntityType::HopperMinecart,
-        items_nbt(&[(2, ItemStack::new(Item::GoldIngot, 7))]).with("Enabled", false),
+        items_nbt(&[(2, ItemStack::mint(Item::GoldIngot, 7, MintReason::Test))])
+            .with("Enabled", false),
         [9.5, SKY as f64 + 1.0, 9.5],
     )
     .await;

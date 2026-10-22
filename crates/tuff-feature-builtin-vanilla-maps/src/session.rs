@@ -8,7 +8,7 @@ use tuff_core::world::region_api::{RegionHooks, RegionWorld};
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{HookFuture, SessionHooks, SessionTick};
 use tuff_core::world::stats::Stat;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{SoundEvent, StatType};
 use tuff_vanilla_data::{BlockState, Item};
@@ -51,7 +51,7 @@ fn hides_marker(session: &PlayerSession) -> bool {
         session.inventory.equipped(slot).is_some_and(|stack| {
             tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::MAP_INVISIBILITY_EQUIPMENT,
-                stack.item,
+                stack.item(),
             )
         })
     })
@@ -107,7 +107,10 @@ fn report_carried(session: &mut PlayerSession) {
 }
 
 pub fn is_map(stack: &ItemStack) -> bool {
-    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::CLONABLE_MAPS, stack.item)
+    tuff_datapack::tags::is(
+        tuff_vanilla_data::tag::item::key::CLONABLE_MAPS,
+        stack.item(),
+    )
 }
 
 /// The cartography table's result, worked out again after its inputs
@@ -146,15 +149,20 @@ async fn fill_cartography(session: &mut PlayerSession) {
             if inputs[0].as_ref() == Some(&map) && inputs[1].as_ref() == Some(&additional)
     );
     if menu.window_id != window || !current || menu.container[cartography::RESULT] == result {
+        if let Some(result) = result {
+            result.burn(tuff_item::item::BurnReason::Template);
+        }
         return;
     }
-    menu.container[cartography::RESULT] = result;
+    if let Some(old) = std::mem::replace(&mut menu.container[cartography::RESULT], result) {
+        old.burn(tuff_item::item::BurnReason::Template);
+    }
     session.send_menu_slot(cartography::RESULT);
 }
 
 #[derive(Default)]
 struct Extending {
-    checked: Option<ItemStack>,
+    checked: Option<tuff_item::item::ItemSnapshot>,
 }
 
 /// Clears a crafting table's map extending result whose map cannot grow,
@@ -170,7 +178,7 @@ async fn check_extending(session: &mut PlayerSession) {
     let Some(result) = menu.container[0]
         .as_ref()
         .filter(|stack| post_processing(stack) == Some(Derivation::ZoomOut))
-        .cloned()
+        .map(tuff_item::item::ItemSnapshot::of)
     else {
         return;
     };
@@ -188,13 +196,15 @@ async fn check_extending(session: &mut PlayerSession) {
     let Some(menu) = session.menus.menu.as_mut() else {
         return;
     };
-    if menu.window_id != window || menu.container[0].as_ref() != Some(&result) {
+    if menu.window_id != window || menu.container[0].as_ref() != Some(&*result) {
         return;
     }
     if extends(data.as_ref()) {
         session.ext.entry::<Extending>().checked = Some(result);
     } else {
-        menu.container[0] = None;
+        if let Some(old) = menu.container[0].take() {
+            old.burn(tuff_item::item::BurnReason::Template);
+        }
         session.send_menu_slot(0);
     }
 }
@@ -210,7 +220,10 @@ async fn post_process(session: &mut PlayerSession) {
     let slots: Vec<usize> = (1..session.inventory.slots().len())
         .filter(|&slot| pending(&session.inventory.slots()[slot]))
         .collect();
-    let carried = pending(&session.inventory.carried().cloned());
+    let carried = session
+        .inventory
+        .carried()
+        .is_some_and(|stack| post_processing(stack).is_some());
     if slots.is_empty() && !carried {
         return;
     }
@@ -218,15 +231,31 @@ async fn post_process(session: &mut PlayerSession) {
     let Some(service) = shared.services.get::<MapService>() else {
         return;
     };
-    for slot in slots {
-        if let Some(mut stack) = session.inventory.slots()[slot].clone() {
-            process(service, &mut stack).await;
-            session.inventory.set_slot(slot, Some(stack));
+    let targets = slots.into_iter().map(Some).chain(carried.then_some(None));
+    let mut jobs = Vec::new();
+    for target in targets {
+        let held = match target {
+            Some(slot) => session.inventory.slot_mut(slot),
+            None => session.inventory.carried_mut(),
+        };
+        if let Some(stack) = held
+            && let Some(how) = take_post_processing(stack)
+            && let Some(id) = stack.components.map_id
+        {
+            jobs.push((target, id, how));
         }
     }
-    if carried && let Some(mut stack) = session.inventory.carried().cloned() {
-        process(service, &mut stack).await;
-        session.inventory.set_carried(Some(stack));
+    for (target, id, how) in jobs {
+        let Some(new) = service.derive(id, how).await else {
+            continue;
+        };
+        let held = match target {
+            Some(slot) => session.inventory.slot_mut(slot),
+            None => session.inventory.carried_mut(),
+        };
+        if let Some(stack) = held.as_mut().filter(|s| s.components.map_id == Some(id)) {
+            stack.components.map_id = Some(new);
+        }
     }
     if session.menus.menu.is_some() {
         session.send_menu_content();
@@ -235,22 +264,11 @@ async fn post_process(session: &mut PlayerSession) {
     }
 }
 
-async fn process(service: &MapService, stack: &mut ItemStack) {
-    let Some(how) = take_post_processing(stack) else {
-        return;
-    };
-    if let Some(id) = stack.components.map_id
-        && let Some(new) = service.derive(id, how).await
-    {
-        stack.components.map_id = Some(new);
-    }
-}
-
 async fn use_empty_map(session: &mut PlayerSession, off_hand: bool) {
     if session.is_dead() || session.mode.game_mode == GameMode::Spectator {
         return;
     }
-    if session.inventory.hand(off_hand).map(|stack| stack.item) != Some(Item::Map) {
+    if session.inventory.hand(off_hand).map(|stack| stack.item()) != Some(Item::Map) {
         return;
     }
     let shared = session.shared.clone();
@@ -266,7 +284,7 @@ async fn use_empty_map(session: &mut PlayerSession, off_hand: bool) {
         return;
     };
     if !session.mode.abilities.instabuild {
-        session.inventory.take_from_hand(off_hand, 1);
+        session.inventory.consume_from_hand(off_hand, 1);
     }
     session
         .progress
@@ -275,7 +293,7 @@ async fn use_empty_map(session: &mut PlayerSession, off_hand: bool) {
     session
         .player_sound(SoundEvent::UiCartographyTableTakeResult, 1.0, 1.0)
         .await;
-    let mut map = ItemStack::new(Item::FilledMap, 1);
+    let mut map = ItemStack::mint(Item::FilledMap, 1, MintReason::Transform);
     map.components.map_id = Some(id);
     if session.inventory.hand(off_hand).is_none() {
         let slot = if off_hand {

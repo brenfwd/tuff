@@ -3,7 +3,7 @@
 use tuff_vanilla_data::Item;
 
 use super::CustomContent;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 
 pub const ROWS: u8 = 6;
@@ -14,7 +14,7 @@ pub const TITLE_KEY: &str = "tuff.catalog.title";
 pub const TAKEN_KEY: &str = "tuff.catalog.taken";
 
 /// What a click on the catalog did.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum CatalogClick {
     Page(usize),
     Take(ItemStack),
@@ -68,10 +68,16 @@ impl Catalog {
             .map(|(i, stack)| (i as u8, stack))
             .collect();
         if self.page > 0 {
-            slots.push((PREVIOUS_SLOT, ItemStack::new(Item::Arrow, 1)));
+            slots.push((
+                PREVIOUS_SLOT,
+                ItemStack::mint(Item::Arrow, 1, MintReason::Template),
+            ));
         }
         if self.page + 1 < content.catalog_pages(PAGE_SIZE) {
-            slots.push((NEXT_SLOT, ItemStack::new(Item::Arrow, 1)));
+            slots.push((
+                NEXT_SLOT,
+                ItemStack::mint(Item::Arrow, 1, MintReason::Template),
+            ));
         }
         slots
     }

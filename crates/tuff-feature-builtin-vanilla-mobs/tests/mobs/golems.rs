@@ -36,12 +36,13 @@ async fn seed_chest(
     expect(events, container_menu).await;
     let changes = slots
         .iter()
-        .flat_map(|(slot, stack)| set_slot(pos, *slot, None, Some(stack.clone())))
-        .collect();
+        .flat_map(|(slot, stack)| set_slot(pos, *slot, None, Some(stack.test_copy())))
+        .collect::<Vec<_>>();
     region
         .request(RegionRequest::ContainerTransaction {
             player: player.clone(),
             window_id: 1,
+            pool: pool_for(&changes),
             changes,
             took_result: false,
         })
@@ -81,7 +82,7 @@ async fn chest_contents(
         })
         .await;
     match open.source {
-        MenuSource::Blocks { contents, .. } => contents,
+        MenuSource::Blocks { contents, .. } => stacks(&contents),
         other => panic!("expected a block container, got {other:?}"),
     }
 }
@@ -366,8 +367,8 @@ async fn a_copper_golem_sorts_by_item_type_across_several_chests() {
         &mut events,
         copper,
         &[
-            (0, ItemStack::new(Item::Diamond, 16)),
-            (1, ItemStack::new(Item::Emerald, 5)),
+            (0, ItemStack::mint(Item::Diamond, 16, MintReason::Test)),
+            (1, ItemStack::mint(Item::Emerald, 5, MintReason::Test)),
         ],
         1,
     )
@@ -377,7 +378,7 @@ async fn a_copper_golem_sorts_by_item_type_across_several_chests() {
         &player,
         &mut events,
         ineligible,
-        &[(0, ItemStack::new(Item::GoldIngot, 3))],
+        &[(0, ItemStack::mint(Item::GoldIngot, 3, MintReason::Test))],
         2,
     )
     .await;
@@ -396,7 +397,7 @@ async fn a_copper_golem_sorts_by_item_type_across_several_chests() {
     // land, before the golem can start a second trip for the emeralds
     // (which neither destination chest would ever accept).
     let mut sequence = 3;
-    let mut filled = vec![None; 27];
+    let mut filled = (0..27).map(|_| None).collect();
     for _ in 0..800 {
         world.ticks(1).await;
         sequence += 1;
@@ -407,7 +408,7 @@ async fn a_copper_golem_sorts_by_item_type_across_several_chests() {
     }
     assert_eq!(
         filled[0],
-        Some(ItemStack::new(Item::Diamond, 16)),
+        Some(ItemStack::mint(Item::Diamond, 16, MintReason::Test)),
         "all 16 diamonds (the transport cap) land in the chest that will take them"
     );
     assert!(
@@ -419,7 +420,7 @@ async fn a_copper_golem_sorts_by_item_type_across_several_chests() {
     let skipped = chest_contents(&region, &player, &mut events, ineligible, sequence).await;
     assert_eq!(
         skipped[0],
-        Some(ItemStack::new(Item::GoldIngot, 3)),
+        Some(ItemStack::mint(Item::GoldIngot, 3, MintReason::Test)),
         "the golem never touches a chest holding a different item: {skipped:?}"
     );
 
@@ -431,7 +432,7 @@ async fn a_copper_golem_sorts_by_item_type_across_several_chests() {
     );
     assert_eq!(
         source[1],
-        Some(ItemStack::new(Item::Emerald, 5)),
+        Some(ItemStack::mint(Item::Emerald, 5, MintReason::Test)),
         "its emeralds are untouched so far: {source:?}"
     );
 
@@ -489,7 +490,7 @@ async fn a_copper_golem_holds_each_chest_lid_open_while_it_works() {
         &player,
         &mut events,
         copper,
-        &[(0, ItemStack::new(Item::Diamond, 16))],
+        &[(0, ItemStack::mint(Item::Diamond, 16, MintReason::Test))],
         1,
     )
     .await;
@@ -582,7 +583,7 @@ async fn a_copper_golem_fills_a_double_chest_split_across_a_region_border() {
         &player,
         &mut events,
         copper,
-        &[(0, ItemStack::new(Item::Diamond, 16))],
+        &[(0, ItemStack::mint(Item::Diamond, 16, MintReason::Test))],
         1,
     )
     .await;
@@ -604,8 +605,8 @@ async fn a_copper_golem_fills_a_double_chest_split_across_a_region_border() {
         diamonds = merged
             .iter()
             .flatten()
-            .filter(|stack| stack.item == Item::Diamond)
-            .map(|stack| i32::from(stack.count))
+            .filter(|stack| stack.item() == Item::Diamond)
+            .map(|stack| i32::from(stack.count()))
             .sum();
         if diamonds > 0 {
             break;

@@ -422,13 +422,9 @@ pub fn equipment_packet(entity: &dyn RegionEntity) -> Option<bytes::Bytes> {
     if equipment.iter().all(|(_, stack)| stack.is_none()) {
         return None;
     }
-    let items: Vec<(u8, Option<&ItemStack>)> = equipment
-        .iter()
-        .map(|(slot, stack)| (*slot, stack.as_ref()))
-        .collect();
     Some(framed(&play::SetEquipment {
         entity_id: entity.base().id,
-        items: &items,
+        items: &equipment,
     }))
 }
 

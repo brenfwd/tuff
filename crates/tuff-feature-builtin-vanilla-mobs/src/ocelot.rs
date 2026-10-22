@@ -153,7 +153,7 @@ impl Species for Ocelot {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        ocelot_food(stack.item)
+        ocelot_food(stack.item())
     }
 
     fn interact(
@@ -165,8 +165,8 @@ impl Species for Ocelot {
         if self.trusting {
             return None;
         }
-        let stack = interaction.stack.as_ref()?;
-        if !ocelot_food(stack.item) {
+        let stack = interaction.stack.as_deref()?;
+        if !ocelot_food(stack.item()) {
             return None;
         }
         if cx.rng.gen_bool(TRUST_CHANCE) {
@@ -211,7 +211,15 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::new(item, 1)),
+            stack: item
+                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (item.map(|item| {
+                    tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())
+                }))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking: false,

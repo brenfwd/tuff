@@ -19,7 +19,7 @@ use tuff_core::world::entity::{Effect, EntityInteraction, InteractOutcome, TickC
 use tuff_core::world::game_event::GameEvent;
 use tuff_core::world::messages::HandEffect;
 use tuff_core::world::region_api::DispenseOutcome;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 
 use super::Damage;
@@ -327,9 +327,13 @@ impl Species for Armadillo {
         let brush = interaction
             .stack
             .as_ref()
-            .is_some_and(|stack| stack.item == Item::Brush);
+            .is_some_and(|stack| stack.item() == Item::Brush);
         if brush && !core.is_baby() {
-            core.drop_item(ItemStack::new(Item::ArmadilloScute, 1), 0.0, cx);
+            core.drop_item(
+                ItemStack::mint(Item::ArmadilloScute, 1, MintReason::Spawn),
+                0.0,
+                cx,
+            );
             core.sound(SoundEvent::EntityArmadilloBrush, 1.0, 1.0, cx);
             cx.effects.push(Effect::GameEvent {
                 event: GameEvent::EntityInteract,
@@ -372,13 +376,17 @@ impl Species for Armadillo {
     fn dispensed_on(
         &mut self,
         core: &mut MobCore,
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
-        if stack.item != Item::Brush || core.is_baby() {
+        if stack.item() != Item::Brush || core.is_baby() {
             return None;
         }
-        core.drop_item(ItemStack::new(Item::ArmadilloScute, 1), 0.0, cx);
+        core.drop_item(
+            ItemStack::mint(Item::ArmadilloScute, 1, MintReason::Spawn),
+            0.0,
+            cx,
+        );
         core.sound(SoundEvent::EntityArmadilloBrush, 1.0, 1.0, cx);
         Some(DispenseOutcome::Worn(BRUSH_WEAR))
     }
@@ -412,7 +420,7 @@ impl Species for Armadillo {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        armadillo_food(stack.item)
+        armadillo_food(stack.item())
     }
 
     fn offspring(&self, _partner: &Self, rng: &mut StdRng) -> Self {
@@ -525,7 +533,20 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(ItemStack::new(item, 1)),
+            stack: Some(tuff_item::item::ItemSnapshot::describe(
+                item,
+                1,
+                Default::default(),
+            )),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (Some(tuff_item::item::ItemSnapshot::describe(
+                    item,
+                    1,
+                    Default::default(),
+                )))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking: false,
@@ -612,7 +633,7 @@ mod tests {
             armadillo.shed_scute(core, cx);
             assert!(cx.effects.iter().any(|e| matches!(
                 e,
-                Effect::DropItem { stack, .. } if stack.item == Item::ArmadilloScute
+                Effect::DropItem { stack, .. } if stack.item() == Item::ArmadilloScute
             )));
             assert!(armadillo.scute_time >= SCUTE_TIME_MIN);
         });

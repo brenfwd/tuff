@@ -548,7 +548,7 @@ impl Species for Cat {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        cat_food(stack.item)
+        cat_food(stack.item())
     }
 
     fn interact(
@@ -557,14 +557,14 @@ impl Species for Cat {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref();
+        let stack = interaction.stack.as_deref();
         let owned = core.is_owner(interaction.player_uuid);
         if core.tame.as_ref().is_some_and(|t| t.is_tamed()) {
             if !owned {
                 return None;
             }
             if let Some(stack) = stack
-                && cat_food(stack.item)
+                && cat_food(stack.item())
                 && core.health < core.max_health()
             {
                 core.heal(HEAL_AMOUNT);
@@ -578,7 +578,7 @@ impl Species for Cat {
             return None;
         }
         if let Some(stack) = stack
-            && cat_food(stack.item)
+            && cat_food(stack.item())
         {
             core.try_tame(interaction.player_uuid, TAME_CHANCE, cx);
             return Some(HandEffect::Consume(1));
@@ -648,7 +648,15 @@ mod tests {
             player_uuid: owner,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item.map(|item| ItemStack::new(item, 1)),
+            stack: item
+                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
+            hand: tuff_core::world::entity::HandOffer::new(
+                (item.map(|item| {
+                    tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())
+                }))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
+            ),
             off_hand: false,
             creative: false,
             sneaking: false,

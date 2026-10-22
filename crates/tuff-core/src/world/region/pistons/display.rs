@@ -68,7 +68,10 @@ impl CarriedDisplay {
                 vec![
                     (TRANSLATION, MetadataValue::Vector3(*translation)),
                     (LEFT_ROTATION, MetadataValue::Quaternion(*rotation)),
-                    (SHOWN, MetadataValue::Slot(Some(item.as_ref().clone()))),
+                    (
+                        SHOWN,
+                        MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(item.as_ref()))),
+                    ),
                 ],
             ),
             CarriedLook::Model | CarriedLook::BlockDisplay => (

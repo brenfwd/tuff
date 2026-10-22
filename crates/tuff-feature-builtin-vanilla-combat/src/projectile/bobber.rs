@@ -15,7 +15,6 @@ use tuff_core::world::projectile::{
     Owner, block_hit, border_stop, bounce_off_border, lerp_rotation, rotation_of,
 };
 use tuff_core::world::{distance_sq, framed, packets, physics};
-use tuff_item::item::ItemStack;
 use tuff_nbt::Compound;
 use tuff_world_model::BlockPos;
 
@@ -49,7 +48,7 @@ pub struct Bobber {
     pub base: EntityBase,
     pub owner: Owner,
     state: State,
-    rod: ItemStack,
+    rod: tuff_item::item::ItemSnapshot,
     luck: f32,
     lure: i32,
     landed: bool,
@@ -70,7 +69,7 @@ impl Bobber {
         eye: [f64; 3],
         (yaw, pitch): (f32, f32),
         owner: Owner,
-        rod: ItemStack,
+        rod: tuff_item::item::ItemSnapshot,
         owner_luck: f32,
         rng: &mut impl Rng,
     ) -> Self {
@@ -274,7 +273,7 @@ impl Bobber {
             dimension: String::new(),
             ..Default::default()
         };
-        let mut items = Vec::new();
+        let mut caught = Vec::new();
         if let Some(hooked) = self.hooked_id() {
             let target = cx
                 .entities
@@ -303,15 +302,20 @@ impl Bobber {
                 damage = if is_item { 3 } else { 5 };
             }
         } else if self.line.biting() {
-            items = cx
-                .shared
-                .block_loot()
-                .fishing(self.luck, self.open_water, &self.rod, cx.rng);
-            for stack in &items {
+            let items =
+                cx.shared
+                    .block_loot()
+                    .fishing(self.luck, self.open_water, &self.rod, cx.rng);
+            for stack in items {
+                if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item())
+                {
+                    fish += 1;
+                }
+                caught.push(tuff_item::item::ItemSnapshot::of(&stack));
                 let delta = [0, 1, 2].map(|i| player.position[i] - self.base.position[i]);
                 let length = delta.iter().map(|c| c * c).sum::<f64>().sqrt();
                 cx.effects.push(Effect::DropItem {
-                    stack: stack.clone(),
+                    stack,
                     position: self.base.position,
                     velocity: [
                         delta[0] * 0.1,
@@ -328,9 +332,6 @@ impl Bobber {
                     ],
                     amount: cx.rng.gen_range(1..=6),
                 });
-                if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item) {
-                    fish += 1;
-                }
             }
             damage = 1;
         }
@@ -338,12 +339,13 @@ impl Bobber {
             damage = 2;
         }
         if let Some(handle) = &self.owner.handle {
-            if damage > 0 && (self.hooked_id().is_some() || !items.is_empty() || self.line.biting())
+            if damage > 0
+                && (self.hooked_id().is_some() || !caught.is_empty() || self.line.biting())
             {
                 handle.send(PlayerEvent::Advancement(Box::new(
                     AdvancementEvent::FishingRodHooked {
                         entity: facts,
-                        items,
+                        items: caught,
                     },
                 )));
             }

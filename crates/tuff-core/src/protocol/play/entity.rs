@@ -4,7 +4,7 @@ use tuff_vanilla_data::registry::Attribute;
 
 use crate::protocol::codec::WriteExt;
 use crate::protocol::{Encode, Packet};
-use tuff_item::item::{ItemStack, SwingKind};
+use tuff_item::item::{ItemSnapshot, ItemView, SwingKind};
 use tuff_item::text::TextComponent;
 use tuff_wire::PacketWriter;
 use tuff_world_model::BlockPos;
@@ -311,7 +311,7 @@ pub enum MetadataValue {
     OptionalVarInt(Option<i32>),
     VarLong(i64),
     Float(f32),
-    Slot(Option<ItemStack>),
+    Slot(Option<ItemSnapshot>),
     OptionalPosition(Option<BlockPos>),
     Position(BlockPos),
     /// A dimension key and a position, or none.
@@ -570,7 +570,7 @@ impl Encode for SetEntityData<'_> {
                 MetadataValue::OptionalVarInt(v) => w.write_var_int(v.map_or(0, |v| v + 1)),
                 MetadataValue::VarLong(v) => w.write_var_long(*v),
                 MetadataValue::Float(v) => w.write_float(*v),
-                MetadataValue::Slot(v) => w.write_slot(v.as_ref()),
+                MetadataValue::Slot(v) => w.write_slot(v.as_ref().map(ItemSnapshot::view)),
                 MetadataValue::Pose(v)
                 | MetadataValue::HumanoidArm(v)
                 | MetadataValue::Direction(v) => w.write_var_int(*v),
@@ -654,7 +654,7 @@ pub mod equipment_slot {
 
 pub struct SetEquipment<'a> {
     pub entity_id: i32,
-    pub items: &'a [(u8, Option<&'a ItemStack>)],
+    pub items: &'a [(u8, Option<ItemView<'a>>)],
 }
 
 impl Encode for SetEquipment<'_> {

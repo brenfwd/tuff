@@ -198,11 +198,15 @@ impl SpearUse {
     }
 
     fn sweep(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
-        let Some(stack) = mob.equipment.main_hand().cloned() else {
+        let Some(stack) = mob
+            .equipment
+            .main_hand()
+            .map(tuff_item::item::ItemSnapshot::of)
+        else {
             return;
         };
         let (Some(kinetic), Some(mut range)) =
-            (stack.kinetic_weapon(), stack.item.attack_range().copied())
+            (stack.kinetic_weapon(), stack.item().attack_range().copied())
         else {
             return;
         };
@@ -281,16 +285,18 @@ impl SpearUse {
         let knockback_base = mob.attribute(Attribute::AttackKnockback);
         let base_damage = mob.attribute(Attribute::AttackDamage);
         let yaw = f64::from(mob.base.yaw.to_radians());
-        let kind = stack.item.damage_type().unwrap_or(&damage_type::MOB_ATTACK);
+        let kind = stack
+            .item()
+            .damage_type()
+            .unwrap_or(&damage_type::MOB_ATTACK);
         let test = |c: &Option<tuff_vanilla_data::item::KineticCondition>, relative: f64| {
             c.as_ref()
                 .is_some_and(|c| c.test(used, speed, relative, MOB_ACTION_FACTOR))
         };
-        let mut weapon = stack.clone();
         let wear = stack
             .weapon()
             .map_or(0, |w| w.item_damage_per_attack as u32);
-        let (mut broken, mut worn) = (false, false);
+        let mut broken = false;
         for (id, motion, dismountable) in victims {
             self.stabbed.retain(|(other, _)| *other != id);
             self.stabbed.push((id, cx.tick));
@@ -307,8 +313,12 @@ impl SpearUse {
             let living = cx.players.iter().any(|p| p.id == id)
                 || cx.entities.iter().any(|e| e.id == id && e.living.is_some());
             if living && !broken && wear > 0 {
-                worn = true;
-                broken = weapon.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken;
+                broken = mob
+                    .equipment
+                    .get_mut(tuff_vanilla_data::item::EquipmentSlot::Mainhand)
+                    .is_none_or(|weapon| {
+                        weapon.hurt(wear, cx.rng) == tuff_item::item::Hurt::Broken
+                    });
             }
             if !(damages || knocks) {
                 continue;
@@ -334,14 +344,12 @@ impl SpearUse {
                 hit: Box::new(hit),
             });
         }
-        if broken {
-            mob.equipment
-                .set(tuff_vanilla_data::item::EquipmentSlot::Mainhand, None);
-        } else if worn {
-            mob.equipment.set(
-                tuff_vanilla_data::item::EquipmentSlot::Mainhand,
-                Some(weapon),
-            );
+        if broken
+            && let Some(weapon) = mob
+                .equipment
+                .take(tuff_vanilla_data::item::EquipmentSlot::Mainhand)
+        {
+            weapon.burn(tuff_item::item::BurnReason::Broken);
         }
     }
 }

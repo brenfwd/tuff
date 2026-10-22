@@ -687,7 +687,7 @@ async fn an_item_in_a_gateway_raises_an_exit_island_and_comes_out_there() {
     build_gateway(&region, entry).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [96.5, 75.1, 0.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -1191,7 +1191,7 @@ async fn an_item_touching_a_gateway_in_the_neighbour_region_goes_through() {
     world.ticks(25).await;
     region
         .request(RegionRequest::SpawnItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: ItemStack::mint(Item::Stone, 1, MintReason::Test),
             position: [0.1, 75.1, 0.5],
             velocity: [0.0; 3],
             pickup_delay: 10_000,
@@ -1226,7 +1226,7 @@ async fn throwing_an_eye_of_ender_consumes_it_and_counts_its_use() {
     player.stand_at([4.5, 151.0, 6.5], true);
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
-        Some(ItemStack::new(Item::EnderEye, 1)),
+        Some(ItemStack::mint(Item::EnderEye, 1, MintReason::Test)),
     );
     player.throw_eye(false, BlockPos::new(100, 64, 100)).await;
     assert!(

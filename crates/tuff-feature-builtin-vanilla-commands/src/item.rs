@@ -4,6 +4,7 @@
 //! files or inline JSON-like functions.
 
 use std::sync::Arc;
+use tuff_item::item::{BurnReason, ItemSnapshot};
 
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -14,7 +15,7 @@ use tuff_core::world::messages::PlayerSnapshot;
 use tuff_core::world::messages::{Directive, SlotFill};
 use tuff_core::world::predicate::slot_range;
 use tuff_datapack::slot_source::{SlotSource, SlotSourceRef, SlotSources};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_data::loot_table::LootFunction;
@@ -80,13 +81,16 @@ fn list_key(id: i32, holder: Holder, nbt: &Compound) -> Option<(&'static str, i8
 /// `None` when the holder has no such slot.
 pub(super) fn read_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Option<ItemStack>> {
     if let Holder::Container(_, Some(key)) = holder {
-        return (id == 0).then(|| nbt.get_compound(key).and_then(ItemStack::from_nbt));
+        return (id == 0).then(|| {
+            nbt.get_compound(key)
+                .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
+        });
     }
     if let Some(key) = equipment_key(id, holder) {
         return Some(
             nbt.get_compound("equipment")
                 .and_then(|equipment| equipment.get_compound(key))
-                .and_then(ItemStack::from_nbt),
+                .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template)),
         );
     }
     let (list, slot) = list_key(id, holder, nbt)?;
@@ -96,11 +100,16 @@ pub(super) fn read_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Optio
             .iter()
             .filter_map(Tag::as_compound)
             .find(|entry| entry.get_byte("Slot") == Some(slot))
-            .and_then(ItemStack::from_nbt),
+            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template)),
     )
 }
 
 pub(super) fn write_slot(nbt: &mut Compound, id: i32, holder: Holder, value: Option<ItemStack>) {
+    tuff_item::item::conservation::releasing(|| write_slot_nbt(nbt, id, holder, value));
+}
+
+/// The stack is kept as the holder's saved NBT.
+fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<ItemStack>) {
     if let Holder::Container(_, Some(key)) = holder {
         if id == 0 {
             match value {
@@ -232,7 +241,12 @@ async fn modify_items(ctx: &mut Context<'_>, is_block: bool) -> Result<i32, Comm
             let stack = stack.unwrap_or_else(empty_stack);
             selected += 1;
             let result = apply(ctx, &functions, stack, &mut rng);
-            write_slot(&mut data, id, holder, (result.count > 0).then_some(result));
+            write_slot(
+                &mut data,
+                id,
+                holder,
+                (result.count() > 0).then_some(result),
+            );
         }
         if selected == 0 {
             return Err(slot.missing_error("target"));
@@ -281,7 +295,7 @@ async fn modify_items(ctx: &mut Context<'_>, is_block: bool) -> Result<i32, Comm
                         &mut data,
                         id,
                         Holder::Mob,
-                        (result.count > 0).then_some(result),
+                        (result.count() > 0).then_some(result),
                     );
                     changed += 1;
                 }
@@ -375,7 +389,7 @@ async fn store_block(
 }
 
 fn empty_stack() -> ItemStack {
-    ItemStack::new(tuff_vanilla_data::registry::Item::Air, 0)
+    ItemStack::empty()
 }
 
 fn fail_args() -> CommandError {
@@ -397,7 +411,7 @@ async fn source_stack(ctx: &mut Context<'_>, slot: &SlotArg) -> Result<ItemStack
         }
     }
     found
-        .map(|stack| stack.unwrap_or_else(|| ItemStack::new(tuff_vanilla_data::Item::Air, 0)))
+        .map(|stack| stack.unwrap_or_else(ItemStack::empty))
         .ok_or_else(|| slot.missing_error("source"))
 }
 
@@ -435,13 +449,15 @@ async fn source_data(
 }
 
 fn spread(mode: SlotFill, ids: &[i32], stack: &ItemStack) -> Vec<(i32, Option<ItemStack>)> {
-    let value = (stack.count > 0).then(|| stack.clone());
+    let value = || {
+        (stack.count() > 0).then(|| ItemStack::mint_like(stack, stack.count(), MintReason::Command))
+    };
     ids.iter()
         .enumerate()
         .filter_map(|(index, id)| match mode {
-            SlotFill::Fill => Some((*id, value.clone())),
-            SlotFill::Replace => (index == 0).then(|| (*id, value.clone())),
-            SlotFill::Override => Some((*id, if index == 0 { value.clone() } else { None })),
+            SlotFill::Fill => Some((*id, value())),
+            SlotFill::Replace => (index == 0).then(|| (*id, value())),
+            SlotFill::Override => Some((*id, if index == 0 { value() } else { None })),
         })
         .collect()
 }
@@ -483,7 +499,10 @@ impl Executor for ItemCommand {
                 };
                 input.stack(count)
             };
-            let item = item_name(stack.item, &stack.components);
+            let template = ItemSnapshot::of(&stack);
+            stack.burn(BurnReason::Template);
+            let stack = template;
+            let item = item_name(stack.item(), &stack.components);
             if is_block {
                 return set_block(ctx, mode, &slot, &stack, item).await;
             }
@@ -549,7 +568,7 @@ impl Executor for ItemCommand {
             let player_ids = slot.player_ids(ctx, &players);
             let name = slot.label();
             let single_item = item.clone();
-            let known = item_name(stack.item, &stack.components);
+            let known = item_name(stack.item(), &stack.components);
             let messages = Messages::new(
                 move |reply| {
                     TextComponent::translate(
@@ -803,14 +822,18 @@ mod tests {
     #[test]
     fn mob_inventory_and_horse_slots_map_to_their_lists() {
         let mut nbt = Compound::new();
-        let stack = ItemStack::from_nbt(
+        let stack = ItemStack::mint_from_nbt(
             &Compound::new()
                 .with("id", Tag::String("minecraft:apple".into()))
                 .with("count", Tag::Int(1)),
+            MintReason::Test,
         );
         assert!(stack.is_some());
-        write_slot(&mut nbt, 302, Holder::Mob, stack.clone());
-        write_slot(&mut nbt, 503, Holder::Mob, stack.clone());
+        let other = stack
+            .as_ref()
+            .map(|stack| ItemStack::mint_like(stack, stack.count(), MintReason::Test));
+        write_slot(&mut nbt, 302, Holder::Mob, stack);
+        write_slot(&mut nbt, 503, Holder::Mob, other);
         assert!(nbt.get_list("Inventory").is_some());
         assert!(nbt.get_list("Items").is_some());
         assert!(read_slot(&nbt, 302, Holder::Mob).flatten().is_some());

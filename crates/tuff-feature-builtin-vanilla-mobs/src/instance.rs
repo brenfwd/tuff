@@ -309,7 +309,7 @@ impl<S: Species> Mob<S> {
                 amount,
                 core.attribute(Attribute::Armor) as f32,
                 core.attribute(Attribute::ArmorToughness) as f32,
-                damage.weapon.as_ref(),
+                damage.weapon.as_deref(),
                 &damage.context(kind),
                 cx.rng,
             );
@@ -464,6 +464,10 @@ impl<S: Species> Mob<S> {
                 if !drops.is_empty() && heads.claim() {
                     for stack in drops {
                         self.core.drop_item(stack, 0.0, cx);
+                    }
+                } else {
+                    for stack in drops {
+                        stack.burn(tuff_item::item::BurnReason::Loot);
                     }
                 }
             }
@@ -947,7 +951,7 @@ impl<S: Species> Mob<S> {
             EquipmentSlot::Legs,
             EquipmentSlot::Feet,
         ]
-        .map(|slot| core.equipment.get(slot).map(|stack| stack.item));
+        .map(|slot| core.equipment.get(slot).map(|stack| stack.item()));
         let can_freeze = freezing::can_freeze(core.kind(), false, armor.iter().map(Option::as_ref));
         let before = core.base.ticks_frozen;
         if inside.thaws {
@@ -1378,8 +1382,8 @@ impl<S: Species> Mob<S> {
         interaction: &EntityInteraction,
         cx: &mut TickContext,
     ) -> InteractOutcome {
-        let stack = interaction.stack.as_ref()?;
-        if stack.item != tuff_vanilla_data::Item::Shears
+        let stack = interaction.stack.as_deref()?;
+        if stack.item() != tuff_vanilla_data::Item::Shears
             || interaction.sneaking
             || !self.species.can_shear_equipment(&self.core, interaction)
         {
@@ -1388,9 +1392,8 @@ impl<S: Species> Mob<S> {
         let slot = SHEARABLE_SLOTS
             .into_iter()
             .find(|slot| shearable(self.core.equipment.get(*slot), interaction.creative))?;
-        let worn = self.core.equipment.get(slot)?.clone();
-        let sound = worn.equippable()?.shearing_sound;
-        self.core.equipment.set(slot, None);
+        let sound = self.core.equipment.get(slot)?.equippable()?.shearing_sound;
+        let worn = self.core.equipment.take(slot)?;
         cx.effects.push(Effect::GameEvent {
             event: tuff_core::world::game_event::GameEvent::Shear,
             position: self.core.base.position,
@@ -1398,14 +1401,15 @@ impl<S: Species> Mob<S> {
         });
         let seats = self.core.kind().passenger_attachments();
         let height = seats.iter().map(|seat| seat[1]).sum::<f64>() / seats.len().max(1) as f64;
+        let shown = tuff_item::item::ItemSnapshot::of(&worn);
         self.core
-            .drop_item(worn.clone(), height * self.core.size_ratio(), cx);
+            .drop_item(worn, height * self.core.size_ratio(), cx);
         self.core.sound(sound, 1.0, 1.0, cx);
         cx.effects.push(Effect::Advancement {
             player: interaction.player_uuid,
             event: Box::new(
                 tuff_core::world::messages::AdvancementEvent::ShearedEquipment {
-                    item: worn,
+                    item: shown,
                     entity: self.core.facts(),
                 },
             ),

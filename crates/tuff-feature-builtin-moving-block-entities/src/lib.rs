@@ -22,7 +22,7 @@ use tuff_core::storage::chunk_nbt::decode_block_state;
 use tuff_core::storage::normalise::{SaveNormaliser, SaveNormaliserEntry, SaveView};
 use tuff_core::world::block_entity::raw;
 use tuff_core::world::redstone::{BlockEntityCarrier, CarriedLook};
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemStack, MintReason};
 use tuff_item::load::{LoadError, Phase};
 use tuff_nbt::Compound;
 
@@ -108,7 +108,7 @@ fn patterned_banner(state: BlockState, nbt: &Compound) -> Option<CarriedLook> {
         .into_patch()
         .banner_patterns
         .filter(|layers| !layers.is_empty())?;
-    let mut item = ItemStack::new(state.block().item()?, 1);
+    let mut item = ItemStack::mint(state.block().item()?, 1, MintReason::Template);
     item.components.banner_patterns = Some(patterns);
     let half = -(f32::from(rotation) * 22.5 + 180.0).to_radians() / 2.0;
     Some(CarriedLook::ItemDisplay {
@@ -136,7 +136,11 @@ fn sign_board(state: BlockState) -> Option<CarriedLook> {
     };
     let half = f32::to_radians(angle) / 2.0;
     Some(CarriedLook::ItemDisplay {
-        item: Box::new(ItemStack::new(state.block().item()?, 1)),
+        item: Box::new(ItemStack::mint(
+            state.block().item()?,
+            1,
+            MintReason::Template,
+        )),
         translation: [0.5 + offset[0], 0.5, 0.5 + offset[1]],
         rotation: [0.0, half.sin(), 0.0, half.cos()],
     })
@@ -153,12 +157,8 @@ fn standing_turn(state: BlockState) -> Option<[f32; 4]> {
 fn profiled_head(state: BlockState, nbt: &Compound) -> Option<CarriedLook> {
     let rotation = standing_turn(state)?;
     let components = Components::from_nbt(&raw::collect_components(BlockEntityType::Skull, nbt));
-    components
-        .clone()
-        .into_patch()
-        .other
-        .get("minecraft:profile")?;
-    let mut item = ItemStack::new(state.block().item()?, 1);
+    components.other.get("minecraft:profile")?;
+    let mut item = ItemStack::mint(state.block().item()?, 1, MintReason::Template);
     item.components = components;
     Some(CarriedLook::ItemDisplay {
         item: Box::new(item),
@@ -311,15 +311,8 @@ mod tests {
         let CarriedLook::ItemDisplay { item, .. } = look else {
             panic!("{look:?}");
         };
-        assert_eq!(item.item, tuff_vanilla_data::Item::PlayerHead);
-        assert!(
-            item.components
-                .clone()
-                .into_patch()
-                .other
-                .get("minecraft:profile")
-                .is_some()
-        );
+        assert_eq!(item.item(), tuff_vanilla_data::Item::PlayerHead);
+        assert!(item.components.other.get("minecraft:profile").is_some());
         assert_eq!(
             Carrier.look(state("minecraft:player_head[rotation=4]"), None),
             CarriedLook::BlockDisplay
@@ -341,7 +334,7 @@ mod tests {
         else {
             panic!("{look:?}");
         };
-        assert_eq!(item.item, tuff_vanilla_data::Item::WhiteBanner);
+        assert_eq!(item.item(), tuff_vanilla_data::Item::WhiteBanner);
         assert_eq!(item.components.banner_patterns.as_ref().unwrap().len(), 1);
         assert_eq!(translation, [0.5; 3]);
         let expected = [0.0, -1.0, 0.0, 0.0];
@@ -383,7 +376,7 @@ mod tests {
             let CarriedLook::ItemDisplay { item, .. } = look else {
                 panic!("{text}: {look:?}");
             };
-            assert_eq!(item.item, want, "{text}");
+            assert_eq!(item.item(), want, "{text}");
         }
     }
 }

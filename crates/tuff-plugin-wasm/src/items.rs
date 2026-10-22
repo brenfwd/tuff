@@ -3,12 +3,12 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use tuff_item::item::ItemSnapshot;
 
 use tuff_core::protocol::play::{PlayerActionStatus, Serverbound};
 use tuff_core::world::inventory::Inventory;
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{PacketInterceptor, SessionHooks, Verdict};
-use tuff_item::item::ItemStack;
 
 use crate::host::WasmHost;
 use crate::wit::bindings::types::{Event, EventKinds, ItemAction, ItemActionKind, ItemsTaken};
@@ -22,7 +22,7 @@ pub fn kind_flag(kind: ItemActionKind) -> EventKinds {
     }
 }
 
-fn has_tag(stack: &ItemStack, tag: &str) -> bool {
+fn has_tag(stack: tuff_item::item::ItemView<'_>, tag: &str) -> bool {
     stack
         .components
         .other
@@ -32,7 +32,12 @@ fn has_tag(stack: &ItemStack, tag: &str) -> bool {
 }
 
 /// Reports the action when plugins listen; whether a filter cancels it.
-fn act(session: &PlayerSession, kind: ItemActionKind, stack: &ItemStack, count: u8) -> bool {
+fn act(
+    session: &PlayerSession,
+    kind: ItemActionKind,
+    stack: tuff_item::item::ItemView<'_>,
+    count: u8,
+) -> bool {
     let Some(host) = session.shared.services.get::<WasmHost>() else {
         return false;
     };
@@ -40,7 +45,7 @@ fn act(session: &PlayerSession, kind: ItemActionKind, stack: &ItemStack, count: 
     if !host.listens(flag) {
         return false;
     }
-    let item = stack.item.name();
+    let item = stack.item().name();
     let cancel = host.snapshot().items.iter().any(|filter| {
         filter.kind == kind
             && filter.item.as_deref().is_none_or(|wanted| wanted == item)
@@ -87,8 +92,9 @@ impl PacketInterceptor for Actions {
 }
 
 fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdict {
-    let main =
-        session.inventory.slots()[Inventory::hotbar_slot(session.inventory.selected())].clone();
+    let main = session.inventory.slots()[Inventory::hotbar_slot(session.inventory.selected())]
+        .as_ref()
+        .map(ItemSnapshot::of);
     let cancel = match status {
         PlayerActionStatus::DropItem | PlayerActionStatus::DropAllItems => {
             let Some(stack) = main else {
@@ -97,15 +103,16 @@ fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdi
             let count = if status == PlayerActionStatus::DropItem {
                 1
             } else {
-                stack.count
+                stack.count()
             };
-            act(session, ItemActionKind::Drop, &stack, count)
+            act(session, ItemActionKind::Drop, stack.view(), count)
         }
         PlayerActionStatus::SwapItemWithOffhand => {
-            let Some(stack) = main.or_else(|| session.inventory.hand(true).cloned()) else {
+            let Some(stack) = main.or_else(|| session.inventory.hand(true).map(ItemSnapshot::of))
+            else {
                 return Verdict::Allow;
             };
-            act(session, ItemActionKind::Swap, &stack, stack.count)
+            act(session, ItemActionKind::Swap, stack.view(), stack.count())
         }
         _ => return Verdict::Allow,
     };
@@ -118,21 +125,26 @@ fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdi
 
 fn craft(session: &mut PlayerSession, window: i32, slot: i16) -> Verdict {
     let result = match session.menu_kind() {
-        None if window == 0 && slot == 0 => session.inventory.slots()[0].clone(),
+        None if window == 0 && slot == 0 => {
+            session.inventory.slots()[0].as_ref().map(ItemSnapshot::of)
+        }
         Some(kind)
             if session.window_id() == Some(window)
                 && kind.result_slot().is_some_and(|r| r as i16 == slot) =>
         {
-            session
-                .menu_container()
-                .and_then(|container| container.get(slot as usize).cloned().flatten())
+            session.menu_container().and_then(|container| {
+                container
+                    .get(slot as usize)
+                    .and_then(Option::as_ref)
+                    .map(ItemSnapshot::of)
+            })
         }
         _ => return Verdict::Allow,
     };
     let Some(stack) = result else {
         return Verdict::Allow;
     };
-    if !act(session, ItemActionKind::Craft, &stack, stack.count) {
+    if !act(session, ItemActionKind::Craft, stack.view(), stack.count()) {
         return Verdict::Allow;
     }
     if window == 0 {
@@ -175,10 +187,14 @@ impl SessionHooks for Pickups {
         );
     }
 
-    fn allows_item_pickup(&self, session: &PlayerSession, stack: &ItemStack) -> bool {
-        if session.inventory.room_for(stack) == 0 {
+    fn allows_item_pickup(
+        &self,
+        session: &PlayerSession,
+        stack: tuff_item::item::ItemView<'_>,
+    ) -> bool {
+        if session.inventory.room_for(stack.get()) == 0 {
             return true;
         }
-        !act(session, ItemActionKind::Pickup, stack, stack.count)
+        !act(session, ItemActionKind::Pickup, stack, stack.count())
     }
 }

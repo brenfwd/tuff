@@ -21,12 +21,12 @@ pub enum Event<'a> {
     /// empty). `inventory` is every inventory slot, equipment included.
     InventoryChanged {
         changed: Option<&'a ItemStack>,
-        inventory: &'a [Option<ItemStack>],
+        inventory: &'a [Option<tuff_item::item::ItemView<'a>>],
     },
     RecipeUnlocked(&'a str),
     RecipeCrafted {
         recipe: &'a str,
-        ingredients: &'a [ItemStack],
+        ingredients: &'a [tuff_item::item::ItemSnapshot],
     },
     ConsumeItem(&'a ItemStack),
     /// A block placed by the player, the item it came from.
@@ -89,7 +89,7 @@ pub enum Event<'a> {
     FishingRodHooked {
         rod: &'a ItemStack,
         entity: &'a EntityFacts,
-        items: &'a [ItemStack],
+        items: &'a [tuff_item::item::ItemSnapshot],
     },
     SummonedEntity(&'a EntityFacts),
     UsedTotem(&'a ItemStack),
@@ -181,7 +181,7 @@ pub enum Event<'a> {
     /// A crafter near the player crafted `recipe`.
     CrafterRecipeCrafted {
         recipe: &'a str,
-        ingredients: &'a [ItemStack],
+        ingredients: &'a [tuff_item::item::ItemSnapshot],
     },
     /// The player broke a bee nest or hive holding `bees` bees.
     BeeNestDestroyed {
@@ -295,7 +295,7 @@ impl Event<'_> {
     /// The item an inventory change is about, for indexing criteria.
     pub fn changed_item(&self) -> Option<Item> {
         match self {
-            Self::InventoryChanged { changed, .. } => changed.map(|stack| stack.item),
+            Self::InventoryChanged { changed, .. } => changed.map(|stack| stack.item()),
             _ => None,
         }
     }

@@ -8,17 +8,17 @@ use tuff_vanilla_data::registry::{
 };
 
 use crate::protocol::codec::WriteExt;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack};
 use tuff_wire::PacketWriter;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SlotDisplay {
     Empty,
     AnyFuel,
     WithAnyPotion(Box<SlotDisplay>),
     OnlyWithComponent(Box<SlotDisplay>, DataComponentType),
     Item(Item),
-    Stack(ItemStack),
+    Stack(ItemSnapshot),
     /// The items an ingredient accepts, sent as an inline id set.
     Ingredient(Ingredient),
     Dyed {
@@ -38,7 +38,16 @@ pub enum SlotDisplay {
     Composite(Vec<SlotDisplay>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl SlotDisplay {
+    /// Shows `stack`, a template that never becomes a real item.
+    pub fn template(stack: ItemStack) -> Self {
+        let shown = ItemSnapshot::of(&stack);
+        stack.burn(BurnReason::Template);
+        Self::Stack(shown)
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum RecipeDisplay {
     Shapeless {
         ingredients: Vec<SlotDisplay>,
@@ -76,7 +85,7 @@ pub enum RecipeDisplay {
 
 /// One entry of the recipe book: a display with the id the client refers
 /// to it by.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DisplayEntry {
     pub id: u32,
     /// The name of the recipe it shows.
@@ -118,7 +127,7 @@ pub fn write_slot_display(w: &mut PacketWriter, display: &SlotDisplay) {
             w.write_var_int(component.id() as i32);
         }
         SlotDisplay::Item(item) => w.write_var_int(item.id() as i32),
-        SlotDisplay::Stack(stack) => w.write_item_template(stack),
+        SlotDisplay::Stack(stack) => w.write_item_template(stack.view()),
         SlotDisplay::Ingredient(ingredient) => write_ingredient(w, ingredient),
         SlotDisplay::Dyed { dye, target } => {
             write_slot_display(w, dye);

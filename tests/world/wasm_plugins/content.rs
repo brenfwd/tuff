@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::world::crafting::CraftingInput;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_plugin_wasm::wit::bindings::types::{
     AssetDecl, AssetFile, ContentDecl, DataFile, ItemDecl,
 };
@@ -71,10 +71,10 @@ async fn start_gems(grant: Option<&str>) -> (TestDir, TestWorld) {
     (dir, world)
 }
 
-fn shapeless(stacks: Vec<ItemStack>) -> CraftingInput {
+fn shapeless(stacks: Vec<ItemStack>) -> CraftingInput<'static> {
     let mut slots: Vec<Option<ItemStack>> = stacks.into_iter().map(Some).collect();
-    slots.resize(9, None);
-    CraftingInput::positioned(3, 3, &slots).input
+    slots.resize_with(9, || None);
+    CraftingInput::positioned(3, 3, slots.leak()).input
 }
 
 #[tuff_core::watchdog]
@@ -89,17 +89,17 @@ async fn granted_plugin_content_joins_the_world_at_start() {
     let ruby = ruby.stack(1);
     let recipes = world.shared.recipes();
     let input = shapeless(vec![
-        ruby.clone(),
-        ItemStack::new(Item::Redstone, 1),
-        ruby.clone(),
+        ruby.test_copy(),
+        ItemStack::mint(Item::Redstone, 1, MintReason::Test),
+        ruby.test_copy(),
     ]);
     let (name, recipe) = recipes.find(&input).expect("the recipe crafts");
     assert_eq!(&**name, "gems:ruby_block");
-    assert_eq!(recipe.assemble(&input).unwrap().item, Item::RedstoneBlock);
+    assert_eq!(recipe.assemble(&input).unwrap().item(), Item::RedstoneBlock);
     let emeralds = shapeless(vec![
-        ItemStack::new(Item::Emerald, 1),
-        ItemStack::new(Item::Redstone, 1),
-        ItemStack::new(Item::Emerald, 1),
+        ItemStack::mint(Item::Emerald, 1, MintReason::Test),
+        ItemStack::mint(Item::Redstone, 1, MintReason::Test),
+        ItemStack::mint(Item::Emerald, 1, MintReason::Test),
     ]);
     assert!(
         recipes.find(&emeralds).is_none(),

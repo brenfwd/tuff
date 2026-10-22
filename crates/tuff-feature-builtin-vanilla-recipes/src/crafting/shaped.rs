@@ -110,7 +110,7 @@ impl ShapedPattern {
                     self.at(x, y)
                 };
                 match (expected, input.get(x, y)) {
-                    (Some(ingredient), Some(stack)) => ingredient.matches(stack.item),
+                    (Some(ingredient), Some(stack)) => ingredient.matches(stack.item()),
                     (None, None) => true,
                     _ => false,
                 }
@@ -221,7 +221,9 @@ impl Recipe for Shaped {
                 .iter()
                 .map(|cell| cell.clone().map_or(SlotDisplay::Empty, slot))
                 .collect(),
-            result: SlotDisplay::Stack(result_stack(&self.recipe.result)),
+            result: SlotDisplay::template(tuff_core::world::crafting::result_template(
+                &self.recipe.result,
+            )),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }
@@ -319,7 +321,7 @@ impl Recipe for Shapeless {
         if input.items.len() == 1 && ingredients.len() == 1 {
             return input.items[0]
                 .as_ref()
-                .is_some_and(|stack| ingredients[0].matches(stack.item));
+                .is_some_and(|stack| ingredients[0].matches(stack.item()));
         }
         input.stacked().try_pick(ingredients, 1).is_some()
     }
@@ -331,7 +333,9 @@ impl Recipe for Shapeless {
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: self.recipe.ingredients.iter().cloned().map(slot).collect(),
-            result: SlotDisplay::Stack(result_stack(&self.recipe.result)),
+            result: SlotDisplay::template(tuff_core::world::crafting::result_template(
+                &self.recipe.result,
+            )),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }

@@ -140,7 +140,7 @@ async fn bottles_move_water_a_level_at_a_time() {
     else {
         panic!("{outcome:?}");
     };
-    assert_eq!(stack.item, Item::Potion);
+    assert_eq!(stack.item(), Item::Potion);
     assert_eq!(
         stack.components.potion_contents.as_ref().unwrap().potion,
         Some(Potion::Water)
@@ -199,7 +199,8 @@ async fn water_washes_banners_shulker_boxes_and_dyed_armor() {
                     .with("color", "blue"),
             ),
         ]),
-    ));
+    ))
+    .into();
     let outcome = click(&region, &mut events, banner).await;
     let ActionOutcome::Used {
         effect: HandEffect::ExchangeStack(stack),
@@ -228,7 +229,7 @@ async fn water_washes_banners_shulker_boxes_and_dyed_armor() {
     else {
         panic!("{outcome:?}");
     };
-    assert_eq!(stack.item, Item::ShulkerBox);
+    assert_eq!(stack.item(), Item::ShulkerBox);
     assert_eq!(block_at(&region, pos()).await, Some(water(1)));
 
     set(&region, pos(), water(3)).await;

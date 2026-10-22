@@ -1,4 +1,5 @@
 use super::*;
+use crate::world::conservation::Transfer;
 
 impl RegionActor {
     /// Drops `amount` experience at `position` as orbs, merging into orbs
@@ -136,6 +137,9 @@ impl RegionActor {
     /// enough, holding it for that player until they answer.
     pub(in crate::world::region) fn offer_items(&mut self) {
         let _span = tuff_timings::span!("region.offer_items");
+        if self.quarantined() {
+            return;
+        }
         self.offer_ground_pickups();
         for (id, tracked) in &mut self.ents.entities {
             let Some(item) = tracked.entity.downcast_mut::<ItemEntity>() else {
@@ -165,7 +169,7 @@ impl RegionActor {
                 collector.handle.send(PlayerEvent::OfferItem {
                     item: *id,
                     offer,
-                    stack: item.stack.clone(),
+                    stack: tuff_item::item::ItemSnapshot::of(&item.stack),
                     region: self.handle.clone(),
                 });
             }
@@ -212,7 +216,11 @@ impl RegionActor {
                 }
                 continue;
             }
-            let Some(stack) = pickup.stack else {
+            let Some(stack) = pickup
+                .stack
+                .as_deref()
+                .map(tuff_item::item::ItemSnapshot::of)
+            else {
                 continue;
             };
             let in_range = self.ents.presence.values().filter(touching);
@@ -261,14 +269,9 @@ impl RegionActor {
         if item.reserved.is_some() || item.pickup_delay > 0 {
             return;
         }
-        let taken = count.min(item.stack.count);
-        let mut stack = item.stack.clone();
-        stack.count = taken;
-        let rest = (taken < item.stack.count).then(|| {
-            let mut rest = item.stack.clone();
-            rest.count -= taken;
-            rest
-        });
+        let taken = count.min(item.stack.count());
+        let stack = item.stack.take(taken);
+        let emptied = item.stack.is_empty();
         let thrower = item.thrower();
         let at = item.base.position;
         if let Some(base) = self.ents.entities.get(&collector).map(|t| t.entity.base()) {
@@ -286,11 +289,10 @@ impl RegionActor {
             None => self.ents.taken_stacks.push((collector, stack)),
         }
         self.take_entity(id, collector, i32::from(taken));
-        match rest {
-            Some(rest) => self.set_item_stack(id, rest),
-            None => {
-                self.remove_entity(id, &[]);
-            }
+        if emptied {
+            self.remove_entity(id, &[]);
+        } else {
+            self.refresh_item_stack(id);
         }
     }
 
@@ -334,7 +336,7 @@ impl RegionActor {
         if let Some((handle, _)) = player {
             handle.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::ThrownItemPickedUpByEntity {
-                    item: stack.clone(),
+                    item: tuff_item::item::ItemSnapshot::of(stack),
                     entity: picker,
                 },
             )));
@@ -342,7 +344,7 @@ impl RegionActor {
         if let Some(picked_by) = picked_by {
             picked_by.send(PlayerEvent::Advancement(Box::new(
                 AdvancementEvent::ThrownItemPickedUpByPlayer {
-                    item: stack.clone(),
+                    item: tuff_item::item::ItemSnapshot::of(stack),
                     thrower: facts,
                 },
             )));
@@ -389,7 +391,7 @@ impl RegionActor {
         }
         let pickup = crate::world::region_api::ItemPickup {
             taker,
-            stack: stack.clone(),
+            stack: tuff_item::item::ItemSnapshot::of(stack),
             position,
             thrower,
         };
@@ -458,13 +460,42 @@ impl RegionActor {
                 }
                 return;
             }
-            let Some(stack) = pickup.stack else {
+            if pickup.stack.is_none() {
+                return;
+            }
+            let at = self
+                .ents
+                .entities
+                .get(&id)
+                .map(|t| t.entity.base().position);
+            let pos = BlockPos::containing(at.unwrap_or_default());
+            if !self.may_transfer_with(Transfer::Pickup, pos, player, false) {
+                return;
+            }
+            let Some(held) = self
+                .ents
+                .entities
+                .get_mut(&id)
+                .and_then(|tracked| tracked.entity.ground_pickup())
+                .and_then(|pickup| pickup.stack)
+            else {
                 return;
             };
-            if !player.send(PlayerEvent::ItemGranted {
+            let stack = std::mem::replace(held, ItemStack::empty());
+            if let Err(refused) = player.try_send(PlayerEvent::ItemGranted {
                 stack,
                 picked_up: true,
-            }) {
+            }) && let PlayerEvent::ItemGranted { stack, .. } = *refused
+            {
+                if let Some(held) = self
+                    .ents
+                    .entities
+                    .get_mut(&id)
+                    .and_then(|tracked| tracked.entity.ground_pickup())
+                    .and_then(|pickup| pickup.stack)
+                {
+                    *held = stack;
+                }
                 return;
             }
             self.take_entity(id, player.id, 1);
@@ -484,33 +515,52 @@ impl RegionActor {
             }
             return;
         }
-        let taken = taken.min(item.stack.count);
-        let mut granted = item.stack.clone();
-        granted.count = taken;
-        let thrower = item.thrower();
-        let at = item.base.position;
-        if !player.send(PlayerEvent::ItemGranted {
-            stack: granted.clone(),
-            picked_up: true,
-        }) {
+        let pos = BlockPos::containing(item.base.position);
+        if !self.may_transfer_with(Transfer::Pickup, pos, player, false) {
             return;
         }
-        self.report_pickup(
-            crate::world::region_api::ItemTaker::Player(player.id),
-            &granted,
-            at,
-            thrower,
-        );
         let Some(item) = self.entity_mut::<ItemEntity>(id) else {
             return;
         };
-
+        let before = u64::from(item.stack.count());
+        let taken = taken.min(item.stack.count());
+        let granted = item.stack.take(taken);
+        let after = u64::from(item.stack.count());
+        let shown = tuff_item::item::ItemSnapshot::of(&granted);
+        let thrower = item.thrower();
+        let at = item.base.position;
         let chunk = item.base.chunk();
-        let rest = (taken < item.stack.count).then(|| {
-            let mut rest = item.stack.clone();
-            rest.count -= taken;
-            rest
-        });
+        let sent = u64::from(granted.count());
+        if !self.transfer_balanced(Transfer::Pickup, pos, before, 0, after, sent) {
+            if let Some(item) = self.entity_mut::<ItemEntity>(id)
+                && let Err(stack) = item.stack.join(granted)
+            {
+                self.spawn_item_at(stack, at, [0.0; 3], 0);
+            }
+            return;
+        }
+        if let Err(refused) = player.try_send(PlayerEvent::ItemGranted {
+            stack: granted,
+            picked_up: true,
+        }) {
+            if let PlayerEvent::ItemGranted { stack, .. } = *refused
+                && let Some(item) = self.entity_mut::<ItemEntity>(id)
+                && let Err(stack) = item.stack.join(stack)
+            {
+                debug_assert!(false, "a refused grant no longer fits: {stack:?}");
+                self.spawn_item_at(stack, at, [0.0; 3], 0);
+            }
+            return;
+        }
+        let emptied = self
+            .entity_mut::<ItemEntity>(id)
+            .is_none_or(|item| item.stack.is_empty());
+        self.report_pickup(
+            crate::world::region_api::ItemTaker::Player(player.id),
+            &shown,
+            at,
+            thrower,
+        );
         let take = packets([framed(&play::TakeItemEntity {
             collected: id,
             collector: player.id,
@@ -520,11 +570,10 @@ impl RegionActor {
             entity: id,
             packets: take.clone(),
         });
-        match rest {
-            Some(rest) => self.set_item_stack(id, rest),
-            None => {
-                self.remove_entity(id, &[]);
-            }
+        if emptied {
+            self.remove_entity(id, &[]);
+        } else {
+            self.refresh_item_stack(id);
         }
         let picker = self.ents.presence.get(&player.id).map(|p| p.position);
         if let Some(position) = picker {
@@ -534,22 +583,22 @@ impl RegionActor {
                 dimension: self.dimension().key.clone(),
                 ..Default::default()
             };
-            self.thrown_item_picked_up(thrower, &granted, picker, Some(player));
+            self.thrown_item_picked_up(thrower, &shown, picker, Some(player));
         }
     }
 
-    /// Changes what a dropped item holds, for its viewers too.
-    pub(in crate::world::region) fn set_item_stack(&mut self, id: i32, stack: ItemStack) {
+    /// Tells the viewers of dropped item `id` what it holds now.
+    pub(in crate::world::region) fn refresh_item_stack(&mut self, id: i32) {
         let Some(tracked) = self.ents.entities.get_mut(&id) else {
             return;
         };
-        let Some(item) = tracked.entity.downcast_mut::<ItemEntity>() else {
+        let Some(item) = tracked.entity.downcast_ref::<ItemEntity>() else {
             return;
         };
-        item.stack = stack.clone();
         let chunk = item.base.chunk();
+        let snapshot = tuff_item::item::ItemSnapshot::of(&item.stack);
         let data =
-            tracked.data_packets(&[(metadata::ITEM_STACK, MetadataValue::Slot(Some(stack)))]);
+            tracked.data_packets(&[(metadata::ITEM_STACK, MetadataValue::Slot(Some(snapshot)))]);
         if let Some(column) = self.columns.get_mut(&chunk) {
             column.entities_dirty = true;
         }
@@ -559,18 +608,59 @@ impl RegionActor {
         });
     }
 
+    /// Takes the whole stack out of dropped item `id`, leaving an empty
+    /// husk until [`return_item_stack`](Self::return_item_stack).
+    pub(in crate::world::region) fn take_item_stack(&mut self, id: i32) -> Option<ItemStack> {
+        let item = self.entity_mut::<ItemEntity>(id)?;
+        Some(std::mem::replace(&mut item.stack, ItemStack::empty()))
+    }
+
+    /// Puts what is left of a stack taken with
+    /// [`take_item_stack`](Self::take_item_stack) back into item `id`,
+    /// removing the item when nothing is left and telling viewers when
+    /// its count is no longer `before`.
+    pub(in crate::world::region) fn return_item_stack(
+        &mut self,
+        id: i32,
+        stack: Option<ItemStack>,
+        before: u8,
+    ) {
+        let Some(item) = self.entity_mut::<ItemEntity>(id) else {
+            if let Some(stack) = stack {
+                debug_assert!(false, "returned a stack to a vanished item: {stack:?}");
+                let at = self
+                    .ents
+                    .entities
+                    .get(&id)
+                    .map_or([0.0; 3], |t| t.entity.base().position);
+                self.spawn_item_at(stack, at, [0.0; 3], 0);
+            }
+            return;
+        };
+        let stack = stack.filter(|stack| !stack.is_empty());
+        let after = stack.as_ref().map_or(0, ItemStack::count);
+        if let Some(stack) = stack {
+            item.stack = stack;
+        }
+        if after == 0 {
+            self.remove_entity(id, &[]);
+        } else if after != before {
+            self.refresh_item_stack(id);
+        }
+    }
+
     /// Dropped items whose box meets `area`, in id order.
-    pub(in crate::world::region) fn items_in(&self, area: [f64; 6]) -> Vec<(i32, ItemStack)> {
-        let mut found: Vec<(i32, ItemStack)> = self
+    pub(in crate::world::region) fn items_in(&self, area: [f64; 6]) -> Vec<i32> {
+        let mut found: Vec<i32> = self
             .ents
             .entities
             .iter()
             .filter_map(|(id, tracked)| {
                 let item = tracked.entity.downcast_ref::<ItemEntity>()?;
-                experience::intersects(item.bounds(), area).then(|| (*id, item.stack.clone()))
+                experience::intersects(item.bounds(), area).then_some(*id)
             })
             .collect();
-        found.sort_unstable_by_key(|(id, _)| *id);
+        found.sort_unstable();
         found
     }
 }

@@ -22,7 +22,7 @@ mod sub;
 pub use sub::slot_range;
 
 /// An entity as a predicate sees it.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct EntityFacts {
     pub kind: Option<EntityType>,
     /// The entity id, when the source of the facts knows it.
@@ -32,7 +32,7 @@ pub struct EntityFacts {
     pub dimension: String,
     pub biome: Option<String>,
     pub flags: Flags,
-    pub equipment: Vec<(EquipmentSlot, ItemStack)>,
+    pub equipment: Vec<(EquipmentSlot, tuff_item::item::ItemSnapshot)>,
     pub vehicle: Option<Box<EntityFacts>>,
     pub passengers: Vec<EntityFacts>,
     /// Entity data components such as `minecraft:cat/variant`, by id.
@@ -196,7 +196,7 @@ pub trait PredicateWorld {
 }
 
 /// A damage source.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DamageFacts {
     pub kind: &'static DamageType,
     /// The entity the damage is blamed on.
@@ -358,8 +358,10 @@ pub fn item(predicate: &Value, stack: &ItemStack) -> bool {
         return false;
     };
     fields.iter().all(|(key, value)| match key.as_str() {
-        "items" => in_set(value, stack.item.name(), |tag| item_in_tag(stack.item, tag)),
-        "count" => bounds(value, f64::from(stack.count)),
+        "items" => in_set(value, stack.item().name(), |tag| {
+            item_in_tag(stack.item(), tag)
+        }),
+        "count" => bounds(value, f64::from(stack.count())),
         "components" => value.as_object().is_some_and(|components| {
             let patch = stack.components.to_nbt();
             components.iter().all(|(id, expected)| {
@@ -387,7 +389,7 @@ pub fn item(predicate: &Value, stack: &ItemStack) -> bool {
 /// The prototype value of the item component `id` on `stack` for the
 /// components the item type fixes.
 fn default_component(stack: &ItemStack, id: &str) -> Option<Tag> {
-    let item = stack.item;
+    let item = stack.item();
     let int = |value: u32| Tag::Int(i32::try_from(value).unwrap_or(i32::MAX));
     match id {
         "minecraft:max_stack_size" => Some(Tag::Int(i32::from(item.max_stack_size()))),

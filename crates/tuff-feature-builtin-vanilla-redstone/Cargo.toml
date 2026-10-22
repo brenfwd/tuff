@@ -15,6 +15,7 @@ tuff-vanilla-data = { workspace = true }
 rand = { workspace = true }
 
 [dev-dependencies]
+tuff-item = { workspace = true, features = ["test-support"] }
 tuff-core = { workspace = true, features = ["test-hooks"] }
 tuff-test-support = { workspace = true }
 bytes = { workspace = true }

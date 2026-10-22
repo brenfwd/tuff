@@ -4,7 +4,7 @@
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::DataComponentType;
 
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ComponentsSnapshot, ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 
 use super::args::{Resources, read_identifier, read_nbt_value};
@@ -16,12 +16,25 @@ use super::reader::Reader;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemInput {
     pub item: Item,
-    pub components: Components,
+    pub components: ComponentsSnapshot,
 }
 
 impl ItemInput {
+    /// The item a template pictures.
+    pub fn from_template(template: &ItemSnapshot) -> Self {
+        Self {
+            item: template.item(),
+            components: ComponentsSnapshot::of(&template.components),
+        }
+    }
+
     pub fn stack(&self, count: u8) -> ItemStack {
-        ItemStack::new(self.item, count).with_components(self.components.clone())
+        ItemStack::mint_with(self.item, count, &self.components, MintReason::Command)
+    }
+
+    /// What `/give` and `/item` hand to each target, which mints its own.
+    pub fn template(&self, count: u8) -> ItemSnapshot {
+        ItemSnapshot::describe_with(self.item, count, &self.components)
     }
 }
 
@@ -77,11 +90,11 @@ impl ItemPredicate {
 impl ItemTest {
     fn test(&self, stack: &ItemStack) -> bool {
         match self {
-            Self::Item(item) => stack.item == *item,
-            Self::Tag(_, items) => items.contains(&stack.item),
+            Self::Item(item) => stack.item() == *item,
+            Self::Tag(_, items) => items.contains(&stack.item()),
             Self::HasComponent(id) => stack.components.to_nbt().contains_key(id),
             Self::ComponentEquals(id, value) => stack.components.to_nbt().get(id) == Some(value),
-            Self::Count(range) => range.contains(i32::from(stack.count)),
+            Self::Count(range) => range.contains(i32::from(stack.count())),
             Self::Damage(range) => range.contains(stack.damage() as i32),
             Self::Component(predicate) => predicate.test(stack),
             Self::Custom(id) => crate::custom::item_id(stack) == Some(id.as_str()),
@@ -200,7 +213,7 @@ pub fn parse_item_stack_with(
     }
     Ok(ItemInput {
         item,
-        components: Components::from_nbt(&nbt),
+        components: ComponentsSnapshot::describing(Components::from_nbt(&nbt)),
     })
 }
 
@@ -455,9 +468,9 @@ mod tests {
     #[test]
     fn predicates_match_stacks() {
         let predicate = |input: &str| parse_item_predicate(&mut Reader::new(input)).unwrap();
-        let stone = ItemStack::new(Item::Stone, 5);
-        let cobblestone = ItemStack::new(Item::Cobblestone, 1);
-        let mut sword = ItemStack::new(Item::DiamondSword, 1);
+        let stone = ItemStack::mint(Item::Stone, 5, MintReason::Test);
+        let cobblestone = ItemStack::mint(Item::Cobblestone, 1, MintReason::Test);
+        let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         sword.set_damage(10);
         assert!(predicate("stone").test(&stone));
         assert!(!predicate("stone").test(&sword));
@@ -519,7 +532,7 @@ mod tests {
             .unwrap(),
         )
         .stack(4);
-        let plain = ItemStack::new(Item::Stone, 1);
+        let plain = ItemStack::mint(Item::Stone, 1, MintReason::Test);
         assert!(
             predicate("*[enchantments~[{enchantments:\"sharpness\",levels:{min:2}}]]")
                 .test(&enchanted)

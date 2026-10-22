@@ -2,6 +2,7 @@
 //! else ever touches its state.
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::damage_type;
 use tuff_vanilla_data::registry::SoundEvent;
 
@@ -15,7 +16,7 @@ use crate::world::messages::{
     AttributeAnswer, AttributeOp, DialogRef, Directive, DirectiveReply, DirectiveSource,
     PostEffectOp, SlotFill, Teleport, TitleAction,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemSnapshot, ItemStack, ItemView, MintReason};
 use tuff_item::text::TextComponent;
 
 #[derive(Clone, Copy)]
@@ -114,7 +115,8 @@ impl PlayerSession {
                 self.reply(1, changed, None)
             }
             Directive::Give { stack, count } => {
-                self.give_items(stack, count).await;
+                self.give_items(stack.view(), count, MintReason::Command)
+                    .await;
                 self.reply(1, true, None)
             }
             Directive::Clear {
@@ -588,47 +590,45 @@ impl PlayerSession {
 
     /// `/item` on this player: how many of `ids` the player has, and how
     /// many of them changed.
-    pub fn set_game_slots(&mut self, ids: &[i32], stack: &ItemStack, mode: SlotFill) -> (i32, i32) {
+    pub fn set_game_slots(
+        &mut self,
+        ids: &[i32],
+        stack: &ItemSnapshot,
+        mode: SlotFill,
+    ) -> (i32, i32) {
         let (mut selected, mut changed) = (0, 0);
         for id in ids {
             let Some(slot) = self.game_slot(*id) else {
                 continue;
             };
+            let mint = || ItemStack::mint_like(stack, stack.count(), MintReason::Command);
             let value = match mode {
-                SlotFill::Fill => Some(Some(stack.clone())),
-                SlotFill::Replace if selected == 0 => Some(Some(stack.clone())),
-                SlotFill::Override => Some((selected == 0).then(|| stack.clone())),
+                SlotFill::Fill => Some(Some(mint())),
+                SlotFill::Replace if selected == 0 => Some(Some(mint())),
+                SlotFill::Override => Some((selected == 0).then(mint)),
                 SlotFill::Replace => None,
             };
             selected += 1;
             let Some(value) = value else {
                 continue;
             };
-            self.write_game_slot(slot, value.filter(|stack| stack.count > 0));
+            let value = value.and_then(|value| {
+                if value.count() > 0 {
+                    Some(value)
+                } else {
+                    value.burn(BurnReason::Command);
+                    None
+                }
+            });
+            if let Some(old) = self.write_game_slot(slot, value) {
+                old.burn(BurnReason::Command);
+            }
             changed += 1;
         }
         if changed > 0 {
             self.send_inventory();
         }
         (selected, changed)
-    }
-
-    fn read_game_slot(&self, slot: GameSlot) -> Option<ItemStack> {
-        match slot {
-            GameSlot::Window(slot) => self.inventory.slots().get(slot).cloned().flatten(),
-            GameSlot::Cursor => self.inventory.carried().cloned(),
-            GameSlot::Ender(index) => {
-                let container = match &self.menus.menu {
-                    Some(OpenMenu {
-                        backing: MenuBacking::EnderChest(_),
-                        container,
-                        ..
-                    }) => container,
-                    _ => &self.menus.ender_items,
-                };
-                container.get(index).cloned().flatten()
-            }
-        }
     }
 
     /// `/item modify` on this player: how many of `ids` hold an item, and
@@ -646,11 +646,17 @@ impl PlayerSession {
                 continue;
             };
             let stack = self
-                .read_game_slot(slot)
-                .unwrap_or_else(|| ItemStack::new(tuff_vanilla_data::registry::Item::Air, 0));
+                .write_game_slot(slot, None)
+                .unwrap_or_else(ItemStack::empty);
             selected += 1;
             let result = loot.modify_item(functions, stack, &mut rng);
-            self.write_game_slot(slot, Some(result).filter(|stack| stack.count > 0));
+            let result = if result.count() > 0 {
+                Some(result)
+            } else {
+                result.burn(BurnReason::Command);
+                None
+            };
+            self.write_game_slot(slot, result);
             changed += 1;
         }
         if changed > 0 {
@@ -659,10 +665,10 @@ impl PlayerSession {
         (selected, changed)
     }
 
-    fn write_game_slot(&mut self, slot: GameSlot, value: Option<ItemStack>) {
+    fn write_game_slot(&mut self, slot: GameSlot, value: Option<ItemStack>) -> Option<ItemStack> {
         match slot {
-            GameSlot::Window(slot) => self.inventory.set_slot(slot, value),
-            GameSlot::Cursor => self.inventory.set_carried(value),
+            GameSlot::Window(slot) => std::mem::replace(self.inventory.slot_mut(slot), value),
+            GameSlot::Cursor => std::mem::replace(self.inventory.carried_mut(), value),
             GameSlot::Ender(index) => {
                 let container = match &mut self.menus.menu {
                     Some(OpenMenu {
@@ -672,23 +678,48 @@ impl PlayerSession {
                     }) => container,
                     _ => &mut self.menus.ender_items,
                 };
-                if let Some(entry) = container.get_mut(index) {
-                    *entry = value;
+                match container.get_mut(index) {
+                    Some(entry) => std::mem::replace(entry, value),
+                    None => value,
                 }
             }
         }
     }
 
-    /// `/give`: stacks up to the item's size, dropped at the player when
-    /// the inventory is full.
-    pub async fn give_items(&mut self, stack: ItemStack, count: i32) {
-        let max = i32::from(stack.max_stack_size().max(1));
+    /// `/give`: mints `count` items like `template` for `reason`, stacked
+    /// up to the item's size and dropped at the player when the inventory
+    /// is full.
+    pub async fn give_items(&mut self, template: ItemView<'_>, count: i32, reason: MintReason) {
+        let max = i32::from(template.max_stack_size().max(1));
         let mut remaining = count;
-        let mut added_any = false;
+        let mut parts = Vec::new();
         while remaining > 0 {
             let size = remaining.min(max);
             remaining -= size;
-            let part = stack.clone().with_count(size as u8);
+            parts.push(ItemStack::mint_like(template, size as u8, reason));
+        }
+        let fake = ItemSnapshot::of(template).with_count(1);
+        self.give_parts(parts, fake).await;
+    }
+
+    /// Moves `stack` into the inventory, split to the item's stack size,
+    /// dropping what does not fit.
+    pub async fn give_stack(&mut self, mut stack: ItemStack) {
+        let fake = ItemSnapshot::of(&stack).with_count(1);
+        let max = stack.max_stack_size().max(1);
+        let mut parts = Vec::new();
+        while stack.count() > max {
+            parts.push(stack.take(max));
+        }
+        if !stack.is_empty() {
+            parts.push(stack);
+        }
+        self.give_parts(parts, fake).await;
+    }
+
+    async fn give_parts(&mut self, parts: Vec<ItemStack>, fake: ItemSnapshot) {
+        let mut added_any = false;
+        for part in parts {
             match self.inventory.add(part) {
                 Some(leftover) => {
                     let eye = self.eye();
@@ -704,7 +735,7 @@ impl PlayerSession {
             if let Some(handle) = self.region(region).await {
                 handle
                     .request(RegionRequest::SpawnFakeItem {
-                        stack: stack.clone().with_count(1),
+                        stack: fake,
                         position: [eye[0], eye[1] - 0.3, eye[2]],
                     })
                     .await;
@@ -736,13 +767,13 @@ impl PlayerSession {
         let matches = |stack: &ItemStack| predicate.is_none_or(|predicate| predicate.test(stack));
         let slots = self.inventory.slots().len();
         for slot in 0..slots {
-            let Some(stack) = self.inventory.slots()[slot].clone() else {
+            let Some(stack) = &self.inventory.slots()[slot] else {
                 continue;
             };
-            if !matches(&stack) {
+            if !matches(stack) {
                 continue;
             }
-            let count = i32::from(stack.count);
+            let count = i32::from(stack.count());
             if counting {
                 removed += count;
                 continue;
@@ -750,28 +781,30 @@ impl PlayerSession {
             let take = count.min(budget);
             budget -= take;
             removed += take;
-            let left = count - take;
-            self.inventory.set_slot(
-                slot,
-                (left > 0).then(|| stack.clone().with_count(left as u8)),
+            ItemStack::burn_from(
+                self.inventory.slot_mut(slot),
+                take as u8,
+                BurnReason::Command,
             );
             if budget == 0 {
                 break;
             }
         }
-        if let Some(carried) = self.inventory.carried().cloned()
-            && matches(&carried)
+        if let Some(carried) = self.inventory.carried()
+            && matches(carried)
             && budget > 0
         {
-            let count = i32::from(carried.count);
+            let count = i32::from(carried.count());
             if counting {
                 removed += count;
             } else {
                 let take = count.min(budget);
                 removed += take;
-                let left = count - take;
-                self.inventory
-                    .set_carried((left > 0).then(|| carried.with_count(left as u8)));
+                ItemStack::burn_from(
+                    self.inventory.carried_mut(),
+                    take as u8,
+                    BurnReason::Command,
+                );
             }
         }
         if !counting {
@@ -784,7 +817,7 @@ impl PlayerSession {
     /// `/enchant`: puts an enchantment on the main-hand item if the item
     /// takes it and nothing on it conflicts.
     pub fn enchant_hand(&mut self, enchantment: &str, level: i32) -> DirectiveReply {
-        let Some(stack) = self.inventory.hand(false).cloned() else {
+        let Some(stack) = self.inventory.hand(false) else {
             return self.reply(
                 0,
                 false,
@@ -794,8 +827,8 @@ impl PlayerSession {
                 )),
             );
         };
-        let updated = match crate::world::messages::enchant_stack(&stack, enchantment, level) {
-            Ok(updated) => updated,
+        let enchantments = match crate::world::messages::enchant_stack(stack, enchantment, level) {
+            Ok(enchantments) => enchantments,
             Err(crate::world::messages::EnchantAnswer::Incompatible(item)) => {
                 return self.reply(
                     0,
@@ -810,7 +843,9 @@ impl PlayerSession {
         };
         let selected = self.inventory.selected();
         let slot = Inventory::hotbar_slot(selected);
-        self.inventory.set_slot(slot, Some(updated));
+        if let Some(stack) = self.inventory.slot_mut(slot) {
+            stack.components.enchantments = enchantments;
+        }
         self.send_inventory();
         self.reply(1, true, None)
     }

@@ -18,7 +18,7 @@ fn use_on(player: &PlayerHandle, target: BlockPos, item: Option<Item>, sequence:
     let mut click = place(player, target, item.unwrap_or(Item::Stick), sequence);
     click.item = None;
     click.held = item;
-    click
+    offering(click)
 }
 
 struct Setup {
@@ -153,7 +153,7 @@ async fn decorated_pots_take_one_matching_item_per_click() {
             matches!(
                 result,
                 ActionOutcome::Used {
-                    effect: HandEffect::Consume(1),
+                    effect: HandEffect::None,
                     ..
                 }
             ),
@@ -678,7 +678,7 @@ async fn a_fake_item_appears_and_leaves_without_being_collectable() {
     let at = s.above;
     s.region
         .request(RegionRequest::SpawnFakeItem {
-            stack: ItemStack::new(Item::Stone, 1),
+            stack: tuff_item::item::ItemSnapshot::describe(Item::Stone, 1, Default::default()),
             position: [at.x as f64 + 0.5, at.y as f64 + 3.0, at.z as f64 + 0.5],
         })
         .await;
@@ -792,7 +792,7 @@ async fn flower_pots_take_a_plant_and_give_it_back() {
     bare.held = None;
     s.region.request(RegionRequest::Place(bare)).await;
     expect(&mut s.events, |event| match event {
-        PlayerEvent::ItemGranted { stack, .. } => (stack.item == Item::OakSapling).then_some(()),
+        PlayerEvent::ItemGranted { stack, .. } => (stack.item() == Item::OakSapling).then_some(()),
         _ => None,
     })
     .await;
@@ -861,7 +861,7 @@ async fn adventure_placing_needs_a_matching_can_place_on_predicate() {
     ] {
         let mut click = place(&s.player, floor, Item::Stone, seq);
         click.may_build = false;
-        click.components = adventure_components("minecraft:can_place_on", block);
+        click.components = adventure_components("minecraft:can_place_on", block).into();
         s.region.request(RegionRequest::Place(click)).await;
         let result = outcome(&mut s.events, seq).await;
         assert_eq!(matches!(result, ActionOutcome::Placed { .. }), placed);
@@ -887,13 +887,13 @@ async fn adventure_breaking_needs_a_matching_can_break_predicate() {
     place_blocks(&s.world, &s.region, [(target, Block::Dirt.default_state())]).await;
     let eye = [1.5, target.y as f64 + 1.62, 2.5];
     for (seq, block, broken) in [(1, "minecraft:stone", false), (2, "minecraft:dirt", true)] {
-        let mut tool = ItemStack::new(Item::Stick, 1);
+        let mut tool = ItemStack::mint(Item::Stick, 1, MintReason::Test);
         tool.components = adventure_components("minecraft:can_break", block);
         s.region
             .request(RegionRequest::BreakRestricted {
                 player: s.player.clone(),
                 pos: target,
-                tool: Some(tool),
+                tool: Some(tuff_item::item::ItemSnapshot::of(&tool)),
                 mode: BreakMode::Verified {
                     ticks: 1000,
                     eye,

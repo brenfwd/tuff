@@ -649,7 +649,7 @@ pub struct BossBarState {
 
 /// Damage an entity (a mob's attack, a projectile) does to a player or
 /// another entity.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct EntityHit {
     pub amount: f32,
     pub kind: &'static DamageType,
@@ -677,7 +677,7 @@ pub struct EntityHit {
     /// Seconds of fire the hit sets the victim alight for, if it lands.
     pub ignite: f32,
     /// The attacker's weapon: its enchantments act on the victim.
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     /// The part hit, for entities made of parts.
     pub part: Option<usize>,
     /// Status effects the victim gets if the hit lands (a wither
@@ -895,16 +895,20 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// What it wears and holds in each slot it has, by equipment slot id,
     /// for viewers.
-    fn equipment(&self) -> Vec<(u8, Option<ItemStack>)> {
+    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> {
         Vec::new()
     }
 
     /// What it holds in its main hand; `None` when it has no hands.
-    fn main_hand_item(&self) -> Option<Option<ItemStack>> {
+    fn main_hand_item(&self) -> Option<Option<tuff_item::item::ItemView<'_>>> {
         None
     }
 
-    fn set_main_hand_item(&mut self, _stack: Option<ItemStack>) {}
+    /// Puts `stack` in its main hand and hands back what was there (or
+    /// `stack` itself when it has no hands).
+    fn replace_main_hand_item(&mut self, stack: Option<ItemStack>) -> Option<ItemStack> {
+        stack
+    }
 
     /// Whether its equipment changed since last asked.
     fn take_equipment_changed(&mut self) -> bool {
@@ -933,10 +937,11 @@ pub trait RegionEntity: Any + Send + Debug {
     }
 
     /// A dispenser fires `stack` at it (equipping, a brush, a chest);
-    /// `None` when it has no use for the item.
+    /// `None` when it has no use for the item. An item it keeps is taken
+    /// from `stack`.
     fn dispensed_on(
         &mut self,
-        _stack: &ItemStack,
+        _stack: &crate::world::region_api::Fired,
         _context: &mut TickContext,
     ) -> Option<crate::world::region_api::DispenseOutcome> {
         None
@@ -1019,22 +1024,28 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// The slots of an inventory players can open on it (a chest boat),
     /// which the region serves as a menu like a block container.
-    fn container(&self) -> Option<&[Option<ItemStack>]> {
+    fn container(&self) -> Option<crate::world::entity_slots::ContainerSlots<'_>> {
         None
     }
 
-    fn container_mut(&mut self) -> Option<&mut [Option<ItemStack>]> {
+    fn container_mut(&mut self) -> Option<crate::world::entity_slots::ContainerSlotsMut<'_>> {
         None
+    }
+
+    /// Takes every item the entity holds (its container, equipment and
+    /// anything it carries), before it is removed for good.
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        Vec::new()
     }
 
     /// What the entity holds on display or wears, indexed by the slot
     /// numbers its held-item edits report (an item frame, an armor stand).
-    fn held_items(&self) -> Option<Vec<Option<ItemStack>>> {
+    fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {
         None
     }
 
-    /// Sets held slots as [`Self::held_items`] indexes them; false if
-    /// none was valid.
+    /// Sets held slots as [`Self::held_items`] indexes them, burning what
+    /// they held (only features set them); false if none was valid.
     fn set_held_items(&mut self, _slots: Vec<(usize, Option<ItemStack>)>) -> bool {
         false
     }
@@ -1058,7 +1069,7 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// The menu its container opens as; a 9-wide grid by default.
     fn container_menu(&self) -> crate::world::menu::MenuKind {
-        let rows = self.container().map_or(0, <[_]>::len) / 9;
+        let rows = self.container().map_or(0, |slots| slots.len()) / 9;
         crate::world::menu::MenuKind::Generic { rows: rows as u8 }
     }
 

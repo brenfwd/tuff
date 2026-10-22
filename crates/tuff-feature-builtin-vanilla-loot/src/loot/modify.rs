@@ -1,4 +1,5 @@
 use super::*;
+use tuff_item::item::BurnReason;
 
 /// Runs item modifier `functions` over one stack, as a command does:
 /// no block, entity or tool in the context. The result is limited to the
@@ -32,32 +33,45 @@ pub fn modify_item(functions: &[LootFunction], stack: ItemStack, rng: &mut impl 
             "minecraft:set_count" => {
                 if let Some(value) = json_int(&params["count"], rng, context.scores().as_ref()) {
                     let count = if params["add"].as_bool() == Some(true) {
-                        i64::from(stack.count) + value
+                        i64::from(stack.count()) + value
                     } else {
                         value
                     };
-                    stack.count = count.clamp(0, 255) as u8;
+                    stack.resize(
+                        count.clamp(0, 255) as u8,
+                        MintReason::Loot,
+                        BurnReason::Loot,
+                    );
                 }
             }
             "minecraft:limit_count" => {
-                let count = limit_count(&params["limit"], i64::from(stack.count), rng);
-                stack.count = count.clamp(0, 255) as u8;
+                let count = limit_count(&params["limit"], i64::from(stack.count()), rng);
+                stack.resize(
+                    count.clamp(0, 255) as u8,
+                    MintReason::Loot,
+                    BurnReason::Loot,
+                );
             }
             "minecraft:set_item" => {
                 if let Some(item) = params["item"].as_str().and_then(Item::from_name) {
-                    stack = ItemStack::new(item, stack.count).with_components(stack.components);
+                    let count = stack.count();
+                    stack = stack.into_item(item, count, MintReason::Loot, BurnReason::Loot);
                 }
             }
             "minecraft:furnace_smelt" => {
-                if let Some(recipe) = smelting_recipe(stack.item) {
+                if let Some(recipe) = smelting_recipe(stack.item()) {
                     let input = if params["use_input_count"].as_bool() == Some(false) {
                         1
                     } else {
-                        u64::from(stack.count)
+                        u64::from(stack.count())
                     };
                     let count = (input * recipe.result.count).min(255) as u8;
-                    stack =
-                        ItemStack::new(recipe.result.item, count).with_components(stack.components);
+                    stack = stack.into_item(
+                        recipe.result.item,
+                        count,
+                        MintReason::Loot,
+                        BurnReason::Loot,
+                    );
                 }
             }
             "minecraft:set_name" => {
@@ -74,6 +88,10 @@ pub fn modify_item(functions: &[LootFunction], stack: ItemStack, rng: &mut impl 
             kind => stack = modify_stack(stack, kind, &params, &context, rng),
         }
     }
-    stack.count = stack.count.min(stack.max_stack_size());
+    stack.resize(
+        stack.count().min(stack.max_stack_size()),
+        MintReason::Loot,
+        BurnReason::Loot,
+    );
     stack
 }

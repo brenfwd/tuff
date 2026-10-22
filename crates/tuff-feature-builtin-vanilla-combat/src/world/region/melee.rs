@@ -45,11 +45,11 @@ impl RegionHooks for CombatRegionHooks {
         pos: BlockPos,
         facing: Facing,
         origin: [f64; 3],
-        stack: &ItemStack,
+        stack: &tuff_core::world::region_api::Fired,
     ) -> Option<DispenseOutcome> {
         let (sx, sy, sz) = facing.step();
         let step = [f64::from(sx), f64::from(sy), f64::from(sz)];
-        match stack.item {
+        match stack.item() {
             Item::Arrow | Item::TippedArrow | Item::SpectralArrow => {
                 let velocity = projectile::shot_velocity(
                     step,
@@ -58,8 +58,13 @@ impl RegionHooks for CombatRegionHooks {
                     world.rng(),
                 );
                 let id = world.shared().next_entity_id();
-                let mut arrow =
-                    Arrow::from_item(stack, id, origin, velocity, projectile::Owner::default());
+                let mut arrow = Arrow::from_item(
+                    stack.take()?,
+                    id,
+                    origin,
+                    velocity,
+                    projectile::Owner::default(),
+                );
                 arrow.pickup = Pickup::Allowed;
                 world.add_entity(Box::new(arrow));
                 Some(DispenseOutcome::Launched { sound: None })
@@ -78,7 +83,7 @@ impl RegionHooks for CombatRegionHooks {
                     id,
                     position,
                     velocity,
-                    stack,
+                    stack.take()?,
                     projectile::Owner::default(),
                     world.rng(),
                 );
@@ -113,7 +118,7 @@ impl RegionHooks for CombatRegionHooks {
                     id,
                     origin,
                     velocity,
-                    stack.clone(),
+                    stack.take()?,
                     projectile::Owner::default(),
                 );
                 world.add_entity(Box::new(thrown));
@@ -207,7 +212,7 @@ fn armor_post_attack(
                 5 => EquipmentSlot::Head,
                 _ => return None,
             };
-            Some((slot, stack.as_ref()?))
+            Some((slot, stack.as_ref()?.get()))
         })
         .collect();
     if worn.is_empty() {

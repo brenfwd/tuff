@@ -43,7 +43,7 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
         dimension: tuff_core::world::dimension::DimensionId,
         origin: tuff_world_model::BlockPos,
         stack: &tuff_item::item::ItemStack,
-    ) -> Option<tokio::sync::oneshot::Receiver<Option<tuff_item::item::ItemStack>>> {
+    ) -> Option<tuff_core::world::exploration::Answer> {
         exploration::finish(shared, dimension, origin, stack)
     }
 
@@ -166,7 +166,7 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
     use tuff_core::world::drops::{BlockLoot, NoBlockLoot};
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
     use tuff_vanilla_data::registry::EntityType;
 
@@ -187,8 +187,8 @@ mod tests {
             ..EntityFacts::default()
         };
         let drops = loot.entity_drops("minecraft:entities/cow", &facts, &mut rng);
-        assert!(drops.iter().any(|s| s.item == Item::Beef));
-        let rod = ItemStack::new(Item::FishingRod, 1);
+        assert!(drops.iter().any(|s| s.item() == Item::Beef));
+        let rod = ItemStack::mint(Item::FishingRod, 1, MintReason::Test);
         assert_eq!(loot.fishing(0.0, true, &rod, &mut rng).len(), 1);
 
         let none = NoBlockLoot;

@@ -2,15 +2,19 @@ use super::*;
 
 /// A container's item slots at a position, read-only (see
 /// [`TickContext::container`]).
-pub(super) type ContainerView<'a> = std::borrow::Cow<'a, [Option<ItemStack>]>;
+pub(super) type ContainerView<'a> = tuff_item::item::SlotsCow<'a>;
 
 /// What examining a target chest resolves to: sampled on arrival for the
 /// sound and animation, and again when the dwell ends for the transfer.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(super) enum Outcome {
-    Take { stack: ItemStack },
+    Take {
+        stack: tuff_item::item::ItemSnapshot,
+    },
     TakeFail,
-    Deposit { stack: ItemStack },
+    Deposit {
+        stack: tuff_item::item::ItemSnapshot,
+    },
     DepositFail,
 }
 
@@ -246,8 +250,8 @@ impl TransportItems {
         if Self::picking_up(mob) {
             match items.iter().flatten().next() {
                 Some(stack) => {
-                    let mut stack = stack.clone();
-                    stack.count = stack.count.min(TAKE_MAX);
+                    let stack = tuff_item::item::ItemSnapshot::of(stack)
+                        .with_count(stack.count().min(TAKE_MAX));
                     Outcome::Take { stack }
                 }
                 None => Outcome::TakeFail,
@@ -258,10 +262,10 @@ impl TransportItems {
                 return Outcome::DepositFail;
             };
             let empty = items.iter().all(Option::is_none);
-            let matches = empty || items.iter().flatten().any(|s| s.item == held.item);
+            let matches = empty || items.iter().flatten().any(|s| s.item() == held.item());
             if matches {
                 Outcome::Deposit {
-                    stack: held.clone(),
+                    stack: tuff_item::item::ItemSnapshot::of(held),
                 }
             } else {
                 Outcome::DepositFail
@@ -326,23 +330,19 @@ impl TransportItems {
                 self.visited.clear();
             }
             Outcome::Deposit { stack } => {
-                let mut view = (cx.container)(target).unwrap_or_default().into_owned();
-                let (left, _) = tuff_core::world::block_entity::golem_place(
-                    &mut view,
-                    stack.clone(),
-                    &mut Vec::new(),
-                );
-                let placed = stack.count - left.as_ref().map_or(0, |l| l.count);
-                if placed > 0 {
+                let view = (cx.container)(target).unwrap_or_default();
+                let placed = tuff_core::world::block_entity::golem_room(view.iter(), &stack);
+                if placed > 0
+                    && let Some(given) = mob.equipment.take_some(EquipmentSlot::Mainhand, placed)
+                {
                     cx.effects.push(Effect::CopperGolemDeposit {
                         pos: target,
-                        stack: stack.with_count(placed),
+                        stack: given,
                     });
                 }
-                if left.is_none() {
+                if mob.equipment.get(EquipmentSlot::Mainhand).is_none() {
                     self.visited.clear();
                 }
-                mob.equipment.set(EquipmentSlot::Mainhand, left);
             }
             Outcome::TakeFail | Outcome::DepositFail => {}
         }

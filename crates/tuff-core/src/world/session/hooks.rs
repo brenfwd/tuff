@@ -19,7 +19,6 @@ use crate::protocol::play::Serverbound;
 use crate::world::contact::PortalContact;
 use crate::world::menu::MenuKind;
 use crate::world::messages::PlayerEvent;
-use tuff_item::item::ItemStack;
 
 /// What an async hook returns.
 pub type HookFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
@@ -29,7 +28,7 @@ fn done<'a>() -> HookFuture<'a> {
 }
 
 /// What an interceptor decides about one serverbound packet.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Verdict {
     /// Pass it on unchanged.
     Allow,
@@ -140,7 +139,13 @@ pub trait SessionHooks: Send + Sync {
     }
 
     /// The player did `action` with `stack`. Observe only.
-    fn item_action(&self, _session: &PlayerSession, _action: ItemAction, _stack: &ItemStack) {}
+    fn item_action(
+        &self,
+        _session: &PlayerSession,
+        _action: ItemAction,
+        _stack: tuff_item::item::ItemView<'_>,
+    ) {
+    }
 
     /// A feature's take removed `removed` of `requested` `item` from the
     /// player's inventory. Observe only.
@@ -198,7 +203,11 @@ pub trait SessionHooks: Send + Sync {
 
     /// Whether the player may take the dropped item `stack` offered to
     /// them; any hook saying no leaves it on the ground.
-    fn allows_item_pickup(&self, _session: &PlayerSession, _stack: &ItemStack) -> bool {
+    fn allows_item_pickup(
+        &self,
+        _session: &PlayerSession,
+        _stack: tuff_item::item::ItemView<'_>,
+    ) -> bool {
         true
     }
 
@@ -398,7 +407,7 @@ impl PlayerSession {
         }
     }
 
-    pub fn item_action_hooks(&self, action: ItemAction, stack: &ItemStack) {
+    pub fn item_action_hooks(&self, action: ItemAction, stack: tuff_item::item::ItemView<'_>) {
         for hook in self.shared.session_hooks.iter() {
             hook.item_action(self, action, stack);
         }

@@ -84,7 +84,7 @@ struct Config {
 
 struct Vault {
     config: Config,
-    display_item: Option<ItemStack>,
+    display_item: Option<tuff_item::item::ItemSnapshot>,
     connected: Vec<u128>,
     connected_range: f64,
     rewarded: Vec<u128>,
@@ -93,6 +93,17 @@ struct Vault {
     total_ejections: i32,
     shared_dirty: bool,
     server_dirty: bool,
+}
+
+/// A vault is read from and written back to its block entity's NBT, which
+/// keeps its items between ticks.
+impl Drop for Vault {
+    fn drop(&mut self) {
+        tuff_item::item::conservation::release((
+            self.config.key_item.take(),
+            std::mem::take(&mut self.items_to_eject),
+        ));
+    }
 }
 
 fn is_vault(nbt: &Compound) -> bool {
@@ -125,7 +136,7 @@ fn uuids(nbt: &Compound, key: &str) -> Vec<u128> {
 }
 
 fn stack_in(nbt: &Compound, key: &str) -> Option<ItemStack> {
-    ItemStack::from_nbt(nbt.get_compound(key)?)
+    ItemStack::from_storage(nbt.get_compound(key)?)
 }
 
 impl Vault {
@@ -151,7 +162,7 @@ impl Vault {
                     .get_str("override_loot_table_to_display")
                     .map(str::to_owned),
             },
-            display_item: stack_in(shared, "display_item"),
+            display_item: stack_in(shared, "display_item").map(ItemStack::into_template),
             connected: uuids(shared, "connected_players"),
             connected_range: double(
                 shared,
@@ -164,7 +175,7 @@ impl Vault {
                 .get_list("items_to_eject")
                 .into_iter()
                 .flatten()
-                .filter_map(|tag| ItemStack::from_nbt(tag.as_compound()?))
+                .filter_map(|tag| ItemStack::from_storage(tag.as_compound()?))
                 .collect(),
             total_ejections: long(server, "total_ejections_needed") as i32,
             shared_dirty: false,
@@ -202,7 +213,7 @@ impl Vault {
         nbt.insert("server_data", server);
     }
 
-    fn set_display(&mut self, stack: Option<ItemStack>) {
+    fn set_display(&mut self, stack: Option<tuff_item::item::ItemSnapshot>) {
         if self.display_item != stack {
             self.display_item = stack;
             self.shared_dirty = true;
@@ -218,8 +229,10 @@ impl Vault {
         self.server_dirty = true;
     }
 
-    fn next_to_eject(&self) -> Option<ItemStack> {
-        self.items_to_eject.last().cloned()
+    fn next_to_eject(&self) -> Option<tuff_item::item::ItemSnapshot> {
+        self.items_to_eject
+            .last()
+            .map(tuff_item::item::ItemSnapshot::of)
     }
 
     fn ejection_progress(&self) -> f32 {
@@ -273,7 +286,11 @@ impl Vault {
             return;
         }
         let pick = world.rng().gen_range(0..items.len());
-        self.set_display(Some(items.swap_remove(pick)));
+        let shown = items.swap_remove(pick).into_template();
+        for rest in items {
+            rest.burn(tuff_item::item::BurnReason::Template);
+        }
+        self.set_display(Some(shown));
     }
 }
 
@@ -469,8 +486,12 @@ pub fn use_block(
     if !vault.can_eject(State::Active) {
         return interacted;
     }
-    let key = vault.config.key_item.clone()?;
-    if key.item != held || key.components != place.components || place.held_count < key.count {
+    let key = vault
+        .config
+        .key_item
+        .as_ref()
+        .map(tuff_item::item::ItemSnapshot::of)?;
+    if key.item() != held || key.components != *place.components || place.held_count < key.count() {
         play_fail(world, pos, SoundEvent::BlockVaultInsertItemFail);
         return interacted;
     }
@@ -513,6 +534,6 @@ pub fn use_block(
     Some(ActionOutcome::Used {
         off_hand: place.off_hand,
         item: held,
-        effect: HandEffect::Consume(key.count),
+        effect: HandEffect::Consume(key.count()),
     })
 }

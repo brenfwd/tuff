@@ -7,6 +7,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 use tuff_vanilla_data::{Item, tag};
 
@@ -258,17 +259,21 @@ impl Fox {
     fn eat_from_mouth(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         self.ticks_since_eaten += 1;
         let slot = EquipmentSlot::Mainhand;
-        let Some(held) = core.equipment.get(slot).cloned() else {
+        let Some(held) = core.equipment.get(slot) else {
             return;
         };
-        let consumable = held.item.food().is_some() && held.consumable().is_some();
+        let consumable = held.item().food().is_some() && held.consumable().is_some();
         if !(consumable && core.target.is_none() && core.base.on_ground && !core.sleeping) {
             return;
         }
         if self.ticks_since_eaten > EAT_TICKS {
-            let mut rest = held;
-            rest.count = rest.count.saturating_sub(1);
-            core.equipment.set(slot, (rest.count > 0).then_some(rest));
+            if let Some(mut rest) = core.equipment.take(slot) {
+                rest.shrink(1, BurnReason::Consumed);
+                if rest.count() > 0 {
+                    let none = core.equipment.replace(slot, Some(rest));
+                    debug_assert!(none.is_none());
+                }
+            }
             self.ticks_since_eaten = 0;
         } else if self.ticks_since_eaten > EAT_TICKS - 40 && cx.rng.gen_range(0.0..1.0f32) < 0.1 {
             core.sound(SoundEvent::EntityFoxEat, 1.0, 1.0, cx);
@@ -365,7 +370,7 @@ impl Species for Fox {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        fox_food(stack.item)
+        fox_food(stack.item())
     }
 
     fn offspring(&self, partner: &Self, rng: &mut StdRng) -> Self {
@@ -406,6 +411,7 @@ mod tests {
     use crate::goals::Tempt;
     use crate::tests::with_world;
     use tuff_core::protocol::play::metadata::POSE;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Block;
 
     fn roofed(pos: BlockPos) -> Option<tuff_vanilla_data::BlockState> {
@@ -562,29 +568,35 @@ mod tests {
             core.base.on_ground = true;
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::SweetBerries, 2)),
+                Some(ItemStack::mint(Item::SweetBerries, 2, MintReason::Test)),
             );
             for _ in 0..EAT_TICKS {
                 fox.tick(core, cx);
             }
             assert_eq!(
-                core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.count),
+                core.equipment
+                    .get(EquipmentSlot::Mainhand)
+                    .map(|s| s.count()),
                 Some(2)
             );
             fox.tick(core, cx);
             assert_eq!(
-                core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.count),
+                core.equipment
+                    .get(EquipmentSlot::Mainhand)
+                    .map(|s| s.count()),
                 Some(1)
             );
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::Feather, 1)),
+                Some(ItemStack::mint(Item::Feather, 1, MintReason::Test)),
             );
             for _ in 0..EAT_TICKS + 5 {
                 fox.tick(core, cx);
             }
             assert_eq!(
-                core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.count),
+                core.equipment
+                    .get(EquipmentSlot::Mainhand)
+                    .map(|s| s.count()),
                 Some(1)
             );
         });

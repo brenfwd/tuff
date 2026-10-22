@@ -322,9 +322,9 @@ pub fn interact<S: Species>(
     interaction: &EntityInteraction,
     cx: &mut TickContext,
 ) -> InteractOutcome {
-    let stack = interaction.stack.as_ref()?;
+    let stack = interaction.stack.as_deref()?;
     let core = &mut mob.core;
-    if stack.item == Item::GoldenDandelion
+    if stack.item() == Item::GoldenDandelion
         && core.is_baby()
         && core.age.as_ref().is_some_and(|a| a.lock_cooldown == 0)
         && !tuff_core::world::entity_in_tag(core.base.kind, "cannot_be_age_locked")
@@ -346,7 +346,7 @@ pub fn interact<S: Species>(
         core.sound_as(sound, play::sound_category::PLAYERS, 1.0, 1.0, cx);
         return Some(HandEffect::Consume(1));
     }
-    if core.age.is_some() && stack.item.spawns_entity() == Some(core.base.kind) {
+    if core.age.is_some() && stack.item().spawns_entity() == Some(core.base.kind) {
         let species = mob.species.offspring_in(&mob.species, cx);
         return spawn_egg_baby(mob, species, stack, cx);
     }

@@ -74,7 +74,7 @@ impl PlayerSession {
     pub(super) fn holds_debug_stick(&self, off_hand: bool) -> bool {
         self.inventory
             .hand(off_hand)
-            .is_some_and(|stack| stack.item == Item::DebugStick)
+            .is_some_and(|stack| stack.item() == Item::DebugStick)
     }
 
     fn overlay_translation(&mut self, key: String, args: impl IntoIterator<Item = TextComponent>) {
@@ -155,6 +155,7 @@ impl PlayerSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Block;
 
     #[tuff_core::watchdog]
@@ -190,7 +191,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn the_selection_is_stored_per_block_on_the_stack() {
-        let mut stack = ItemStack::new(Item::DebugStick, 1);
+        let mut stack = ItemStack::mint(Item::DebugStick, 1, MintReason::Test);
         let stairs = Block::OakStairs.default_state();
         let stone = Block::Stone.default_state();
         assert_eq!(selected(&stack, stairs), None);

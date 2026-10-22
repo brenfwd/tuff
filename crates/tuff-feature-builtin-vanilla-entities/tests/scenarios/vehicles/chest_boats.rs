@@ -32,7 +32,7 @@ pub(super) async fn sneak_open(
     match open.source {
         MenuSource::Entity { entity, contents } => {
             assert_eq!(entity, boat);
-            contents
+            stacks(&contents)
         }
         other => panic!("not an entity menu: {other:?}"),
     }
@@ -51,7 +51,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     subscribe(&region, &other, &mut other_events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let diamond = ItemStack::new(Item::Diamond, 3);
+    let diamond = ItemStack::mint(Item::Diamond, 3, MintReason::Test);
     let saved = diamond.to_nbt().with("Slot", 4i8);
     summon(
         &region,
@@ -64,19 +64,19 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
 
     let contents = sneak_open(&region, &player, &mut events, boat).await;
     assert_eq!(contents.len(), 27);
-    assert_eq!(contents[4], Some(diamond.clone()));
+    assert_eq!(contents[4], Some(diamond.test_copy()));
     sneak_open(&region, &other, &mut other_events, boat).await;
 
     let take = vec![
         EntitySlotChange {
             slot: 4,
-            expected: Some(diamond.clone()),
+            expected: snap(Some(diamond.test_copy())),
             new: None,
         },
         EntitySlotChange {
             slot: 0,
             expected: None,
-            new: Some(ItemStack::new(Item::Stick, 1)),
+            new: snap(Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))),
         },
     ];
     region
@@ -85,6 +85,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
             window_id: 1,
             entity: boat,
             changes: take.clone(),
+            pool: entity_pool_for(&take.clone()),
         })
         .await;
     let accepted = expect(&mut events, |event| match event {
@@ -94,13 +95,21 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     .await;
     assert!(accepted);
     let slots = expect(&mut other_events, |event| match event {
-        PlayerEvent::EntitySlots { entity, slots, .. } if entity == boat => Some(slots),
+        PlayerEvent::EntitySlots { entity, slots, .. } if entity == boat => Some(
+            slots
+                .into_iter()
+                .map(|(i, s)| (i, s.as_deref().map(ItemStack::test_copy)))
+                .collect::<Vec<_>>(),
+        ),
         _ => None,
     })
     .await;
     assert_eq!(
         slots,
-        vec![(4, None), (0, Some(ItemStack::new(Item::Stick, 1)))]
+        vec![
+            (4, None),
+            (0, Some(ItemStack::mint(Item::Stick, 1, MintReason::Test)))
+        ]
     );
 
     region
@@ -108,6 +117,7 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
             player: player.clone(),
             window_id: 1,
             entity: boat,
+            pool: entity_pool_for(&take),
             changes: take,
         })
         .await;
@@ -119,7 +129,11 @@ async fn chest_boats_serve_their_items_as_a_menu_and_spill_them_when_broken() {
     })
     .await;
     assert!(!accepted, "a stale click is refused");
-    assert_eq!(contents[0], Some(ItemStack::new(Item::Stick, 1)));
+    let contents = stacks(&contents);
+    assert_eq!(
+        contents[0],
+        Some(ItemStack::mint(Item::Stick, 1, MintReason::Test))
+    );
     assert_eq!(contents[4], None);
 
     let data = chest_boat_data(&region, boat).await;
@@ -222,6 +236,7 @@ async fn a_chest_boat_rolls_its_loot_table_on_first_open_and_riders_open_it() {
     let MenuSource::Entity { contents, .. } = open.source else {
         panic!("not an entity menu");
     };
+    let contents = stacks(&contents);
     assert!(contents.iter().any(Option::is_some), "the loot rolled");
 
     let data = chest_boat_data(&region, raft).await;
@@ -243,7 +258,9 @@ async fn a_player_shift_clicks_items_out_of_a_chest_boat() {
     let (viewer, mut events) = PlayerHandle::new(999);
     subscribe(&region, &viewer, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let saved = ItemStack::new(Item::Diamond, 3).to_nbt().with("Slot", 4i8);
+    let saved = ItemStack::mint(Item::Diamond, 3, MintReason::Test)
+        .to_nbt()
+        .with("Slot", 4i8);
     summon(
         &region,
         EntityType::SpruceChestBoat,
@@ -298,7 +315,7 @@ async fn a_player_shift_clicks_items_out_of_a_chest_boat() {
             .inventory()
             .slots()
             .iter()
-            .any(|s| s.as_ref() == Some(&ItemStack::new(Item::Diamond, 3)))
+            .any(|s| s.as_ref() == Some(&ItemStack::mint(Item::Diamond, 3, MintReason::Test)))
     );
     let data = chest_boat_data(&region, boat).await;
     assert!(data.get_list("Items").unwrap_or(&[]).is_empty());
@@ -450,7 +467,9 @@ async fn killing_a_chest_boat_scatters_its_stacks_in_pieces() {
     let (player, mut events) = PlayerHandle::new(100);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let saved = ItemStack::new(Item::Stone, 64).to_nbt().with("Slot", 0i8);
+    let saved = ItemStack::mint(Item::Stone, 64, MintReason::Test)
+        .to_nbt()
+        .with("Slot", 0i8);
     summon(
         &region,
         EntityType::OakChestBoat,
@@ -477,10 +496,10 @@ async fn killing_a_chest_boat_scatters_its_stacks_in_pieces() {
         let stack = data
             .get("Item")
             .and_then(|tag| tag.as_compound())
-            .and_then(ItemStack::from_nbt)
+            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Test))
             .expect("a saved stack");
-        if stack.item == Item::Stone {
-            pieces.push(stack.count);
+        if stack.item() == Item::Stone {
+            pieces.push(stack.count());
         }
     }
     assert_eq!(pieces.iter().map(|c| u32::from(*c)).sum::<u32>(), 64);

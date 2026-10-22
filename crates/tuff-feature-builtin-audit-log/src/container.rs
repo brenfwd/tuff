@@ -2,7 +2,8 @@
 //! removals, and undoing them on a container's current contents.
 
 use tuff_core::world::region_api::{BlockCause, ContainerHolder, SlotEdit};
-use tuff_item::item::ItemStack;
+use tuff_item::item::BurnReason;
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::Compound;
 
 use crate::record::{Kind, Record, Who};
@@ -13,7 +14,7 @@ pub const MAX_PENDING: usize = 1024;
 /// One item's net change in a container: `stack` is one of it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Net {
-    pub stack: ItemStack,
+    pub stack: ItemSnapshot,
     pub delta: i64,
     /// The last slot it went into or came out of.
     pub slot: usize,
@@ -39,7 +40,7 @@ impl Pending {
     }
 
     fn add(&mut self, stack: &ItemStack, delta: i64, slot: usize) {
-        let one = stack.clone().with_count(1);
+        let one = ItemSnapshot::of(stack).with_count(1);
         match self.items.iter_mut().find(|net| net.stack == one) {
             Some(net) => {
                 net.delta += delta;
@@ -57,10 +58,10 @@ impl Pending {
     pub fn apply(&mut self, slots: &[SlotEdit]) {
         for edit in slots {
             if let Some(old) = &edit.old {
-                self.add(old, -i64::from(old.count), edit.slot);
+                self.add(old, -i64::from(old.count()), edit.slot);
             }
             if let Some(new) = &edit.new {
-                self.add(new, i64::from(new.count), edit.slot);
+                self.add(new, i64::from(new.count()), edit.slot);
             }
         }
     }
@@ -85,7 +86,7 @@ impl Pending {
                     Kind::ContainerRemove
                 };
                 let mut record = Record::new(time, who.clone(), kind, world, [pos.x, pos.y, pos.z]);
-                record.material = Some(net.stack.item.name().to_owned());
+                record.material = Some(net.stack.item().name().to_owned());
                 record.amount = net.delta.unsigned_abs().min(i32::MAX as u64) as i32;
                 record.text = Some(encode_text(&holder, net.slot));
                 record.data = Some(net.stack.to_nbt());
@@ -138,7 +139,7 @@ pub fn parse_text(text: &str) -> Place {
 pub struct Undo {
     pub id: i64,
     pub entity: Option<u128>,
-    pub stack: ItemStack,
+    pub stack: ItemSnapshot,
     /// The stack's components are unknown: match by item alone.
     pub any_components: bool,
     pub amount: i64,
@@ -150,7 +151,7 @@ pub struct Undo {
 
 fn same(stack: &ItemStack, undo: &Undo) -> bool {
     if undo.any_components {
-        stack.item == undo.stack.item
+        stack.item() == undo.stack.item()
     } else {
         stack.stacks_with(&undo.stack)
     }
@@ -175,7 +176,9 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
                     break;
                 }
                 let room = match &items[slot] {
-                    Some(stack) if !empty_pass && same(stack, undo) => max - i64::from(stack.count),
+                    Some(stack) if !empty_pass && same(stack, undo) => {
+                        max - i64::from(stack.count())
+                    }
                     None if empty_pass => max,
                     _ => continue,
                 };
@@ -184,8 +187,16 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
                     continue;
                 }
                 left -= moved;
-                let stack = items[slot].get_or_insert_with(|| undo.stack.clone().with_count(0));
-                stack.count += moved as u8;
+                match &mut items[slot] {
+                    Some(stack) => stack.grow(moved as u8, MintReason::Command),
+                    empty => {
+                        *empty = Some(ItemStack::mint_like(
+                            &undo.stack,
+                            moved as u8,
+                            MintReason::Command,
+                        ))
+                    }
+                }
             }
         }
     } else {
@@ -200,10 +211,10 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
             let Some(stack) = items[slot].as_mut().filter(|stack| same(stack, undo)) else {
                 continue;
             };
-            let moved = i64::from(stack.count).min(left);
+            let moved = i64::from(stack.count()).min(left);
             left -= moved;
-            stack.count -= moved as u8;
-            if stack.count == 0 {
+            stack.shrink(moved as u8, BurnReason::Command);
+            if stack.count() == 0 {
                 items[slot] = None;
             }
         }
@@ -212,8 +223,11 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
 }
 
 /// The stack a row's item data names.
-pub fn stack_of(data: Option<&Compound>) -> Option<ItemStack> {
-    ItemStack::from_nbt(data?).map(|stack| stack.with_count(1))
+pub fn stack_of(data: Option<&Compound>) -> Option<ItemSnapshot> {
+    let stack = ItemStack::mint_from_nbt(data?, MintReason::Template)?;
+    let one = ItemSnapshot::of(&stack).with_count(1);
+    stack.burn(BurnReason::Template);
+    Some(one)
 }
 
 #[cfg(test)]
@@ -223,14 +237,14 @@ mod tests {
     use tuff_world_model::BlockPos;
 
     fn stack(item: Item, count: u8) -> Option<ItemStack> {
-        Some(ItemStack::new(item, count))
+        Some(ItemStack::mint(item, count, MintReason::Test))
     }
 
     fn undo(item: Item, amount: i64, add: bool, slot: Option<usize>) -> Undo {
         Undo {
             id: 1,
             entity: None,
-            stack: ItemStack::new(item, 1),
+            stack: ItemSnapshot::describe(item, 1, Default::default()),
             any_components: false,
             amount,
             add,
@@ -250,23 +264,33 @@ mod tests {
         pending.apply(&[
             SlotEdit {
                 slot: 0,
-                old: stack(Item::Diamond, 10),
+                old: stack(Item::Diamond, 10)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
                 new: None,
             },
             SlotEdit {
                 slot: 4,
                 old: None,
-                new: stack(Item::Diamond, 10),
+                new: stack(Item::Diamond, 10)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
             },
             SlotEdit {
                 slot: 1,
-                old: stack(Item::Stone, 3),
-                new: stack(Item::Stone, 1),
+                old: stack(Item::Stone, 3)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
+                new: stack(Item::Stone, 1)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
             },
             SlotEdit {
                 slot: 2,
                 old: None,
-                new: stack(Item::Dirt, 5),
+                new: stack(Item::Dirt, 5)
+                    .as_ref()
+                    .map(tuff_item::item::ItemSnapshot::of),
             },
         ]);
         let records: Vec<Record> = pending
@@ -282,7 +306,11 @@ mod tests {
         assert_eq!(records[1].amount, 5);
         assert_eq!(
             stack_of(records[1].data.as_ref()),
-            Some(ItemStack::new(Item::Dirt, 1))
+            Some(tuff_item::item::ItemSnapshot::describe(
+                Item::Dirt,
+                1,
+                Default::default()
+            ))
         );
     }
 

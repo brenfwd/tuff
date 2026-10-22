@@ -3,7 +3,7 @@ use crate::world::crafting::RecipeSet;
 use tuff_vanilla_data::Item;
 
 fn dirt(count: u8) -> Option<ItemStack> {
-    Some(ItemStack::new(Item::Dirt, count))
+    Some(ItemStack::mint(Item::Dirt, count, MintReason::Test))
 }
 
 struct Chest {
@@ -15,7 +15,7 @@ struct Chest {
 impl Chest {
     fn new() -> Self {
         Self {
-            container: vec![None; 27],
+            container: (0..27).map(|_| None).collect::<Vec<Option<ItemStack>>>(),
             inventory: Inventory::default(),
             drag: None,
         }
@@ -90,7 +90,9 @@ fn quick_move_into_a_mount_fills_armor_then_saddle_then_chest() {
         saddle: true,
         armor: MountArmor::Horse,
     };
-    let mut container = vec![None; kind.container_size()];
+    let mut container = (0..kind.container_size())
+        .map(|_| None)
+        .collect::<Vec<Option<ItemStack>>>();
     let mut inventory = Inventory::default();
     let mut drag = None;
     for item in [
@@ -99,7 +101,7 @@ fn quick_move_into_a_mount_fills_armor_then_saddle_then_chest() {
         Item::Saddle,
         Item::RedCarpet,
     ] {
-        inventory.set_slot(36, Some(ItemStack::new(item, 1)));
+        inventory.set_slot(36, Some(ItemStack::mint(item, 1, MintReason::Test)));
         let slot = kind.window_slot(36).unwrap() as i16;
         click(
             kind,
@@ -118,15 +120,15 @@ fn quick_move_into_a_mount_fills_armor_then_saddle_then_chest() {
             },
         );
     }
-    let item = |slot: usize| container[slot].as_ref().map(|stack| stack.item);
+    let item = |slot: usize| container[slot].as_ref().map(|stack| stack.item());
     assert_eq!(container.len(), 2 + 9);
     assert_eq!(item(mount::BODY), Some(Item::IronHorseArmor));
     assert_eq!(item(mount::SADDLE), Some(Item::Saddle));
     assert_eq!(item(mount::CHEST), Some(Item::Saddle));
     assert_eq!(item(mount::CHEST + 1), Some(Item::RedCarpet));
-    let carpet = ItemStack::new(Item::RedCarpet, 1);
+    let carpet = ItemStack::mint(Item::RedCarpet, 1, MintReason::Test);
     assert!(!kind.may_place(&RecipeSet::default(), mount::BODY, &carpet));
-    let saddle = ItemStack::new(Item::Saddle, 1);
+    let saddle = ItemStack::mint(Item::Saddle, 1, MintReason::Test);
     assert_eq!(kind.max_stack(mount::SADDLE, &saddle), 1);
     assert_eq!(kind.menu_type(), None, "mounts open with their own packet");
 }
@@ -136,7 +138,7 @@ fn quick_move_into_a_mount_fills_armor_then_saddle_then_chest() {
 fn quick_move_from_a_full_container_leaves_the_stack() {
     let mut chest = Chest::new();
     for slot in &mut chest.container {
-        *slot = Some(ItemStack::new(Item::Stone, 64));
+        *slot = Some(ItemStack::mint(Item::Stone, 64, MintReason::Test));
     }
     chest.inventory.set_slot(36, dirt(7));
     chest.click(54, 0, mode::QUICK_MOVE);
@@ -186,7 +188,7 @@ fn double_click_collects_partial_stacks_across_both_sections_first() {
     chest.inventory.set_slot(40, dirt(20));
     chest
         .inventory
-        .set_slot(12, Some(ItemStack::new(Item::Stone, 3)));
+        .set_slot(12, Some(ItemStack::mint(Item::Stone, 3, MintReason::Test)));
     chest.click(7, 0, mode::PICKUP_ALL);
     assert_eq!(chest.inventory.carried(), dirt(64).as_ref());
     assert_eq!(chest.container[5], None);
@@ -194,7 +196,7 @@ fn double_click_collects_partial_stacks_across_both_sections_first() {
     assert_eq!(chest.container[0], dirt(31));
     assert_eq!(
         chest.inventory_slot(12),
-        Some(&ItemStack::new(Item::Stone, 3))
+        Some(&ItemStack::mint(Item::Stone, 3, MintReason::Test))
     );
 }
 
@@ -211,13 +213,16 @@ fn pickup_swaps_takes_half_and_merges() {
     assert_eq!(chest.inventory.carried(), None);
     chest
         .inventory
-        .set_carried(Some(ItemStack::new(Item::Stone, 2)));
+        .set_carried(Some(ItemStack::mint(Item::Stone, 2, MintReason::Test)));
     chest.click(4, 0, mode::PICKUP);
-    assert_eq!(chest.container[4], Some(ItemStack::new(Item::Stone, 2)));
+    assert_eq!(
+        chest.container[4],
+        Some(ItemStack::mint(Item::Stone, 2, MintReason::Test))
+    );
     assert_eq!(chest.inventory.carried(), dirt(9).as_ref());
     assert_eq!(
         chest.click(OUTSIDE, 1, mode::PICKUP),
-        vec![ItemStack::new(Item::Dirt, 1)]
+        vec![ItemStack::mint(Item::Dirt, 1, MintReason::Test)]
     );
     assert_eq!(chest.inventory.carried(), dirt(8).as_ref());
 }
@@ -229,28 +234,31 @@ fn number_keys_swap_with_the_hotbar_and_throw_drops_from_the_container() {
     chest.container[2] = dirt(3);
     chest
         .inventory
-        .set_slot(37, Some(ItemStack::new(Item::Stone, 1)));
+        .set_slot(37, Some(ItemStack::mint(Item::Stone, 1, MintReason::Test)));
     chest.click(2, 1, mode::SWAP);
-    assert_eq!(chest.container[2], Some(ItemStack::new(Item::Stone, 1)));
+    assert_eq!(
+        chest.container[2],
+        Some(ItemStack::mint(Item::Stone, 1, MintReason::Test))
+    );
     assert_eq!(chest.inventory_slot(37), dirt(3).as_ref());
     assert_eq!(
         chest.click(55, 1, mode::THROW),
-        vec![ItemStack::new(Item::Dirt, 3)]
+        vec![ItemStack::mint(Item::Dirt, 3, MintReason::Test)]
     );
     assert_eq!(chest.inventory_slot(37), None);
     assert_eq!(
         chest.click(2, 0, mode::THROW),
-        vec![ItemStack::new(Item::Stone, 1)]
+        vec![ItemStack::mint(Item::Stone, 1, MintReason::Test)]
     );
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn shulker_boxes_refuse_shulker_boxes_and_clone_needs_creative() {
-    let mut container = vec![None; 27];
+    let mut container = (0..27).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     let mut inventory = Inventory::default();
     let mut drag = None;
-    inventory.set_carried(Some(ItemStack::new(Item::ShulkerBox, 1)));
+    inventory.set_carried(Some(ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test)));
     click(
         MenuKind::ShulkerBox,
         &mut container,
@@ -286,7 +294,7 @@ fn shulker_boxes_refuse_shulker_boxes_and_clone_needs_creative() {
     );
     assert_eq!(
         inventory.slots()[9],
-        Some(ItemStack::new(Item::ShulkerBox, 1))
+        Some(ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test))
     );
     click(
         MenuKind::ShulkerBox,
@@ -326,7 +334,7 @@ fn shulker_boxes_refuse_shulker_boxes_and_clone_needs_creative() {
 }
 
 fn bundle_with(stacks: Vec<ItemStack>) -> ItemStack {
-    let mut bundle = ItemStack::new(Item::Bundle, 1);
+    let mut bundle = ItemStack::mint(Item::Bundle, 1, MintReason::Test);
     for mut stack in stacks {
         bundle.edit_bundle(|contents| contents.try_insert(&mut stack));
     }
@@ -338,7 +346,7 @@ fn held(bundle: &ItemStack) -> Vec<(Item, u8)> {
         .components
         .bundle_contents
         .as_ref()
-        .map(|c| c.items().iter().map(|s| (s.item, s.count)).collect())
+        .map(|c| c.items().iter().map(|s| (s.item(), s.count())).collect())
         .unwrap_or_default()
 }
 
@@ -348,7 +356,11 @@ fn a_carried_bundle_takes_the_clicked_stack_up_to_its_room() {
     let mut chest = Chest::new();
     chest
         .inventory
-        .set_carried(Some(bundle_with(vec![ItemStack::new(Item::Stone, 40)])));
+        .set_carried(Some(bundle_with(vec![ItemStack::mint(
+            Item::Stone,
+            40,
+            MintReason::Test,
+        )])));
     chest.container[0] = dirt(64);
     chest.click(0, 0, mode::PICKUP);
     let bundle = chest.inventory.carried().unwrap();
@@ -366,7 +378,11 @@ fn a_full_bundle_refuses_with_the_fail_sound_and_changes_nothing() {
     let mut chest = Chest::new();
     chest
         .inventory
-        .set_carried(Some(bundle_with(vec![ItemStack::new(Item::Stone, 64)])));
+        .set_carried(Some(bundle_with(vec![ItemStack::mint(
+            Item::Stone,
+            64,
+            MintReason::Test,
+        )])));
     chest.container[0] = dirt(5);
     chest.click(0, 0, mode::PICKUP);
     assert_eq!(chest.container[0], dirt(5));
@@ -381,8 +397,8 @@ fn a_full_bundle_refuses_with_the_fail_sound_and_changes_nothing() {
 fn a_carried_bundle_puts_one_stack_into_an_empty_slot_on_right_click() {
     let mut chest = Chest::new();
     chest.inventory.set_carried(Some(bundle_with(vec![
-        ItemStack::new(Item::Stone, 3),
-        ItemStack::new(Item::Dirt, 5),
+        ItemStack::mint(Item::Stone, 3, MintReason::Test),
+        ItemStack::mint(Item::Dirt, 5, MintReason::Test),
     ])));
     chest.click(4, 1, mode::PICKUP);
     assert_eq!(chest.container[4], dirt(5));
@@ -428,8 +444,8 @@ fn clicking_a_bundle_in_a_slot_with_the_cursor_fills_or_empties_it() {
 fn a_plain_click_on_a_bundle_still_picks_it_up_and_clears_its_selection() {
     let mut chest = Chest::new();
     let mut bundle = bundle_with(vec![
-        ItemStack::new(Item::Dirt, 2),
-        ItemStack::new(Item::Stone, 2),
+        ItemStack::mint(Item::Dirt, 2, MintReason::Test),
+        ItemStack::mint(Item::Stone, 2, MintReason::Test),
     ]);
     bundle
         .components
@@ -479,7 +495,7 @@ fn crafter_slots_map_to_the_client_layout() {
 #[tuff_core::watchdog]
 #[test]
 fn armor_slots_hold_one_item() {
-    let stack = ItemStack::new(Item::Dirt, 64);
+    let stack = ItemStack::mint(Item::Dirt, 64, MintReason::Test);
     assert_eq!(MenuKind::Player.max_stack(5, &stack), 1);
     assert_eq!(MenuKind::Player.max_stack(9, &stack), 64);
 }
@@ -488,14 +504,14 @@ fn armor_slots_hold_one_item() {
 #[test]
 fn binding_curse_blocks_taking_armor_unless_creative() {
     let kind = MenuKind::Player;
-    let mut cursed = ItemStack::new(Item::IronHelmet, 1);
+    let mut cursed = ItemStack::mint(Item::IronHelmet, 1, MintReason::Test);
     cursed.components.enchantments = Some(tuff_item::item::Enchantments::new([(
         "minecraft:binding_curse".to_string(),
         1,
     )]));
     for (creative, expect_taken) in [(false, false), (true, true)] {
         let mut inventory = Inventory::default();
-        inventory.set_slot(5, Some(cursed.clone()));
+        inventory.set_slot(5, Some(cursed.test_copy()));
         let mut drag = None;
         click(
             kind,

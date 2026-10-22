@@ -3,6 +3,7 @@
 //! from trades, restocking, prices that follow demand and what they gossip
 //! about players, food in an eight-slot inventory, and babies.
 
+use tuff_item::item::BurnReason;
 pub mod brain;
 pub mod gossip;
 
@@ -264,7 +265,9 @@ impl Villager {
             .retain_mut(|(answer, offer)| match poll(answer) {
                 None => true,
                 Some(Some(map)) => {
-                    map.apply(&mut offer.sell);
+                    offer
+                        .sell
+                        .edit_components(|components| map.apply(components));
                     offers.push(offer.clone());
                     false
                 }
@@ -522,7 +525,11 @@ impl Villager {
         self.inventory
             .iter()
             .flatten()
-            .filter_map(|s| s.item.villager_food().map(|n| n as i32 * s.count as i32))
+            .filter_map(|s| {
+                s.item()
+                    .villager_food()
+                    .map(|n| n as i32 * s.count() as i32)
+            })
             .sum()
     }
 
@@ -534,14 +541,14 @@ impl Villager {
     /// Whether it would pick up `stack`: food, what its profession wants,
     /// or the items every villager takes, if it has room.
     pub fn wants(&self, stack: &ItemStack) -> bool {
-        let wanted = tuff_datapack::tags::is(tag::item::key::VILLAGER_PICKS_UP, stack.item)
-            || stack.item.villager_food().is_some()
+        let wanted = tuff_datapack::tags::is(tag::item::key::VILLAGER_PICKS_UP, stack.item())
+            || stack.item().villager_food().is_some()
             || self
                 .data
                 .profession
                 .info()
                 .requested_items
-                .contains(&stack.item);
+                .contains(&stack.item());
         wanted && self.room_for(stack) > 0
     }
 
@@ -552,7 +559,7 @@ impl Villager {
             .iter()
             .map(|slot| match slot {
                 None => max,
-                Some(s) if s.stacks_with(stack) => max.saturating_sub(s.count as u32),
+                Some(s) if s.stacks_with(stack) => max.saturating_sub(s.count() as u32),
                 Some(_) => 0,
             })
             .sum()
@@ -562,11 +569,10 @@ impl Villager {
     pub fn add_item(&mut self, mut stack: ItemStack) -> Option<ItemStack> {
         let max = stack.max_stack_size();
         for slot in self.inventory.iter_mut().flatten() {
-            if slot.stacks_with(&stack) && slot.count < max {
-                let moved = (max - slot.count).min(stack.count);
-                slot.count += moved;
-                stack.count -= moved;
-                if stack.count == 0 {
+            if slot.stacks_with(&stack) && slot.count() < max {
+                let room = max - slot.count();
+                slot.transfer(&mut stack, room);
+                if stack.count() == 0 {
                     return None;
                 }
             }
@@ -590,14 +596,14 @@ impl Villager {
             let Some(stack) = slot else {
                 continue;
             };
-            let Some(nutrition) = stack.item.villager_food() else {
+            let Some(nutrition) = stack.item().villager_food() else {
                 continue;
             };
-            while stack.count > 0 && self.food_level < BREEDING_FOOD_THRESHOLD {
+            while stack.count() > 0 && self.food_level < BREEDING_FOOD_THRESHOLD {
                 self.food_level += nutrition as i32;
-                stack.count -= 1;
+                stack.shrink(1, BurnReason::Consumed);
             }
-            if stack.count == 0 {
+            if stack.count() == 0 {
                 *slot = None;
             }
         }
@@ -681,6 +687,10 @@ fn overworld_day(cx: &TickContext) -> i64 {
 }
 
 impl Species for Villager {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        self.inventory.iter_mut().filter_map(Option::take).collect()
+    }
+
     const RANDOM_BABIES: bool = false;
 
     fn debug_value(
@@ -738,7 +748,7 @@ impl Species for Villager {
 
     fn create(_rng: &mut StdRng) -> Self {
         Self {
-            inventory: vec![None; INVENTORY_SLOTS],
+            inventory: (0..INVENTORY_SLOTS).map(|_| None).collect(),
             ..Self::default()
         }
     }
@@ -780,8 +790,10 @@ impl Species for Villager {
             take(nbt, "RestocksToday", tuff_core::world::entity::number).map_or(0, |v| v as i32);
         if let Some(items) = take(nbt, "Inventory", |t| t.as_list().map(<[Tag]>::to_vec)) {
             for item in items {
-                if let Some(stack) = item.as_compound().and_then(ItemStack::from_nbt) {
-                    let _ = self.add_item(stack);
+                if let Some(stack) = item.as_compound().and_then(ItemStack::from_storage)
+                    && let Some(rest) = self.add_item(stack)
+                {
+                    rest.burn(tuff_item::item::BurnReason::Discarded);
                 }
             }
         }
@@ -976,7 +988,7 @@ impl Species for Villager {
         if interaction
             .stack
             .as_ref()
-            .is_some_and(|s| s.item == Item::VillagerSpawnEgg)
+            .is_some_and(|s| s.item() == Item::VillagerSpawnEgg)
             || self.trading.is_some()
             || self.brain.sleeping.is_some()
         {
@@ -1175,6 +1187,7 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
 
     fn witness(id: i32, position: [f64; 3]) -> tuff_core::world::entity::EntitySummary {
         use tuff_core::world::entity::{EntitySummary, LivingSummary};
@@ -1287,9 +1300,12 @@ mod tests {
     #[test]
     fn food_fills_the_inventory_and_breeding_eats_it() {
         let mut villager = Villager::create(&mut <StdRng as rand::SeedableRng>::seed_from_u64(1));
-        assert!(villager.wants(&ItemStack::new(Item::Bread, 1)));
-        assert!(!villager.wants(&ItemStack::new(Item::Stone, 1)));
-        assert_eq!(villager.add_item(ItemStack::new(Item::Bread, 3)), None);
+        assert!(villager.wants(&ItemStack::mint(Item::Bread, 1, MintReason::Test)));
+        assert!(!villager.wants(&ItemStack::mint(Item::Stone, 1, MintReason::Test)));
+        assert_eq!(
+            villager.add_item(ItemStack::mint(Item::Bread, 3, MintReason::Test)),
+            None
+        );
         assert_eq!(villager.food_in_inventory(), 12);
         villager.eat_and_digest();
         assert_eq!(villager.food_level, 0);

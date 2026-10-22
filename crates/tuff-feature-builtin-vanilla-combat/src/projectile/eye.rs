@@ -3,13 +3,14 @@
 //! back as an item or shatter (one in five).
 
 use rand::Rng;
+use tuff_item::item::BurnReason;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::{EntityType, SoundEvent};
 
 use tuff_core::protocol::play::{self, MetadataValue};
 use tuff_core::world::entity::{Effect, EntityBase, RegionEntity, Tick, TickContext, take};
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_world_model::BlockPos;
 
@@ -45,7 +46,7 @@ impl EyeOfEnder {
         let base = EntityBase::new(EntityType::EyeOfEnder, id, rng.r#gen(), position, [0.0; 3]);
         let mut eye = Self {
             base,
-            item: item.with_count(1),
+            item: item.keep(1, BurnReason::Template),
             target: None,
             life: 0,
             survive_after_death: false,
@@ -110,6 +111,15 @@ fn steer(velocity: [f64; 3], position: [f64; 3], target: [f64; 3]) -> [f64; 3] {
 }
 
 impl RegionEntity for EyeOfEnder {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let item = std::mem::replace(&mut self.item, ItemStack::empty());
+        if item.is_empty() {
+            Vec::new()
+        } else {
+            vec![item]
+        }
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }
@@ -123,7 +133,10 @@ impl RegionEntity for EyeOfEnder {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        vec![(DATA_ITEM, MetadataValue::Slot(Some(self.item.clone())))]
+        vec![(
+            DATA_ITEM,
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&self.item))),
+        )]
     }
 
     fn tick(&mut self, cx: &mut TickContext) -> Tick {
@@ -154,7 +167,7 @@ impl RegionEntity for EyeOfEnder {
                 cx.rng.r#gen::<f64>() * 0.2 - 0.1,
             ];
             cx.effects.push(Effect::DropItem {
-                stack: self.item.clone(),
+                stack: std::mem::replace(&mut self.item, ItemStack::empty()),
                 position: next,
                 velocity,
                 pickup_delay: 0,
@@ -177,8 +190,10 @@ impl RegionEntity for EyeOfEnder {
 }
 
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
-    let item = take(nbt, "Item", |tag| ItemStack::from_nbt(tag.as_compound()?))
-        .unwrap_or_else(|| ItemStack::new(Item::EnderEye, 1));
+    let item = take(nbt, "Item", |tag| {
+        ItemStack::from_storage(tag.as_compound()?)
+    })
+    .unwrap_or_else(|| ItemStack::mint(Item::EnderEye, 1, MintReason::Template));
     Some(Box::new(EyeOfEnder {
         base,
         item,
@@ -200,7 +215,7 @@ mod tests {
         EyeOfEnder::thrown(
             1,
             [0.5, 70.9, 0.5],
-            ItemStack::new(Item::EnderEye, 5),
+            ItemStack::mint(Item::EnderEye, 5, MintReason::Test),
             target,
             &mut rng,
         )
@@ -214,7 +229,7 @@ mod tests {
         assert!((target[0] - 12.5).abs() < 1e-2);
         assert!((target[1] - 78.9).abs() < 1e-9);
         assert!((target[2] - 0.5).abs() < 1e-2);
-        assert_eq!(eye.item.count, 1);
+        assert_eq!(eye.item.count(), 1);
     }
 
     #[tuff_core::watchdog]

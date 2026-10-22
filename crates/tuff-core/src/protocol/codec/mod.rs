@@ -19,7 +19,7 @@ use tuff_item::item::gear::{
     AttributeModifier, BlockSet, MAX_MODIFIERS, MAX_TOOL_RULES, ModifierDisplay, Tool, ToolRule,
 };
 use tuff_item::item::{
-    Components, EffectDetails, Enchantments, ItemStack, NetworkComponent, PotionContents,
+    Components, EffectDetails, Enchantments, ItemStack, ItemView, NetworkComponent, PotionContents,
     PotionEffect, SuspiciousEffect, typed_entity_name,
 };
 use tuff_item::text::TextComponent;
@@ -76,7 +76,7 @@ pub struct HashedSlot {
 
 impl HashedSlot {
     /// Whether the client's view agrees with a stack the server holds.
-    pub fn matches(slot: Option<&Self>, stack: Option<&ItemStack>) -> bool {
+    pub fn matches(slot: Option<&Self>, stack: Option<ItemView<'_>>) -> bool {
         match (slot, stack) {
             (None, None) => true,
             (Some(slot), Some(stack)) => slot.matches_stack(stack),
@@ -84,8 +84,8 @@ impl HashedSlot {
         }
     }
 
-    fn matches_stack(&self, stack: &ItemStack) -> bool {
-        if self.item != stack.item.id() || self.count != stack.count as i32 {
+    fn matches_stack(&self, stack: ItemView<'_>) -> bool {
+        if self.item != stack.item().id() || self.count != stack.count() as i32 {
             return false;
         }
         let mut removed: Vec<u32> = stack
@@ -116,10 +116,12 @@ impl HashedSlot {
 /// each added component's payload is prefixed with its byte length, so a
 /// component type this server cannot decode is skipped rather than making
 /// the rest of the packet unreadable.
-#[derive(Debug, Clone, PartialEq)]
+/// The stack is a picture of what the client asks for; the session makes
+/// it.
+#[derive(Clone, Debug, PartialEq)]
 pub enum CreativeSlot {
     Empty,
-    Stack(ItemStack),
+    Stack(tuff_item::item::ItemSnapshot),
     /// A stack this server cannot hold: a component type it cannot decode.
     Unsupported,
     /// A stack no client holds: an unknown item, or a count above the
@@ -131,10 +133,10 @@ pub trait WriteExt {
     fn write_position(&mut self, pos: BlockPos);
     fn write_angle(&mut self, degrees: f32);
     fn write_lp_vec3(&mut self, v: [f64; 3]);
-    fn write_slot(&mut self, stack: Option<&ItemStack>);
+    fn write_slot(&mut self, stack: Option<ItemView<'_>>);
     /// A non-empty stack as item, count and component patch, with no Slot
     /// count prefix (recipe book stack displays, container contents).
-    fn write_item_template(&mut self, stack: &ItemStack);
+    fn write_item_template(&mut self, stack: ItemView<'_>);
     fn write_component(&mut self, component: &NetworkComponent<'_>);
     fn write_text(&mut self, text: &TextComponent);
     fn write_effect_details(&mut self, details: &EffectDetails);

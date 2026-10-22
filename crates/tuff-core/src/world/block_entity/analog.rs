@@ -5,7 +5,7 @@
 
 use tuff_vanilla_data::{Block, BlockState};
 
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 
 /// Comparator readings features compute from runtime state (a creaking
@@ -41,14 +41,14 @@ pub fn block_entity_signal(
         Block::Lectern => lectern(state, nbt),
         Block::Jukebox => nbt
             .get_compound("RecordItem")
-            .and_then(ItemStack::from_nbt)
+            .and_then(ItemStack::picture_from_nbt)
             .map_or(0, |record| song_output(&record)),
         Block::ChiseledBookshelf => nbt
             .get_int("last_interacted_slot")
             .map_or(0, |slot| (slot + 1).clamp(0, 15) as u8),
         Block::DecoratedPot => nbt
             .get_compound("item")
-            .and_then(ItemStack::from_nbt)
+            .and_then(ItemStack::picture_from_nbt)
             .map_or(0, |stack| fullness(&[Some(stack)])),
         Block::Crafter => crafter(nbt),
         Block::CommandBlock | Block::ChainCommandBlock | Block::RepeatingCommandBlock => nbt
@@ -71,7 +71,10 @@ fn lectern(state: BlockState, nbt: &Compound) -> u8 {
     if state.get("has_book") != Some("true") {
         return 0;
     }
-    let Some(book) = nbt.get_compound("Book").and_then(ItemStack::from_nbt) else {
+    let Some(book) = nbt
+        .get_compound("Book")
+        .and_then(ItemStack::picture_from_nbt)
+    else {
         return 0;
     };
     let pages = page_count(&book);
@@ -100,7 +103,7 @@ pub fn song_output(record: &ItemStack) -> u8 {
     }
     match components.other.get_str(JUKEBOX_PLAYABLE) {
         Some(song) => tuff_vanilla_data::item::jukebox_song_output(song).unwrap_or(0),
-        None => record.item.jukebox_output(),
+        None => record.item().jukebox_output(),
     }
 }
 
@@ -112,7 +115,7 @@ pub fn song_id(record: &ItemStack) -> Option<u32> {
     }
     match components.other.get_str(JUKEBOX_PLAYABLE) {
         Some(song) => tuff_vanilla_data::item::jukebox_song(song).map(|(id, _)| id),
-        None => record.item.jukebox_song_id(),
+        None => record.item().jukebox_song_id(),
     }
 }
 
@@ -131,7 +134,8 @@ fn shelf(state: BlockState, nbt: &Compound, direction: tuff_vanilla_data::block:
             continue;
         };
         let slot = entry.get_byte("Slot").map_or(-1, i32::from);
-        if (0..3).contains(&slot) && ItemStack::from_nbt(entry).is_some() {
+        if (0..3).contains(&slot) && ItemStack::mint_from_nbt(entry, MintReason::Template).is_some()
+        {
             bits |= 1 << slot;
         }
     }
@@ -146,7 +150,9 @@ fn crafter(nbt: &Compound) -> u8 {
             continue;
         };
         let slot = entry.get_byte("Slot").map_or(-1, i32::from);
-        if (0..CRAFTER_SLOTS as i32).contains(&slot) && ItemStack::from_nbt(entry).is_some() {
+        if (0..CRAFTER_SLOTS as i32).contains(&slot)
+            && ItemStack::mint_from_nbt(entry, MintReason::Template).is_some()
+        {
             filled[slot as usize] = true;
         }
     }
@@ -163,7 +169,7 @@ fn fullness(slots: &[Option<ItemStack>]) -> u8 {
     let total: f32 = slots
         .iter()
         .flatten()
-        .map(|stack| f32::from(stack.count) / f32::from(stack.max_stack_size().max(1)))
+        .map(|stack| f32::from(stack.count()) / f32::from(stack.max_stack_size().max(1)))
         .sum();
     let share = total / slots.len() as f32;
     (share * 14.0).floor() as u8 + u8::from(share > 0.0)

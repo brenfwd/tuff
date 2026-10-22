@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use super::RegionActor;
 use crate::world::block_entity::ContainerKind;
+use crate::world::conservation::Transfer;
 use crate::world::item_port::{ItemPort, PortAccess, Porter};
 use tuff_vanilla_data::block::Facing;
 use tuff_world_model::BlockPos;
@@ -55,17 +56,22 @@ impl RegionActor {
         face: Facing,
     ) -> Option<bool> {
         let (port, at) = self.port_at(target, face, Porter::Hopper(pos))?;
+        if !self.may_transfer(Transfer::Port, target, None) {
+            return Some(false);
+        }
         for slot in 0..ContainerKind::Hopper.size() {
-            let Some(one) = self
-                .block_entity(pos)
-                .and_then(|entity| entity.items[slot].as_ref())
-                .map(|stack| stack.clone().with_count(1))
-            else {
+            let Some(one) = self.take_one_out(pos, slot) else {
                 continue;
             };
-            if port.offer(self, &at, &one) {
-                self.take_hopper_item(pos, slot);
-                return Some(true);
+            let shown = self
+                .observes_containers()
+                .then(|| tuff_item::item::ItemSnapshot::of(&one));
+            match port.offer(self, &at, one) {
+                Ok(()) => {
+                    self.took_one(pos, slot, shown.as_deref());
+                    return Some(true);
+                }
+                Err(one) => self.return_one(pos, slot, one),
             }
         }
         Some(false)
@@ -75,16 +81,29 @@ impl RegionActor {
     /// port shows if it has room. `None` when `above` has no port.
     pub(super) fn hopper_pull_port(&mut self, pos: BlockPos, above: BlockPos) -> Option<bool> {
         let (port, at) = self.port_at(above, Facing::Down, Porter::Hopper(pos))?;
-        let Some(record) = port.peek(self, &at) else {
+        let Some(shown) = port.peek(self, &at) else {
             return Some(false);
         };
-        if self
-            .insert_into(ContainerKind::Hopper, &[pos], None, record, None)
-            .is_some()
-        {
+        let recipes = self.shared.recipes();
+        let room = self.block_entity(pos).map_or(0, |hopper| {
+            crate::world::block_entity::insert_room(
+                &recipes,
+                ContainerKind::Hopper,
+                &hopper.items,
+                None,
+                &shown,
+                shown.count(),
+                0,
+            )
+        });
+        if room < shown.count() || !self.may_transfer(Transfer::Port, above, None) {
             return Some(false);
         }
-        port.take(self, &at);
+        if let Some(taken) = self.take_from_port(&*port, &at, shown.count())
+            && let Some(rest) = self.insert_into(ContainerKind::Hopper, &[pos], None, taken, None)
+        {
+            self.spawn_item_at(rest, pos.center(), [0.0; 3], 0);
+        }
         Some(true)
     }
 
@@ -92,28 +111,41 @@ impl RegionActor {
     /// `None` when `above` has no port.
     pub(super) fn cart_pull_port(&mut self, id: i32, above: BlockPos) -> Option<bool> {
         let (port, at) = self.port_at(above, Facing::Down, Porter::Cart(id))?;
-        let Some(record) = port.peek(self, &at) else {
+        let Some(shown) = port.peek(self, &at) else {
             return Some(false);
         };
-        if self.insert_into_entity(id, record).is_some() {
+        if self.entity_insert_room(id, &shown) < shown.count()
+            || !self.may_transfer(Transfer::Port, above, None)
+        {
             return Some(false);
         }
-        port.take(self, &at);
+        if let Some(taken) = self.take_from_port(&*port, &at, shown.count())
+            && let Some(rest) = self.insert_into_entity(id, taken)
+        {
+            self.spawn_item_at(rest, above.center(), [0.0; 3], 0);
+        }
         Some(true)
     }
 
-    pub(super) fn take_hopper_item(&mut self, pos: BlockPos, slot: usize) {
-        let Some(entity) = self.block_entity_mut(pos) else {
-            return;
-        };
-        let Some(stack) = entity.items[slot].as_mut() else {
-            return;
-        };
-        stack.count -= 1;
-        if stack.count == 0 {
-            entity.items[slot] = None;
+    /// Takes what a port showed; a port giving more than it showed made
+    /// items, which is a violation (the region is quarantined).
+    fn take_from_port(
+        &mut self,
+        port: &dyn ItemPort,
+        at: &PortAccess,
+        shown: u8,
+    ) -> Option<tuff_item::item::ItemStack> {
+        let taken = port.take(self, at)?;
+        if taken.count() > shown {
+            self.transfer_balanced(
+                Transfer::Port,
+                at.pos,
+                u64::from(shown),
+                0,
+                0,
+                u64::from(taken.count()),
+            );
         }
-        let value = entity.items[slot].clone();
-        self.broadcast_slots(pos, vec![(slot, value)]);
+        Some(taken)
     }
 }

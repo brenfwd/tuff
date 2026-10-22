@@ -62,7 +62,7 @@ async fn entity_post_attack(session: &mut PlayerSession, hit: &EntityHit) {
     let equipment = session.equipment();
     let worn: Vec<combat::Equipped> = equipment
         .iter()
-        .map(|(slot, stack)| (*slot, stack))
+        .map(|(slot, stack)| (*slot, &**stack))
         .collect();
     let own = combat::post_attack(&worn, combat::Side::Victim, &context, &mut session.rng);
     let weapon = match (&hit.weapon, hit.projectile) {
@@ -165,7 +165,7 @@ impl SessionHooks for CombatHooks {
                 }) => {
                     if target_kind == tuff_vanilla_data::registry::EntityType::Player {
                         session.hurt_entity(
-                            &weapon,
+                            weapon.as_ref(),
                             target_kind,
                             target_position,
                             dealt,

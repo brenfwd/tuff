@@ -256,9 +256,9 @@ impl ContainerKind {
                 furnace::FUEL => {
                     let bucket_in = items[furnace::FUEL]
                         .as_ref()
-                        .is_some_and(|fuel| fuel.item == Item::Bucket);
-                    stack.item.cooking_fuel().is_some()
-                        || (stack.item == Item::Bucket && !bucket_in)
+                        .is_some_and(|fuel| fuel.item() == Item::Bucket);
+                    stack.item().cooking_fuel().is_some()
+                        || (stack.item() == Item::Bucket && !bucket_in)
                 }
                 _ => true,
             },
@@ -268,12 +268,12 @@ impl ContainerKind {
 
     pub fn can_extract(self, slot: usize, stack: &ItemStack, face: Option<Facing>) -> bool {
         if self == Self::BrewingStand && slot == brewing::INGREDIENT {
-            return stack.item == Item::GlassBottle;
+            return stack.item() == Item::GlassBottle;
         }
         if self.is_furnace() && face == Some(Facing::Down) && slot == furnace::FUEL {
             return tuff_datapack::tags::is(
                 tag::item::key::FURNACE_FUEL_BOTTOM_TAKEABLE,
-                stack.item,
+                stack.item(),
             );
         }
         true
@@ -316,14 +316,14 @@ fn crafter_accepts(items: &[Option<ItemStack>], slot: usize, disabled: u16) -> b
     let Some(current) = &items[slot] else {
         return true;
     };
-    if current.count >= current.max_stack_size() {
+    if current.count() >= current.max_stack_size() {
         return false;
     }
     !(slot + 1..CRAFTER_SLOTS).any(|other| {
         disabled & (1 << other) == 0
             && match &items[other] {
                 None => true,
-                Some(stack) => stack.count < current.count && stack.stacks_with(current),
+                Some(stack) => stack.count() < current.count() && stack.stacks_with(current),
             }
     })
 }
@@ -422,7 +422,7 @@ impl State {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct BlockEntity {
     pub kind: ContainerKind,
     pub items: Vec<Option<ItemStack>>,
@@ -439,7 +439,7 @@ impl BlockEntity {
     pub fn new(kind: ContainerKind) -> Self {
         Self {
             kind,
-            items: vec![None; kind.size()],
+            items: (0..kind.size()).map(|_| None).collect(),
             custom_name: None,
             transfer_cooldown: NO_COOLDOWN,
             state: State::for_kind(kind),
@@ -512,9 +512,10 @@ impl BlockEntity {
     }
 
     pub fn is_full(&self) -> bool {
-        self.items
-            .iter()
-            .all(|slot| slot.as_ref().is_some_and(|s| s.count >= s.max_stack_size()))
+        self.items.iter().all(|slot| {
+            slot.as_ref()
+                .is_some_and(|s| s.count() >= s.max_stack_size())
+        })
     }
 
     /// The NBT clients need to render this block entity (a campfire's
@@ -540,7 +541,7 @@ impl BlockEntity {
             .then(|| {
                 entity.items[brewing::INGREDIENT]
                     .as_ref()
-                    .map(|stack| stack.item)
+                    .map(|stack| stack.item())
             })
             .flatten();
         match &mut entity.state {
@@ -671,10 +672,36 @@ impl BlockEntity {
     }
 }
 
+/// What a save writes for a chunk's block entities, taken on the owning
+/// thread: the modeled ones are encoded in place (their stacks are read,
+/// never copied) and stored with the unmodeled ones.
+pub trait SavePicture {
+    fn save_picture(&self) -> Self;
+}
+
+impl SavePicture for tuff_world_model::chunk_meta::ChunkMeta<BlockEntity> {
+    fn save_picture(&self) -> Self {
+        let mut raw_block_entities = self.raw_block_entities.clone();
+        raw_block_entities.extend(
+            self.block_entities
+                .iter()
+                .map(|(pos, entity)| (*pos, entity.encode(*pos))),
+        );
+        Self {
+            status: self.status.clone(),
+            extra: self.extra.clone(),
+            relight: self.relight,
+            block_entities: Default::default(),
+            raw_block_entities,
+            below_zero_retrogen: self.below_zero_retrogen,
+        }
+    }
+}
+
 /// `size` slots filled from saved `Items` entries; entries with a slot out
 /// of range or an unreadable stack are dropped.
 pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemStack>> {
-    let mut items = vec![None; size];
+    let mut items: Vec<Option<ItemStack>> = (0..size).map(|_| None).collect();
     for entry in entries {
         let Some(entry) = entry.as_compound() else {
             continue;
@@ -685,7 +712,7 @@ pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemSt
         }
         let mut stack = entry.clone();
         stack.remove("Slot");
-        items[slot as usize] = ItemStack::from_nbt(&stack);
+        items[slot as usize] = ItemStack::from_storage(&stack);
     }
     items
 }
@@ -728,6 +755,28 @@ pub fn write_items(nbt: &mut Compound, items: &[Option<ItemStack>]) {
 /// slot, which takes everything left. Returns what is left (`None` when
 /// all went in)
 /// and whether the walk reached an empty slot.
+/// How many of `stack` [`golem_place`] would put into `items`.
+pub fn golem_room<'a>(
+    items: impl IntoIterator<Item = &'a Option<ItemStack>>,
+    stack: &ItemStack,
+) -> u8 {
+    let mut room = 0u8;
+    for item in items {
+        match item {
+            None => return stack.count(),
+            Some(existing) if existing.stacks_with(stack) => {
+                room =
+                    room.saturating_add(existing.max_stack_size().saturating_sub(existing.count()));
+                if room >= stack.count() {
+                    return stack.count();
+                }
+            }
+            Some(_) => {}
+        }
+    }
+    room
+}
+
 pub fn golem_place(
     items: &mut [Option<ItemStack>],
     stack: ItemStack,
@@ -743,16 +792,15 @@ pub fn golem_place(
             }
             Some(existing) if existing.stacks_with(&held) => {
                 let max = existing.max_stack_size();
-                if existing.count >= max {
+                if existing.count() >= max {
                     continue;
                 }
-                let room = max - existing.count;
-                existing.count += room.min(held.count);
+                let room = max - existing.count();
+                existing.transfer(&mut held, room);
                 changed.push(slot);
-                if held.count <= room {
+                if held.count() == 0 {
                     return (None, false);
                 }
-                held.count -= room;
             }
             Some(_) => {}
         }
@@ -774,7 +822,7 @@ pub fn insert(
     disabled: u16,
 ) -> Option<ItemStack> {
     for slot in kind.slots_for_face(face) {
-        if stack.count == 0 {
+        if stack.count() == 0 {
             break;
         }
         if !kind.can_insert(recipes, items, slot, &stack, face, disabled) {
@@ -782,26 +830,58 @@ pub fn insert(
         }
         match &mut items[slot] {
             None => {
-                items[slot] = Some(stack.clone());
-                stack.count = 0;
+                let count = stack.count();
+                items[slot] = Some(stack.take(count));
                 changed.push(slot);
             }
             Some(current)
-                if current.stacks_with(&stack) && current.count <= current.max_stack_size() =>
+                if current.stacks_with(&stack) && current.count() <= current.max_stack_size() =>
             {
                 let moved = stack
-                    .count
-                    .min(stack.max_stack_size().saturating_sub(current.count));
+                    .count()
+                    .min(stack.max_stack_size().saturating_sub(current.count()));
                 if moved > 0 {
-                    current.count += moved;
-                    stack.count -= moved;
+                    current.transfer(&mut stack, moved);
                     changed.push(slot);
                 }
             }
             Some(_) => {}
         }
     }
-    (stack.count > 0).then_some(stack)
+    (stack.count() > 0).then_some(stack)
+}
+
+/// How many of `count` of `stack` [`insert`] would put into `items`,
+/// reading them only. Exact for containers whose slots accept items
+/// regardless of the others (chests).
+pub fn insert_room(
+    recipes: &RecipeSet,
+    kind: ContainerKind,
+    items: &[Option<ItemStack>],
+    face: Option<Facing>,
+    stack: &ItemStack,
+    count: u8,
+    disabled: u16,
+) -> u8 {
+    let mut left = count;
+    for slot in kind.slots_for_face(face) {
+        if left == 0 {
+            break;
+        }
+        if !kind.can_insert(recipes, items, slot, stack, face, disabled) {
+            continue;
+        }
+        match &items[slot] {
+            None => left = 0,
+            Some(current)
+                if current.stacks_with(stack) && current.count() <= current.max_stack_size() =>
+            {
+                left -= left.min(stack.max_stack_size().saturating_sub(current.count()));
+            }
+            Some(_) => {}
+        }
+    }
+    count - left
 }
 
 /// Whether every slot of `items` reachable through `face` is full.
@@ -809,7 +889,7 @@ pub fn is_full(kind: ContainerKind, items: &[Option<ItemStack>], face: Option<Fa
     kind.slots_for_face(face).into_iter().all(|slot| {
         items[slot]
             .as_ref()
-            .is_some_and(|s| s.count >= s.max_stack_size())
+            .is_some_and(|s| s.count() >= s.max_stack_size())
     })
 }
 
@@ -832,15 +912,13 @@ pub fn transfer_one(
         if !from_kind.can_extract(slot, stack, from_face) {
             continue;
         }
-        let one = stack.clone().with_count(1);
+        let Some(one) = ItemStack::take_from(&mut from[slot], 1) else {
+            continue;
+        };
         let mut changed = Vec::new();
-        if insert(recipes, into_kind, into, into_face, one, &mut changed, 0).is_none() {
-            let stack = from[slot].as_mut().unwrap();
-            stack.count -= 1;
-            if stack.count == 0 {
-                from[slot] = None;
-            }
-            return Some((slot, changed));
+        match insert(recipes, into_kind, into, into_face, one, &mut changed, 0) {
+            None => return Some((slot, changed)),
+            Some(back) => ItemStack::put_back(&mut from[slot], back),
         }
     }
     None
@@ -863,25 +941,26 @@ pub fn scatter(
             pos.y as f64 + rng.r#gen::<f64>() * (1.0 - ITEM_WIDTH),
             pos.z as f64 + rng.r#gen::<f64>() * (1.0 - ITEM_WIDTH) + ITEM_WIDTH / 2.0,
         ];
-        while stack.count > 0 {
-            let piece = (rng.gen_range(0..21) + 10).min(stack.count as i32) as u8;
-            stack.count -= piece;
+        while stack.count() > 0 {
+            let piece = (rng.gen_range(0..21) + 10).min(stack.count() as i32) as u8;
+            let piece = stack.take(piece);
             let mut triangle =
                 |mode: f64| mode + DEVIATION * (rng.r#gen::<f64>() - rng.r#gen::<f64>());
             let velocity = [triangle(0.0), triangle(0.2), triangle(0.0)];
-            drops.push((stack.clone().with_count(piece), position, velocity));
+            drops.push((piece, position, velocity));
         }
     }
     drops
 }
 
-/// The items to drop when a container block breaks: its contents, or for
-/// shulker boxes nothing (they keep their contents in the item).
-pub fn spilled(entity: &BlockEntity) -> Vec<ItemStack> {
+/// Takes out the items to drop when a container block breaks: its
+/// contents, or for shulker boxes nothing (they keep their contents in
+/// the item).
+pub fn spilled(entity: &mut BlockEntity) -> Vec<ItemStack> {
     if entity.kind == ContainerKind::ShulkerBox {
         return Vec::new();
     }
-    entity.items.iter().flatten().cloned().collect()
+    entity.items.iter_mut().filter_map(Option::take).collect()
 }
 
 /// Splits a chunk's stored `block_entities` into the modeled ones and the

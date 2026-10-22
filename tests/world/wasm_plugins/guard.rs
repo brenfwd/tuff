@@ -374,7 +374,7 @@ async fn block_rules_refuse_bucket_pours_and_relight_with_a_resync() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn egg_throws_in_the_air_are_cancelled_and_reported() {
     use crate::world::inventory::Inventory;
-    use tuff_item::item::ItemStack;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
 
     let dir = TestDir::new();
@@ -386,7 +386,8 @@ async fn egg_throws_in_the_air_are_cancelled_and_reported() {
         off_hand,
         sequence: 9,
     };
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Egg, 4));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Egg, 4, MintReason::Test));
     assert_eq!(
         guard::Uses
             .intercept(&mut client.session, &throw(false))
@@ -401,7 +402,8 @@ async fn egg_throws_in_the_air_are_cancelled_and_reported() {
         Verdict::Allow,
         "only the main hand"
     );
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Snowball, 4));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Snowball, 4, MintReason::Test));
     assert_eq!(
         guard::Uses
             .intercept(&mut client.session, &throw(false))
@@ -411,7 +413,8 @@ async fn egg_throws_in_the_air_are_cancelled_and_reported() {
     assert_eq!(announced(&world).await.len(), 1);
 
     console(&world, "tuff plugin unload arena").await;
-    *client.session.inventory.slot_mut(slot) = Some(ItemStack::new(Item::Egg, 4));
+    *client.session.inventory.slot_mut(slot) =
+        Some(ItemStack::mint(Item::Egg, 4, MintReason::Test));
     assert_eq!(
         guard::Uses
             .intercept(&mut client.session, &throw(false))

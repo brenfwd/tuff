@@ -172,7 +172,7 @@ async fn tadpole_buckets_keep_age_and_slimeballs_speed_growth() {
     let HandEffect::ExchangeStack(stack) = effect else {
         panic!("expected a tadpole bucket, got {effect:?}");
     };
-    assert_eq!(stack.item, Item::TadpoleBucket);
+    assert_eq!(stack.item(), Item::TadpoleBucket);
     assert!(mobs(&region, EntityType::Tadpole).await.is_empty());
     let data = bucket_entity_data(&stack).expect("bucket data");
     assert_eq!(data.get_int("Age"), Some(age));

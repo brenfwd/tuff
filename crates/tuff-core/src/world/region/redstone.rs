@@ -692,7 +692,7 @@ impl RegionActor {
                 command_success: (cart.base().kind
                     == tuff_vanilla_data::registry::EntityType::CommandBlockMinecart)
                     .then(|| cart.base().extra.get_int("SuccessCount").unwrap_or(0)),
-                slots: cart.container(),
+                slots: cart.container().and_then(|slots| slots.as_slice()),
             })
             .collect()
     }

@@ -293,7 +293,7 @@ async fn attack(session: &mut PlayerSession, target: i32) -> Verdict {
         };
     let held = session.inventory.slots()[Inventory::hotbar_slot(session.inventory.selected())]
         .as_ref()
-        .map(|stack| stack.item.name());
+        .map(|stack| stack.item().name());
     let dimension = session.shared.dimensions.get(session.dimension).key.clone();
     let hit = Attack {
         kind: kind.name(),

@@ -85,12 +85,12 @@ impl ClickBefore {
             seen.push(index);
             if let Some(stack) = stack_at(index) {
                 bundle |= stack.is_bundle();
-                add(&mut totals, stack.item, u32::from(stack.count));
+                add(&mut totals, stack.item(), u32::from(stack.count()));
             }
         }
         if let Some(stack) = session.inventory.carried() {
             bundle |= stack.is_bundle();
-            add(&mut totals, stack.item, u32::from(stack.count));
+            add(&mut totals, stack.item(), u32::from(stack.count()));
         }
         let result = kind.result_slot();
         let on_result = result
@@ -130,14 +130,14 @@ pub enum Tamper {
 }
 
 /// Checks a client-made stack, its contents and their NBT.
-pub fn tampered(stack: &ItemStack) -> Option<Tamper> {
+pub fn tampered(stack: tuff_item::item::ItemView<'_>) -> Option<Tamper> {
     let mut bytes = 0;
     walk(stack, &mut bytes).err()
 }
 
-fn walk(stack: &ItemStack, bytes: &mut usize) -> Result<(), Tamper> {
+fn walk(stack: tuff_item::item::ItemView<'_>, bytes: &mut usize) -> Result<(), Tamper> {
     let max = stack.max_stack_size();
-    if stack.count == 0 || stack.count > max {
+    if stack.count() == 0 || stack.count() > max {
         return Err(Tamper::Count);
     }
     if max > 1 && stack.max_damage().is_some() {
@@ -152,14 +152,14 @@ fn walk(stack: &ItemStack, bytes: &mut usize) -> Result<(), Tamper> {
             return Err(Tamper::BundleWeight);
         }
         for inner in bundle.items() {
-            walk(inner, bytes)?;
+            walk(inner.view(), bytes)?;
         }
     }
     for inner in components.container.iter().flatten().flatten() {
-        walk(inner, bytes)?;
+        walk(inner.view(), bytes)?;
     }
     for inner in components.charged_projectiles.iter().flatten() {
-        walk(inner, bytes)?;
+        walk(inner.view(), bytes)?;
     }
     Ok(())
 }
@@ -224,7 +224,7 @@ impl ItemIntegrity {
     fn creative(stack: &CreativeSlot) -> Option<Flag> {
         match stack {
             CreativeSlot::Invalid => Flag::resync(STACK_COUNT, 5.0),
-            CreativeSlot::Stack(stack) => match tampered(stack)? {
+            CreativeSlot::Stack(stack) => match tampered(stack.view())? {
                 Tamper::Count => Flag::resync(STACK_COUNT, 5.0),
                 Tamper::NbtDepth | Tamper::NbtSize => Flag::resync(ITEM_DATA, 10.0),
                 Tamper::DamageableStack | Tamper::BundleWeight => Flag::resync(ITEM_DATA, 5.0),
@@ -302,6 +302,7 @@ impl Check for ItemIntegrity {
 mod tests {
     use super::super::facts;
     use super::*;
+    use tuff_item::item::{ItemSnapshot, MintReason};
     use tuff_nbt::Compound;
 
     fn creative(stack: CreativeSlot) -> Serverbound {
@@ -313,7 +314,7 @@ mod tests {
     }
 
     fn with_data(item: Item, data: Tag) -> ItemStack {
-        let mut stack = ItemStack::new(item, 1);
+        let mut stack = ItemStack::mint(item, 1, MintReason::Test);
         stack.components.other.insert("minecraft:custom_data", data);
         stack
     }
@@ -328,15 +329,21 @@ mod tests {
     #[test]
     fn plain_and_reasonable_creative_stacks_pass() {
         let f = facts();
-        let stone = ItemStack::new(Item::Stone, 64);
-        assert_eq!(flag_of(&f, &creative(CreativeSlot::Stack(stone))), None);
+        let stone = ItemStack::mint(Item::Stone, 64, MintReason::Test);
+        assert_eq!(
+            flag_of(&f, &creative(CreativeSlot::Stack(ItemSnapshot::of(&stone)))),
+            None
+        );
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Empty)), None);
         assert_eq!(flag_of(&f, &creative(CreativeSlot::Unsupported)), None);
         let data = with_data(Item::Stick, nested(MAX_NBT_DEPTH - 1));
-        assert_eq!(tampered(&data), None);
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
-        shulker.components.container = Some(vec![Some(ItemStack::new(Item::Dirt, 64)), None]);
-        assert_eq!(tampered(&shulker), None);
+        assert_eq!(tampered(data.view()), None);
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
+        shulker.components.container = Some(vec![
+            Some(ItemStack::mint(Item::Dirt, 64, MintReason::Test)),
+            None,
+        ]);
+        assert_eq!(tampered(shulker.view()), None);
     }
 
     #[tuff_core::watchdog]
@@ -347,30 +354,40 @@ mod tests {
             flag_of(&f, &creative(CreativeSlot::Invalid)),
             Some(STACK_COUNT)
         );
-        let swords = ItemStack::new(Item::DiamondSword, 2);
-        assert_eq!(tampered(&swords), Some(Tamper::Count));
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
-        shulker.components.container = Some(vec![None, Some(ItemStack::new(Item::Dirt, 65))]);
+        let swords = ItemStack::mint(Item::DiamondSword, 2, MintReason::Test);
+        assert_eq!(tampered(swords.view()), Some(Tamper::Count));
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
+        shulker.components.container = Some(vec![
+            None,
+            Some(ItemStack::mint(Item::Dirt, 65, MintReason::Test)),
+        ]);
         assert_eq!(
-            flag_of(&f, &creative(CreativeSlot::Stack(shulker))),
+            flag_of(
+                &f,
+                &creative(CreativeSlot::Stack(ItemSnapshot::of(&shulker)))
+            ),
             Some(STACK_COUNT)
         );
-        let mut crossbow = ItemStack::new(Item::Crossbow, 1);
-        crossbow.components.charged_projectiles = Some(vec![ItemStack::new(Item::Arrow, 0)]);
-        assert_eq!(tampered(&crossbow), Some(Tamper::Count));
+        let mut crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test);
+        crossbow.components.charged_projectiles =
+            Some(vec![ItemStack::mint(Item::Arrow, 0, MintReason::Test)]);
+        assert_eq!(tampered(crossbow.view()), Some(Tamper::Count));
     }
 
     #[tuff_core::watchdog]
     #[test]
     fn stackable_tools_are_tampered() {
-        let mut sword = ItemStack::new(Item::DiamondSword, 1);
+        let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
         sword
             .components
             .other
             .insert("minecraft:max_stack_size", Tag::Int(16));
-        assert_eq!(tampered(&sword), Some(Tamper::DamageableStack));
+        assert_eq!(tampered(sword.view()), Some(Tamper::DamageableStack));
         assert_eq!(
-            flag_of(&facts(), &creative(CreativeSlot::Stack(sword))),
+            flag_of(
+                &facts(),
+                &creative(CreativeSlot::Stack(ItemSnapshot::of(&sword)))
+            ),
             Some(ITEM_DATA)
         );
     }
@@ -379,21 +396,28 @@ mod tests {
     #[test]
     fn deep_or_huge_nbt_is_flagged() {
         let deep = with_data(Item::Stick, nested(MAX_NBT_DEPTH + 1));
-        assert_eq!(tampered(&deep), Some(Tamper::NbtDepth));
+        assert_eq!(tampered(deep.view()), Some(Tamper::NbtDepth));
         let wide = Tag::List(vec![Tag::String("x".repeat(1024)); 300]);
         assert_eq!(
-            tampered(&with_data(Item::Stick, wide)),
+            tampered(with_data(Item::Stick, wide).view()),
             Some(Tamper::NbtSize)
         );
         let small = Tag::List(vec![Tag::String("x".repeat(1024)); 100]);
-        let mut shulker = ItemStack::new(Item::ShulkerBox, 1);
-        shulker.components.container = Some(vec![Some(with_data(Item::Stick, small.clone())); 3]);
-        assert_eq!(tampered(&shulker), Some(Tamper::NbtSize));
-        assert_eq!(tampered(&with_data(Item::Stick, small)), None);
+        let mut shulker = ItemStack::mint(Item::ShulkerBox, 1, MintReason::Test);
+        shulker.components.container = Some(
+            (0..3)
+                .map(|_| Some(with_data(Item::Stick, small.clone())))
+                .collect(),
+        );
+        assert_eq!(tampered(shulker.view()), Some(Tamper::NbtSize));
+        assert_eq!(tampered(with_data(Item::Stick, small).view()), None);
         assert_eq!(
             flag_of(
                 &facts(),
-                &creative(CreativeSlot::Stack(with_data(Item::Stick, nested(500))))
+                &creative(CreativeSlot::Stack(ItemSnapshot::of(&with_data(
+                    Item::Stick,
+                    nested(500)
+                ))))
             ),
             Some(ITEM_DATA)
         );

@@ -84,6 +84,15 @@ impl RegionHandle {
         self.requests.send(request).await.is_ok()
     }
 
+    /// Like [`Self::request`], but hands the request back if the region
+    /// has closed, so nothing it carries is lost.
+    pub async fn try_request(&self, request: RegionRequest) -> Result<(), Box<RegionRequest>> {
+        self.requests
+            .send(request)
+            .await
+            .map_err(|error| Box::new(error.0))
+    }
+
     /// Runs `run` on the region and answers what it returned; `None` if
     /// the region has closed.
     pub async fn ask<T: Send + 'static>(
@@ -102,6 +111,14 @@ impl RegionHandle {
 
     pub fn internal(&self, message: RegionInternal) -> bool {
         self.internal.send(message).is_ok()
+    }
+
+    /// Like [`Self::internal`], but hands the message back when the region
+    /// is gone, so the stacks it carries go back to their sender.
+    pub fn try_internal(&self, message: RegionInternal) -> Result<(), Box<RegionInternal>> {
+        self.internal
+            .send(message)
+            .map_err(|error| Box::new(error.0))
     }
 
     /// Like [`Self::internal`], but hands the message back if the region is
@@ -125,7 +142,7 @@ impl RegionHandle {
 }
 
 /// A player's state as seen by the regions it is in or near.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct PlayerUpdate {
     pub handle: PlayerHandle,
     pub uuid: u128,
@@ -149,7 +166,7 @@ pub struct PlayerUpdate {
     /// Standing on the ground, alive and not riding.
     pub grounded: bool,
     /// What the player wears on its feet.
-    pub feet: Option<ItemStack>,
+    pub feet: Option<tuff_item::item::ItemSnapshot>,
     /// It landed with this update, after falling this far.
     pub landed: Option<f64>,
     /// What mobs see of the player.
@@ -303,7 +320,7 @@ pub enum RegionRequest {
     Break {
         player: PlayerHandle,
         pos: BlockPos,
-        tool: Option<ItemStack>,
+        tool: Option<tuff_item::item::ItemSnapshot>,
         mode: BreakMode,
         sequence: i32,
     },
@@ -312,7 +329,7 @@ pub enum RegionRequest {
     BreakRestricted {
         player: PlayerHandle,
         pos: BlockPos,
-        tool: Option<ItemStack>,
+        tool: Option<tuff_item::item::ItemSnapshot>,
         mode: BreakMode,
         sequence: i32,
     },
@@ -391,7 +408,7 @@ pub enum RegionRequest {
     /// A dropped item that cannot be picked up and despawns on its first
     /// tick (the visual of a full `/give`).
     SpawnFakeItem {
-        stack: ItemStack,
+        stack: tuff_item::item::ItemSnapshot,
         position: [f64; 3],
     },
     /// Adds a new entity (a player's arrow or thrown item).
@@ -410,29 +427,35 @@ pub enum RegionRequest {
         except: Option<PlayerId>,
     },
     /// A click on an open block container: applied if every `expected`
-    /// matches, answered with [`PlayerEvent::Transaction`]. `took_result`
-    /// says the click took from a result slot, which collects a furnace's
-    /// experience.
+    /// matches, answered with [`PlayerEvent::Transaction`]. `pool` holds
+    /// what the player's side gave up; the slots put what they lose into
+    /// it and take what they gain out of it, and the rest goes back.
+    /// `took_result` says the click took from a result slot, which collects
+    /// a furnace's experience.
     ContainerTransaction {
         player: PlayerHandle,
         window_id: i32,
         changes: Vec<ContainerChange>,
+        pool: Vec<ItemStack>,
         took_result: bool,
     },
     /// The first phase of a transaction spanning two regions: validate
-    /// `changes` like [`Self::ContainerTransaction`] and lock their slots,
-    /// answering with [`PlayerEvent::TransactionPrepared`].
+    /// `changes` like [`Self::ContainerTransaction`], lock their slots and
+    /// take out what they lose, answering with
+    /// [`PlayerEvent::TransactionPrepared`].
     PrepareTransaction {
         player: PlayerHandle,
         window_id: i32,
         txn: u64,
         changes: Vec<ContainerChange>,
     },
-    /// The second phase: apply (`commit`) or drop the prepared changes.
+    /// The second phase: on `commit`, `items` fill what the prepared
+    /// slots gain; otherwise `items` are what they gave up, put back.
     ResolveTransaction {
         player: PlayerId,
         txn: u64,
         commit: bool,
+        items: Vec<ItemStack>,
     },
     /// Sends a viewer the full contents of the container at `pos`, after
     /// any update already sent to it.
@@ -497,6 +520,7 @@ pub enum RegionRequest {
         window_id: i32,
         entity: i32,
         changes: Vec<EntitySlotChange>,
+        pool: Vec<ItemStack>,
     },
     /// The player no longer views the container of `entity`.
     CloseEntityContainer {

@@ -550,6 +550,89 @@ inline WorldOutcome<Unit> clear_slot(Uuid player, uint8_t slot) {
     return detail::unit(raw::tuff_plugin_host_set_slot(&player, slot, nullptr, &e), e);
 }
 
+// Items the plugin holds: a handle to stacks the server keeps for it. They
+// move only through these calls, so the plugin can make, move and use up
+// items but never copy one; a Stash is move-only like the items it names.
+// Items still in a stash when the plugin unloads are used up.
+class Stash {
+  public:
+    static WorldOutcome<Stash> create() {
+        raw::tuff_plugin_host_stash_t id = 0;
+        raw::tuff_plugin_host_world_error_t e = {};
+        if (!raw::tuff_plugin_host_stash_new(&id, &e)) {
+            return WorldOutcome<Stash>(detail::world_error(e));
+        }
+        return WorldOutcome<Stash>(Stash(id));
+    }
+    Stash(Stash &&other) : id_(other.id_) { other.id_ = 0; }
+    Stash &operator=(Stash &&other) {
+        id_ = other.id_;
+        other.id_ = 0;
+        return *this;
+    }
+    Stash(const Stash &) = delete;
+    Stash &operator=(const Stash &) = delete;
+
+    uint64_t handle() const { return id_; }
+
+    // Makes `count` (1 to 2304) new items into the stash.
+    WorldOutcome<Unit> mint(Str item, uint32_t count) const {
+        raw::tuff_plugin_host_world_error_t e = {};
+        return detail::unit(
+            raw::tuff_plugin_host_stash_mint(id_, &item, count, nullptr, nullptr, &e), e);
+    }
+
+    // How many items it holds.
+    uint32_t count() const {
+        raw::tuff_plugin_host_list_item_stack_t held = {};
+        if (!raw::tuff_plugin_host_stash_contents(id_, &held)) {
+            return 0;
+        }
+        uint32_t total = 0;
+        for (size_t i = 0; i < held.len; i++) {
+            total += held.ptr[i].count;
+        }
+        raw::tuff_plugin_host_list_item_stack_free(&held);
+        return total;
+    }
+
+    // Moves everything in `other` into this stash.
+    WorldOutcome<Unit> absorb(Stash other) const {
+        raw::tuff_plugin_host_world_error_t e = {};
+        uint64_t source = other.id_;
+        other.id_ = 0;
+        return detail::unit(raw::tuff_plugin_host_stash_merge(id_, source, &e), e);
+    }
+
+    // Uses up everything it holds.
+    WorldOutcome<Unit> burn() && {
+        raw::tuff_plugin_host_world_error_t e = {};
+        uint64_t id = id_;
+        id_ = 0;
+        return detail::unit(raw::tuff_plugin_host_stash_burn(id, &e), e);
+    }
+
+    // Queues moving everything it holds into an online player's inventory.
+    WorldOutcome<Unit> give(Uuid player) && {
+        raw::tuff_plugin_host_world_error_t e = {};
+        uint64_t id = id_;
+        id_ = 0;
+        return detail::unit(raw::tuff_plugin_host_give_stash(&player, id, &e), e);
+    }
+
+    // Queues taking up to `count` of `item` from an online player into the
+    // stash; the items arrive after the call.
+    WorldOutcome<Unit> take_from(Uuid player, Str item, uint32_t count, bool all_or_nothing) const {
+        raw::tuff_plugin_host_world_error_t e = {};
+        return detail::unit(
+            raw::tuff_plugin_host_take_into_stash(&player, &item, count, all_or_nothing, id_, &e), e);
+    }
+
+  private:
+    explicit Stash(uint64_t id) : id_(id) {}
+    uint64_t id_;
+};
+
 } // namespace online
 
 namespace dimensions {

@@ -305,8 +305,14 @@ impl<const HUSK: bool> Species for Camel<HUSK> {
         if HUSK {
             core.persistence_required = true;
         }
-        let stack = interaction.stack.as_ref()?;
-        super::equine::saddle_up(core, stack, Some(Self::SOUNDS.saddle), cx)
+        let stack = interaction.stack.as_deref()?;
+        super::equine::saddle_up(
+            core,
+            stack,
+            &interaction.hand,
+            Some(Self::SOUNDS.saddle),
+            cx,
+        )
     }
 
     fn configure(core: &mut MobCore) {
@@ -379,7 +385,7 @@ impl<const HUSK: bool> Species for Camel<HUSK> {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        Self::food(stack.item)
+        Self::food(stack.item())
     }
 
     fn offspring(&self, _partner: &Self, _rng: &mut StdRng) -> Self {
@@ -409,6 +415,7 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuff_item::item::MintReason;
 
     #[tuff_core::watchdog]
     #[test]
@@ -477,8 +484,8 @@ mod tests {
             let mut husk = CamelHusk::default();
             assert!(core.age.is_none() && core.love.is_none());
             assert!(!husk.can_fall_in_love(core) && husk.remove_when_far_away());
-            assert!(husk.is_food(&ItemStack::new(Item::RabbitFoot, 1)));
-            assert!(!husk.is_food(&ItemStack::new(Item::Cactus, 1)));
+            assert!(husk.is_food(&ItemStack::mint(Item::RabbitFoot, 1, MintReason::Test)));
+            assert!(!husk.is_food(&ItemStack::mint(Item::Cactus, 1, MintReason::Test)));
             assert_eq!(
                 husk.sounds(core).ambient,
                 Some(SoundEvent::EntityCamelHuskAmbient)
@@ -489,6 +496,7 @@ mod tests {
                 position: [0.0; 3],
                 location: [0.0; 3],
                 stack: None,
+                hand: Default::default(),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -501,7 +509,7 @@ mod tests {
 
             let camel = Camel::<false>::default();
             assert!(camel.can_fall_in_love(core) && !camel.remove_when_far_away());
-            assert!(camel.is_food(&ItemStack::new(Item::Cactus, 1)));
+            assert!(camel.is_food(&ItemStack::mint(Item::Cactus, 1, MintReason::Test)));
         });
     }
 

@@ -17,9 +17,9 @@ fn stacks_without_components_stay_small_and_unallocated() {
     assert!(size_of::<ItemStack>() <= 32);
     assert!(size_of::<Option<ItemStack>>() <= 32);
     assert_eq!(size_of::<Components>(), size_of::<usize>());
-    let stone = ItemStack::new(Item::Stone, 64);
+    let stone = ItemStack::mint(Item::Stone, 64, MintReason::Test);
     assert!(!stone.components.is_allocated());
-    assert!(!stone.clone().components.is_allocated());
+    assert!(!stone.test_copy().components.is_allocated());
     assert!(!Components::from_nbt(&Compound::new()).is_allocated());
     assert!(!Components::from(ComponentPatch::default()).is_allocated());
     assert!(
@@ -34,8 +34,10 @@ fn stacks_without_components_stay_small_and_unallocated() {
 #[test]
 fn an_emptied_patch_equals_no_patch() {
     let plain = Components::default();
-    let mut emptied = plain.clone();
-    emptied.damage = Some(3);
+    let mut emptied = Components::from(ComponentPatch {
+        damage: Some(3),
+        ..Default::default()
+    });
     assert!(emptied.is_allocated());
     assert_ne!(emptied, plain);
     assert_eq!(emptied.damage, Some(3));
@@ -44,7 +46,7 @@ fn an_emptied_patch_equals_no_patch() {
     assert!(emptied.is_empty());
     assert_eq!(emptied, plain);
     assert_eq!(plain, emptied);
-    assert!(!emptied.clone().is_allocated());
+    assert!(!emptied.picture_copy().is_allocated());
     emptied.compact();
     assert!(!emptied.is_allocated());
     assert_eq!(
@@ -99,7 +101,7 @@ impl RngCore for CountingRng {
 }
 
 fn pickaxe(damage: u32) -> ItemStack {
-    let mut stack = ItemStack::new(Item::DiamondPickaxe, 1);
+    let mut stack = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     stack.set_damage(damage);
     stack
 }
@@ -113,17 +115,20 @@ fn enchanted(stack: ItemStack, id: &str, level: i32) -> ItemStack {
 #[tuff_core::watchdog]
 #[test]
 fn nbt_round_trip_of_plain_stacks() {
-    let stack = ItemStack::new(Item::Dirt, 12);
+    let stack = ItemStack::mint(Item::Dirt, 12, MintReason::Test);
     assert_eq!(stack.to_nbt().get_str("id"), Some("minecraft:dirt"));
     assert!(!stack.to_nbt().contains_key("components"));
-    assert_eq!(ItemStack::from_nbt(&stack.to_nbt()), Some(stack));
+    assert_eq!(
+        ItemStack::mint_from_nbt(&stack.to_nbt(), MintReason::Test),
+        Some(stack)
+    );
     let bare = Compound::new().with("id", "minecraft:stone");
     assert_eq!(
-        ItemStack::from_nbt(&bare),
-        Some(ItemStack::new(Item::Stone, 1))
+        ItemStack::mint_from_nbt(&bare, MintReason::Test),
+        Some(ItemStack::mint(Item::Stone, 1, MintReason::Test))
     );
     assert_eq!(
-        ItemStack::from_nbt(&Compound::new().with("id", "modded:x")),
+        ItemStack::mint_from_nbt(&Compound::new().with("id", "modded:x"), MintReason::Test),
         None
     );
 }
@@ -166,10 +171,10 @@ fn nbt_round_trip_keeps_typed_raw_and_removed_components() {
         )
         .with("modded:thing", 4)
         .with("!minecraft:tool", Compound::new());
-    let nbt = ItemStack::new(Item::DiamondPickaxe, 1)
+    let nbt = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test)
         .to_nbt()
         .with("components", components);
-    let stack = ItemStack::from_nbt(&nbt).unwrap();
+    let stack = ItemStack::mint_from_nbt(&nbt, MintReason::Test).unwrap();
     let c = &stack.components;
     assert_eq!(c.damage, Some(3));
     assert_eq!(c.max_damage, Some(2000));
@@ -202,7 +207,7 @@ fn nbt_round_trip_keeps_typed_raw_and_removed_components() {
     assert!(c.is_removed("minecraft:tool"));
 
     let saved = stack.to_nbt();
-    let reloaded = ItemStack::from_nbt(&saved).unwrap();
+    let reloaded = ItemStack::mint_from_nbt(&saved, MintReason::Test).unwrap();
     assert_eq!(reloaded, stack);
     let saved_components = saved.get_compound("components").unwrap();
     assert_eq!(
@@ -235,10 +240,10 @@ fn nbt_round_trip_of_suspicious_stew_effects() {
             Compound::new().with("id", "minecraft:hunger"),
         ],
     );
-    let nbt = ItemStack::new(Item::SuspiciousStew, 1)
+    let nbt = ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Test)
         .to_nbt()
         .with("components", components);
-    let stack = ItemStack::from_nbt(&nbt).unwrap();
+    let stack = ItemStack::mint_from_nbt(&nbt, MintReason::Test).unwrap();
     let effects = stack.components.suspicious_stew_effects.as_ref().unwrap();
     assert_eq!(
         effects,
@@ -255,7 +260,10 @@ fn nbt_round_trip_of_suspicious_stew_effects() {
     );
 
     let saved = stack.to_nbt();
-    assert_eq!(ItemStack::from_nbt(&saved), Some(stack));
+    assert_eq!(
+        ItemStack::mint_from_nbt(&saved, MintReason::Test),
+        Some(stack)
+    );
     let saved_effects = saved
         .get_compound("components")
         .unwrap()
@@ -298,12 +306,15 @@ fn unparseable_typed_components_stay_raw() {
 #[test]
 fn gear_components_are_typed_and_round_trip() {
     use crate::item::gear::samples;
-    let mut stack = ItemStack::new(Item::Stick, 1);
+    let mut stack = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     stack.components.attribute_modifiers = Some(samples::modifiers());
     stack.components.tool = Some(Box::new(samples::tool()));
     stack.components.weapon = Some(samples::weapon());
     let saved = stack.to_nbt();
-    assert_eq!(ItemStack::from_nbt(&saved), Some(stack.clone()));
+    assert_eq!(
+        ItemStack::mint_from_nbt(&saved, MintReason::Test),
+        Some(stack.test_copy())
+    );
     assert_eq!(stack.weapon(), Some(samples::weapon()));
     assert_eq!(stack.attribute_modifiers().len(), 3);
     assert!(stack.is_correct_tool_for_drops(tuff_vanilla_data::Block::Stone));
@@ -329,7 +340,7 @@ fn gear_components_are_typed_and_round_trip() {
     let c = Components::from_nbt(&broken);
     assert_eq!(c.tool, None);
     assert_eq!(c.to_nbt(), broken, "a tool this server cannot read is kept");
-    let sword = ItemStack::new(Item::DiamondSword, 1).with_components(c);
+    let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test).with_components(c);
     assert!(sword.tool().is_some(), "and the item default still applies");
 }
 
@@ -364,7 +375,7 @@ fn damage_tracks_max_damage_and_defaults() {
     stack.set_damage(5000);
     assert_eq!(stack.damage(), 1561);
 
-    let mut dirt = ItemStack::new(Item::Dirt, 1);
+    let mut dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
     assert!(!dirt.is_damageable());
     dirt.components.max_damage = Some(10);
     assert!(!dirt.is_damageable());
@@ -385,7 +396,7 @@ fn damage_tracks_max_damage_and_defaults() {
 #[tuff_core::watchdog]
 #[test]
 fn only_a_mostly_intact_elytra_can_glide() {
-    let mut elytra = ItemStack::new(Item::Elytra, 1);
+    let mut elytra = ItemStack::mint(Item::Elytra, 1, MintReason::Test);
     assert!(elytra.can_glide());
     let max = elytra.max_damage().unwrap();
     elytra.set_damage(max - 2);
@@ -394,7 +405,7 @@ fn only_a_mostly_intact_elytra_can_glide() {
     assert!(!elytra.can_glide(), "the next hit would break it");
     elytra.set_damage(max);
     assert!(!elytra.can_glide());
-    assert!(!ItemStack::new(Item::DiamondChestplate, 1).can_glide());
+    assert!(!ItemStack::mint(Item::DiamondChestplate, 1, MintReason::Test).can_glide());
 }
 
 #[tuff_core::watchdog]
@@ -416,7 +427,7 @@ fn hurt_damages_and_breaks_at_max_damage() {
     let mut unbreakable = pickaxe(0);
     unbreakable.components.unbreakable = true;
     assert_eq!(unbreakable.hurt(5, &mut rng), Hurt::Unchanged);
-    let mut dirt = ItemStack::new(Item::Dirt, 1);
+    let mut dirt = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
     assert_eq!(dirt.hurt(5, &mut rng), Hurt::Unchanged);
 }
 
@@ -425,7 +436,7 @@ fn hurt_damages_and_breaks_at_max_damage() {
 fn repair_with_experience_spends_two_durability_per_point_capped_by_damage() {
     let stack = pickaxe(10);
     assert!(!stack.wants_mending(), "not enchanted yet");
-    let mut stack = enchanted(stack.clone(), MENDING, 1);
+    let mut stack = enchanted(stack.test_copy(), MENDING, 1);
     assert!(stack.wants_mending());
     assert_eq!(
         stack.repair_with_experience(3),
@@ -461,7 +472,7 @@ fn unbreaking_skips_points_at_the_vanilla_rate() {
         let mut rng = StdRng::seed_from_u64(7);
         let taken: u32 = (0..trials)
             .map(|_| {
-                let mut probe = stack.clone();
+                let mut probe = stack.test_copy();
                 probe.set_damage(0);
                 u32::from(probe.hurt(1, &mut rng) == Hurt::Damaged)
             })
@@ -470,9 +481,17 @@ fn unbreaking_skips_points_at_the_vanilla_rate() {
     };
     let tool = enchanted(pickaxe(0), UNBREAKING, 3);
     assert!((rate(&tool) - 0.25).abs() < 0.02, "tool {}", rate(&tool));
-    let armor = enchanted(ItemStack::new(Item::IronChestplate, 1), UNBREAKING, 1);
+    let armor = enchanted(
+        ItemStack::mint(Item::IronChestplate, 1, MintReason::Test),
+        UNBREAKING,
+        1,
+    );
     assert!((rate(&armor) - 0.8).abs() < 0.02, "armor {}", rate(&armor));
-    let armor3 = enchanted(ItemStack::new(Item::IronChestplate, 1), UNBREAKING, 3);
+    let armor3 = enchanted(
+        ItemStack::mint(Item::IronChestplate, 1, MintReason::Test),
+        UNBREAKING,
+        3,
+    );
     assert!(
         (rate(&armor3) - 0.7).abs() < 0.02,
         "armor3 {}",
@@ -561,12 +580,12 @@ fn dropped_points_normal_approximation_matches_binomial_mean_and_variance() {
 #[tuff_core::watchdog]
 #[test]
 fn stacks_merge_only_with_equal_components() {
-    let plain = ItemStack::new(Item::DiamondPickaxe, 1);
-    assert!(plain.stacks_with(&plain.clone()));
+    let plain = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
+    assert!(plain.stacks_with(&plain.test_copy()));
     assert!(!plain.stacks_with(&pickaxe(3)));
-    assert!(!plain.stacks_with(&enchanted(plain.clone(), UNBREAKING, 1)));
+    assert!(!plain.stacks_with(&enchanted(plain.test_copy(), UNBREAKING, 1)));
     assert!(pickaxe(3).stacks_with(&pickaxe(3)));
-    let mut sized = ItemStack::new(Item::Dirt, 1);
+    let mut sized = ItemStack::mint(Item::Dirt, 1, MintReason::Test);
     assert_eq!(sized.max_stack_size(), 64);
     sized.components.other.insert(MAX_STACK_SIZE, 16);
     assert_eq!(sized.max_stack_size(), 16);
@@ -663,7 +682,7 @@ fn network_view_drops_what_cannot_be_encoded() {
 #[tuff_core::watchdog]
 #[test]
 fn use_effects_default_from_the_item_and_accept_stack_overrides() {
-    let mut spear = ItemStack::new(Item::IronSpear, 1);
+    let mut spear = ItemStack::mint(Item::IronSpear, 1, MintReason::Test);
     let effects = spear.use_effects();
     assert!(effects.can_sprint && !effects.interact_vibrations);
     assert_eq!(effects.speed_multiplier, 1.0);
@@ -678,7 +697,7 @@ fn use_effects_default_from_the_item_and_accept_stack_overrides() {
     let effects = spear.use_effects();
     assert!(effects.can_sprint && effects.interact_vibrations);
     assert_eq!(effects.speed_multiplier, 0.5);
-    let bow = ItemStack::new(Item::Bow, 1).use_effects();
+    let bow = ItemStack::mint(Item::Bow, 1, MintReason::Test).use_effects();
     assert!(!bow.can_sprint && bow.interact_vibrations);
     assert_eq!(bow.speed_multiplier, 0.2);
 }
@@ -686,7 +705,7 @@ fn use_effects_default_from_the_item_and_accept_stack_overrides() {
 #[tuff_core::watchdog]
 #[test]
 fn a_stacks_own_use_components_override_the_items_defaults() {
-    let mut stone = ItemStack::new(Item::Stone, 1);
+    let mut stone = ItemStack::mint(Item::Stone, 1, MintReason::Test);
     assert_eq!(stone.use_cooldown(), None);
     assert_eq!(stone.use_remainder(), None);
     let mut cooldown = Compound::new();
@@ -713,8 +732,10 @@ fn a_stacks_own_use_components_override_the_items_defaults() {
     let left = stone.use_remainder().unwrap();
     assert_eq!((left.item, left.count), (Item::Bowl, 2));
 
-    let mut milk = ItemStack::new(Item::MilkBucket, 1);
-    assert_eq!(milk.use_remainder().unwrap().item, Item::Bucket);
+    let mut milk = ItemStack::mint(Item::MilkBucket, 1, MintReason::Test);
+    let bucket = milk.use_remainder().unwrap();
+    assert_eq!(bucket.item, Item::Bucket);
+    bucket.burn(crate::item::BurnReason::Test);
     milk.components
         .removed
         .push("minecraft:use_remainder".to_owned());
@@ -724,17 +745,17 @@ fn a_stacks_own_use_components_override_the_items_defaults() {
 #[tuff_core::watchdog]
 #[test]
 fn death_protection_comes_from_the_component_not_the_item() {
-    let totem = ItemStack::new(Item::TotemOfUndying, 1);
+    let totem = ItemStack::mint(Item::TotemOfUndying, 1, MintReason::Test);
     assert_eq!(totem.death_protection().map(|e| e.len()), Some(4));
 
-    let mut removed = totem.clone();
+    let mut removed = totem.test_copy();
     removed
         .components
         .removed
         .push("minecraft:death_protection".into());
     assert!(removed.death_protection().is_none());
 
-    let mut custom = ItemStack::new(Item::Stick, 1);
+    let mut custom = ItemStack::mint(Item::Stick, 1, MintReason::Test);
     assert!(custom.death_protection().is_none());
     let effect = Compound::new().with("type", "minecraft:clear_all_effects");
     custom.components.other.insert(
@@ -751,10 +772,37 @@ fn death_protection_comes_from_the_component_not_the_item() {
 #[test]
 fn spears_stab_and_other_items_whack() {
     assert_eq!(
-        ItemStack::new(Item::Stick, 1).attack_animation(),
+        ItemStack::mint(Item::Stick, 1, MintReason::Test).attack_animation(),
         (SwingKind::Whack, 6)
     );
-    let (kind, duration) = ItemStack::new(Item::WoodenSpear, 1).attack_animation();
+    let (kind, duration) =
+        ItemStack::mint(Item::WoodenSpear, 1, MintReason::Test).attack_animation();
     assert_eq!(kind, SwingKind::Stab);
     assert!(duration > 6);
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn transform_records_a_burn_and_a_mint_and_keeps_count_and_components() {
+    let mut stack = ItemStack::mint(Item::EnchantedBook, 5, MintReason::Command);
+    stack.components.repair_cost = Some(3);
+    let before = conservation::totals();
+    stack.transform(Item::Book, MintReason::Transform, BurnReason::Transform);
+    let after = conservation::totals();
+    assert_eq!(stack.item(), Item::Book);
+    assert_eq!(stack.count(), 5);
+    assert_eq!(stack.components.repair_cost, Some(3));
+    assert!(!stack.is_picture());
+    assert!(after.burned >= before.burned + 5);
+    assert!(after.minted >= before.minted + 5);
+    stack.burn(BurnReason::Test);
+
+    let mut picture = ItemStack::mint(Item::Map, 1, MintReason::Test);
+    picture.transform(
+        Item::WoodlandMansionMap,
+        MintReason::Transform,
+        BurnReason::Transform,
+    );
+    assert_eq!(picture.item(), Item::WoodlandMansionMap);
+    assert!(picture.is_picture());
 }

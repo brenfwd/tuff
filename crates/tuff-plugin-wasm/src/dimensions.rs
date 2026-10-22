@@ -102,6 +102,7 @@ pub async fn create(
                         blocks: Some(blocks),
                         entities: EntityWrite::Clear,
                         pois: EntityWrite::Clear,
+                        ticket: None,
                     }),
                     _ => None,
                 })

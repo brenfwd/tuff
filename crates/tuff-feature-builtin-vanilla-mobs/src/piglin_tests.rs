@@ -71,11 +71,13 @@ fn a_brute_keeps_a_home_and_only_takes_a_golden_axe() {
         brute.finalize_spawn(core, cx);
         assert!(core.home.is_some());
         core.equipment.set(EquipmentSlot::Mainhand, None);
-        brute.took_item(core, ItemStack::new(Item::GoldIngot, 1));
+        brute.took_item(core, ItemStack::mint(Item::GoldIngot, 1, MintReason::Test));
         assert!(core.equipment.get(EquipmentSlot::Mainhand).is_none());
-        brute.took_item(core, ItemStack::new(Item::GoldenAxe, 1));
+        brute.took_item(core, ItemStack::mint(Item::GoldenAxe, 1, MintReason::Test));
         assert_eq!(
-            core.equipment.get(EquipmentSlot::Mainhand).map(|s| s.item),
+            core.equipment
+                .get(EquipmentSlot::Mainhand)
+                .map(|s| s.item()),
             Some(Item::GoldenAxe)
         );
     });
@@ -85,9 +87,9 @@ fn a_brute_keeps_a_home_and_only_takes_a_golden_axe() {
 #[test]
 fn arming_a_zombified_piglin_keeps_a_handed_item() {
     crate::tests::with_context(|core, cx| {
-        let fungus = ItemStack::new(Item::WarpedFungusOnAStick, 1);
+        let fungus = ItemStack::mint(Item::WarpedFungusOnAStick, 1, MintReason::Test);
         core.equipment
-            .set(EquipmentSlot::Mainhand, Some(fungus.clone()));
+            .set(EquipmentSlot::Mainhand, Some(fungus.test_copy()));
         arm_zombified(core, cx);
         assert_eq!(core.equipment.get(EquipmentSlot::Mainhand), Some(&fungus));
         core.equipment.set(EquipmentSlot::Mainhand, None);
@@ -112,7 +114,7 @@ fn spawned_piglins_may_be_babies_or_carry_a_crossbow_sword_or_spear() {
                 babies += 1;
                 assert!(core.equipment.main_hand().is_none());
             } else {
-                let weapon = core.equipment.main_hand().unwrap().item;
+                let weapon = core.equipment.main_hand().unwrap().item();
                 *weapons.entry(weapon).or_insert(0) += 1;
             }
         }
@@ -146,10 +148,18 @@ fn structure_piglins_skip_the_baby_roll_and_the_spawn_weapon() {
 fn pockets_hold_eight_stacks() {
     let mut brain = PiglinBrain::default();
     for _ in 0..8 {
-        assert!(brain.add(ItemStack::new(Item::GoldNugget, 64)).is_none());
+        assert!(
+            brain
+                .add(ItemStack::mint(Item::GoldNugget, 64, MintReason::Test))
+                .is_none()
+        );
     }
     assert!(!brain.can_add(Item::Stick));
-    assert!(brain.add(ItemStack::new(Item::Stick, 1)).is_some());
+    assert!(
+        brain
+            .add(ItemStack::mint(Item::Stick, 1, MintReason::Test))
+            .is_some()
+    );
 }
 
 pub(crate) fn summary(id: i32, kind: EntityType, x: f64, age: i32, alive: bool) -> EntitySummary {

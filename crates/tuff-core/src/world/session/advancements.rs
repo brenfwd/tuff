@@ -157,8 +157,7 @@ impl PlayerSession {
                     };
                     let drops = loot.entity_drops(table, &facts, &mut self.rng);
                     for stack in drops {
-                        let count = i32::from(stack.count);
-                        self.give_items(stack, count).await;
+                        self.give_stack(stack).await;
                     }
                 }
                 if let Some(function) = &reward.function {
@@ -207,27 +206,31 @@ impl PlayerSession {
     /// it. The crafting result and grid are not inventory slots.
     pub fn scan_inventory(&mut self) {
         let slots = self.inventory.slots();
-        if slots == self.progress.last_inventory.as_slice() {
+        let same = |slot: usize| {
+            slots[slot].as_ref()
+                == self
+                    .progress
+                    .last_inventory
+                    .get(slot)
+                    .and_then(Option::as_deref)
+        };
+        if slots.len() == self.progress.last_inventory.len() && (0..slots.len()).all(same) {
             return;
         }
-        let changed: Vec<Option<ItemStack>> = UNLOCK_WATCHED_SLOTS
-            .filter(|slot| {
-                slots[*slot] != self.progress.last_inventory.get(*slot).cloned().flatten()
-            })
-            .map(|slot| slots[slot].clone())
-            .collect();
-        let mut inventory: Vec<Option<ItemStack>> = INVENTORY_ORDER
-            .iter()
-            .map(|&slot| slots[slot].clone())
-            .collect();
+        let changed: Vec<usize> = UNLOCK_WATCHED_SLOTS.filter(|slot| !same(*slot)).collect();
+        let last = tuff_item::item::snapshot_slots(slots);
+        let view = |slot: usize| last[slot].as_ref().map(tuff_item::item::ItemSnapshot::view);
+        let mut inventory: Vec<Option<tuff_item::item::ItemView<'_>>> =
+            INVENTORY_ORDER.iter().map(|&slot| view(slot)).collect();
         inventory.extend(std::iter::repeat_n(None, ALWAYS_EMPTY_SLOTS));
-        self.progress.last_inventory = slots.to_vec();
-        for stack in &changed {
+        for &slot in &changed {
             self.fire(Event::InventoryChanged {
-                changed: stack.as_ref(),
+                changed: view(slot).map(tuff_item::item::ItemView::get),
                 inventory: &inventory,
             });
         }
+        drop(inventory);
+        self.progress.last_inventory = last;
     }
 
     /// A held item used on a block: placed-block and item-used-on-block
@@ -241,9 +244,11 @@ impl PlayerSession {
         let stack = self
             .inventory
             .hand(off_hand)
-            .filter(|stack| stack.item == item)
-            .cloned()
-            .unwrap_or_else(|| ItemStack::new(item, 1));
+            .filter(|stack| stack.item() == item)
+            .map(tuff_item::item::ItemSnapshot::of)
+            .unwrap_or_else(|| {
+                tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())
+            });
         if let Some(placed) = &placement.placed {
             self.fire(Event::PlacedBlock {
                 location: placed,
@@ -259,7 +264,10 @@ impl PlayerSession {
     /// Recipes crafted in a result slot, with the stacks they used.
     pub fn crafted_recipes(
         &mut self,
-        crafted: &[(tuff_vanilla_data::Frozen<str>, Vec<ItemStack>)],
+        crafted: &[(
+            tuff_vanilla_data::Frozen<str>,
+            Vec<tuff_item::item::ItemSnapshot>,
+        )],
     ) {
         self.award_recipes(crafted.iter().map(|(recipe, _)| &**recipe));
         for (recipe, ingredients) in crafted {
@@ -336,8 +344,12 @@ impl PlayerSession {
                 let entity = here(entity);
                 let rod = [false, true]
                     .into_iter()
-                    .filter_map(|off_hand| self.inventory.hand(off_hand).cloned())
-                    .find(|stack| stack.item == tuff_vanilla_data::Item::FishingRod);
+                    .filter_map(|off_hand| {
+                        self.inventory
+                            .hand(off_hand)
+                            .map(tuff_item::item::ItemSnapshot::of)
+                    })
+                    .find(|stack| stack.item() == tuff_vanilla_data::Item::FishingRod);
                 if let Some(rod) = rod {
                     self.fire(Event::FishingRodHooked {
                         rod: &rod,
@@ -357,12 +369,12 @@ impl PlayerSession {
                 taken,
             } => {
                 let victim = here(victim);
-                self.hurt_entity_facts(&weapon, &victim, &damage, dealt, taken);
+                self.hurt_entity_facts(weapon.as_ref(), &victim, &damage, dealt, taken);
             }
             AdvancementEvent::InteractedWithEntity { item, entity } => {
                 let entity = here(entity);
                 self.fire(Event::PlayerInteractedWithEntity {
-                    item: item.as_ref(),
+                    item: item.as_deref(),
                     entity: &entity,
                 });
             }
@@ -379,8 +391,14 @@ impl PlayerSession {
                 let item = self
                     .inventory
                     .hand(off_hand)
-                    .cloned()
-                    .unwrap_or_else(|| ItemStack::new(tuff_vanilla_data::Item::Air, 0));
+                    .map(tuff_item::item::ItemSnapshot::of)
+                    .unwrap_or_else(|| {
+                        tuff_item::item::ItemSnapshot::describe(
+                            tuff_vanilla_data::Item::Air,
+                            0,
+                            Default::default(),
+                        )
+                    });
                 self.fire(Event::AnyBlockUse {
                     location: &location,
                     item: &item,
@@ -416,7 +434,7 @@ impl PlayerSession {
             AdvancementEvent::BeeNestDestroyed { block, item, bees } => {
                 self.fire(Event::BeeNestDestroyed {
                     block,
-                    item: item.as_ref(),
+                    item: item.as_deref(),
                     bees,
                 });
             }
@@ -538,7 +556,7 @@ impl PlayerSession {
         for (victims, weapon) in group_arrow_kills(pending) {
             self.fire(Event::KilledByArrow {
                 victims: &victims,
-                weapon: weapon.as_ref(),
+                weapon: weapon.as_deref(),
             });
         }
     }
@@ -576,7 +594,7 @@ impl PlayerSession {
 
     fn hurt_entity_facts(
         &mut self,
-        weapon: &Option<tuff_item::item::ItemStack>,
+        weapon: Option<&tuff_item::item::ItemSnapshot>,
         victim: &EntityFacts,
         damage: &crate::world::predicate::DamageFacts,
         dealt: f32,
@@ -609,7 +627,7 @@ impl PlayerSession {
     /// This player's melee hit landed on an entity of type `kind`.
     pub fn hurt_entity(
         &mut self,
-        weapon: &Option<tuff_item::item::ItemStack>,
+        weapon: Option<&tuff_item::item::ItemSnapshot>,
         kind: EntityType,
         position: [f64; 3],
         dealt: f32,
@@ -709,25 +727,6 @@ impl PlayerSession {
     }
 
     /// Potions taken out of a brewing stand's bottle slots.
-    pub fn took_potions(&mut self, before: &[Option<ItemStack>], after: &[Option<ItemStack>]) {
-        for (slot, taken) in before
-            .iter()
-            .enumerate()
-            .take(crate::world::menu::brewing::INGREDIENT)
-        {
-            let Some(taken) = taken else {
-                continue;
-            };
-            let left = after.get(slot).cloned().flatten();
-            if left.as_ref().is_some_and(|stack| stack.item == taken.item) {
-                continue;
-            }
-            if let Some(contents) = &taken.components.potion_contents {
-                self.fire(Event::BrewedPotion(contents.potion.map(|p| p.name())));
-            }
-        }
-    }
-
     /// The progress as selectors read it.
     pub fn advancement_view(&mut self) -> View {
         let tree = self.progress.advancement_tree.clone();
@@ -778,8 +777,8 @@ impl PlayerSession {
             && let Some(stack) = self
                 .inventory
                 .hand(using.off_hand)
-                .filter(|stack| stack.item == using.item)
-                .cloned()
+                .filter(|stack| stack.item() == using.item)
+                .map(tuff_item::item::ItemSnapshot::of)
         {
             self.fire(Event::UsingItem(&stack));
         }
@@ -831,9 +830,15 @@ impl PlayerSession {
     }
 }
 
-type ArrowKill = (EntityFacts, Option<ItemStack>, Option<i32>);
+type ArrowKill = (
+    EntityFacts,
+    Option<tuff_item::item::ItemSnapshot>,
+    Option<i32>,
+);
 
-fn group_arrow_kills(mut pending: Vec<ArrowKill>) -> Vec<(Vec<EntityFacts>, Option<ItemStack>)> {
+fn group_arrow_kills(
+    mut pending: Vec<ArrowKill>,
+) -> Vec<(Vec<EntityFacts>, Option<tuff_item::item::ItemSnapshot>)> {
     let mut volleys = Vec::new();
     while !pending.is_empty() {
         let (weapon, arrow) = (pending[0].1.clone(), pending[0].2);
@@ -844,6 +849,28 @@ fn group_arrow_kills(mut pending: Vec<ArrowKill>) -> Vec<(Vec<EntityFacts>, Opti
         volleys.push((volley.into_iter().map(|(v, _, _)| v).collect(), weapon));
     }
     volleys
+}
+
+/// The potions taken out of a brewing stand's bottle slots between
+/// `before` and `after`, by name, for the brewed potion trigger.
+pub(crate) fn potions_taken(
+    before: &[Option<ItemStack>],
+    after: &[Option<ItemStack>],
+) -> Vec<Option<&'static str>> {
+    before
+        .iter()
+        .enumerate()
+        .take(crate::world::menu::brewing::INGREDIENT)
+        .filter_map(|(slot, taken)| {
+            let taken = taken.as_ref()?;
+            let left = after.get(slot).and_then(Option::as_ref);
+            if left.is_some_and(|stack| stack.item() == taken.item()) {
+                return None;
+            }
+            let contents = taken.components.potion_contents.as_ref()?;
+            Some(contents.potion.map(|p| p.name()))
+        })
+        .collect()
 }
 
 #[cfg(test)]

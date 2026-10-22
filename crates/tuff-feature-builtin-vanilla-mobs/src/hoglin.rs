@@ -489,7 +489,7 @@ impl Species for Hoglin {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::HOGLIN_FOOD, stack.item)
+        tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::HOGLIN_FOOD, stack.item())
     }
 
     fn tick(&mut self, core: &mut MobCore, cx: &mut TickContext) {

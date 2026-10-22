@@ -6,7 +6,7 @@ use super::smelting as ticking;
 use crate::crafting::registered::vanilla_set;
 use tuff_core::world::block_entity::{CAMPFIRE_SLOTS, Campfire, ContainerKind, Furnace, furnace};
 use tuff_core::world::crafting::smelting::{self, FurnaceTick};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 
 fn tick_furnace(
     kind: ContainerKind,
@@ -34,7 +34,10 @@ fn place_food(
     campfire: &mut Campfire,
     stack: &ItemStack,
 ) -> Option<usize> {
-    smelting::place_food(vanilla_set(), items, campfire, stack)
+    let one = ItemStack::mint_like(stack, 1, MintReason::Test);
+    smelting::place_food(vanilla_set(), items, campfire, one)
+        .map_err(|refused| refused.burn(tuff_item::item::BurnReason::Test))
+        .ok()
 }
 
 fn can_cook(kind: ContainerKind, item: Item) -> bool {
@@ -42,7 +45,7 @@ fn can_cook(kind: ContainerKind, item: Item) -> bool {
 }
 
 fn stack(item: Item, count: u8) -> Option<ItemStack> {
-    Some(ItemStack::new(item, count))
+    Some(ItemStack::mint(item, count, MintReason::Test))
 }
 
 fn run(
@@ -257,13 +260,19 @@ fn relighting_keeps_the_progress_ratio_across_speeds() {
 #[tuff_core::watchdog]
 #[test]
 fn campfires_cook_for_600_ticks_and_cool_when_unlit() {
-    let mut items = vec![None; CAMPFIRE_SLOTS];
+    let mut items = (0..CAMPFIRE_SLOTS)
+        .map(|_| None)
+        .collect::<Vec<Option<ItemStack>>>();
     let mut campfire = Campfire::default();
     assert_eq!(
-        place_food(&mut items, &mut campfire, &ItemStack::new(Item::Stone, 1)),
+        place_food(
+            &mut items,
+            &mut campfire,
+            &ItemStack::mint(Item::Stone, 1, MintReason::Test)
+        ),
         None
     );
-    let beef = ItemStack::new(Item::Beef, 5);
+    let beef = ItemStack::mint(Item::Beef, 5, MintReason::Test);
     assert_eq!(place_food(&mut items, &mut campfire, &beef), Some(0));
     assert_eq!(place_food(&mut items, &mut campfire, &beef), Some(1));
     assert_eq!(items[0], stack(Item::Beef, 1));
@@ -276,8 +285,8 @@ fn campfires_cook_for_600_ticks_and_cool_when_unlit() {
     assert_eq!(
         popped,
         vec![
-            ItemStack::new(Item::CookedBeef, 1),
-            ItemStack::new(Item::CookedBeef, 1)
+            ItemStack::mint(Item::CookedBeef, 1, MintReason::Test),
+            ItemStack::mint(Item::CookedBeef, 1, MintReason::Test)
         ]
     );
     assert!(items.iter().all(Option::is_none));

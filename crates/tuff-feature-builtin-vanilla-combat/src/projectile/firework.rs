@@ -18,7 +18,7 @@ use tuff_core::world::physics;
 use tuff_core::world::projectile::{Owner, block_hit, margin, rotation_of, targets_along};
 use tuff_core::world::region_api::RegionWorld;
 use tuff_core::world::{framed, packets};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::{Block, BlockState};
 use tuff_world_model::BlockPos;
@@ -51,7 +51,7 @@ impl FireworkRocket {
     pub fn launched(
         id: i32,
         position: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         rng: &mut rand::rngs::StdRng,
     ) -> Self {
@@ -60,7 +60,7 @@ impl FireworkRocket {
             0.05,
             physics::triangle(rng, 0.0, 0.002297),
         ];
-        let lifetime = tuff_core::world::projectile::firework_lifetime(item, rng);
+        let lifetime = tuff_core::world::projectile::firework_lifetime(&item, rng);
         Self::build(id, position, velocity, item, owner, lifetime)
     }
 
@@ -69,11 +69,11 @@ impl FireworkRocket {
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         rng: &mut rand::rngs::StdRng,
     ) -> Self {
-        let lifetime = tuff_core::world::projectile::firework_lifetime(item, rng);
+        let lifetime = tuff_core::world::projectile::firework_lifetime(&item, rng);
         let mut rocket = Self::build(id, position, velocity, item, owner, lifetime);
         rocket.shot_at_angle = true;
         rocket
@@ -85,7 +85,7 @@ impl FireworkRocket {
         id: i32,
         player: i32,
         position: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         lifetime: i32,
     ) -> Self {
@@ -98,7 +98,7 @@ impl FireworkRocket {
         id: i32,
         position: [f64; 3],
         velocity: [f64; 3],
-        item: &ItemStack,
+        item: ItemStack,
         owner: Owner,
         lifetime: i32,
     ) -> Self {
@@ -115,7 +115,7 @@ impl FireworkRocket {
         Self {
             base,
             owner,
-            item: item.clone().with_count(1),
+            item: item.keep(1, tuff_item::item::BurnReason::Template),
             life: 0,
             lifetime,
             shot_at_angle: false,
@@ -266,6 +266,15 @@ fn neighbour_blast(
 }
 
 impl RegionEntity for FireworkRocket {
+    fn take_items(&mut self) -> Vec<ItemStack> {
+        let item = std::mem::replace(&mut self.item, ItemStack::empty());
+        if item.is_empty() {
+            Vec::new()
+        } else {
+            vec![item]
+        }
+    }
+
     fn base(&self) -> &EntityBase {
         &self.base
     }
@@ -283,7 +292,10 @@ impl RegionEntity for FireworkRocket {
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {
-        let mut values = vec![(DATA_ITEM, MetadataValue::Slot(Some(self.item.clone())))];
+        let mut values = vec![(
+            DATA_ITEM,
+            MetadataValue::Slot(Some(tuff_item::item::ItemSnapshot::of(&self.item))),
+        )];
         if self.attached.is_some() {
             values.push((DATA_ATTACHED, MetadataValue::OptionalVarInt(self.attached)));
         }
@@ -373,9 +385,9 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     let mut owner = Owner::default();
     owner.load(nbt);
     let item = take(nbt, "FireworksItem", |tag| {
-        ItemStack::from_nbt(tag.as_compound()?)
+        ItemStack::from_storage(tag.as_compound()?)
     })
-    .unwrap_or_else(|| ItemStack::new(Item::FireworkRocket, 1));
+    .unwrap_or_else(|| ItemStack::mint(Item::FireworkRocket, 1, MintReason::Template));
     Some(Box::new(FireworkRocket {
         base,
         owner,
@@ -395,7 +407,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn rockets_without_a_fireworks_patch_fly_for_one() {
-        let plain = ItemStack::new(Item::FireworkRocket, 1);
+        let plain = ItemStack::mint(Item::FireworkRocket, 1, MintReason::Test);
         assert_eq!(
             tuff_core::world::projectile::firework_flight(&plain),
             (1, 0)

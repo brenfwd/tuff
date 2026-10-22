@@ -59,6 +59,7 @@ impl Sandbox {
     pub(super) fn finish(&mut self) -> Effects {
         let state = self.state();
         state.caller = None;
+        state.effects.violations = state.stashes.take_violations();
         std::mem::take(&mut state.effects)
     }
 
@@ -299,6 +300,11 @@ impl Sandbox {
         self.optional(bindings::CAPABILITY_EVENTS_ON_IO, None, |runtime| {
             bindings::capability_events_on_io(runtime, event)
         })
+    }
+
+    /// Puts items taken from a player into one of the plugin's stashes.
+    pub fn fill_stash(&mut self, stash: u64, stacks: Vec<tuff_item::item::ItemStack>) {
+        self.state().stashes.fill(stash, stacks);
     }
 
     /// Replaces the plugin's working copy of its persistent store.

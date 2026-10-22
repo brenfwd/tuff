@@ -140,8 +140,7 @@ impl Goal for PandaSit {
     }
 
     fn stop(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
-        if let Some(stack) = mob.equipment.main_hand().cloned() {
-            mob.equipment.set(EquipmentSlot::Mainhand, None);
+        if let Some(stack) = mob.equipment.take(EquipmentSlot::Mainhand) {
             mob.drop_item(stack, 0.0, cx);
             let seconds = if mob.panda_lazy {
                 cx.rng.gen_range(0..50)
@@ -438,7 +437,7 @@ fn handle_eating(core: &mut MobCore, cx: &mut TickContext) {
                 && core
                     .equipment
                     .main_hand()
-                    .is_some_and(|s| eats_from_ground(s.item));
+                    .is_some_and(|s| eats_from_ground(s.item()));
             if finished {
                 core.equipment.set(EquipmentSlot::Mainhand, None);
                 set_flag(core, FLAG_SITTING, false);
@@ -641,29 +640,30 @@ impl Species for Panda {
             set_flag(core, FLAG_ON_BACK, false);
             return Some(HandEffect::None);
         }
-        let stack = interaction.stack.as_ref()?;
-        if !panda_food(stack.item)
+        let stack = interaction.stack.as_deref()?;
+        if !panda_food(stack.item())
             || core.is_baby()
             || core.panda_flags & FLAG_SITTING != 0
             || core.body.in_water
         {
             return None;
         }
+        let food = interaction.hand.take(1)?;
         try_to_sit(core);
         set_eat(core, 1);
-        if let Some(held) = core.equipment.main_hand().cloned()
-            && !interaction.creative
-        {
-            core.drop_item(held, 0.0, cx);
+        if let Some(held) = core.equipment.replace(EquipmentSlot::Mainhand, Some(food)) {
+            if interaction.creative {
+                held.burn(tuff_item::item::BurnReason::Creative);
+            } else {
+                core.drop_item(held, 0.0, cx);
+            }
         }
-        core.equipment
-            .set(EquipmentSlot::Mainhand, Some(ItemStack::new(stack.item, 1)));
         core.equipment.set_drop_chance(
             EquipmentSlot::Mainhand,
             super::equipment::PRESERVED_DROP_CHANCE,
         );
         core.persistence_required = true;
-        Some(HandEffect::Consume(1))
+        Some(HandEffect::None)
     }
 
     fn metadata(&self, core: &MobCore) -> Vec<(u8, MetadataValue)> {
@@ -697,7 +697,7 @@ impl Species for Panda {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        panda_food(stack.item)
+        panda_food(stack.item())
     }
 
     fn offspring(&self, partner: &Self, rng: &mut StdRng) -> Self {
@@ -838,6 +838,7 @@ mod tests {
                 position: [0.0; 3],
                 location: [0.0; 3],
                 stack: None,
+                hand: Default::default(),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -912,7 +913,10 @@ mod tests {
                     .iter()
                     .any(|e| matches!(e, Effect::TakeItem { item: 9, .. }))
             );
-            panda.took_item(core, ItemStack::new(Item::Bamboo, 1));
+            panda.took_item(
+                core,
+                ItemStack::mint(Item::Bamboo, 1, tuff_item::item::MintReason::Test),
+            );
             assert!(holding(core));
             goal.start(core, cx);
             assert_ne!(core.panda_flags & FLAG_SITTING, 0);
@@ -937,7 +941,11 @@ mod tests {
             Panda::configure(core);
             core.equipment.set(
                 EquipmentSlot::Mainhand,
-                Some(ItemStack::new(Item::Bamboo, 1)),
+                Some(ItemStack::mint(
+                    Item::Bamboo,
+                    1,
+                    tuff_item::item::MintReason::Test,
+                )),
             );
             let mut goal = PandaSit::default();
             assert!(goal.can_use(core, cx));
@@ -1023,7 +1031,20 @@ mod tests {
                 player_uuid: 1,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(ItemStack::new(Item::Bamboo, 1)),
+                stack: Some(tuff_item::item::ItemSnapshot::describe(
+                    Item::Bamboo,
+                    1,
+                    Default::default(),
+                )),
+                hand: tuff_core::world::entity::HandOffer::new(
+                    (Some(tuff_item::item::ItemSnapshot::describe(
+                        Item::Bamboo,
+                        1,
+                        Default::default(),
+                    )))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
+                ),
                 off_hand: false,
                 creative: false,
                 sneaking: false,
@@ -1031,7 +1052,7 @@ mod tests {
                 hero: None,
             };
             let effect = panda.interact(core, &interaction, cx);
-            assert!(matches!(effect, Some(HandEffect::Consume(1))));
+            assert!(matches!(effect, Some(HandEffect::None)));
             assert_ne!(core.panda_flags & FLAG_SITTING, 0);
             assert_eq!(core.panda_eat, 1);
             assert!(holding(core));

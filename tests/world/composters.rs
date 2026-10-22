@@ -57,7 +57,7 @@ async fn wait_level(world: &TestWorld, region: &RegionHandle, pos: BlockPos, wan
 async fn click(region: &RegionHandle, events: &mut Events, mut place: Place) -> ActionOutcome {
     let sequence = place.sequence;
     place.item = None;
-    region.request(RegionRequest::Place(place)).await;
+    region.request(RegionRequest::Place(offering(place))).await;
     expect(events, |event| match event {
         PlayerEvent::ActionResult {
             sequence: seq,
@@ -113,7 +113,7 @@ async fn a_composter_fills_from_clicks_ripens_and_gives_bone_meal() {
                 outcome,
                 ActionOutcome::Used {
                     item: Item::Cake,
-                    effect: HandEffect::Consume(1),
+                    effect: HandEffect::None,
                     ..
                 }
             ),

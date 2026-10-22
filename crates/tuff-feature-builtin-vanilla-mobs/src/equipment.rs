@@ -7,7 +7,7 @@ use tuff_vanilla_data::item::EquipmentSlot;
 
 use tuff_core::protocol::play::equipment_slot;
 use tuff_core::world::entity::take;
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemStack, ItemView};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_common::combat::Equipped;
 
@@ -35,7 +35,7 @@ pub const DEFAULT_DROP_CHANCE: f32 = 0.085;
 /// the mob picked up).
 pub const PRESERVED_DROP_CHANCE: f32 = 2.0;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Equipment {
     items: [Option<ItemStack>; 8],
     drop_chances: [f32; 8],
@@ -51,6 +51,10 @@ impl Default for Equipment {
         }
     }
 }
+
+const _: () = assert!(
+    matches!(SLOTS[6].0, EquipmentSlot::Body) && matches!(SLOTS[7].0, EquipmentSlot::Saddle)
+);
 
 fn index(slot: EquipmentSlot) -> Option<usize> {
     SLOTS.iter().position(|(s, ..)| *s == slot)
@@ -70,34 +74,97 @@ impl Equipment {
     }
 
     /// Every slot's item, by slot number (`EquipmentSlot as usize`).
-    pub fn by_number(&self) -> Vec<Option<ItemStack>> {
+    pub fn by_number(&self) -> Vec<Option<&ItemStack>> {
         let len = SLOTS
             .iter()
             .map(|(s, ..)| *s as usize)
             .max()
             .map_or(0, |m| m + 1);
-        let mut out = vec![None; len];
+        let mut out: Vec<Option<&ItemStack>> = vec![None; len];
         for (slot, ..) in &SLOTS {
-            out[*slot as usize] = self.get(*slot).cloned();
+            out[*slot as usize] = self.get(*slot);
         }
         out
     }
 
-    /// Sets the slot with this number; false if there is none.
-    pub fn set_number(&mut self, number: usize, stack: Option<ItemStack>) -> bool {
+    /// Puts `stack` in the slot with this number and hands back what it
+    /// held; `Err` gives `stack` back if there is no such slot.
+    pub fn replace_number(
+        &mut self,
+        number: usize,
+        stack: Option<ItemStack>,
+    ) -> Result<Option<ItemStack>, Option<ItemStack>> {
         let Some((slot, ..)) = SLOTS.iter().find(|(s, ..)| *s as usize == number) else {
-            return false;
+            return Err(stack);
         };
-        self.set(*slot, stack);
-        true
+        Ok(self.replace(*slot, stack))
     }
 
+    /// Puts `stack` in `slot` and hands back what it held (or `stack`
+    /// itself for a slot mobs do not have).
+    #[must_use]
+    pub fn replace(&mut self, slot: EquipmentSlot, stack: Option<ItemStack>) -> Option<ItemStack> {
+        let Some(i) = index(slot) else {
+            return stack;
+        };
+        self.changed = true;
+        std::mem::replace(&mut self.items[i], stack)
+    }
+
+    /// The item in `slot` to change in place; marks the equipment changed.
+    pub fn get_mut(&mut self, slot: EquipmentSlot) -> Option<&mut ItemStack> {
+        let item = self.items[index(slot)?].as_mut()?;
+        self.changed = true;
+        Some(item)
+    }
+
+    /// The saddle and body slots, in the order a mount's screen shows them.
+    pub fn mount_slots(&self) -> [&Option<ItemStack>; 2] {
+        let [.., body, saddle] = &self.items;
+        [saddle, body]
+    }
+
+    /// [`Self::mount_slots`] to change; marks the equipment changed.
+    pub fn mount_slots_mut(&mut self) -> [&mut Option<ItemStack>; 2] {
+        self.changed = true;
+        let [.., body, saddle] = &mut self.items;
+        [saddle, body]
+    }
+
+    /// Takes every item out.
+    pub fn take_all(&mut self) -> Vec<ItemStack> {
+        let taken: Vec<_> = self.items.iter_mut().filter_map(Option::take).collect();
+        self.changed |= !taken.is_empty();
+        taken
+    }
+
+    /// Takes up to `n` items out of `slot`, emptying it when none are left.
+    pub fn take_some(&mut self, slot: EquipmentSlot, n: u8) -> Option<ItemStack> {
+        let taken = ItemStack::take_from(&mut self.items[index(slot)?], n);
+        self.changed |= taken.is_some();
+        taken
+    }
+
+    /// Takes the item out of `slot`.
+    pub fn take(&mut self, slot: EquipmentSlot) -> Option<ItemStack> {
+        let i = index(slot)?;
+        let taken = self.items[i].take();
+        self.changed |= taken.is_some();
+        taken
+    }
+
+    /// Puts `stack` in `slot`, burning what it replaces (or `stack` when
+    /// the slot already holds the same).
     pub fn set(&mut self, slot: EquipmentSlot, stack: Option<ItemStack>) {
-        if let Some(i) = index(slot)
-            && self.items[i] != stack
-        {
-            self.items[i] = stack;
-            self.changed = true;
+        let discarded = match index(slot) {
+            Some(i) if self.items[i] != stack => {
+                self.changed = true;
+                std::mem::replace(&mut self.items[i], stack)
+            }
+            _ => stack,
+        };
+        if let Some(discarded) = discarded {
+            discarded.burn(tuff_item::item::BurnReason::Discarded);
         }
     }
 
@@ -125,11 +192,11 @@ impl Equipment {
     }
 
     /// Every slot by protocol id, empty ones included.
-    pub fn visible(&self) -> Vec<(u8, Option<ItemStack>)> {
+    pub fn visible(&self) -> Vec<(u8, Option<ItemView<'_>>)> {
         SLOTS
             .iter()
             .zip(&self.items)
-            .map(|((_, _, id), stack)| (*id, stack.clone()))
+            .map(|((_, _, id), stack)| (*id, stack.as_ref().map(ItemStack::view)))
             .collect()
     }
 
@@ -187,7 +254,7 @@ impl Equipment {
             let mut kept = Compound::new();
             for (key, value) in saved.iter() {
                 let slot = SLOTS.iter().position(|(_, name, _)| *name == key);
-                let stack = value.as_compound().and_then(ItemStack::from_nbt);
+                let stack = value.as_compound().and_then(ItemStack::from_storage);
                 match (slot, stack) {
                     (Some(i), Some(stack)) => self.items[i] = Some(stack),
                     _ => {
@@ -244,7 +311,7 @@ impl Equipment {
 /// empty slot the item belongs in.
 pub fn dispense_equip(
     core: &mut super::MobCore,
-    stack: &ItemStack,
+    stack: &tuff_core::world::region_api::Fired,
     cx: &mut tuff_core::world::entity::TickContext,
 ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
     let equippable = stack.equippable()?;
@@ -256,8 +323,7 @@ pub fn dispense_equip(
     {
         return None;
     }
-    core.equipment
-        .set(equippable.slot, Some(stack.clone().with_count(1)));
+    core.equipment.set(equippable.slot, Some(stack.take()?));
     core.equipment
         .set_drop_chance(equippable.slot, PRESERVED_DROP_CHANCE);
     core.persistence_required = true;
@@ -268,6 +334,7 @@ pub fn dispense_equip(
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
+    use tuff_item::item::MintReason;
     use tuff_vanilla_data::Item;
 
     use super::*;
@@ -277,10 +344,14 @@ mod tests {
     fn slots_are_read_and_set_by_number() {
         let mut equipment = Equipment::default();
         let head = EquipmentSlot::Head as usize;
-        assert!(equipment.set_number(head, Some(ItemStack::new(Item::Bow, 1))));
-        assert!(!equipment.set_number(99, None));
+        let bow = ItemStack::mint(Item::Bow, 1, MintReason::Test);
+        assert!(matches!(
+            equipment.replace_number(head, Some(bow)),
+            Ok(None)
+        ));
+        assert!(equipment.replace_number(99, None).is_err());
         assert_eq!(
-            equipment.by_number()[head].as_ref().map(|s| s.item),
+            equipment.by_number()[head].map(|s| s.item()),
             Some(Item::Bow)
         );
         assert!(equipment.take_changed());
@@ -293,9 +364,18 @@ mod tests {
             .with(
                 "equipment",
                 Compound::new()
-                    .with("mainhand", ItemStack::new(Item::Bow, 1).to_nbt())
-                    .with("saddle", ItemStack::new(Item::Saddle, 1).to_nbt())
-                    .with("reins", ItemStack::new(Item::Stick, 1).to_nbt()),
+                    .with(
+                        "mainhand",
+                        ItemStack::mint(Item::Bow, 1, MintReason::Test).to_nbt(),
+                    )
+                    .with(
+                        "saddle",
+                        ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                    )
+                    .with(
+                        "reins",
+                        ItemStack::mint(Item::Stick, 1, MintReason::Test).to_nbt(),
+                    ),
             )
             .with(
                 "drop_chances",
@@ -305,9 +385,9 @@ mod tests {
             );
         let mut equipment = Equipment::default();
         equipment.load(&mut nbt);
-        assert_eq!(equipment.main_hand().map(|s| s.item), Some(Item::Bow));
+        assert_eq!(equipment.main_hand().map(|s| s.item()), Some(Item::Bow));
         assert_eq!(
-            equipment.get(EquipmentSlot::Saddle).map(|s| s.item),
+            equipment.get(EquipmentSlot::Saddle).map(|s| s.item()),
             Some(Item::Saddle)
         );
         assert!(nbt.get("equipment").is_some(), "the unknown slot stays raw");
@@ -327,7 +407,7 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.set(
             EquipmentSlot::Head,
-            Some(ItemStack::new(Item::GoldIngot, 1)),
+            Some(ItemStack::mint(Item::GoldIngot, 1, MintReason::Test)),
         );
         equipment.set_drop_chance(EquipmentSlot::Head, 0.0);
         assert!(equipment.death_drops(true, &mut rng, |c, _| c).is_empty());
@@ -344,16 +424,16 @@ mod tests {
         let mut equipment = Equipment::default();
         equipment.set(
             EquipmentSlot::Head,
-            Some(ItemStack::new(Item::IronHelmet, 1)),
+            Some(ItemStack::mint(Item::IronHelmet, 1, MintReason::Test)),
         );
         equipment.set(
             EquipmentSlot::Mainhand,
-            Some(ItemStack::new(Item::GoldIngot, 1)),
+            Some(ItemStack::mint(Item::GoldIngot, 1, MintReason::Test)),
         );
         equipment.set_drop_chance(EquipmentSlot::Mainhand, PRESERVED_DROP_CHANCE);
         let drops = equipment.death_drops(false, &mut rng, |chance, _| chance);
         assert_eq!(drops.len(), 1);
-        assert_eq!(drops[0].item, Item::GoldIngot);
+        assert_eq!(drops[0].item(), Item::GoldIngot);
         assert!(equipment.get(EquipmentSlot::Head).is_some());
     }
 }

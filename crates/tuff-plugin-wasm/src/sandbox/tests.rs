@@ -1263,6 +1263,78 @@ fn inventory_writes_queue_by_uuid_and_validate() {
 
 #[tuff_core::watchdog]
 #[test]
+fn stashes_move_items_by_handle_and_queue_their_hand_over() {
+    let mut state = state();
+    let who = Uuid { high: 0, low: 9 };
+    let vault = state.host_stash_new().unwrap().unwrap();
+    assert_eq!(
+        state.host_stash_mint(vault, "minecraft:stone", 70, None, None),
+        Ok(Ok(()))
+    );
+    assert_eq!(
+        state.host_stash_mint(vault + 99, "minecraft:stone", 1, None, None),
+        Ok(Err(WorldError::InvalidState))
+    );
+    let shown = state.host_stash_contents(vault).unwrap().unwrap();
+    assert_eq!(
+        shown
+            .iter()
+            .map(|s| (s.item.as_str(), s.count))
+            .collect::<Vec<_>>(),
+        vec![("minecraft:stone", 64), ("minecraft:stone", 6)]
+    );
+    let part = state
+        .host_stash_split(vault, Some("minecraft:stone".into()), 10)
+        .unwrap()
+        .unwrap();
+    let count = |state: &mut State, stash| -> u32 {
+        state
+            .host_stash_contents(stash)
+            .unwrap()
+            .unwrap_or_default()
+            .iter()
+            .map(|s| u32::from(s.count))
+            .sum()
+    };
+    assert_eq!(
+        (count(&mut state, vault), count(&mut state, part)),
+        (60, 10)
+    );
+    assert_eq!(state.host_stash_merge(vault, part), Ok(Ok(())));
+    assert_eq!(
+        state.host_stash_contents(part),
+        Ok(None),
+        "a merged stash is gone"
+    );
+    assert_eq!(
+        count(&mut state, vault),
+        70,
+        "nothing was made or lost moving"
+    );
+    assert_eq!(
+        state.host_take_into_stash(who, "minecraft:dirt", 3, false, vault),
+        Ok(Ok(()))
+    );
+    assert_eq!(state.host_give_stash(who, vault), Ok(Ok(())));
+    assert_eq!(
+        state.host_stash_burn(vault),
+        Ok(Err(WorldError::InvalidState))
+    );
+    let ops = std::mem::take(&mut state.effects.inventory_ops);
+    assert!(matches!(
+        &ops[0].1,
+        InventoryOp::TakeInto { count: 3, sink, .. } if sink.stash == vault
+    ));
+    let InventoryOp::GiveStacks(given) = &ops[1].1 else {
+        panic!("{:?}", ops[1]);
+    };
+    assert_eq!(given.iter().map(|s| u32::from(s.count())).sum::<u32>(), 70);
+    let burnt = state.host_stash_new().unwrap().unwrap();
+    assert_eq!(state.host_stash_burn(burnt), Ok(Ok(())));
+}
+
+#[tuff_core::watchdog]
+#[test]
 fn player_state_ops_queue_validated_changes_by_uuid() {
     use crate::player_state::PlayerOp;
     use tuff_core::protocol::play::GameMode;

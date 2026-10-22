@@ -415,7 +415,7 @@ pub struct TickContext<'a> {
     pub biome: &'a dyn Fn(BlockPos) -> Option<&'static str>,
     /// A container's item slots at a position (read-only; `None` where
     /// there is none). A double chest reads as both halves in menu order.
-    pub container: &'a dyn Fn(BlockPos) -> Option<std::borrow::Cow<'a, [Option<ItemStack>]>>,
+    pub container: &'a dyn Fn(BlockPos) -> Option<tuff_item::item::SlotsCow<'a>>,
     /// Whether the container at a position is locked and how many players
     /// and mobs have it open.
     pub container_info: &'a dyn Fn(BlockPos) -> ContainerInfo,
@@ -482,13 +482,13 @@ pub struct GroundPickup<'a> {
     /// Only creative players take it, and they get nothing.
     pub creative_only: bool,
     /// What a player taking it gets.
-    pub stack: Option<ItemStack>,
+    pub stack: Option<&'a mut ItemStack>,
     /// Only the player with this UUID may take it (a thrown trident).
     pub only: Option<u128>,
 }
 
 /// A player's melee hit on an entity, as the entity's region applies it.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EntityAttack {
     pub attacker: PlayerId,
     pub attacker_uuid: u128,
@@ -497,7 +497,7 @@ pub struct EntityAttack {
     pub attacker_pitch: f32,
     pub damage: f32,
     pub knockback: f32,
-    pub weapon: Option<ItemStack>,
+    pub weapon: Option<tuff_item::item::ItemSnapshot>,
     pub critical: bool,
     pub magic: bool,
     pub sweep: bool,
@@ -513,15 +513,76 @@ pub struct AttackOutcome {
     pub health_lost: f32,
 }
 
+/// The clicking player's hand stack, moved into the click so an entity
+/// can keep items of it; the rest goes back to the player.
+#[derive(Debug, Default)]
+pub struct HandOffer {
+    stack: std::cell::RefCell<Option<tuff_item::item::ItemStack>>,
+    /// The inventory slot it came from.
+    pub slot: usize,
+}
+
+impl HandOffer {
+    pub fn new(stack: Option<tuff_item::item::ItemStack>) -> Self {
+        Self::from_slot(0, stack)
+    }
+
+    pub fn from_slot(slot: usize, stack: Option<tuff_item::item::ItemStack>) -> Self {
+        Self {
+            stack: std::cell::RefCell::new(stack),
+            slot,
+        }
+    }
+
+    /// Takes `n` of the offered items, or `None` if fewer are offered.
+    pub fn take(&self, n: u8) -> Option<tuff_item::item::ItemStack> {
+        let mut held = self.stack.borrow_mut();
+        let stack = held.as_mut().filter(|stack| stack.count() >= n)?;
+        if stack.count() == n {
+            return held.take();
+        }
+        Some(stack.take(n))
+    }
+
+    /// Takes every offered item.
+    pub fn take_all(&self) -> Option<tuff_item::item::ItemStack> {
+        self.stack.borrow_mut().take()
+    }
+
+    /// Hands `stack` to the player with what is left of the offer;
+    /// returns it if it does not fit there.
+    #[must_use]
+    pub fn give_back(
+        &self,
+        stack: tuff_item::item::ItemStack,
+    ) -> Option<tuff_item::item::ItemStack> {
+        let mut held = self.stack.borrow_mut();
+        match held.as_mut().filter(|held| !held.is_empty()) {
+            None => {
+                *held = Some(stack);
+                None
+            }
+            Some(held) => held.join(stack).err(),
+        }
+    }
+
+    /// What is still offered.
+    pub fn into_inner(self) -> Option<tuff_item::item::ItemStack> {
+        self.stack.into_inner().filter(|stack| !stack.is_empty())
+    }
+}
+
 /// A player's right click on an entity.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EntityInteraction {
     pub player: PlayerId,
     pub player_uuid: u128,
     pub position: [f64; 3],
     /// Where on the entity the player clicked, relative to its position.
     pub location: [f64; 3],
-    pub stack: Option<ItemStack>,
+    pub stack: Option<tuff_item::item::ItemSnapshot>,
+    /// The held stack itself (a creative copy for creative players).
+    pub hand: HandOffer,
     pub off_hand: bool,
     pub creative: bool,
     pub sneaking: bool,
