@@ -7,6 +7,7 @@ export type PostMeta = {
   date: string;
   updated: string;
   author: string;
+  ai: string | null;
   tags: string[];
   image: string;
   imageAlt: string;

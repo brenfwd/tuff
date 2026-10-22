@@ -12,7 +12,7 @@ const outDir = join(root, "public", "blog", "og");
 const cacheDir = join(root, "node_modules", ".cache");
 const cacheFile = join(cacheDir, "og-blog.json");
 const index: BlogIndex = JSON.parse(readFileSync(join(root, "src", "generated", "blog", "index.json"), "utf8"));
-const TEMPLATE_VERSION = "1";
+const TEMPLATE_VERSION = "2";
 
 const font = (pkg: string, file: string) => readFileSync(join(root, "node_modules", "@fontsource-variable", pkg, "files", file)).toString("base64");
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

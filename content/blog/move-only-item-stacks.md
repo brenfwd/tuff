@@ -2,7 +2,8 @@
 title: "Move-only item stacks: item conservation in the type"
 description: How the tuff server made Minecraft item stacks impossible to copy in Rust, backed by a drop guard, a ledger, two-phase handoffs and journaled saves.
 date: 2026-10-22
-author: tuff
+author: Brenden Forward
+ai: "Written with Claude Fable 5.1 from the project's code and design notes, and reviewed by the author."
 tags: [items, rust, design]
 ---
 

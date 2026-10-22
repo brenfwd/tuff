@@ -102,6 +102,8 @@ const time = (iso: string) => `<time datetime="${iso}">${formatDate(iso)}</time>
 const blogStyle = "max-width:46rem;margin:0 auto;padding:3rem 1rem;font-family:system-ui,sans-serif";
 const blogNav = `<nav aria-label="Breadcrumb"><a href="${SITE}">Home</a> / <a href="${BLOG_URL}">Blog</a></nav>`;
 
+const aiNote = (p: Post) => (p.ai ? `<hr /><aside id="ai-note"><p><small>AI assistance: ${esc(p.ai)}</small></p></aside>` : "");
+
 const postLd = (p: Post) => ({
   "@type": "BlogPosting",
   "@id": `${postUrl(p.slug)}#article`,
@@ -110,6 +112,7 @@ const postLd = (p: Post) => ({
   datePublished: p.date,
   dateModified: p.updated,
   author: person(p.author),
+  ...(p.ai ? { contributor: { "@type": "Organization", name: "AI assistance", description: p.ai } } : {}),
   publisher,
   image: { "@type": "ImageObject", url: p.image, ...(p.imageWidth ? { width: p.imageWidth, height: p.imageHeight } : {}) },
   mainEntityOfPage: { "@type": "WebPage", "@id": postUrl(p.slug) },
@@ -155,9 +158,10 @@ for (const p of posts) {
   const neighbours = [p.prev && `<a rel="prev" href="${postUrl(p.prev.slug)}">Previous: ${esc(p.prev.title)}</a>`, p.next && `<a rel="next" href="${postUrl(p.next.slug)}">Next: ${esc(p.next.title)}</a>`].filter(Boolean);
   const body = `<main style="${blogStyle}">${blogNav}<article itemscope itemtype="https://schema.org/BlogPosting">
 <header><h1 itemprop="headline">${esc(p.title)}</h1><p itemprop="description">${esc(p.description)}</p>
-<p>By <span itemprop="author">${esc(p.author)}</span> | Published ${time(p.date).replace("<time", '<time itemprop="datePublished"')}${sameDay(p.date, p.updated) ? "" : ` | Updated ${time(p.updated).replace("<time", '<time itemprop="dateModified"')}`} | ${p.readingMinutes} min read</p>
+<p>By <span itemprop="author">${esc(p.author)}</span>${p.ai ? '<sup><a href="#ai-note" aria-label="AI assistance note">*</a></sup>' : ""} | Published ${time(p.date).replace("<time", '<time itemprop="datePublished"')}${sameDay(p.date, p.updated) ? "" : ` | Updated ${time(p.updated).replace("<time", '<time itemprop="dateModified"')}`} | ${p.readingMinutes} min read</p>
 ${p.tags.length ? `<ul aria-label="Tags">${p.tags.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</header>
 <div itemprop="articleBody">${p.html}</div>
+${aiNote(p)}
 ${neighbours.length ? `<footer><nav aria-label="Previous and next posts">${neighbours.join(" | ")}</nav></footer>` : ""}</article></main>`;
   const head = [
     `<meta property="article:published_time" content="${p.date}" />`,
@@ -189,7 +193,7 @@ const feedHtml = (p: Post) =>
     .replace(/<button type="button" class="copy-btn"[^>]*>Copy<\/button>/g, "")
     .replace(/<a class="anchor"[^>]*>#<\/a>/g, "")
     .replace(/(href|src)="(#[^"]*)"/g, (_m, a, h) => `${a}="${postUrl(p.slug)}${h}"`)
-    .replace(/(href|src)="\/(?!\/)([^"]*)"/g, (_m, a, path) => `${a}="${SITE}${path}"`);
+    .replace(/(href|src)="\/(?!\/)([^"]*)"/g, (_m, a, path) => `${a}="${SITE}${path}"`) + (p.ai ? `<hr /><p><small>AI assistance: ${esc(p.ai)}</small></p>` : "");
 const xmlDecl = '<?xml version="1.0" encoding="UTF-8"?>\n';
 
 write(

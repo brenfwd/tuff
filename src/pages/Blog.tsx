@@ -36,6 +36,8 @@ function Tag({ name, active }: { name: string; active?: boolean }) {
 function PostMetaLine({ post, showUpdated }: { post: PostMeta; showUpdated?: boolean }) {
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-fg-subtle">
+      <span>{post.author}</span>
+      <span aria-hidden="true">/</span>
       <Time iso={post.date} />
       {showUpdated && !sameDay(post.date, post.updated) && (
         <>
@@ -190,7 +192,16 @@ function BlogPostPage({ slug }: { slug: string }) {
                 <h1 className="mt-3 font-display text-[2.1rem] font-bold leading-tight tracking-tight sm:text-5xl">{post.title}</h1>
                 <p className="mt-4 text-lg leading-8 text-fg-muted">{post.description}</p>
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line pb-6">
-                  <span className="text-sm font-medium text-fg">{post.author}</span>
+                  <span className="text-sm font-medium text-fg">
+                    {post.author}
+                    {post.ai && (
+                      <sup className="ml-0.5">
+                        <a href="#ai-note" aria-label="AI assistance note" className="text-fg-subtle hover:text-ember-text" onClick={(e) => { e.preventDefault(); document.getElementById("ai-note")?.scrollIntoView({ behavior: "smooth" }); }}>
+                          *
+                        </a>
+                      </sup>
+                    )}
+                  </span>
                   {post.tags.length > 0 && (
                     <ul className="flex flex-wrap gap-2" aria-label="Tags">
                       {post.tags.map((t) => (
@@ -217,6 +228,12 @@ function BlogPostPage({ slug }: { slug: string }) {
                 </details>
               )}
               <div className="doc-prose blog-prose mt-8" onClick={onArticleClick(`/blog/${slug}`)} dangerouslySetInnerHTML={{ __html: post.html }} />
+
+              {post.ai && (
+                <aside id="ai-note" className="mt-12 scroll-mt-24 border-t border-line pt-4 text-xs leading-5 text-fg-subtle">
+                  <span className="font-medium text-fg-muted">AI assistance:</span> {post.ai}
+                </aside>
+              )}
 
               {(post.prev || post.next) && (
                 <nav aria-label="Previous and next posts" className="mt-16 grid gap-4 border-t border-line pt-8 sm:grid-cols-2">

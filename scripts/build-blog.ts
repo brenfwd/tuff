@@ -61,6 +61,12 @@ function excerptOf(body: string) {
   return `${text.slice(0, text.lastIndexOf(" ", 220))}...`;
 }
 
+const optStr = (file: string, data: Record<string, unknown>, key: string) => {
+  const v = data[key];
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string" || !v.trim()) fail(file, `frontmatter field "${key}" must be a non-empty string if present`);
+  return (v as string).trim();
+};
 const str = (file: string, data: Record<string, unknown>, key: string) => {
   const v = data[key];
   if (typeof v !== "string" || !v.trim()) fail(file, `frontmatter field "${key}" must be a non-empty string`);
@@ -71,7 +77,7 @@ export function buildBlog(genDir: string): { posts: number; sections: Section[] 
   const out = join(genDir, "blog");
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  const files = existsSync(blogDir) ? readdirSync(blogDir).filter((f) => f.endsWith(".md")) : [];
+  const files = existsSync(blogDir) ? readdirSync(blogDir).filter((f) => f.endsWith(".md") && f !== "README.md") : [];
   const renderer = createRenderer();
   const posts: (PostMeta & { html: string; toc: Post["toc"]; body: string })[] = [];
 
@@ -106,6 +112,7 @@ export function buildBlog(genDir: string): { posts: number; sections: Section[] 
       date,
       updated,
       author: str(file, data, "author"),
+      ai: optStr(file, data, "ai"),
       tags: (tags as string[]).map((t) => t.trim()).filter(Boolean),
       image,
       imageAlt: title,
