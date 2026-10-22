@@ -302,9 +302,8 @@ fn prepared_writes_are_journaled_once_and_roll_back_after_a_crash() {
                 pois: false,
             }])
             .unwrap();
-        let journaled = || {
-            parse_records(&fs::read(epoch_path(&journal_dir(&dir), epoch)).unwrap()).len()
-        };
+        let journaled =
+            || parse_records(&fs::read(epoch_path(&journal_dir(&dir), epoch)).unwrap()).len();
         assert_eq!(journaled(), 1);
         ticket.scope(|| store.write_chunk(chunk(), &bytes).unwrap());
         store.flush().unwrap();
