@@ -42,6 +42,16 @@ pub enum Transfer {
     Hopper,
     /// Dropped items merging across a region border.
     BorderMerge,
+    /// What a block or entity click offered and did not keep, handed
+    /// back to the player.
+    HandReturn,
+    /// An item entity or ground pickup granted to a player.
+    Pickup,
+    /// An entity handed with everything it carries to another region or
+    /// dimension.
+    EntityHandOff,
+    /// A plugin giving items to or taking items from a player.
+    Plugin,
 }
 
 impl Transfer {
@@ -52,6 +62,10 @@ impl Transfer {
             Self::Port => "item port transfer",
             Self::Hopper => "cross-region hopper transfer",
             Self::BorderMerge => "cross-region item merge",
+            Self::HandReturn => "hand return to a player",
+            Self::Pickup => "item pickup",
+            Self::EntityHandOff => "entity hand-off",
+            Self::Plugin => "plugin inventory operation",
         }
     }
 }

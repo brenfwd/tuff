@@ -4,7 +4,8 @@
 
 use super::RegionActor;
 use crate::world::conservation::{ItemViolation, Subject, Transfer};
-use crate::world::messages::{PlayerEvent, PlayerHandle};
+use crate::world::entity::RegionEntity;
+use crate::world::messages::{PlayerEvent, PlayerHandle, RegionHandle};
 use tuff_item::text::TextComponent;
 use tuff_world_model::BlockPos;
 use tuff_world_model::pos::RegionPos;
@@ -97,6 +98,60 @@ impl RegionActor {
             },
         );
         false
+    }
+
+    /// Whether a `transfer` at `pos` between this region and `player` may
+    /// run. An injected failure is a violation quarantining both. `owed`
+    /// says the items already left the player (a hand return): then a
+    /// refusal because either side is quarantined quarantines both too,
+    /// since the player's state no longer holds them and must not be
+    /// saved. Otherwise such a refusal just moves nothing.
+    pub(in crate::world::region) fn may_transfer_with(
+        &mut self,
+        transfer: Transfer,
+        pos: BlockPos,
+        player: &PlayerHandle,
+        owed: bool,
+    ) -> bool {
+        let conservation = &self.shared.conservation;
+        let blocked = self.quarantined() || conservation.quarantined(Subject::Player(player.id));
+        let detail = if blocked {
+            if !owed {
+                return false;
+            }
+            "a side of the transfer is quarantined"
+        } else if conservation.take_injected(transfer) {
+            "the transfer check was made to fail"
+        } else {
+            return true;
+        };
+        self.item_violation(
+            Some(player),
+            ItemViolation {
+                operation: transfer.operation(),
+                player: Some(player.id),
+                pos,
+                item: None,
+                detail: detail.to_owned(),
+            },
+        );
+        false
+    }
+
+    /// Hands `entity`, with everything it carries, to the region behind
+    /// `to` once [`Self::may_transfer`] allows it. Refused or undelivered,
+    /// the entity comes back.
+    pub(in crate::world::region) fn hand_entity(
+        &mut self,
+        to: &RegionHandle,
+        entity: Box<dyn RegionEntity>,
+        seq: u64,
+    ) -> Result<(), Box<dyn RegionEntity>> {
+        let pos = BlockPos::containing(entity.base().position);
+        if !self.may_transfer(Transfer::EntityHandOff, pos, Some(to.pos)) {
+            return Err(entity);
+        }
+        to.try_entity(entity, seq)
     }
 
     /// The release check of one side of a `transfer` at `pos`: the items

@@ -1300,6 +1300,12 @@ impl RegionActor {
             if stack.is_empty() {
                 continue;
             }
+            let pos = BlockPos::containing(place.position);
+            let transfer = crate::world::conservation::Transfer::HandReturn;
+            if !self.may_transfer_with(transfer, pos, &place.player, true) {
+                self.spawn_item_at(stack, place.position, [0.0; 3], 0);
+                continue;
+            }
             if let Err(refused) = place.player.try_send(PlayerEvent::HandReturned {
                 slot,
                 stack,

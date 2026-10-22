@@ -938,18 +938,21 @@ impl RegionActor {
                 .is_some_and(|mount| self.ents.entities.contains_key(&mount.id));
             if !self.pos.contains(to) && !seated_here {
                 let seq = tracked.seq;
-                let handed = match self.border.neighbors.get(&to.region()) {
-                    Some(neighbor) => neighbor.try_entity(tracked.entity, seq),
+                let handed = match self.border.neighbors.get(&to.region()).cloned() {
+                    Some(neighbor) => self
+                        .hand_entity(&neighbor, tracked.entity, seq)
+                        .map(|()| neighbor),
                     None => Err(tracked.entity),
                 };
-                let Err(mut entity) = handed else {
-                    if let Some(neighbor) = self.border.neighbors.get(&to.region()).cloned() {
+                let mut entity = match handed {
+                    Ok(neighbor) => {
                         self.hand_off_viewers(id, &neighbor);
+                        summaries.retain(|s| s.id != id);
+                        grid = EntityGrid::build(&summaries);
+                        slots = summary_slots(&summaries);
+                        continue;
                     }
-                    summaries.retain(|s| s.id != id);
-                    grid = EntityGrid::build(&summaries);
-                    slots = summary_slots(&summaries);
-                    continue;
+                    Err(entity) => entity,
                 };
                 let base = entity.base_mut();
                 base.position = before;

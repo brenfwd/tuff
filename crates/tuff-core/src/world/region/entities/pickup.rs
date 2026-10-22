@@ -1,4 +1,5 @@
 use super::*;
+use crate::world::conservation::Transfer;
 
 impl RegionActor {
     /// Drops `amount` experience at `position` as orbs, merging into orbs
@@ -459,7 +460,25 @@ impl RegionActor {
                 }
                 return;
             }
-            let Some(held) = pickup.stack else {
+            if pickup.stack.is_none() {
+                return;
+            }
+            let at = self
+                .ents
+                .entities
+                .get(&id)
+                .map(|t| t.entity.base().position);
+            let pos = BlockPos::containing(at.unwrap_or_default());
+            if !self.may_transfer_with(Transfer::Pickup, pos, player, false) {
+                return;
+            }
+            let Some(held) = self
+                .ents
+                .entities
+                .get_mut(&id)
+                .and_then(|tracked| tracked.entity.ground_pickup())
+                .and_then(|pickup| pickup.stack)
+            else {
                 return;
             };
             let stack = std::mem::replace(held, ItemStack::empty());
@@ -496,12 +515,30 @@ impl RegionActor {
             }
             return;
         }
+        let pos = BlockPos::containing(item.base.position);
+        if !self.may_transfer_with(Transfer::Pickup, pos, player, false) {
+            return;
+        }
+        let Some(item) = self.entity_mut::<ItemEntity>(id) else {
+            return;
+        };
+        let before = u64::from(item.stack.count());
         let taken = taken.min(item.stack.count());
         let granted = item.stack.take(taken);
+        let after = u64::from(item.stack.count());
         let shown = tuff_item::item::ItemSnapshot::of(&granted);
         let thrower = item.thrower();
         let at = item.base.position;
         let chunk = item.base.chunk();
+        let sent = u64::from(granted.count());
+        if !self.transfer_balanced(Transfer::Pickup, pos, before, 0, after, sent) {
+            if let Some(item) = self.entity_mut::<ItemEntity>(id)
+                && let Err(stack) = item.stack.join(granted)
+            {
+                self.spawn_item_at(stack, at, [0.0; 3], 0);
+            }
+            return;
+        }
         if let Err(refused) = player.try_send(PlayerEvent::ItemGranted {
             stack: granted,
             picked_up: true,

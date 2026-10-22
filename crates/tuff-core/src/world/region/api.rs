@@ -449,7 +449,7 @@ impl RegionWorld for RegionActor {
             self.receive_entity(tracked.entity, seq);
             return;
         }
-        let handed = target.try_entity(tracked.entity, seq);
+        let handed = self.hand_entity(&target, tracked.entity, seq);
         if let Err(mut entity) = handed {
             let base = entity.base_mut();
             base.position = old_position;

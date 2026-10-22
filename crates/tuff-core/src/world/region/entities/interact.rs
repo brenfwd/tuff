@@ -233,6 +233,18 @@ impl RegionActor {
             return;
         };
         let creative = interaction.creative;
+        let pos = BlockPos::containing(interaction.position);
+        if !creative
+            && !self.may_transfer_with(
+                crate::world::conservation::Transfer::HandReturn,
+                pos,
+                player,
+                true,
+            )
+        {
+            self.spawn_item_at(stack, interaction.position, [0.0; 3], 0);
+            return;
+        }
         if let Err(refused) = player.try_send(PlayerEvent::HandReturned {
             slot: interaction.hand.slot,
             stack,
