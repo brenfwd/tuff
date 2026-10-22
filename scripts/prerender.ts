@@ -1,5 +1,6 @@
 // Writes crawlable static snapshots, blog feeds, sitemap.xml and 404.html into dist/.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { DESCRIPTION, SHOW_PERFORMANCE, SITE_NAME, SITE_URL as SITE } from "../src/lib/site";
 import { formatDate, sameDay, type BlogIndex, type Post, type PostMeta } from "../src/lib/blog";
@@ -288,9 +289,16 @@ write(
 
 // Sitemap
 const today = new Date().toISOString().slice(0, 10);
+const lastCommitDate = (...paths: string[]) => {
+  try {
+    return execFileSync("git", ["log", "-1", "--format=%cs", "--", ...paths], { cwd: root, encoding: "utf8" }).trim() || today;
+  } catch {
+    return today;
+  }
+};
 const entries: [string, string][] = [
-  [SITE, today],
-  ...nav.map((p): [string, string] => [`${SITE}docs/${p.slug}/`, today]),
+  [SITE, lastCommitDate("src", "index.html", "public")],
+  ...nav.map((p): [string, string] => [`${SITE}docs/${p.slug}/`, lastCommitDate(`content/docs/${p.slug}.md`)]),
   [BLOG_URL, lastUpdated],
   ...posts.map((p): [string, string] => [postUrl(p.slug), p.updated]),
 ];
