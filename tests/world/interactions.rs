@@ -792,7 +792,7 @@ async fn flower_pots_take_a_plant_and_give_it_back() {
     bare.held = None;
     s.region.request(RegionRequest::Place(bare)).await;
     expect(&mut s.events, |event| match event {
-        PlayerEvent::ItemGranted { stack, .. } => (stack.item == Item::OakSapling).then_some(()),
+        PlayerEvent::ItemGranted { stack, .. } => (stack.item() == Item::OakSapling).then_some(()),
         _ => None,
     })
     .await;

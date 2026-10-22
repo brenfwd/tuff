@@ -101,7 +101,7 @@ async fn taking_a_repair_charges_levels_and_uses_up_the_inputs() {
     session.handle_packet(take(window)).await;
     assert_eq!(session.body.experience.level, 5);
     let carried = session.inventory().carried().unwrap().test_copy();
-    assert_eq!((carried.item, carried.damage()), (Item::IronSword, 0));
+    assert_eq!((carried.item(), carried.damage()), (Item::IronSword, 0));
     let container = session.menu_container().unwrap();
     assert!(container[anvil::INPUT].is_none());
     assert_eq!(container[anvil::ADDITION].as_ref().unwrap().count(), 2);
@@ -294,7 +294,7 @@ async fn a_blank_rename_packet_clears_an_existing_name_for_one_level() {
     session.handle_packet(take(window)).await;
     assert_eq!(session.body.experience.level, 2);
     let carried = session.inventory().carried().unwrap().test_copy();
-    assert_eq!(carried.item, Item::Stick);
+    assert_eq!(carried.item(), Item::Stick);
     assert!(carried.components.custom_name.is_none());
     world.shutdown().await;
 }

@@ -34,7 +34,7 @@ pub fn dispense(
     stack: &Fired,
 ) -> Option<DispenseOutcome> {
     let target = placement::step(pos, facing);
-    let item = stack.item;
+    let item = stack.item();
     if matches!(item, Item::CarvedPumpkin | Item::WitherSkeletonSkull) {
         return None;
     }
@@ -126,7 +126,7 @@ fn swallow(
     target: BlockPos,
     stack: &Fired,
 ) -> Option<DispenseOutcome> {
-    if !tuff_datapack::tags::is(tag::item::key::SULFUR_CUBE_SWALLOWABLE, stack.item) {
+    if !tuff_datapack::tags::is(tag::item::key::SULFUR_CUBE_SWALLOWABLE, stack.item()) {
         return None;
     }
     world.dispense_on_entity_in(target, stack)
@@ -371,7 +371,7 @@ fn place_shulker_box(
     facing: Facing,
     stack: &ItemStack,
 ) -> DispenseOutcome {
-    let Some(block) = stack.item.block() else {
+    let Some(block) = stack.item().block() else {
         return DispenseOutcome::Failed;
     };
     let below = placement::step(target, Facing::Down);

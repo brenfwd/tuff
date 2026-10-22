@@ -428,8 +428,8 @@ pub fn lock_admits(lock: &Compound, stack: Option<&ItemStack>) -> bool {
         let Some(stack) = stack else {
             return false;
         };
-        if !nbt_in_list(items, stack.item.name(), |tag| {
-            in_tag("minecraft:item", tag, stack.item.name())
+        if !nbt_in_list(items, stack.item().name(), |tag| {
+            in_tag("minecraft:item", tag, stack.item().name())
         }) {
             return false;
         }
@@ -574,9 +574,9 @@ fn modify_stack(
         "minecraft:furnace_smelt" => {
             let smelted = match context.entity.and_then(|e| e.recipes.as_deref()) {
                 Some(recipes) => recipes
-                    .cooking_recipe(CookingStation::Furnace, stack.item)
+                    .cooking_recipe(CookingStation::Furnace, stack.item())
                     .map(|(_, recipe)| recipe.result.item),
-                None => smelting_recipe(stack.item).map(|recipe| recipe.result.item),
+                None => smelting_recipe(stack.item()).map(|recipe| recipe.result.item),
             };
             if let Some(item) = smelted {
                 let count = stack.count();
@@ -630,7 +630,7 @@ fn modify_stack(
         }
         "minecraft:set_enchantments" => {
             let add = params["add"].as_bool() == Some(true);
-            if stack.item == Item::Book {
+            if stack.item() == Item::Book {
                 let count = stack.count();
                 stack = stack.into_item(
                     Item::EnchantedBook,
@@ -639,7 +639,7 @@ fn modify_stack(
                     BurnReason::Loot,
                 );
             }
-            let target = if stack.item == Item::EnchantedBook {
+            let target = if stack.item() == Item::EnchantedBook {
                 &mut stack.components.stored_enchantments
             } else {
                 &mut stack.components.enchantments
@@ -700,7 +700,7 @@ fn modify_stack(
         }
         "minecraft:set_stew_effect" => {
             let entries = params["effects"].as_array().filter(|e| !e.is_empty());
-            if let (Item::SuspiciousStew, Some(entries)) = (stack.item, entries) {
+            if let (Item::SuspiciousStew, Some(entries)) = (stack.item(), entries) {
                 let entry = &entries[rng.gen_range(0..entries.len())];
                 let effect = entry["type"]
                     .as_str()

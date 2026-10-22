@@ -255,7 +255,7 @@ pub fn melee(attacker: &Attacker, victim: EntityType, rng: &mut impl Rng) -> Opt
         && weapon.is_some_and(|weapon| {
             tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::ENCHANTABLE_MACE,
-                weapon.item,
+                weapon.item(),
             )
         });
     let smash_bonus = if smashing {
@@ -274,7 +274,7 @@ pub fn melee(attacker: &Attacker, victim: EntityType, rng: &mut impl Rng) -> Opt
         && attacker.on_ground
         && attacker.known_speed_sq < max_sweep_speed * max_sweep_speed
         && weapon.is_some_and(|weapon| {
-            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::SWORDS, weapon.item)
+            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::SWORDS, weapon.item())
         });
     let sweep = sweeps.then(|| Sweep {
         damage: 1.0 + modifiers.value(Attribute::SweepingDamageRatio) as f32 * damage,

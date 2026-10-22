@@ -168,7 +168,7 @@ impl ItemUseExt for PlayerSession {
         let Some(stack) = self.inventory.hand(off_hand) else {
             return;
         };
-        let item = stack.item;
+        let item = stack.item();
         let kept = |kind: DataComponentType| !stack.components.is_removed(kind.name());
         let consumable = stack.consumable();
         let food = item.food().filter(|_| kept(DataComponentType::Food));
@@ -296,7 +296,7 @@ impl ItemUseExt for PlayerSession {
             stack.has_enchantment_effect(|effects| effects.prevent_armor_change)
         });
         let identical =
-            worn.is_some_and(|w| w.item == hand.item && w.components == hand.components);
+            worn.is_some_and(|w| w.item() == hand.item() && w.components == hand.components);
         if (bound && !creative) || identical {
             self.send_inventory();
             return;
@@ -332,7 +332,7 @@ impl ItemUseExt for PlayerSession {
     /// arrow.
     fn bow_ammo(&self) -> Option<(Option<usize>, tuff_item::item::ItemSnapshot)> {
         let is_arrow = |s: &ItemStack| {
-            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, s.item)
+            tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, s.item())
         };
         for off_hand in [true, false] {
             if let Some(stack) = self.inventory.hand(off_hand).filter(|s| is_arrow(s)) {
@@ -427,7 +427,7 @@ impl ItemUseExt for PlayerSession {
         let Some(bow) = self
             .inventory
             .hand(using.off_hand)
-            .filter(|s| s.item == Item::Bow)
+            .filter(|s| s.item() == Item::Bow)
             .map(tuff_item::item::ItemSnapshot::of)
         else {
             return;
@@ -445,7 +445,7 @@ impl ItemUseExt for PlayerSession {
         let uses = if self.mode.abilities.instabuild {
             0
         } else {
-            combat::ammo_use(&bow, ammo.item, 1.0).floor().max(0.0) as u8
+            combat::ammo_use(&bow, ammo.item(), 1.0).floor().max(0.0) as u8
         };
         if uses > ammo.count() {
             return;
@@ -554,7 +554,7 @@ impl ItemUseExt for PlayerSession {
         if self
             .inventory
             .hand(off_hand)
-            .is_none_or(|s| s.item != Item::EnderEye)
+            .is_none_or(|s| s.item() != Item::EnderEye)
         {
             return;
         }
@@ -737,13 +737,13 @@ impl ItemUseExt for PlayerSession {
         let main = self
             .inventory
             .hand(false)
-            .is_some_and(|s| s.item == Item::FishingRod);
+            .is_some_and(|s| s.item() == Item::FishingRod);
         if main {
             self.wear_slot(EquipmentSlot::Mainhand, damage).await;
         } else if self
             .inventory
             .hand(true)
-            .is_some_and(|s| s.item == Item::FishingRod)
+            .is_some_and(|s| s.item() == Item::FishingRod)
         {
             match self.hurt_slot_reporting(Inventory::OFFHAND_SLOT, damage) {
                 Hurt::Unchanged => {}
@@ -811,7 +811,8 @@ impl ItemUseExt for PlayerSession {
         let Some(mut using) = self.actions.using else {
             return;
         };
-        if self.is_dead() || self.inventory.hand(using.off_hand).map(|s| s.item) != Some(using.item)
+        if self.is_dead()
+            || self.inventory.hand(using.off_hand).map(|s| s.item()) != Some(using.item)
         {
             self.stop_using();
             self.publish(false).await;

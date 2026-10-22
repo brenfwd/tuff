@@ -236,7 +236,7 @@ impl<'a> CraftingInput<'a> {
     pub fn stacked(&self) -> StackedContents {
         let mut contents = StackedContents::default();
         for stack in self.stacks() {
-            contents.account(stack.item, 1);
+            contents.account(stack.item(), 1);
         }
         contents
     }
@@ -246,7 +246,7 @@ impl<'a> CraftingInput<'a> {
         self.items
             .iter()
             .map(|slot| {
-                slot.and_then(|stack| stack.item.crafting_remainder())
+                slot.and_then(|stack| stack.item().crafting_remainder())
                     .map(|(item, count)| ItemStack::mint(item, count, MintReason::Crafting))
             })
             .collect()
@@ -331,7 +331,7 @@ pub fn with_input_components(
             result.count + extra_count,
             result_components(result),
         ),
-        None => (input.item, 1 + extra_count, Components::default()),
+        None => (input.item(), 1 + extra_count, Components::default()),
     };
     let mut stack = ItemStack::mint_with(
         item,
@@ -928,13 +928,13 @@ impl RecipeSet {
             ingredient, stack,
         ) {
             (None, None) => true,
-            (Some(ingredient), Some(stack)) => ingredient.matches(stack.item),
+            (Some(ingredient), Some(stack)) => ingredient.matches(stack.item()),
             _ => false,
         };
         self.recipes_at(&self.smithing).find_map(|(name, recipe)| {
             let slots = recipe.smithing()?;
             (slot_matches(&slots.template, template)
-                && slots.base.matches(base.item)
+                && slots.base.matches(base.item())
                 && slot_matches(&slots.addition, addition))
             .then(|| (name, recipe.smith(template, base, addition)))
         })
@@ -952,20 +952,20 @@ impl RecipeSet {
     /// Whether `stack` may go in a bottle slot.
     pub fn is_potion_input(&self, stack: &ItemStack) -> bool {
         self.property_set("brewing_input")
-            .binary_search_by_key(&stack.item.id(), |item| item.id())
+            .binary_search_by_key(&stack.item().id(), |item| item.id())
             .is_ok()
-            || tuff_datapack::tags::is(tag::item::key::BREWING_POTION_INPUTS, stack.item)
+            || tuff_datapack::tags::is(tag::item::key::BREWING_POTION_INPUTS, stack.item())
     }
 
     /// Whether `stack` may go in the reagent slot.
     pub fn is_brewing_reagent(&self, stack: &ItemStack) -> bool {
         self.property_set("brewing_reagent")
-            .binary_search_by_key(&stack.item.id(), |item| item.id())
+            .binary_search_by_key(&stack.item().id(), |item| item.id())
             .is_ok()
     }
 
     pub fn is_brewing_fuel(&self, stack: &ItemStack) -> bool {
-        stack.item.brewing_fuel().is_some()
+        stack.item().brewing_fuel().is_some()
     }
 }
 

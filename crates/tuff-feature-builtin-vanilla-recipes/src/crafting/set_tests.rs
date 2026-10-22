@@ -40,8 +40,8 @@ struct KeepsBook;
 impl Recipe for KeepsBook {
     fn matches(&self, input: &CraftingInput) -> bool {
         input.ingredient_count() == 2
-            && input.stacks().any(|s| s.item == Item::Book)
-            && input.stacks().any(|s| s.item == Item::Stick)
+            && input.stacks().any(|s| s.item() == Item::Book)
+            && input.stacks().any(|s| s.item() == Item::Stick)
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
@@ -53,7 +53,7 @@ impl Recipe for KeepsBook {
             .items
             .iter()
             .map(|slot| {
-                slot.filter(|s| s.item == Item::Book)
+                slot.filter(|s| s.item() == Item::Book)
                     .map(|s| ItemStack::mint_like(s, s.count(), MintReason::Test))
             })
             .collect()
@@ -65,7 +65,7 @@ struct Torch;
 
 impl Recipe for Torch {
     fn matches(&self, input: &CraftingInput) -> bool {
-        input.ingredient_count() == 2 && input.stacks().all(|s| s.item == Item::Stick)
+        input.ingredient_count() == 2 && input.stacks().all(|s| s.item() == Item::Stick)
     }
 
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
@@ -93,7 +93,7 @@ fn shaped_recipes_match_anywhere_and_mirrored() {
     flipped[7] = stack(Item::Stick, 1);
     assert!(set.grid_recipe(&flipped, 3, 3).is_none());
     assert_eq!(
-        set.grid_result(&grid, 3, 3).map(|s| s.item),
+        set.grid_result(&grid, 3, 3).map(|s| s.item()),
         Some(Item::DiamondHoe)
     );
 }
@@ -105,7 +105,7 @@ fn shapeless_recipes_ignore_position() {
     let mut grid = (0..4).map(|_| None).collect::<Vec<Option<ItemStack>>>();
     grid[3] = stack(Item::Dirt, 5);
     let result = set.grid_result(&grid, 2, 2).unwrap();
-    assert_eq!((result.item, result.count()), (Item::Diamond, 2));
+    assert_eq!((result.item(), result.count()), (Item::Diamond, 2));
     grid[0] = stack(Item::Dirt, 1);
     assert!(set.grid_result(&grid, 2, 2).is_none());
 }
@@ -369,7 +369,7 @@ fn smithing_transforms_without_template_or_addition_match_empty_slots() {
     let diamond = ItemStack::mint(Item::Diamond, 1, MintReason::Test);
     let (name, result) = set.smithing(None, Some(&sword), None).unwrap();
     assert_eq!(name, "test:bare");
-    assert_eq!(result.unwrap().item, Item::DiamondSword);
+    assert_eq!(result.unwrap().item(), Item::DiamondSword);
     assert!(set.smithing(Some(&diamond), Some(&sword), None).is_none());
     assert!(set.smithing(None, Some(&sword), Some(&diamond)).is_none());
 }
@@ -387,7 +387,7 @@ fn smithing_transforms_keep_the_base_components() {
         .unwrap();
     let result = result.unwrap();
     assert_eq!(name, "test:upgrade");
-    assert_eq!((result.item, result.damage()), (Item::DiamondSword, 7));
+    assert_eq!((result.item(), result.damage()), (Item::DiamondSword, 7));
     assert!(set.smithing(None, Some(&sword), Some(&diamond)).is_none());
     assert!(
         set.smithing(Some(&template), Some(&diamond), Some(&diamond))

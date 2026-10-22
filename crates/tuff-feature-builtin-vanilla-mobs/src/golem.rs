@@ -245,7 +245,7 @@ impl Species for IronGolem {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != Item::IronIngot || !core.is_alive() {
+        if stack.item() != Item::IronIngot || !core.is_alive() {
             return None;
         }
         let before = core.health;
@@ -888,7 +888,7 @@ impl Species for SnowGolem {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != Item::Shears {
+        if stack.item() != Item::Shears {
             return None;
         }
         self.shear(core, cx).then_some(HandEffect::Damage(1))
@@ -1153,14 +1153,14 @@ impl Species for CopperGolem {
     ) -> InteractOutcome {
         use tuff_core::protocol::play::level_event;
         let stack = interaction.stack.as_deref()?;
-        if stack.item == Item::Shears
+        if stack.item() == Item::Shears
             && core
                 .equipment
                 .get(EquipmentSlot::Saddle)
                 .is_some_and(|antenna| {
                     tuff_datapack::tags::is(
                         tuff_vanilla_data::tag::item::key::SHEARABLE_FROM_COPPER_GOLEM,
-                        antenna.item,
+                        antenna.item(),
                     )
                 })
             && let Some(antenna) = core.equipment.take(EquipmentSlot::Saddle)
@@ -1180,7 +1180,7 @@ impl Species for CopperGolem {
             });
             return Some(HandEffect::Damage(1));
         }
-        if stack.item == Item::Honeycomb && !self.waxed() {
+        if stack.item() == Item::Honeycomb && !self.waxed() {
             Self::level_event(core, level_event::PARTICLES_WAX_ON, cx);
             core.sound_as(
                 SoundEvent::ItemHoneycombWaxOn,
@@ -1192,7 +1192,7 @@ impl Species for CopperGolem {
             self.next_weather = WEATHER_WAXED;
             return Some(HandEffect::Consume(1));
         }
-        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::AXES, stack.item) {
+        if !tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::AXES, stack.item()) {
             return None;
         }
         if self.waxed() {

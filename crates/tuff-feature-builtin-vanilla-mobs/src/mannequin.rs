@@ -468,7 +468,7 @@ mod tests {
         assert_eq!(mob.species.description(), None);
         assert!(mob.core.base.custom_name.is_some() && mob.core.base.custom_name_visible);
         assert!(mob.core.base.no_gravity);
-        let worn = |slot| mob.core.equipment.get(slot).map(|s| s.item);
+        let worn = |slot| mob.core.equipment.get(slot).map(|s| s.item());
         assert_eq!(worn(EquipmentSlot::Head), Some(Item::LeatherHelmet));
         assert_eq!(worn(EquipmentSlot::Feet), Some(Item::LeatherBoots));
         assert_eq!(worn(EquipmentSlot::Mainhand), Some(Item::WoodenSword));

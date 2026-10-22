@@ -1071,7 +1071,7 @@ mod behavior_tests {
             );
             assert!(cx.effects.iter().any(|e| matches!(
                 e,
-                Effect::DropExtendedItem { stack, .. } if stack.item == tuff_vanilla_data::Item::NetherStar
+                Effect::DropExtendedItem { stack, .. } if stack.item() == tuff_vanilla_data::Item::NetherStar
             )));
         });
     }

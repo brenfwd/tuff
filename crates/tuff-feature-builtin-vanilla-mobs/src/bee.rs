@@ -562,7 +562,7 @@ impl Species for Bee {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        bee_food(stack.item)
+        bee_food(stack.item())
     }
 
     fn ai_step(&mut self, core: &mut MobCore, cx: &mut TickContext) {

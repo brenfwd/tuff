@@ -497,7 +497,7 @@ pub fn thrown_kind(item: Item) -> Option<EntityType> {
 pub fn firework_flight(stack: &ItemStack) -> (u8, usize) {
     match &stack.components.fireworks {
         Some(fireworks) => (fireworks.flight_duration, fireworks.explosions.len()),
-        None if stack.item == Item::FireworkRocket => (1, 0),
+        None if stack.item() == Item::FireworkRocket => (1, 0),
         None => (0, 0),
     }
 }
@@ -548,7 +548,7 @@ impl ArrowShot {
     /// The entity its item flies as: tridents and spectral arrows are
     /// their own types; plain and tipped arrows are arrows.
     pub fn kind(&self) -> EntityType {
-        match self.item.item {
+        match self.item.item() {
             Item::Trident => EntityType::Trident,
             Item::SpectralArrow => EntityType::SpectralArrow,
             _ => EntityType::Arrow,

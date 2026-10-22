@@ -951,7 +951,7 @@ impl<S: Species> Mob<S> {
             EquipmentSlot::Legs,
             EquipmentSlot::Feet,
         ]
-        .map(|slot| core.equipment.get(slot).map(|stack| stack.item));
+        .map(|slot| core.equipment.get(slot).map(|stack| stack.item()));
         let can_freeze = freezing::can_freeze(core.kind(), false, armor.iter().map(Option::as_ref));
         let before = core.base.ticks_frozen;
         if inside.thaws {
@@ -1383,7 +1383,7 @@ impl<S: Species> Mob<S> {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != tuff_vanilla_data::Item::Shears
+        if stack.item() != tuff_vanilla_data::Item::Shears
             || interaction.sneaking
             || !self.species.can_shear_equipment(&self.core, interaction)
         {

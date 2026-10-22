@@ -62,15 +62,15 @@ fn grid_fits_in_inventory(grid: &[Option<ItemStack>], inventory: &Inventory) -> 
             continue;
         }
         let amount = stack.count() as u16;
-        let shared = claimed
-            .iter_mut()
-            .find(|(item, held, cap)| *item == stack.item && *held < *cap && held + amount <= *cap);
+        let shared = claimed.iter_mut().find(|(item, held, cap)| {
+            *item == stack.item() && *held < *cap && held + amount <= *cap
+        });
         match shared {
             Some((_, held, _)) => *held += amount,
             None if empty == 0 => return false,
             None => {
                 empty -= 1;
-                claimed.push((stack.item, amount, stack.max_stack_size() as u16));
+                claimed.push((stack.item(), amount, stack.max_stack_size() as u16));
             }
         }
     }
@@ -100,7 +100,7 @@ fn find_ingredient(
     let slots = inventory.slots();
     item_slots().find(|slot| {
         slots[*slot].as_ref().is_some_and(|stack| {
-            stack.item == item
+            stack.item() == item
                 && usable_for_crafting(stack)
                 && existing.is_none_or(|existing| existing.stacks_with(stack))
         })

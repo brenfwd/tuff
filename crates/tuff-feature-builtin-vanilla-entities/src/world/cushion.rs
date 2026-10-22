@@ -504,7 +504,7 @@ mod tests {
             assert!(matches!(cushion.tick(cx), Tick::Discard));
             assert!(cx.effects.iter().any(|e| matches!(
                 e,
-                Effect::DropItem { stack, .. } if stack.item == Item::BlueCushion
+                Effect::DropItem { stack, .. } if stack.item() == Item::BlueCushion
             )));
         });
     }

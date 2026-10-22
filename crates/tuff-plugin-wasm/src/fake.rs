@@ -216,7 +216,7 @@ impl Fakes {
         let observed = handle.observed.borrow();
         let body = &observed.body;
         let stack = |stack: &tuff_item::item::ItemStack| WitStack {
-            item: stack.item.name().to_owned(),
+            item: stack.item().name().to_owned(),
             count: stack.count(),
         };
         let held = HOTBAR_START + body.selected_slot;

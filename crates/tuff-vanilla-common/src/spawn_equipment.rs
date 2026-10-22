@@ -40,7 +40,7 @@ pub fn equip(world: &mut dyn RegionWorld, table: &Compound, saved: &mut Compound
         .unwrap_or_default();
     for mut stack in world.shared().block_loot().roll(name, world.rng()) {
         let slot = stack
-            .item
+            .item()
             .equippable()
             .map_or(EquipmentSlot::Mainhand, |e| e.slot);
         let Some((_, key)) = SLOT_NAMES

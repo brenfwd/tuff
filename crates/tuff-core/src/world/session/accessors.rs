@@ -85,7 +85,7 @@ impl PlayerSession {
     /// Holds up the item in a hand as if for `ticks` already.
     pub fn hold_up(&mut self, off_hand: bool, ticks: u32) {
         if let Some(stack) = self.inventory.hand(off_hand) {
-            let mut using = UsingItem::new(off_hand, stack.item, UsingItem::HELD);
+            let mut using = UsingItem::new(off_hand, stack.item(), UsingItem::HELD);
             using.remaining -= ticks;
             self.actions.using = Some(using);
         }

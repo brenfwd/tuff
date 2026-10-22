@@ -262,7 +262,7 @@ impl TransportItems {
                 return Outcome::DepositFail;
             };
             let empty = items.iter().all(Option::is_none);
-            let matches = empty || items.iter().flatten().any(|s| s.item == held.item);
+            let matches = empty || items.iter().flatten().any(|s| s.item() == held.item());
             if matches {
                 Outcome::Deposit {
                     stack: tuff_item::item::ItemSnapshot::of(held),

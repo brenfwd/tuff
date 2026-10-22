@@ -221,7 +221,7 @@ impl Goal for UseItem {
 }
 
 fn finish_drinking(mob: &mut MobCore, cx: &mut TickContext) {
-    let held = mob.equipment.get(EquipmentSlot::Mainhand).map(|s| s.item);
+    let held = mob.equipment.get(EquipmentSlot::Mainhand).map(|s| s.item());
     let sound = if held == Some(Item::MilkBucket) {
         let changes = mob.effects.clear();
         mob.pending_effects.extend(changes);
@@ -535,7 +535,7 @@ impl Species for WanderingTrader {
         if interaction
             .stack
             .as_ref()
-            .is_some_and(|s| s.item == Item::VillagerSpawnEgg)
+            .is_some_and(|s| s.item() == Item::VillagerSpawnEgg)
             || !core.is_alive()
             || self.trading.is_some()
             || core.is_baby()

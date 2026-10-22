@@ -391,7 +391,7 @@ async fn stacks_move_between_a_player_and_a_stash_without_copies() {
         .slots()
         .iter()
         .flatten()
-        .filter(|s| s.item == Item::Stone)
+        .filter(|s| s.item() == Item::Stone)
         .map(|s| u32::from(s.count()))
         .sum();
     assert_eq!(held, 6, "a stash no one receives for hands the items back");
@@ -408,7 +408,7 @@ async fn stacks_move_between_a_player_and_a_stash_without_copies() {
         .slots()
         .iter()
         .flatten()
-        .filter(|s| s.item == Item::Stone)
+        .filter(|s| s.item() == Item::Stone)
         .map(|s| u32::from(s.count()))
         .sum();
     assert_eq!(held, 10, "the same items came back");

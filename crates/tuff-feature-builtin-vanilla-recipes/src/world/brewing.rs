@@ -24,7 +24,7 @@ fn shrink_with_remainder(items: &mut [Option<ItemStack>], slot: usize, drops: &m
     let Some(stack) = items[slot].as_mut() else {
         return;
     };
-    let remainder = stack.item.crafting_remainder();
+    let remainder = stack.item().crafting_remainder();
     stack.shrink(1, BurnReason::CraftingInput);
     let empty = stack.count() == 0;
     match remainder {
@@ -69,7 +69,7 @@ pub fn tick(
     if stand.fuel <= 0
         && let Some(fuel) = items[brewing::FUEL]
             .as_ref()
-            .and_then(|stack| stack.item.brewing_fuel())
+            .and_then(|stack| stack.item().brewing_fuel())
     {
         stand.fuel = fuel.uses(Some(block));
         stand.total_fuel = stand.fuel;
@@ -78,7 +78,9 @@ pub fn tick(
         tick.changed = true;
     }
     let brewable = brewable(recipes, items);
-    let reagent = items[brewing::INGREDIENT].as_ref().map(|stack| stack.item);
+    let reagent = items[brewing::INGREDIENT]
+        .as_ref()
+        .map(|stack| stack.item());
     if stand.brew_time > 0 {
         stand.brew_time -= 1;
         if stand.brew_time == 0 && brewable {

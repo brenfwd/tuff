@@ -33,7 +33,7 @@ impl Pillager {
     fn add(&mut self, stack: ItemStack) -> Option<ItemStack> {
         let mut stack = stack;
         for held in &mut self.inventory {
-            if held.item == stack.item && held.components == stack.components {
+            if held.item() == stack.item() && held.components == stack.components {
                 let room = held.max_stack_size().saturating_sub(held.count());
                 held.transfer(&mut stack, room);
             }
@@ -53,7 +53,7 @@ impl Pillager {
             || self
                 .inventory
                 .iter()
-                .any(|held| held.item == item && held.count() < held.max_stack_size())
+                .any(|held| held.item() == item && held.count() < held.max_stack_size())
     }
 
     fn takeable_banner(&self, core: &MobCore, cx: &mut TickContext) -> Option<(i32, u8)> {
@@ -191,7 +191,7 @@ fn enchant_spawn_crossbow(core: &mut MobCore, rng: &mut StdRng) {
     if core
         .equipment
         .get(EquipmentSlot::Mainhand)
-        .is_some_and(|weapon| weapon.item == Item::Crossbow)
+        .is_some_and(|weapon| weapon.item() == Item::Crossbow)
         && let Some(weapon) = core.equipment.take(EquipmentSlot::Mainhand)
     {
         let enchanted = tuff_item::item::enchanting::enchant_from_provider(

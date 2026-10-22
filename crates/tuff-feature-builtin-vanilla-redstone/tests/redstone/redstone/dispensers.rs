@@ -64,7 +64,7 @@ async fn a_dispenser_shoots_a_firework_rocket_straight_out_of_its_face() {
     );
     let left = dispenser_slot(&mut b, dispenser).await;
     assert_eq!(
-        left.map(|s| (s.item, s.count())),
+        left.map(|s| (s.item(), s.count())),
         Some((Item::FireworkRocket, 1))
     );
     b.world.shutdown().await;
@@ -242,7 +242,7 @@ async fn a_bottled_hive_keeps_its_bees_behind_a_blocked_front() {
     b.world.ticks(4).await;
     assert_eq!(state(&b.region, hive).await.get("honey_level"), Some("0"));
     let filled = dispenser_slot(&mut b, dispenser).await.unwrap();
-    assert_eq!(filled.item, Item::HoneyBottle);
+    assert_eq!(filled.item(), Item::HoneyBottle);
     assert!(super::mobs(&b.region, EntityType::Bee).await.is_empty());
     assert_eq!(bees_in(saved_block_entity(&b.region, hive).await), 1);
     b.world.shutdown().await;

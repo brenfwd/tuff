@@ -284,7 +284,7 @@ mod tests {
             for _ in 0..2000 {
                 vex.finalize_spawn(core, cx);
                 let sword = core.equipment.get(EquipmentSlot::Mainhand).unwrap();
-                assert_eq!(sword.item, Item::IronSword);
+                assert_eq!(sword.item(), Item::IronSword);
                 enchanted += usize::from(sword.components.enchantments.is_some());
             }
             assert!(enchanted > 0);

@@ -291,7 +291,7 @@ fn facts_of(
         snow_walker: session
             .inventory
             .equipped(EquipmentSlot::Feet)
-            .is_some_and(|stack| stack.item == Item::LeatherBoots),
+            .is_some_and(|stack| stack.item() == Item::LeatherBoots),
         sprinting: session.pose.sprinting,
         food: session.food_level(),
         riding: session.ride.riding.is_some(),
@@ -498,7 +498,7 @@ fn placement_of(session: &PlayerSession, packet: &Serverbound) -> Option<Placeme
     let holding_block = session
         .inventory
         .hand(*hand == 1)
-        .is_some_and(|stack| stack.item.block().is_some());
+        .is_some_and(|stack| stack.item().block().is_some());
     Placement::probe(
         session.client_world(),
         session.eye(),
@@ -521,7 +521,7 @@ fn predict_placement(session: &mut PlayerSession, packet: &Serverbound) -> bool 
     let Some(block) = session
         .inventory
         .hand(*hand == 1)
-        .and_then(|stack| stack.item.block())
+        .and_then(|stack| stack.item().block())
     else {
         return false;
     };

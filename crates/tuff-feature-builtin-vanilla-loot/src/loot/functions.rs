@@ -307,7 +307,7 @@ pub(super) fn apply(
 ) -> ItemStack {
     match kind {
         "minecraft:fill_player_head" => {
-            if stack.item == Item::PlayerHead
+            if stack.item() == Item::PlayerHead
                 && let Some(name) = context.entity.and_then(|e| e.player_name.clone())
             {
                 patch(&mut stack, |nbt| {

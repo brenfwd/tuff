@@ -33,7 +33,7 @@ impl CustomIngredient {
 
     pub fn matches(&self, stack: &ItemStack) -> bool {
         match self {
-            Self::Item(ingredient) => item_id(stack).is_none() && ingredient.matches(stack.item),
+            Self::Item(ingredient) => item_id(stack).is_none() && ingredient.matches(stack.item()),
             Self::Custom { id, .. } => item_id(stack) == Some(id.as_str()),
         }
     }
@@ -49,7 +49,7 @@ impl CustomIngredient {
     fn base(&self) -> Ingredient {
         match self {
             Self::Item(ingredient) => ingredient.clone(),
-            Self::Custom { display, .. } => Ingredient::Item(display.item),
+            Self::Custom { display, .. } => Ingredient::Item(display.item()),
         }
     }
 }

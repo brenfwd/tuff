@@ -106,13 +106,13 @@ impl PiglinBrain {
             || self
                 .inventory
                 .iter()
-                .any(|s| s.item == item && s.count() < s.item.max_stack_size())
+                .any(|s| s.item() == item && s.count() < s.item().max_stack_size())
     }
 
     fn add(&mut self, mut stack: ItemStack) -> Option<ItemStack> {
         for held in &mut self.inventory {
-            if held.item == stack.item && held.components == stack.components {
-                let room = held.item.max_stack_size().saturating_sub(held.count());
+            if held.item() == stack.item() && held.components == stack.components {
+                let room = held.item().max_stack_size().saturating_sub(held.count());
                 held.transfer(&mut stack, room);
             }
         }
@@ -141,7 +141,7 @@ fn is_preferred_weapon(item: Item) -> bool {
 fn holds_loved_offhand(mob: &MobCore) -> bool {
     mob.equipment
         .get(EquipmentSlot::Offhand)
-        .is_some_and(|s| is_loved(s.item))
+        .is_some_and(|s| is_loved(s.item()))
 }
 
 /// The slot a piglin would wear or hold `item` in, if it would take it
@@ -153,7 +153,7 @@ fn replaces_current(mob: &MobCore, item: Item) -> Option<EquipmentSlot> {
     if slot == EquipmentSlot::Offhand {
         return None;
     }
-    let current = mob.equipment.get(slot).map(|s| s.item);
+    let current = mob.equipment.get(slot).map(|s| s.item());
     let wanted = |i: Item| is_loved(i) || (!mob.is_baby() && is_preferred_weapon(i));
     let new_wanted = wanted(item);
     let current_wanted = current.is_some_and(wanted);
@@ -822,7 +822,7 @@ impl Piglin {
     /// Puts away what it picked up: admires what it loves, eats food, and
     /// wears, holds or pockets the rest.
     fn put_away(&mut self, core: &mut MobCore, stack: ItemStack, cx: &mut TickContext) {
-        let item = stack.item;
+        let item = stack.item();
         if is_loved(item) {
             self.hold_and_admire(core, stack, cx);
         } else if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::PIGLIN_FOOD, item)
@@ -839,7 +839,7 @@ impl Piglin {
     /// dropping the old; otherwise it goes in a pocket, and what does not
     /// fit is thrown.
     fn equip_or_store(&mut self, core: &mut MobCore, stack: ItemStack, cx: &mut TickContext) {
-        if let Some(slot) = replaces_current(core, stack.item) {
+        if let Some(slot) = replaces_current(core, stack.item()) {
             if let Some(old) = core.equipment.replace(slot, Some(stack)) {
                 core.drop_item(old, 0.0, cx);
             }
@@ -873,7 +873,7 @@ impl Piglin {
         let Some(held) = core.equipment.take(EquipmentSlot::Offhand) else {
             return;
         };
-        if held.item == Item::GoldIngot {
+        if held.item() == Item::GoldIngot {
             if core.is_baby() {
                 self.equip_or_store(core, held, cx);
             } else {
@@ -1119,7 +1119,7 @@ impl Species for Piglin {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != Item::GoldIngot
+        if stack.item() != Item::GoldIngot
             || core.piglin.admire > 0
             || core.is_baby()
             || cx.tick < core.piglin.admiring_disabled_until
@@ -1142,7 +1142,7 @@ impl Species for Piglin {
         if core.piglin.admire > 0 {
             core.piglin.admire = 0;
             if let Some(held) = core.equipment.take(EquipmentSlot::Offhand) {
-                if held.item == Item::GoldIngot {
+                if held.item() == Item::GoldIngot {
                     held.burn(tuff_item::item::BurnReason::Consumed);
                 } else {
                     self.equip_or_store(core, held, cx);
@@ -1356,7 +1356,8 @@ impl Species for PiglinBrute {
     }
 
     fn took_item(&mut self, core: &mut MobCore, stack: ItemStack) {
-        if stack.item == Item::GoldenAxe && core.equipment.get(EquipmentSlot::Mainhand).is_none() {
+        if stack.item() == Item::GoldenAxe && core.equipment.get(EquipmentSlot::Mainhand).is_none()
+        {
             core.equipment.set(EquipmentSlot::Mainhand, Some(stack));
             core.equipment.set_drop_chance(
                 EquipmentSlot::Mainhand,

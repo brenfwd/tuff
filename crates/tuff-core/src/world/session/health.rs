@@ -273,7 +273,7 @@ impl PlayerSession {
         };
         let held = self.inventory.slots()[window]
             .as_ref()
-            .map(|stack| stack.item);
+            .map(|stack| stack.item());
         match self.hurt_slot_reporting(window, amount) {
             Hurt::Unchanged => {}
             Hurt::Damaged => self.send_inventory(),
@@ -351,7 +351,7 @@ impl PlayerSession {
         };
         self.progress
             .stats
-            .award(Stat::item(StatType::Used, used.item), 1);
+            .award(Stat::item(StatType::Used, used.item()), 1);
         self.body.health.value = 1.0;
         for effect in death_effects {
             match effect {
@@ -615,7 +615,7 @@ impl PlayerSession {
         if amount == 0 || self.mode.abilities.instabuild {
             return;
         }
-        let held = self.inventory.hand(off_hand).map(|stack| stack.item);
+        let held = self.inventory.hand(off_hand).map(|stack| stack.item());
         let window = self.inventory.hand_slot(off_hand);
         match self.hurt_slot_reporting(window, amount) {
             Hurt::Unchanged => {}

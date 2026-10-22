@@ -79,7 +79,7 @@ async fn items_of(region: &RegionHandle, item: Item) -> Vec<(i32, [f64; 3], u8)>
         else {
             continue;
         };
-        if stack.item == item {
+        if stack.item() == item {
             found.push((snapshot.id, snapshot.position, stack.count()));
         }
     }
@@ -183,7 +183,7 @@ async fn an_allay_gathers_matching_items_and_brings_them_to_the_player_who_gave_
             });
         if let Some(stack) = delivered {
             assert!(gathered, "it carried the items before handing them over");
-            assert_eq!(stack.item, Item::Cobblestone);
+            assert_eq!(stack.item(), Item::Cobblestone);
             assert!(
                 items_of(&region, Item::Cobblestone)
                     .await
@@ -430,7 +430,7 @@ async fn allay_memories_and_inventory_survive_saving_and_loading() {
     };
     let kept =
         ItemStack::mint_from_nbt(inventory[0].as_compound().unwrap(), MintReason::Test).unwrap();
-    assert_eq!((kept.item, kept.count()), (Item::Cobblestone, 7));
+    assert_eq!((kept.item(), kept.count()), (Item::Cobblestone, 7));
     world.shutdown().await;
 }
 

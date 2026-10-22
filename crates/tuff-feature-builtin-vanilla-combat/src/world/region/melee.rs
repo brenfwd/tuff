@@ -49,7 +49,7 @@ impl RegionHooks for CombatRegionHooks {
     ) -> Option<DispenseOutcome> {
         let (sx, sy, sz) = facing.step();
         let step = [f64::from(sx), f64::from(sy), f64::from(sz)];
-        match stack.item {
+        match stack.item() {
             Item::Arrow | Item::TippedArrow | Item::SpectralArrow => {
                 let velocity = projectile::shot_velocity(
                     step,

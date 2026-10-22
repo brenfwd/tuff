@@ -85,7 +85,7 @@ impl HashedSlot {
     }
 
     fn matches_stack(&self, stack: ItemView<'_>) -> bool {
-        if self.item != stack.item.id() || self.count != stack.count() as i32 {
+        if self.item != stack.item().id() || self.count != stack.count() as i32 {
             return false;
         }
         let mut removed: Vec<u32> = stack

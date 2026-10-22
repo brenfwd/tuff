@@ -179,7 +179,7 @@ fn upgraded_item_parses_as_a_stack() {
     item::upgrade(&mut item, Fixer::new(V1_20_4));
     let stack = tuff_item::item::ItemStack::mint_from_nbt(&item, tuff_item::item::MintReason::Test)
         .unwrap();
-    assert_eq!(stack.item, tuff_vanilla_data::Item::IronPickaxe);
+    assert_eq!(stack.item(), tuff_vanilla_data::Item::IronPickaxe);
     assert_eq!(stack.count(), 1);
     assert_eq!(stack.damage(), 30);
 }

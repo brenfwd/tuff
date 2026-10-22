@@ -9,7 +9,7 @@ fn diamonds(session: &PlayerSession) -> u32 {
         .slots()
         .iter()
         .flatten()
-        .filter(|stack| stack.item == Item::Diamond)
+        .filter(|stack| stack.item() == Item::Diamond)
         .map(|stack| stack.count() as u32)
         .sum()
 }

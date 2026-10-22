@@ -29,7 +29,7 @@ const START_SOUND_PERCENT: f32 = 0.2;
 const MID_SOUND_PERCENT: f32 = 0.5;
 
 fn is_arrow(stack: &ItemStack) -> bool {
-    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item)
+    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item())
 }
 
 fn is_intangible(stack: &ItemStack) -> bool {
@@ -62,7 +62,7 @@ pub trait RangedExt {
 
 impl RangedExt for PlayerSession {
     fn crossbow_ammo(&self) -> Option<(Option<usize>, tuff_item::item::ItemSnapshot)> {
-        let held = |s: &ItemStack| is_arrow(s) || s.item == Item::FireworkRocket;
+        let held = |s: &ItemStack| is_arrow(s) || s.item() == Item::FireworkRocket;
         for off_hand in [true, false] {
             if let Some(stack) = self.inventory.hand(off_hand).filter(|s| held(s)) {
                 let slot = if off_hand {
@@ -163,7 +163,7 @@ impl RangedExt for PlayerSession {
         if projectiles.is_empty() {
             return;
         }
-        let power = if projectiles.iter().any(|p| p.item == Item::FireworkRocket) {
+        let power = if projectiles.iter().any(|p| p.item() == Item::FireworkRocket) {
             FIREWORK_POWER
         } else {
             ARROW_POWER
@@ -171,7 +171,7 @@ impl RangedExt for PlayerSession {
         let angles = ranged::volley_angles(projectiles.len(), ranged::projectile_spread(&crossbow));
         let eye = self.eye();
         for (index, (projectile, angle)) in projectiles.into_iter().zip(angles).enumerate() {
-            let rocket = projectile.item == Item::FireworkRocket;
+            let rocket = projectile.item() == Item::FireworkRocket;
             let direction = ranged::volley_direction(self.pose.pitch, self.pose.yaw, angle);
             let velocity = tuff_core::world::projectile::shot_velocity(
                 direction,
@@ -223,7 +223,7 @@ impl RangedExt for PlayerSession {
             if self
                 .inventory
                 .hand(off_hand)
-                .is_none_or(|s| s.item != Item::Crossbow)
+                .is_none_or(|s| s.item() != Item::Crossbow)
             {
                 break;
             }
@@ -258,7 +258,7 @@ impl RangedExt for PlayerSession {
         let Some(trident) = self
             .inventory
             .hand(using.off_hand)
-            .filter(|s| s.item == Item::Trident)
+            .filter(|s| s.item() == Item::Trident)
             .map(tuff_item::item::ItemSnapshot::of)
         else {
             return;
@@ -352,7 +352,9 @@ fn load(
         let uses = if i > 0 || session.mode.abilities.instabuild {
             0
         } else {
-            combat::ammo_use(crossbow, ammo.item, 1.0).floor().max(0.0) as u8
+            combat::ammo_use(crossbow, ammo.item(), 1.0)
+                .floor()
+                .max(0.0) as u8
         };
         if uses > left {
             continue;

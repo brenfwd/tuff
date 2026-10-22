@@ -307,7 +307,8 @@ impl Bobber {
                     .block_loot()
                     .fishing(self.luck, self.open_water, &self.rod, cx.rng);
             for stack in items {
-                if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item) {
+                if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item())
+                {
                     fish += 1;
                 }
                 caught.push(tuff_item::item::ItemSnapshot::of(&stack));

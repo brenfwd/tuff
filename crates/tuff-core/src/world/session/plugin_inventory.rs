@@ -174,7 +174,7 @@ impl PlayerSession {
             && self
                 .inventory
                 .carried()
-                .is_some_and(|stack| stack.item == item);
+                .is_some_and(|stack| stack.item() == item);
         let mut taken = Vec::new();
         for slot in (36..crate::world::inventory::SLOTS).chain(9..36) {
             if remaining == 0 {
@@ -248,7 +248,7 @@ fn take_some(
     item: tuff_vanilla_data::Item,
     remaining: &mut u32,
 ) -> Option<ItemStack> {
-    if held.as_ref().is_none_or(|stack| stack.item != item) {
+    if held.as_ref().is_none_or(|stack| stack.item() != item) {
         return None;
     }
     let count = u32::from(held.as_ref().map_or(0, ItemStack::count));

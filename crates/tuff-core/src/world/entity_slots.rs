@@ -178,7 +178,7 @@ mod tests {
         ];
         let mut slots = ContainerSlotsMut::with_head([&mut saddle, &mut body], &mut chest);
         assert_eq!(slots.len(), 4);
-        assert_eq!(slots[0].as_ref().map(|s| s.item), Some(Item::Saddle));
+        assert_eq!(slots[0].as_ref().map(|s| s.item()), Some(Item::Saddle));
         assert_eq!(slots[3].as_ref().map(|s| s.count()), Some(3));
         slots[1] = slots[3].take();
         assert!(slots.as_mut_slice().is_none());

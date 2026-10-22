@@ -201,7 +201,7 @@ pub trait Interact: RegionWorld + Rest {
                 .and_then(ItemStack::picture_from_nbt);
             if stored
                 .as_ref()
-                .is_some_and(|stored| stored.count() >= stored.item.max_stack_size())
+                .is_some_and(|stored| stored.count() >= stored.item().max_stack_size())
             {
                 return None;
             }
@@ -217,7 +217,7 @@ pub trait Interact: RegionWorld + Rest {
                     }
                 },
             };
-            let ratio = f32::from(next.count()) / next.item.max_stack_size() as f32;
+            let ratio = f32::from(next.count()) / next.item().max_stack_size() as f32;
             self.raw_block_entity_mut(pos)?
                 .insert("item", next.to_nbt());
             self.report_container_edit(

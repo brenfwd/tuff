@@ -339,11 +339,15 @@ async fn an_armor_stand_is_placed_dressed_and_broken() {
         })
         .await;
     let stack = expect(&mut s.events, |event| match event {
-        PlayerEvent::HandReturned { stack, .. } if stack.item != Item::Stick => Some(stack),
+        PlayerEvent::HandReturned { stack, .. } if stack.item() != Item::Stick => Some(stack),
         _ => None,
     })
     .await;
-    assert_eq!(stack.item, Item::IronHelmet, "the helmet goes to the hand");
+    assert_eq!(
+        stack.item(),
+        Item::IronHelmet,
+        "the helmet goes to the hand"
+    );
     let (item, effect) = expect(&mut s.events, |event| match event {
         PlayerEvent::EntityInteracted { item, effect, .. } => Some((item, effect)),
         _ => None,

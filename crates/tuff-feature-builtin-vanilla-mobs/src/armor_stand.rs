@@ -83,7 +83,7 @@ fn usable(slot: EquipmentSlot) -> bool {
 
 fn slot_for(stack: &ItemStack) -> EquipmentSlot {
     stack
-        .item
+        .item()
         .equippable()
         .map(|e| e.slot)
         .filter(|slot| usable(*slot))
@@ -465,7 +465,7 @@ impl Species for ArmorStand {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let held = interaction.stack.as_deref();
-        if self.marker || held.is_some_and(|s| s.item == Item::NameTag) {
+        if self.marker || held.is_some_and(|s| s.item() == Item::NameTag) {
             return None;
         }
         let for_item = held.map_or(EquipmentSlot::Mainhand, slot_for);

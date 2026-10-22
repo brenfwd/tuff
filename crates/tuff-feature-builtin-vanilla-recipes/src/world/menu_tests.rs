@@ -48,7 +48,7 @@ fn count_of(inventory: &Inventory, item: Item) -> u32 {
         .slots()
         .iter()
         .flatten()
-        .filter(|s| s.item == item)
+        .filter(|s| s.item() == item)
         .map(|s| s.count() as u32)
         .sum()
 }
@@ -321,7 +321,7 @@ fn smithing_uses_one_of_each_input_and_gates_its_slots() {
         Some(ItemStack::mint(Item::NetheriteIngot, 1, MintReason::Test));
     container[smithing::RESULT] = smithing_result(vanilla_set(), &container);
     assert_eq!(
-        container[smithing::RESULT].as_ref().map(|s| s.item),
+        container[smithing::RESULT].as_ref().map(|s| s.item()),
         Some(Item::NetheriteSword)
     );
     let mut hook = SmithingHook::new(vanilla_set().clone());
@@ -343,7 +343,7 @@ fn smithing_uses_one_of_each_input_and_gates_its_slots() {
     );
     assert!(hook.took);
     assert_eq!(
-        inventory.carried().map(|s| (s.item, s.damage())),
+        inventory.carried().map(|s| (s.item(), s.damage())),
         Some((Item::NetheriteSword, 5))
     );
     assert_eq!(

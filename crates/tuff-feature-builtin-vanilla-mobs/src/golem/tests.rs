@@ -100,7 +100,7 @@ fn shears_take_a_gifted_poppy_off_a_copper_golem() {
         assert!(core.equipment.get(EquipmentSlot::Saddle).is_none());
         assert!(cx.effects.iter().any(|e| matches!(
             e,
-            Effect::DropItem { stack, .. } if stack.item == Item::Poppy
+            Effect::DropItem { stack, .. } if stack.item() == Item::Poppy
         )));
     });
 }
@@ -160,7 +160,7 @@ fn copper_golems_wear_a_gifted_poppy_once() {
             .core
             .equipment
             .get(EquipmentSlot::Saddle)
-            .map(|s| s.item);
+            .map(|s| s.item());
         assert_eq!(worn, Some(Item::Poppy));
         assert!(golem.core.equipment.drop_chance(EquipmentSlot::Saddle) > 1.0);
         golem
@@ -170,7 +170,7 @@ fn copper_golems_wear_a_gifted_poppy_once() {
             .core
             .equipment
             .get(EquipmentSlot::Saddle)
-            .map(|s| s.item);
+            .map(|s| s.item());
         assert_eq!(worn, Some(Item::Poppy), "one flower at a time");
     });
 }
@@ -516,7 +516,7 @@ fn shearing_a_snow_golem_drops_its_carved_pumpkin() {
         assert!(cx.effects.iter().any(|e| matches!(
             e,
             Effect::DropItem { stack, position, .. }
-                if stack.item == Item::CarvedPumpkin && position[1] > 64.0
+                if stack.item() == Item::CarvedPumpkin && position[1] > 64.0
         )));
         cx.effects.clear();
         assert_eq!(species.interact(core, &click(Item::Shears), cx), None);

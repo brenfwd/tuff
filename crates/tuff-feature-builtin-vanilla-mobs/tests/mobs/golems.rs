@@ -605,7 +605,7 @@ async fn a_copper_golem_fills_a_double_chest_split_across_a_region_border() {
         diamonds = merged
             .iter()
             .flatten()
-            .filter(|stack| stack.item == Item::Diamond)
+            .filter(|stack| stack.item() == Item::Diamond)
             .map(|stack| i32::from(stack.count()))
             .sum();
         if diamonds > 0 {

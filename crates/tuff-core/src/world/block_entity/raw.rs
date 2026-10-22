@@ -504,7 +504,7 @@ mod tests {
         assert!(!data.contains_key(CARRIED));
         let spilled = contents(BlockEntityType::Piston, &piston);
         assert_eq!(spilled.len(), 1);
-        assert_eq!(spilled[0].item, Item::Diamond);
+        assert_eq!(spilled[0].item(), Item::Diamond);
         assert_eq!(spilled[0].count(), 4);
     }
 
@@ -545,7 +545,7 @@ mod tests {
         let kind = BlockEntityType::Lectern;
         assert!(held_drop(kind, &nbt, empty, pos, &mut rng).is_none());
         let (stack, at, velocity) = held_drop(kind, &nbt, full, pos, &mut rng).unwrap();
-        assert_eq!(stack.item, Item::WrittenBook);
+        assert_eq!(stack.item(), Item::WrittenBook);
         assert_eq!(at, [3.5, 65.0, -1.25]);
         assert_eq!(velocity[1], 0.2);
         assert!(velocity[0].abs() <= 0.1 && velocity[2].abs() <= 0.1);

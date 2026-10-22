@@ -396,7 +396,7 @@ fn egg_entity_type(
             .get_str("id")
             .and_then(tuff_vanilla_data::registry::EntityType::from_name),
         Some(_) => None,
-        None => stack.item.spawns_entity(),
+        None => stack.item().spawns_entity(),
     }
 }
 
@@ -522,7 +522,7 @@ impl tuff_core::world::region_api::RegionHooks for MobRegionHooks {
         stack: &tuff_core::world::region_api::Fired,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         let target = tuff_vanilla_common::placement::step(pos, facing);
-        hive::dispensed_at(world, target, stack.item)
+        hive::dispensed_at(world, target, stack.item())
             .or_else(|| world::region::assembly::dispensed(world, target, facing, stack))
             .or_else(|| dispense_spawn_egg(world, pos, facing, stack))
     }

@@ -1191,7 +1191,7 @@ pub fn arrow_spawned(
     look: (f32, f32),
     rng: &mut dyn RngCore,
 ) -> Vec<WorldAction> {
-    let kind = match shot.item.item {
+    let kind = match shot.item.item() {
         tuff_vanilla_data::Item::SpectralArrow => EntityType::SpectralArrow,
         tuff_vanilla_data::Item::Trident => EntityType::Trident,
         _ => EntityType::Arrow,

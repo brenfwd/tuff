@@ -301,7 +301,7 @@ impl Species for Skeleton {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != Item::Shears {
+        if stack.item() != Item::Shears {
             return None;
         }
         bogged_shear(self, core, play::sound_category::PLAYERS, cx).then_some(HandEffect::Damage(1))

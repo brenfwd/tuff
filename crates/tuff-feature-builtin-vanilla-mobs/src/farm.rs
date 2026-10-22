@@ -38,7 +38,7 @@ const EGG_TIME_MIN: i32 = 6000;
 const SHEEP_REGROW_SECONDS: i32 = 60;
 
 fn in_tag(tag: Key<Item>, stack: &ItemStack) -> bool {
-    tuff_datapack::tags::is(tag, stack.item)
+    tuff_datapack::tags::is(tag, stack.item())
 }
 
 fn animal_experience(rng: &mut StdRng) -> i32 {
@@ -141,7 +141,7 @@ impl Species for Cow {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != Item::Bucket || core.is_baby() {
+        if stack.item() != Item::Bucket || core.is_baby() {
             return None;
         }
         core.sound_as(
@@ -341,7 +341,7 @@ impl Species for Mooshroom {
         if core.is_baby() {
             return None;
         }
-        if stack.item == Item::Bucket {
+        if stack.item() == Item::Bucket {
             core.sound_as(
                 SoundEvent::EntityCowMilk,
                 play::sound_category::PLAYERS,
@@ -351,7 +351,7 @@ impl Species for Mooshroom {
             );
             return Some(HandEffect::Exchange(Item::MilkBucket));
         }
-        if stack.item == Item::Bowl {
+        if stack.item() == Item::Bowl {
             let (sound, result) = match self.stew.take() {
                 Some(effects) => {
                     let mut stew = ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Spawn);
@@ -369,12 +369,12 @@ impl Species for Mooshroom {
             core.sound_as(sound, play::sound_category::PLAYERS, 1.0, 1.0, cx);
             return Some(result);
         }
-        if stack.item == Item::Shears {
+        if stack.item() == Item::Shears {
             return mooshroom_shear(self, core, play::sound_category::PLAYERS, cx)
                 .then_some(HandEffect::Damage(1));
         }
         if self.color == MooshroomColor::Brown
-            && let Some(effects) = flower_effects(stack.item)
+            && let Some(effects) = flower_effects(stack.item())
         {
             if self.stew.is_some() {
                 let [x, y, z] = core.base.position;
@@ -535,7 +535,7 @@ impl Species for Pig {
     }
 
     fn mount_refused(&self, _core: &MobCore, stack: Option<&ItemStack>) -> bool {
-        stack.is_some_and(|s| pig_food(s.item))
+        stack.is_some_and(|s| pig_food(s.item()))
     }
 
     fn boost(&mut self, core: &mut MobCore, roll: u32) -> bool {
@@ -682,7 +682,7 @@ fn mixed_color(recipes: &RecipeSet, a: DyeColor, b: DyeColor) -> Option<DyeColor
             };
             let color = recipes.find(&input).and_then(|(_, recipe)| {
                 let result = recipe.assemble(&input)?;
-                let color = result.item.dye();
+                let color = result.item().dye();
                 result.burn(BurnReason::Template);
                 color
             });
@@ -797,11 +797,11 @@ impl Species for Sheep {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item == Item::Shears {
+        if stack.item() == Item::Shears {
             return sheep_shear(self, core, play::sound_category::PLAYERS, cx)
                 .then_some(HandEffect::Damage(1));
         }
-        if let Some(color) = stack.item.dye()
+        if let Some(color) = stack.item().dye()
             && !self.sheared
             && color != self.color
         {
@@ -1265,7 +1265,7 @@ impl Species for Rabbit {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        rabbit_food(stack.item)
+        rabbit_food(stack.item())
     }
 
     fn offspring(&self, partner: &Self, rng: &mut StdRng) -> Self {

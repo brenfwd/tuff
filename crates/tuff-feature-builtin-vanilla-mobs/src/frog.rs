@@ -556,7 +556,7 @@ impl Species for Frog {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        frog_food(stack.item)
+        frog_food(stack.item())
     }
 
     fn breed(

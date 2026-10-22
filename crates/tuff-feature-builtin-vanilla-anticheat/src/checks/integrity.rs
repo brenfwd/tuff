@@ -85,12 +85,12 @@ impl ClickBefore {
             seen.push(index);
             if let Some(stack) = stack_at(index) {
                 bundle |= stack.is_bundle();
-                add(&mut totals, stack.item, u32::from(stack.count()));
+                add(&mut totals, stack.item(), u32::from(stack.count()));
             }
         }
         if let Some(stack) = session.inventory.carried() {
             bundle |= stack.is_bundle();
-            add(&mut totals, stack.item, u32::from(stack.count()));
+            add(&mut totals, stack.item(), u32::from(stack.count()));
         }
         let result = kind.result_slot();
         let on_result = result

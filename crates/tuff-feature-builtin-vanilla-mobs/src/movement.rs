@@ -360,7 +360,7 @@ impl MobCore {
         let feet = self
             .equipment
             .get(tuff_vanilla_data::item::EquipmentSlot::Feet)
-            .map(|s| s.item);
+            .map(|s| s.item());
         let snow_climb = self.body.in_powder_snow
             && tuff_core::world::freezing::walks_on_powder_snow(self.base.kind, feet);
         if (self.body.horizontal_collision || self.body.jumping) && (climbing || snow_climb) {
@@ -519,7 +519,7 @@ impl MobCore {
             self.kind(),
             self.equipment
                 .get(EquipmentSlot::Feet)
-                .map(|stack| stack.item),
+                .map(|stack| stack.item()),
         );
         let fall_distance = self.base.fall_distance;
         let block = cx.block;

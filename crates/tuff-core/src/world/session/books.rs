@@ -77,7 +77,7 @@ impl PlayerSession {
             .inventory_mut()
             .slot_mut(window)
             .as_mut()
-            .filter(|stack| stack.item == Item::WrittenBook)
+            .filter(|stack| stack.item() == Item::WrittenBook)
         {
             stack.components.written_book = Some(Box::new(book));
         }
@@ -102,7 +102,7 @@ impl PlayerSession {
             inventory
                 .slot_mut(window)
                 .as_mut()
-                .filter(|s| s.item == Item::WritableBook)
+                .filter(|s| s.item() == Item::WritableBook)
                 .is_some()
         };
         if !writable(self.inventory_mut()) {

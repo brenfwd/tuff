@@ -86,7 +86,7 @@ impl Pending {
                     Kind::ContainerRemove
                 };
                 let mut record = Record::new(time, who.clone(), kind, world, [pos.x, pos.y, pos.z]);
-                record.material = Some(net.stack.item.name().to_owned());
+                record.material = Some(net.stack.item().name().to_owned());
                 record.amount = net.delta.unsigned_abs().min(i32::MAX as u64) as i32;
                 record.text = Some(encode_text(&holder, net.slot));
                 record.data = Some(net.stack.to_nbt());
@@ -151,7 +151,7 @@ pub struct Undo {
 
 fn same(stack: &ItemStack, undo: &Undo) -> bool {
     if undo.any_components {
-        stack.item == undo.stack.item
+        stack.item() == undo.stack.item()
     } else {
         stack.stacks_with(&undo.stack)
     }

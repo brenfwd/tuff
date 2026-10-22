@@ -328,7 +328,7 @@ impl RegionHooks for DecorHooks {
         _origin: [f64; 3],
         stack: &tuff_core::world::region_api::Fired,
     ) -> Option<DispenseOutcome> {
-        if stack.item != Item::ArmorStand {
+        if stack.item() != Item::ArmorStand {
             return None;
         }
         let (sx, sy, sz) = facing.step();

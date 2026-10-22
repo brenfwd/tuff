@@ -74,7 +74,7 @@ impl PlayerSession {
     pub(super) fn holds_debug_stick(&self, off_hand: bool) -> bool {
         self.inventory
             .hand(off_hand)
-            .is_some_and(|stack| stack.item == Item::DebugStick)
+            .is_some_and(|stack| stack.item() == Item::DebugStick)
     }
 
     fn overlay_translation(&mut self, key: String, args: impl IntoIterator<Item = TextComponent>) {

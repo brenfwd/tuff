@@ -147,14 +147,14 @@ impl OminousItemSpawner {
                 },
             )]))
         };
-        match item.item {
+        match item.item() {
             Item::FireCharge => cx.effects.push(level_event(BLAZE_FIREBALL_EVENT, 0)),
             Item::WindCharge => cx.effects.push(level_event(WIND_CHARGE_SHOOT_EVENT, 0)),
             _ => {}
         }
         let owner =
             projectile::Owner::of(tuff_core::world::entity::Culprit::entity(&self.base), None);
-        let shot = match item.item {
+        let shot = match item.item() {
             Item::Arrow | Item::TippedArrow | Item::SpectralArrow => {
                 let velocity =
                     projectile::shot_velocity(down, SHOT_POWER, SHOT_UNCERTAINTY, cx.rng);

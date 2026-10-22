@@ -5,7 +5,7 @@ use rand::Rng;
 use tuff_core::world::menu::holds_enchantments;
 use tuff_item::enchantment;
 use tuff_item::item::enchanting::Choice;
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{BurnReason, ItemStack, MintReason};
 use tuff_vanilla_data::Item;
 
 const REPAIR_BONUS_PERCENT: u32 = 5;
@@ -21,8 +21,8 @@ fn without_non_curses(mut stack: ItemStack) -> ItemStack {
     let mut kept = crafting_enchantments(&registry, &stack);
     kept.retain(|(enchantment, _)| is_curse(enchantment));
     set_enchantments(&mut stack, &kept);
-    if stack.item == Item::EnchantedBook && kept.is_empty() {
-        stack.item = Item::Book;
+    if stack.item() == Item::EnchantedBook && kept.is_empty() {
+        stack.transform(Item::Book, MintReason::Transform, BurnReason::Transform);
     }
     let mut cost = 0;
     for _ in &kept {
@@ -33,7 +33,7 @@ fn without_non_curses(mut stack: ItemStack) -> ItemStack {
 }
 
 fn merged(input: &ItemStack, additional: &ItemStack) -> Option<ItemStack> {
-    if input.item != additional.item {
+    if input.item() != additional.item() {
         return None;
     }
     let durability = input
@@ -165,7 +165,7 @@ mod tests {
     fn a_ground_enchanted_book_becomes_a_book() {
         let book = enchanted(Item::EnchantedBook, &[("minecraft:mending", 1)]);
         let out = compute(None, Some(&book)).expect("result");
-        assert_eq!(out.item, Item::Book);
+        assert_eq!(out.item(), Item::Book);
         assert_eq!(out.components.repair_cost, Some(0));
     }
 

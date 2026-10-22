@@ -270,7 +270,7 @@ impl Species for ZombieVillager {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item != Item::GoldenApple {
+        if stack.item() != Item::GoldenApple {
             return None;
         }
         if !core.effects.has(MobEffect::Weakness) {

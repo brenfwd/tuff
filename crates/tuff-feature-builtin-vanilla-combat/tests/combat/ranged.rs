@@ -340,7 +340,7 @@ async fn crossbows_load_rockets_from_the_off_hand_and_fire_them() {
     for _ in 0..26 {
         player.run_tick().await;
     }
-    assert_eq!(loaded(&player)[0].item, Item::FireworkRocket);
+    assert_eq!(loaded(&player)[0].item(), Item::FireworkRocket);
     assert_eq!(ammo_left(&player), 5, "held rockets come before arrows");
     player.handle_packet(release()).await;
     player.handle_packet(use_item()).await;
@@ -584,7 +584,7 @@ async fn loyal_tridents_fly_home_to_be_picked_up() {
         _ => None,
     })
     .await;
-    assert_eq!(offered.item, Item::Trident);
+    assert_eq!(offered.item(), Item::Trident);
     world.shutdown().await;
 }
 

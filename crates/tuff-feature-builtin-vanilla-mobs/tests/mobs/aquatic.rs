@@ -116,7 +116,7 @@ async fn axolotls_take_tropical_fish_buckets_and_give_the_water_back() {
         let HandEffect::ExchangeStack(stack) = effect else {
             panic!("expected the empty water bucket back, got {effect:?}");
         };
-        assert_eq!(stack.item, Item::WaterBucket);
+        assert_eq!(stack.item(), Item::WaterBucket);
     }
     wait_for(&world, &region, 600, |found| {
         found

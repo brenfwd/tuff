@@ -273,7 +273,7 @@ impl Species for Strider {
     }
 
     fn mount_refused(&self, _core: &MobCore, stack: Option<&ItemStack>) -> bool {
-        stack.is_some_and(|s| strider_food(s.item))
+        stack.is_some_and(|s| strider_food(s.item()))
     }
 
     fn boost(&mut self, core: &mut MobCore, roll: u32) -> bool {
@@ -306,7 +306,7 @@ impl Species for Strider {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        strider_food(stack.item)
+        strider_food(stack.item())
     }
 
     /// Undamaged by lava, hurt one point a tick by water or rain (it is

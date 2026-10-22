@@ -501,7 +501,7 @@ mod tests {
         defs.register_item("ex", def).unwrap();
         let content = defs.resolve().unwrap();
         let stack = content.item("ex:ruby").unwrap().stack(3);
-        assert_eq!(stack.item, Item::Emerald);
+        assert_eq!(stack.item(), Item::Emerald);
         assert_eq!(stack.count(), 3);
         assert_eq!(item_id(&stack), Some("ex:ruby"));
         assert_eq!(content.item_of(&stack).unwrap().id, "ex:ruby");

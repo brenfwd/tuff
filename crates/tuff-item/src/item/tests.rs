@@ -780,3 +780,29 @@ fn spears_stab_and_other_items_whack() {
     assert_eq!(kind, SwingKind::Stab);
     assert!(duration > 6);
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn transform_records_a_burn_and_a_mint_and_keeps_count_and_components() {
+    let mut stack = ItemStack::mint(Item::EnchantedBook, 5, MintReason::Command);
+    stack.components.repair_cost = Some(3);
+    let before = conservation::totals();
+    stack.transform(Item::Book, MintReason::Transform, BurnReason::Transform);
+    let after = conservation::totals();
+    assert_eq!(stack.item(), Item::Book);
+    assert_eq!(stack.count(), 5);
+    assert_eq!(stack.components.repair_cost, Some(3));
+    assert!(!stack.is_picture());
+    assert!(after.burned >= before.burned + 5);
+    assert!(after.minted >= before.minted + 5);
+    stack.burn(BurnReason::Test);
+
+    let mut picture = ItemStack::mint(Item::Map, 1, MintReason::Test);
+    picture.transform(
+        Item::WoodlandMansionMap,
+        MintReason::Transform,
+        BurnReason::Transform,
+    );
+    assert_eq!(picture.item(), Item::WoodlandMansionMap);
+    assert!(picture.is_picture());
+}

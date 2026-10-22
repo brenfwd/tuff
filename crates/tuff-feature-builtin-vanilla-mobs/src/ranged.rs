@@ -31,16 +31,16 @@ const ARROW_DROP: f64 = 0.100_000_001_490_116_12;
 const ROCKET_DROP: f64 = 0.150_000_005_960_464_48;
 
 fn is_arrow(stack: &ItemStack) -> bool {
-    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item)
+    tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item())
 }
 
 impl MobCore {
     pub fn holding(&self, item: tuff_vanilla_data::Item) -> bool {
-        self.equipment.main_hand().is_some_and(|s| s.item == item)
+        self.equipment.main_hand().is_some_and(|s| s.item() == item)
             || self
                 .equipment
                 .get(tuff_vanilla_data::item::EquipmentSlot::Offhand)
-                .is_some_and(|s| s.item == item)
+                .is_some_and(|s| s.item() == item)
     }
 
     pub fn start_using_item(&mut self) {
@@ -66,14 +66,18 @@ impl MobCore {
     fn weapon_slot(&self, weapon: Item) -> Option<EquipmentSlot> {
         [EquipmentSlot::Mainhand, EquipmentSlot::Offhand]
             .into_iter()
-            .find(|slot| self.equipment.get(*slot).is_some_and(|s| s.item == weapon))
+            .find(|slot| {
+                self.equipment
+                    .get(*slot)
+                    .is_some_and(|s| s.item() == weapon)
+            })
     }
 
     /// Where the ammo `weapon` takes is held (the off hand first): arrows,
     /// and rockets for a crossbow.
     fn ammo_slot(&self, weapon: Item) -> Option<EquipmentSlot> {
         let fits = |s: &ItemStack| {
-            is_arrow(s) || (weapon == Item::Crossbow && s.item == Item::FireworkRocket)
+            is_arrow(s) || (weapon == Item::Crossbow && s.item() == Item::FireworkRocket)
         };
         [EquipmentSlot::Offhand, EquipmentSlot::Mainhand]
             .into_iter()
@@ -161,7 +165,9 @@ impl MobCore {
         let held = self.ammo_slot(Item::Crossbow);
         let ammo = self.projectile_for(Item::Crossbow);
         let shots = ranged::projectile_count(crossbow);
-        let first = combat::ammo_use(crossbow, ammo.item, 1.0).floor().max(0.0) as u8;
+        let first = combat::ammo_use(crossbow, ammo.item(), 1.0)
+            .floor()
+            .max(0.0) as u8;
         let mut left = ammo.count();
         let mut drawn = Vec::new();
         for i in 0..shots {
@@ -234,7 +240,7 @@ impl MobCore {
         let eye = self.eye_position();
         let height = target.bounds[4] - target.bounds[1];
         for (index, (projectile, angle)) in projectiles.into_iter().zip(angles).enumerate() {
-            let rocket = projectile.item == Item::FireworkRocket;
+            let rocket = projectile.item() == Item::FireworkRocket;
             let drop = if rocket { ROCKET_DROP } else { ARROW_DROP };
             let start = [self.base.position[0], eye[1] - drop, self.base.position[2]];
             let dx = target.position[0] - start[0];
@@ -682,7 +688,7 @@ impl TridentAttack {
         let stack = mob
             .equipment
             .main_hand()
-            .filter(|s| s.item == tuff_vanilla_data::Item::Trident)
+            .filter(|s| s.item() == tuff_vanilla_data::Item::Trident)
             .map(|held| ItemStack::mint_like(held, 1, MintReason::EntityDrop))
             .unwrap_or_else(|| ItemStack::mint(Item::Trident, 1, MintReason::EntityDrop));
         let eye = mob.eye_position();
@@ -713,7 +719,7 @@ impl Goal for TridentAttack {
     fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
         mob.equipment
             .main_hand()
-            .is_some_and(|s| s.item == tuff_vanilla_data::Item::Trident)
+            .is_some_and(|s| s.item() == tuff_vanilla_data::Item::Trident)
             && mob.target_view(cx).is_some_and(|t| t.alive)
     }
 

@@ -127,7 +127,7 @@ impl Arrow {
         velocity: [f64; 3],
         owner: Owner,
     ) -> Self {
-        let kind = if item.item == Item::SpectralArrow {
+        let kind = if item.item() == Item::SpectralArrow {
             EntityType::SpectralArrow
         } else {
             EntityType::Arrow
@@ -269,7 +269,7 @@ impl Arrow {
     fn hit_effects(&self) -> Vec<tuff_core::world::effects::ActiveEffect> {
         let mut effects = self.effects.clone();
         if let Some(contents) = &self.item.components.potion_contents {
-            let scale = self.item.item.potion_duration_scale();
+            let scale = self.item.item().potion_duration_scale();
             effects.extend(tuff_core::world::effects::potion_effects(contents, scale));
         }
         if self.base.kind == EntityType::SpectralArrow {

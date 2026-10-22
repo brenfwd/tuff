@@ -453,7 +453,7 @@ impl Species for Axolotl {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        tuff_datapack::tags::is(tag::item::key::AXOLOTL_FOOD, stack.item)
+        tuff_datapack::tags::is(tag::item::key::AXOLOTL_FOOD, stack.item())
     }
 
     fn interact(
@@ -463,7 +463,7 @@ impl Species for Axolotl {
         cx: &mut TickContext,
     ) -> InteractOutcome {
         let stack = interaction.stack.as_deref()?;
-        if stack.item == Item::TropicalFishBucket && self.is_food(stack) {
+        if stack.item() == Item::TropicalFishBucket && self.is_food(stack) {
             return self.feed(core, interaction, cx);
         }
         let color = self.color;

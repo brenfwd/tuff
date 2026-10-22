@@ -749,7 +749,7 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
         _ => None,
     })
     .await;
-    assert_eq!(offered.item, Item::ShulkerBox);
+    assert_eq!(offered.item(), Item::ShulkerBox);
     assert_eq!(offered.components.container, Some(vec![Some(apple)]));
     while let Ok(event) = bob_events.try_recv() {
         assert!(

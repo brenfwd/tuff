@@ -91,13 +91,13 @@ fn summary(entity: &dyn RegionEntity) -> EntitySummary {
         pickable: entity.pickable(),
         item: entity.downcast_ref::<ItemEntity>().map(|item| {
             let takeable = item.pickup_delay == 0 && item.reserved.is_none();
-            (item.stack.item, item.stack.count(), takeable)
+            (item.stack.item(), item.stack.count(), takeable)
         }),
         vehicle: base.vehicle.as_ref().map(|mount| mount.id),
         carries: !base.riders.is_empty() || !base.entity_riders.is_empty(),
         blue_sheep: entity.blue_sheep(),
         ominous_banner: entity.downcast_ref::<ItemEntity>().is_some_and(|item| {
-            item.stack.item == tuff_vanilla_data::Item::WhiteBanner
+            item.stack.item() == tuff_vanilla_data::Item::WhiteBanner
                 && item
                     .stack
                     .components

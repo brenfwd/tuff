@@ -153,7 +153,7 @@ impl Species for Ocelot {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        ocelot_food(stack.item)
+        ocelot_food(stack.item())
     }
 
     fn interact(
@@ -166,7 +166,7 @@ impl Species for Ocelot {
             return None;
         }
         let stack = interaction.stack.as_deref()?;
-        if !ocelot_food(stack.item) {
+        if !ocelot_food(stack.item()) {
             return None;
         }
         if cx.rng.gen_bool(TRUST_CHANCE) {

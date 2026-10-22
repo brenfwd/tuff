@@ -372,7 +372,7 @@ mod screen {
             .slots()
             .iter()
             .flatten()
-            .filter(|s| s.item == Item::Emerald)
+            .filter(|s| s.item() == Item::Emerald)
             .map(|s| s.count() as u32)
             .sum();
         assert_eq!(emeralds, 2);
@@ -1735,7 +1735,7 @@ async fn a_pack_trade_set_changes_a_farmers_first_offers() {
     .await;
     assert_eq!(view.offers.len(), 1, "the pack's set has one trade");
     let offer = &view.offers[0];
-    assert_eq!(offer.sell.item, tuff_vanilla_data::Item::GoldenCarrot);
+    assert_eq!(offer.sell.item(), tuff_vanilla_data::Item::GoldenCarrot);
     assert_eq!(offer.sell.count(), 2);
     assert_eq!(
         (offer.buy.item, offer.buy.count),

@@ -1313,7 +1313,7 @@ impl PlayerSession {
             self.tick_air().await;
             self.tick_shoulders().await;
         }
-        let main_hand = self.inventory.hand(false).map(|stack| stack.item);
+        let main_hand = self.inventory.hand(false).map(|stack| stack.item());
         if main_hand != self.actions.last_main_hand {
             self.actions.last_main_hand = main_hand;
             self.actions.attack_reset_tick = self.tick;

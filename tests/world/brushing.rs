@@ -187,7 +187,7 @@ async fn brushing_suspicious_sand_uncovers_its_loot_and_leaves_sand() {
     assert_eq!(stages, ["1", "2", "3"]);
     let dropped = entities_of(&bench.region, EntityType::Item).await;
     if let Some(dropped) = dropped.first() {
-        assert_eq!(dropped.name, item.item.name());
+        assert_eq!(dropped.name, item.item().name());
         assert!(
             dropped.position[1] > f64::from(SKY + 2),
             "out of the brushed top face"
@@ -201,7 +201,7 @@ async fn brushing_suspicious_sand_uncovers_its_loot_and_leaves_sand() {
             .slots()
             .iter()
             .flatten()
-            .any(|stack| stack.item == item.item);
+            .any(|stack| stack.item() == item.item());
     }
     assert!(
         picked_up,

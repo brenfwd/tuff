@@ -273,15 +273,15 @@ impl PlayerSession {
             EquipmentSlot::Chest,
             EquipmentSlot::Head,
         ]
-        .map(|slot| self.inventory.equipped(slot).map(|s| s.item));
+        .map(|slot| self.inventory.equipped(slot).map(|s| s.item()));
         crate::world::messages::PlayerLooks {
             yaw: self.pose.yaw,
             pitch: self.pose.pitch,
             eye_height: self.eye()[1] - self.pose.position[1],
             height: self.height(),
             held: [
-                self.inventory.hand(false).map(|s| s.item),
-                self.inventory.hand(true).map(|s| s.item),
+                self.inventory.hand(false).map(|s| s.item()),
+                self.inventory.hand(true).map(|s| s.item()),
             ],
             creative: self.mode.game_mode == GameMode::Creative,
             sneaking: self.pose.sneaking,
@@ -482,7 +482,7 @@ impl PlayerSession {
                     // sound; a component-only mutation of the item already
                     // worn (armor durability, enchantments, ...) must not,
                     // or every hit that damages worn armor would replay it.
-                    let same = old.as_ref().is_some_and(|old| old.item == new.item);
+                    let same = old.as_ref().is_some_and(|old| old.item() == new.item());
                     let equippable = new.equippable()?;
                     (equippable.slot == slot && !same && !spectator)
                         .then_some(equippable.equip_sound)

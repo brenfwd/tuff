@@ -311,7 +311,7 @@ mod tests {
         let CarriedLook::ItemDisplay { item, .. } = look else {
             panic!("{look:?}");
         };
-        assert_eq!(item.item, tuff_vanilla_data::Item::PlayerHead);
+        assert_eq!(item.item(), tuff_vanilla_data::Item::PlayerHead);
         assert!(item.components.other.get("minecraft:profile").is_some());
         assert_eq!(
             Carrier.look(state("minecraft:player_head[rotation=4]"), None),
@@ -334,7 +334,7 @@ mod tests {
         else {
             panic!("{look:?}");
         };
-        assert_eq!(item.item, tuff_vanilla_data::Item::WhiteBanner);
+        assert_eq!(item.item(), tuff_vanilla_data::Item::WhiteBanner);
         assert_eq!(item.components.banner_patterns.as_ref().unwrap().len(), 1);
         assert_eq!(translation, [0.5; 3]);
         let expected = [0.0, -1.0, 0.0, 0.0];
@@ -376,7 +376,7 @@ mod tests {
             let CarriedLook::ItemDisplay { item, .. } = look else {
                 panic!("{text}: {look:?}");
             };
-            assert_eq!(item.item, want, "{text}");
+            assert_eq!(item.item(), want, "{text}");
         }
     }
 }

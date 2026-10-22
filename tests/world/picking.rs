@@ -101,7 +101,7 @@ async fn creative_pick_block_creates_the_item_and_copies_block_entity_data() {
         "data makes it a different stack"
     );
     let picked = player.inventory().hand(false).unwrap().test_copy();
-    assert_eq!(picked.item, Item::Spawner);
+    assert_eq!(picked.item(), Item::Spawner);
     let stored = picked.components.to_nbt();
     let data = stored
         .get_compound("minecraft:block_entity_data")
@@ -228,18 +228,18 @@ async fn special_blocks_pick_their_seeds_level_and_honey() {
 
     player.handle_packet(pick_block(5, 151, 5, false)).await;
     let light = player.inventory().hand(false).unwrap().test_copy();
-    assert_eq!(light.item, Item::Light);
+    assert_eq!(light.item(), Item::Light);
     assert_eq!(block_state(&light).unwrap().get_str("level"), Some("7"));
 
     player.handle_packet(pick_block(6, 151, 5, false)).await;
     assert_eq!(
-        player.inventory().hand(false).unwrap().item,
+        player.inventory().hand(false).unwrap().item(),
         Item::WheatSeeds
     );
 
     player.handle_packet(pick_block(7, 151, 5, false)).await;
     let hive = player.inventory().hand(false).unwrap().test_copy();
-    assert_eq!(hive.item, Item::Beehive);
+    assert_eq!(hive.item(), Item::Beehive);
     assert_eq!(block_state(&hive), None);
 
     player.handle_packet(pick_block(7, 151, 5, true)).await;

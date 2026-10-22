@@ -311,14 +311,14 @@ impl SulfurCube {
                 ..Hop::default()
             });
         }
-        for archetype in matching(self.applied.as_ref().map(|s| s.item)) {
+        for archetype in matching(self.applied.as_ref().map(|s| s.item())) {
             for modifier in archetype.attribute_modifiers {
                 core.put_modifier(modifier.attribute, modifier.id.into(), None, false);
             }
         }
         let mut effects = Effects::default();
         let mut contacts = 0;
-        for archetype in matching(current.as_ref().map(|s| s.item)) {
+        for archetype in matching(current.as_ref().map(|s| s.item())) {
             effects.floats |= archetype.buoyant;
             if archetype.explosion.is_some() {
                 effects.explosion = archetype.explosion;
@@ -364,7 +364,7 @@ impl SulfurCube {
         if core.is_baby() {
             return false;
         }
-        if body(core).is_some_and(|held| held.item == item) {
+        if body(core).is_some_and(|held| held.item() == item) {
             return false;
         }
         let Some(one) = one() else {
@@ -802,7 +802,7 @@ impl Species for SulfurCube {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        food(stack.item)
+        food(stack.item())
     }
 
     fn can_fall_in_love(&self, _core: &MobCore) -> bool {
@@ -819,7 +819,8 @@ impl Species for SulfurCube {
         if core.is_baby() || self.is_primed() {
             return None;
         }
-        if self.can_explode(core) && matches!(stack.item, Item::FlintAndSteel | Item::FireCharge) {
+        if self.can_explode(core) && matches!(stack.item(), Item::FlintAndSteel | Item::FireCharge)
+        {
             if !cx.shared.rule_bool("tnt_explodes") {
                 cx.effects.push(Effect::TellPlayer {
                     player: interaction.player,
@@ -833,13 +834,13 @@ impl Species for SulfurCube {
                 return None;
             }
             self.prime(core, false, cx);
-            return Some(if stack.item == Item::FlintAndSteel {
+            return Some(if stack.item() == Item::FlintAndSteel {
                 HandEffect::Damage(1)
             } else {
                 HandEffect::Consume(1)
             });
         }
-        if stack.item == Item::Shears && body(core).is_some() {
+        if stack.item() == Item::Shears && body(core).is_some() {
             self.eject(core, play::sound_category::PLAYERS, cx);
             cx.effects.push(Effect::GameEvent {
                 event: GameEvent::Shear,
@@ -848,8 +849,8 @@ impl Species for SulfurCube {
             });
             return Some(HandEffect::Damage(1));
         }
-        if swallowable(stack.item) {
-            if !self.equip(core, stack.item, || interaction.hand.take(1), cx) {
+        if swallowable(stack.item()) {
+            if !self.equip(core, stack.item(), || interaction.hand.take(1), cx) {
                 return None;
             }
             cx.effects.push(Effect::GameEvent {
@@ -859,7 +860,7 @@ impl Species for SulfurCube {
             });
             return Some(HandEffect::None);
         }
-        if stack.item == Item::Bucket {
+        if stack.item() == Item::Bucket {
             let bucket = self.bucket(core);
             core.sound_as(
                 SoundEvent::ItemBucketFillSulfurCube,
@@ -885,21 +886,21 @@ impl Species for SulfurCube {
         stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
-        if stack.item == Item::FlintAndSteel {
+        if stack.item() == Item::FlintAndSteel {
             if !self.can_explode(core) {
                 return None;
             }
             self.prime(core, false, cx);
             return Some(DispenseOutcome::Worn(1));
         }
-        if !swallowable(stack.item) || !self.equip(core, stack.item, || stack.take(), cx) {
+        if !swallowable(stack.item()) || !self.equip(core, stack.item(), || stack.take(), cx) {
             return None;
         }
         Some(DispenseOutcome::Dispensed)
     }
 
     fn took_item(&mut self, core: &mut MobCore, stack: ItemStack) {
-        if body(core).is_none() && swallowable(stack.item) {
+        if body(core).is_none() && swallowable(stack.item()) {
             self.hold(core, stack.keep(1, BurnReason::Consumed));
             self.pending_absorb_sound = true;
         }
@@ -1314,7 +1315,7 @@ mod tests {
             );
             assert!(
                 cx.effects.iter().any(
-                    |e| matches!(e, Effect::DropItem { stack, .. } if stack.item == Item::Tnt)
+                    |e| matches!(e, Effect::DropItem { stack, .. } if stack.item() == Item::Tnt)
                 ),
                 "the old block is spat out"
             );

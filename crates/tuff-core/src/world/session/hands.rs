@@ -32,7 +32,7 @@ impl PlayerSession {
         let is_book = self
             .inventory
             .hand(off_hand)
-            .is_some_and(|s| matches!(s.item, Item::WritableBook | Item::WrittenBook));
+            .is_some_and(|s| matches!(s.item(), Item::WritableBook | Item::WrittenBook));
         if is_book {
             self.send(&play::OpenBook { off_hand });
         }
@@ -273,7 +273,7 @@ impl PlayerSession {
         let held = self
             .inventory
             .hand(off_hand)
-            .map(|stack| stack.item)
+            .map(|stack| stack.item())
             .filter(|_| {
                 self.mode.abilities.may_build || self.adventure_tool(off_hand, CAN_PLACE_ON)
             });
@@ -320,7 +320,7 @@ impl PlayerSession {
         let Some(item) = self
             .inventory
             .hand(off_hand)
-            .map(|stack| stack.item)
+            .map(|stack| stack.item())
             .filter(|item| self.shared.block_rules.places_on_water(*item))
         else {
             return false;
@@ -384,7 +384,7 @@ impl PlayerSession {
             off_hand_item: self
                 .inventory
                 .hand(true)
-                .map(|stack| stack.item)
+                .map(|stack| stack.item())
                 .filter(|_| self.mode.abilities.may_build),
             sequence,
             interact,
@@ -395,7 +395,7 @@ impl PlayerSession {
             off_hand_blocks: self
                 .inventory
                 .hand(true)
-                .is_some_and(|stack| stack.item.blocks_attacks().is_some())
+                .is_some_and(|stack| stack.item().blocks_attacks().is_some())
                 && !self.pose.sneaking,
             may_build: self.mode.abilities.may_build,
             game_master: self.mode.game_mode == GameMode::Creative
@@ -413,7 +413,7 @@ impl PlayerSession {
         let Some(stack) = self.inventory.hand(off_hand) else {
             return false;
         };
-        let item = stack.item;
+        let item = stack.item();
         let egg = item.spawns_entity().is_some();
         let (fluid, mob) = match item.bucket() {
             Some(tuff_vanilla_data::item::Bucket::Fluid { fluid, mob }) => (fluid, mob),
@@ -481,7 +481,7 @@ impl PlayerSession {
         stack
             .use_cooldown()
             .and_then(|cooldown| cooldown.group)
-            .unwrap_or_else(|| stack.item.name().to_owned())
+            .unwrap_or_else(|| stack.item().name().to_owned())
     }
 
     pub fn stack_on_cooldown(&self, stack: &ItemStack) -> bool {
@@ -685,7 +685,7 @@ impl PlayerSession {
         let key = self.dimension().key.clone();
         let mut checks = Vec::new();
         for (slot, stack) in self.inventory.slots().iter().enumerate() {
-            let Some(stack) = stack.as_ref().filter(|s| s.item == Item::Compass) else {
+            let Some(stack) = stack.as_ref().filter(|s| s.item() == Item::Compass) else {
                 continue;
             };
             let Some(tracker) = stack
@@ -953,7 +953,7 @@ impl PlayerSession {
     /// Shared body of [`HandEffect::Exchange`] and [`HandEffect::ExchangeStack`].
     pub async fn apply_exchange(&mut self, off_hand: bool, creative: bool, result: ItemStack) {
         if creative {
-            let spare = match self.inventory.find_item(result.item) {
+            let spare = match self.inventory.find_item(result.item()) {
                 None => self.inventory.add(result),
                 Some(_) => Some(result),
             };

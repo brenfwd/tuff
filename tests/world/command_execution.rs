@@ -298,7 +298,7 @@ async fn directives_change_the_players_inventory_and_experience() {
         .slots()
         .iter()
         .flatten()
-        .filter(|s| s.item == Item::Stone)
+        .filter(|s| s.item() == Item::Stone)
         .map(|s| s.count())
         .collect();
     assert_eq!(stacks, [64, 6], "the game splits gifts into full stacks");

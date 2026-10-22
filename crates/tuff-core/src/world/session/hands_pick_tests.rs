@@ -34,7 +34,7 @@ fn picked_blocks_copy_block_entity_data_only_when_asked() {
     assert!(entity.get("x").is_none() && entity.get("keepPacked").is_none());
     let wall = Block::OakWallSign.default_state();
     assert_eq!(
-        picked_block_stack(wall, None, true).unwrap().item,
+        picked_block_stack(wall, None, true).unwrap().item(),
         Item::OakSign
     );
 }
@@ -85,19 +85,22 @@ fn block_state_of(stack: &ItemStack) -> Option<tuff_nbt::Compound> {
 #[test]
 fn plants_and_technical_blocks_pick_what_the_game_gives() {
     let pick = |block: Block| picked_block_stack(block.default_state(), None, false);
-    assert_eq!(pick(Block::Wheat).unwrap().item, Item::WheatSeeds);
-    assert_eq!(pick(Block::PumpkinStem).unwrap().item, Item::PumpkinSeeds);
+    assert_eq!(pick(Block::Wheat).unwrap().item(), Item::WheatSeeds);
+    assert_eq!(pick(Block::PumpkinStem).unwrap().item(), Item::PumpkinSeeds);
     assert_eq!(
-        pick(Block::AttachedMelonStem).unwrap().item,
+        pick(Block::AttachedMelonStem).unwrap().item(),
         Item::MelonSeeds
     );
-    assert_eq!(pick(Block::CaveVinesPlant).unwrap().item, Item::GlowBerries);
-    assert_eq!(pick(Block::KelpPlant).unwrap().item, Item::Kelp);
-    assert_eq!(pick(Block::TallSeagrass).unwrap().item, Item::Seagrass);
-    assert_eq!(pick(Block::PottedPoppy).unwrap().item, Item::Poppy);
-    assert_eq!(pick(Block::CandleCake).unwrap().item, Item::Cake);
     assert_eq!(
-        pick(Block::SweetBerryBush).unwrap().item,
+        pick(Block::CaveVinesPlant).unwrap().item(),
+        Item::GlowBerries
+    );
+    assert_eq!(pick(Block::KelpPlant).unwrap().item(), Item::Kelp);
+    assert_eq!(pick(Block::TallSeagrass).unwrap().item(), Item::Seagrass);
+    assert_eq!(pick(Block::PottedPoppy).unwrap().item(), Item::Poppy);
+    assert_eq!(pick(Block::CandleCake).unwrap().item(), Item::Cake);
+    assert_eq!(
+        pick(Block::SweetBerryBush).unwrap().item(),
         Item::SweetBerries
     );
     assert!(pick(Block::FrostedIce).is_none());
@@ -107,7 +110,7 @@ fn plants_and_technical_blocks_pick_what_the_game_gives() {
         .with("type", "sticky")
         .unwrap();
     assert_eq!(
-        picked_block_stack(sticky, None, false).unwrap().item,
+        picked_block_stack(sticky, None, false).unwrap().item(),
         Item::StickyPiston
     );
 }

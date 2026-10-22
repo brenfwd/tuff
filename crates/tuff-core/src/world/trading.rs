@@ -62,7 +62,7 @@ impl ItemCost {
 
     /// Whether `stack` is this item with every required component equal.
     pub fn matches(&self, stack: &ItemStack) -> bool {
-        if stack.item != self.item {
+        if stack.item() != self.item {
             return false;
         }
         if self.components.is_empty() {

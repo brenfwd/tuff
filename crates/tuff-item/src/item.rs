@@ -80,8 +80,13 @@ const TYPED_NBT_ON_WIRE: [DataComponentType; 2] = [
 #[derive(Debug, PartialEq)]
 #[must_use = "items must be stored, moved or burned"]
 pub struct ItemStack {
-    pub item: Item,
+    item: Item,
     count: u8,
+    /// Public: editing components never changes how many items exist.
+    /// Stacks nested in components (containers, bundles, charged
+    /// projectiles) are stacks of their own, accounted for by their own
+    /// mint, burn and drop checks, so an edit that drops one is still
+    /// reported as lost.
     pub components: Components,
     tally: ledger::Tally,
 }

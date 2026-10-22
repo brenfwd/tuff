@@ -278,7 +278,7 @@ impl RegionActor {
             }
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_deref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item()),
                 effect,
             });
             return;
@@ -357,7 +357,7 @@ impl RegionActor {
         if let Some(effect) = outcome {
             player.send(PlayerEvent::EntityInteracted {
                 off_hand: interaction.off_hand,
-                item: interaction.stack.as_deref().map(|stack| stack.item),
+                item: interaction.stack.as_deref().map(|stack| stack.item()),
                 effect,
             });
         }

@@ -349,7 +349,7 @@ pub fn item_requirement(
 ) -> bool {
     requirement.is_none_or(|requirement| match ITEM_CONDITION.get() {
         Some(condition) => condition(&requirement.condition, tool, level, rng),
-        None => crate::item::tool_requirement(&requirement.condition, tool.item),
+        None => crate::item::tool_requirement(&requirement.condition, tool.item()),
     })
 }
 

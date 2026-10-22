@@ -327,7 +327,7 @@ impl Species for Armadillo {
         let brush = interaction
             .stack
             .as_ref()
-            .is_some_and(|stack| stack.item == Item::Brush);
+            .is_some_and(|stack| stack.item() == Item::Brush);
         if brush && !core.is_baby() {
             core.drop_item(
                 ItemStack::mint(Item::ArmadilloScute, 1, MintReason::Spawn),
@@ -379,7 +379,7 @@ impl Species for Armadillo {
         stack: &tuff_core::world::region_api::Fired,
         cx: &mut TickContext,
     ) -> Option<DispenseOutcome> {
-        if stack.item != Item::Brush || core.is_baby() {
+        if stack.item() != Item::Brush || core.is_baby() {
             return None;
         }
         core.drop_item(
@@ -420,7 +420,7 @@ impl Species for Armadillo {
     }
 
     fn is_food(&self, stack: &ItemStack) -> bool {
-        armadillo_food(stack.item)
+        armadillo_food(stack.item())
     }
 
     fn offspring(&self, _partner: &Self, rng: &mut StdRng) -> Self {
@@ -633,7 +633,7 @@ mod tests {
             armadillo.shed_scute(core, cx);
             assert!(cx.effects.iter().any(|e| matches!(
                 e,
-                Effect::DropItem { stack, .. } if stack.item == Item::ArmadilloScute
+                Effect::DropItem { stack, .. } if stack.item() == Item::ArmadilloScute
             )));
             assert!(armadillo.scute_time >= SCUTE_TIME_MIN);
         });

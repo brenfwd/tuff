@@ -295,7 +295,7 @@ impl Event<'_> {
     /// The item an inventory change is about, for indexing criteria.
     pub fn changed_item(&self) -> Option<Item> {
         match self {
-            Self::InventoryChanged { changed, .. } => changed.map(|stack| stack.item),
+            Self::InventoryChanged { changed, .. } => changed.map(|stack| stack.item()),
             _ => None,
         }
     }

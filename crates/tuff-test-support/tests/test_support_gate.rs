@@ -10,7 +10,13 @@ const MANIFEST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml");
 #[test]
 fn only_dev_dependencies_enable_item_test_support() {
     let out = cargo()
-        .args(["metadata", "--format-version", "1", "--no-deps", "--offline"])
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--no-deps",
+            "--offline",
+        ])
         .args(["--manifest-path", MANIFEST])
         .output()
         .expect("run cargo metadata");
@@ -38,13 +44,23 @@ fn only_dev_dependencies_enable_item_test_support() {
 #[test]
 fn server_build_has_no_item_test_support() {
     let out = cargo()
-        .args(["tree", "--offline", "-p", "tuff", "-e", "normal,build,features"])
+        .args([
+            "tree",
+            "--offline",
+            "-p",
+            "tuff",
+            "-e",
+            "normal,build,features",
+        ])
         .args(["-i", "tuff-item", "--manifest-path", MANIFEST])
         .output()
         .expect("run cargo tree");
     assert!(out.status.success(), "cargo tree failed");
     let tree = String::from_utf8(out.stdout).unwrap();
-    assert!(tree.contains("tuff-item"), "tuff-item missing from the tree");
+    assert!(
+        tree.contains("tuff-item"),
+        "tuff-item missing from the tree"
+    );
     assert!(
         !tree.contains("feature \"test-support\""),
         "the server build enables tuff-item/test-support:\n{tree}"

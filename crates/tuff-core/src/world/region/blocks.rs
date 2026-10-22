@@ -657,7 +657,7 @@ impl RegionActor {
                 .creative_break(self, pos, state);
         }
         if state.block() == Block::Tripwire
-            && tool.is_some_and(|tool| tool.item == Item::Shears)
+            && tool.is_some_and(|tool| tool.item() == Item::Shears)
             && let Some(disarmed) = state.with("disarmed", "true")
         {
             self.raw_set_block(pos, disarmed);

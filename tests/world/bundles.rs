@@ -25,7 +25,7 @@ fn contents(player: &session::PlayerSession) -> Vec<(Item, u8)> {
         .inventory()
         .hand(false)
         .and_then(|stack| stack.components.bundle_contents.as_ref())
-        .map(|c| c.items().iter().map(|s| (s.item, s.count())).collect())
+        .map(|c| c.items().iter().map(|s| (s.item(), s.count())).collect())
         .unwrap_or_default()
 }
 

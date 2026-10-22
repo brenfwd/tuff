@@ -43,7 +43,7 @@ pub fn dispensed(
     facing: Facing,
     stack: &tuff_core::world::region_api::Fired,
 ) -> Option<DispenseOutcome> {
-    let head = match stack.item {
+    let head = match stack.item() {
         Item::CarvedPumpkin => Some(Block::CarvedPumpkin.default_state()),
         Item::WitherSkeletonSkull => Block::WitherSkeletonSkull
             .default_state()
@@ -65,7 +65,7 @@ pub fn dispensed(
                 world.block(p)
             }
         };
-        let completes = if stack.item == Item::CarvedPumpkin {
+        let completes = if stack.item() == Item::CarvedPumpkin {
             golem::try_assemble(target, lookup).is_some()
         } else {
             wither::try_assemble(target, lookup).is_some()

@@ -180,7 +180,7 @@ impl PlayerSession {
             EquipmentSlot::Legs,
             EquipmentSlot::Feet,
         ]
-        .map(|slot| self.inventory.equipped(slot).map(|stack| stack.item));
+        .map(|slot| self.inventory.equipped(slot).map(|stack| stack.item()));
         freezing::can_freeze(
             EntityType::Player,
             self.mode.game_mode == GameMode::Spectator,
@@ -328,7 +328,7 @@ impl PlayerSession {
         let worn = self
             .inventory
             .equipped(EquipmentSlot::Head)
-            .is_some_and(|stack| stack.item == tuff_vanilla_data::Item::TurtleHelmet);
+            .is_some_and(|stack| stack.item() == tuff_vanilla_data::Item::TurtleHelmet);
         if !worn || self.surroundings.submersion.eyes {
             return;
         }

@@ -341,7 +341,7 @@ impl MountInventory {
     pub fn sync(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         let touched = std::mem::take(&mut self.screen_touched);
         for (index, slot) in WORN.into_iter().enumerate() {
-            let worn = core.equipment.get(slot).map(|stack| stack.item);
+            let worn = core.equipment.get(slot).map(|stack| stack.item());
             if touched && worn.is_some() && worn != self.worn[index] {
                 core.equipment
                     .set_drop_chance(slot, super::equipment::PRESERVED_DROP_CHANCE);
@@ -358,7 +358,7 @@ impl MountInventory {
     pub fn adopt(&mut self, core: &MobCore) {
         self.screen_touched = false;
         for (index, slot) in WORN.into_iter().enumerate() {
-            self.worn[index] = core.equipment.get(slot).map(|stack| stack.item);
+            self.worn[index] = core.equipment.get(slot).map(|stack| stack.item());
         }
     }
 }
@@ -557,7 +557,7 @@ impl Equine {
             && !core.is_baby()
             && !saddled(core)
             && stack
-                .item
+                .item()
                 .equippable()
                 .is_some_and(|eq| eq.equip_on_interact && eq.slot == EquipmentSlot::Saddle)
     }
@@ -567,7 +567,7 @@ impl Equine {
     }
 
     fn can_equip_chest(&self, core: &MobCore, profile: &Profile, stack: &ItemStack) -> bool {
-        profile.chested && !self.has_chest && stack.item == Item::Chest && is_tame(core)
+        profile.chested && !self.has_chest && stack.item() == Item::Chest && is_tame(core)
     }
 
     fn equip(&mut self, core: &mut MobCore, slot: EquipmentSlot, one: ItemStack) {
@@ -598,13 +598,14 @@ impl Equine {
         let Some(stack) = stack else {
             return false;
         };
-        if core.is_baby() || (profile.fed_by_hand && (profile.food)(stack.item)) || !is_tame(core) {
+        if core.is_baby() || (profile.fed_by_hand && (profile.food)(stack.item())) || !is_tame(core)
+        {
             return true;
         }
         self.can_equip_chest(core, profile, stack)
             || self.can_equip_saddle(core, profile, stack)
             || self.can_equip_armor(core, profile, stack)
-            || (stack.item == Item::NameTag && stack.components.custom_name.is_some())
+            || (stack.item() == Item::NameTag && stack.components.custom_name.is_some())
     }
 
     /// A click that did not mount it. `None` leaves it to the shared
@@ -626,16 +627,16 @@ impl Equine {
         let stack = interaction.stack.as_deref()?;
         let ridden = ridden(core);
         let baby = core.is_baby();
-        let dandelion = baby && stack.item == Item::GoldenDandelion;
+        let dandelion = baby && stack.item() == Item::GoldenDandelion;
         let opens = tamed && !baby && interaction.sneaking;
         if !profile.tame_to_touch && !ridden && !dandelion && !opens {
-            if profile.fed_by_hand && (profile.food)(stack.item) {
+            if profile.fed_by_hand && (profile.food)(stack.item()) {
                 return self
-                    .feed(core, profile, stack.item, interaction.player_uuid, cx)
+                    .feed(core, profile, stack.item(), interaction.player_uuid, cx)
                     .then_some(HandEffect::Consume(1));
             }
             if !tamed {
-                if matches!(stack.item, Item::NameTag | Item::Lead) {
+                if matches!(stack.item(), Item::NameTag | Item::Lead) {
                     return None;
                 }
                 self.make_mad(core, profile, cx);
@@ -1012,7 +1013,7 @@ macro_rules! equine_species {
         }
 
         fn is_food(&self, stack: &ItemStack) -> bool {
-            (Self::PROFILE.food)(stack.item)
+            (Self::PROFILE.food)(stack.item())
         }
 
         fn can_fall_in_love(&self, _core: &MobCore) -> bool {

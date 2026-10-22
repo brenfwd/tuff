@@ -256,9 +256,9 @@ impl ContainerKind {
                 furnace::FUEL => {
                     let bucket_in = items[furnace::FUEL]
                         .as_ref()
-                        .is_some_and(|fuel| fuel.item == Item::Bucket);
-                    stack.item.cooking_fuel().is_some()
-                        || (stack.item == Item::Bucket && !bucket_in)
+                        .is_some_and(|fuel| fuel.item() == Item::Bucket);
+                    stack.item().cooking_fuel().is_some()
+                        || (stack.item() == Item::Bucket && !bucket_in)
                 }
                 _ => true,
             },
@@ -268,12 +268,12 @@ impl ContainerKind {
 
     pub fn can_extract(self, slot: usize, stack: &ItemStack, face: Option<Facing>) -> bool {
         if self == Self::BrewingStand && slot == brewing::INGREDIENT {
-            return stack.item == Item::GlassBottle;
+            return stack.item() == Item::GlassBottle;
         }
         if self.is_furnace() && face == Some(Facing::Down) && slot == furnace::FUEL {
             return tuff_datapack::tags::is(
                 tag::item::key::FURNACE_FUEL_BOTTOM_TAKEABLE,
-                stack.item,
+                stack.item(),
             );
         }
         true
@@ -541,7 +541,7 @@ impl BlockEntity {
             .then(|| {
                 entity.items[brewing::INGREDIENT]
                     .as_ref()
-                    .map(|stack| stack.item)
+                    .map(|stack| stack.item())
             })
             .flatten();
         match &mut entity.state {

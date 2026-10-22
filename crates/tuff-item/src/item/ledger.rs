@@ -382,6 +382,29 @@ impl ItemStack {
         Self::mint(item, count, mint).with_components(components)
     }
 
+    /// The item this stack holds. It only changes through a mint, a burn
+    /// or [`Self::transform`].
+    #[inline]
+    pub fn item(&self) -> Item {
+        self.item
+    }
+
+    /// Turns this stack into `item` in place, keeping its count and
+    /// components: the ledger records a burn of the old items and a mint of
+    /// the new ones. A picture stays a picture.
+    pub fn transform(&mut self, item: Item, mint: MintReason, _burn: BurnReason) {
+        if matches!(self.tally, Tally::Counted) {
+            if !self.is_empty() {
+                conservation::burned(self.count);
+            }
+            self.tally = Tally::of(mint);
+            if matches!(self.tally, Tally::Counted) && item != Item::Air && self.count > 0 {
+                conservation::minted(self.count);
+            }
+        }
+        self.item = item;
+    }
+
     /// Whether this stack is a picture (template, snapshot or test
     /// fixture) rather than counted items.
     pub fn is_picture(&self) -> bool {
