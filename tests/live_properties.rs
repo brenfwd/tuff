@@ -241,7 +241,7 @@ fn test_name(key: &str) -> String {
 #[test]
 fn every_live_key_has_a_test_and_every_key_a_classification() {
     let source = include_str!("live_properties.rs");
-    let readme = include_str!("../README.md");
+    let settings = include_str!("../docs/settings.md");
     for property in PROPERTIES {
         match property.effect {
             Effect::Live => assert!(
@@ -260,7 +260,7 @@ fn every_live_key_has_a_test_and_every_key_a_classification() {
             Effect::Creation => {}
         }
         let row = format!("| `{}` | {} |", property.name, property.effect.name());
-        assert!(readme.contains(&row), "README lacks the row {row}");
+        assert!(settings.contains(&row), "docs/settings.md lacks the row {row}");
     }
     assert!(PROPERTIES.windows(2).all(|w| w[0].name < w[1].name));
 }
