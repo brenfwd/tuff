@@ -93,6 +93,7 @@ fn properties_are_offline_on_the_given_ports() {
         rcon_password: "secret".into(),
         seed: -7,
         view_distance: 12,
+        simulation_distance: 9,
         max_players: 30,
     };
     let text = vanilla::properties(&settings);
@@ -105,7 +106,8 @@ fn properties_are_offline_on_the_given_ports() {
         "rcon.password=secret",
         "level-seed=-7",
         "view-distance=12",
-        "simulation-distance=12",
+        "simulation-distance=9",
+        "max-tick-time=-1",
         "max-players=30",
         "spawn-protection=0",
     ] {

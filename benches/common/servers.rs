@@ -77,12 +77,14 @@ pub struct Spec {
     pub max_players: Option<u32>,
     pub tick_lockstep: TickLockstep,
     pub config: Vec<(String, String)>,
+    pub simulation_distance: i32,
     pub vanilla: VanillaOptions,
 }
 
 /// Where a run keeps its instance: `--instance_dir` (kept afterwards), or
-/// a fresh directory that is removed afterwards. Vanilla's lives under the
-/// target directory, since the jar unpacks its libraries into it.
+/// a fresh directory under the target directory that is removed afterwards,
+/// so both servers keep their worlds on the same disk (and never on a
+/// tmpfs `/tmp`).
 pub fn instance_dir(bench: &str, kind: Kind, chosen: Option<&Path>) -> Result<(PathBuf, bool)> {
     if let Some(dir) = chosen {
         return Ok((dir.to_path_buf(), false));
@@ -101,12 +103,9 @@ pub fn instance_path(bench: &str, kind: Kind, chosen: Option<&Path>) -> Result<P
         return Ok(dir.to_path_buf());
     }
     let name = format!("tuff-{bench}-bench-{}-{}", kind.name(), std::process::id());
-    Ok(match kind {
-        Kind::Tuff => std::env::temp_dir().join(name),
-        Kind::Vanilla => crate::vanilla::target_dir()?
-            .join("vanilla-bench")
-            .join(name),
-    })
+    Ok(crate::vanilla::target_dir()?
+        .join("vanilla-bench")
+        .join(name))
 }
 
 /// Why the server in `instance` died, as far as it left a trace.
@@ -232,6 +231,10 @@ impl BenchServer {
                 let mut overrides = vec![
                     ("pause-when-empty-seconds".to_string(), "-1".to_string()),
                     ("tuff.allowPublicOffline".to_string(), "true".to_string()),
+                    (
+                        "simulation-distance".to_string(),
+                        spec.simulation_distance.to_string(),
+                    ),
                 ];
                 overrides.extend(spec.config.clone());
                 let server = Server::builder()
@@ -270,6 +273,7 @@ impl BenchServer {
                     rcon_password: String::new(),
                     seed: spec.seed,
                     view_distance: spec.view_distance,
+                    simulation_distance: spec.simulation_distance,
                     max_players: spec.max_players.unwrap_or(20),
                 };
                 let server =

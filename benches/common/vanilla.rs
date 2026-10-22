@@ -123,11 +123,12 @@ pub struct Settings {
     pub rcon_password: String,
     pub seed: i64,
     pub view_distance: i32,
+    pub simulation_distance: i32,
     pub max_players: u32,
 }
 
-/// `server.properties` for a bench run. Simulation distance follows view
-/// distance as tuff's does; spawn protection is off and flight allowed
+/// `server.properties` for a bench run. The watchdog is off, since a sprint
+/// may run ticks far longer than its limit; spawn protection is off and flight allowed
 /// because tuff has neither, so bots see the same rules.
 pub fn properties(settings: &Settings) -> String {
     let host = match settings.host {
@@ -145,12 +146,16 @@ pub fn properties(settings: &Settings) -> String {
         ("broadcast-rcon-to-ops", "false".into()),
         ("level-seed", settings.seed.to_string()),
         ("view-distance", settings.view_distance.to_string()),
-        ("simulation-distance", settings.view_distance.to_string()),
+        (
+            "simulation-distance",
+            settings.simulation_distance.to_string(),
+        ),
         ("max-players", settings.max_players.to_string()),
         ("spawn-protection", "0".into()),
         ("allow-flight", "true".into()),
         ("pause-when-empty-seconds", "0".into()),
         ("white-list", "false".into()),
+        ("max-tick-time", "-1".into()),
         ("motd", "tuff vanilla comparison bench".into()),
     ];
     lines
@@ -159,8 +164,11 @@ pub fn properties(settings: &Settings) -> String {
         .collect()
 }
 
-/// `<target>`: `CARGO_TARGET_DIR`, else from this executable's path,
-/// `<target>/<profile>/deps/<name>` or `<target>/<profile>/build/...`.
+/// `<target>`: `CARGO_TARGET_DIR`, else from this executable's path
+/// (`<target>/<profile>/deps/<name>`, `<target>/<profile>/build/...`, or
+/// any directory holding cargo's `.rustc_info.json`), else the workspace's
+/// `target`, so a bench binary copied out of the target directory still
+/// finds the cached jar.
 pub fn target_dir() -> Result<PathBuf> {
     if let Some(dir) = std::env::var_os("CARGO_TARGET_DIR") {
         return Ok(dir.into());
@@ -172,6 +180,15 @@ pub fn target_dir() -> Result<PathBuf> {
                 .is_some_and(|name| name == "deps" || name == "build")
         })
         .and_then(|deps| Some(deps.parent()?.parent()?.to_path_buf()))
+        .or_else(|| {
+            exe.ancestors()
+                .find(|dir| dir.join(".rustc_info.json").is_file())
+                .map(Path::to_path_buf)
+        })
+        .or_else(|| {
+            let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("target");
+            workspace.is_dir().then_some(workspace)
+        })
         .context("cannot find the target directory from the bench executable")
 }
 

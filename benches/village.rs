@@ -13,8 +13,10 @@
 //! ```
 //!
 //! Flags: `--seed <n>` (1), `--fly_chunks <n>` (640), `--speed <blocks per
-//! tick>` (4.4), `--sprint <duration>` (10d), `--instance_dir <dir>` (a
-//! fresh directory that is removed afterwards), `--tick_lockstep
+//! tick>` (4.4), `--sprint <duration>` (10d), `--warmup_sprint <duration>` (none, a
+//! discarded sprint before the measured one), `--simulation_distance <n>`
+//! (32, the view distance), `--instance_dir <dir>` (a fresh directory that
+//! is removed afterwards), `--tick_lockstep
 //! <sprint|always>` (always), `--ops <name,..>` (players made operators so
 //! a human can join and watch), `--host <ip>` (127.0.0.1), `--port <n>`
 //! (0, an ephemeral port), `--out <file>`, `--label <text>`, `--server
@@ -58,6 +60,8 @@ struct Options {
     fly_chunks: i32,
     speed: f64,
     sprint: String,
+    warmup_sprint: Option<String>,
+    simulation_distance: i32,
     instance_dir: Option<PathBuf>,
     tick_lockstep: TickLockstep,
     watch: Watch,
@@ -75,6 +79,8 @@ impl Options {
             "speed": self.speed,
             "sprint": self.sprint,
             "view_distance": VIEW_DISTANCE,
+            "simulation_distance": self.simulation_distance,
+            "warmup_sprint": self.warmup_sprint,
             "tick_lockstep": self.tick_lockstep.name(),
         })
     }
@@ -86,6 +92,8 @@ fn options() -> Result<Options> {
         fly_chunks: 640,
         speed: 4.4,
         sprint: "10d".into(),
+        warmup_sprint: None,
+        simulation_distance: VIEW_DISTANCE.into(),
         instance_dir: None,
         tick_lockstep: TickLockstep::Always,
         watch: Watch::default(),
@@ -105,6 +113,8 @@ fn options() -> Result<Options> {
             "--fly_chunks" => options.fly_chunks = value()?.parse()?,
             "--speed" => options.speed = value()?.parse()?,
             "--sprint" => options.sprint = value()?,
+            "--warmup_sprint" => options.warmup_sprint = Some(value()?),
+            "--simulation_distance" => options.simulation_distance = value()?.parse()?,
             "--instance_dir" => options.instance_dir = Some(value()?.into()),
             "--tick_lockstep" => {
                 options.tick_lockstep =
@@ -181,6 +191,7 @@ async fn run(options: Options, kind: Kind) -> Result<()> {
         max_players: None,
         tick_lockstep: options.tick_lockstep,
         config: Vec::new(),
+        simulation_distance: options.simulation_distance,
         vanilla: options.vanilla.clone(),
     })
     .await?;
@@ -231,12 +242,25 @@ async fn run(options: Options, kind: Kind) -> Result<()> {
         "village view of {village_chunks} chunks loaded in {load_s:.1}s"
     ));
 
+    if let Some(warmup) = &options.warmup_sprint {
+        let warm = Instant::now();
+        say(console.run(&format!("tick sprint {warmup}")).await?);
+        loop {
+            tokio::time::sleep(SPRINT_POLL).await;
+            if !console::sprinting(&console.run("tick query").await?) {
+                break;
+            }
+        }
+        say(format!("warm-up sprint took {:.1}s wall clock", secs(warm)));
+    }
+
     let source = server.tick_source(samples).await?;
     let ticks_source = source.describe();
     let (done, done_rx) = watch::channel(false);
     let tick_task = tokio::spawn(servers::collect_ticks(source, done_rx.clone()));
     let sample_task = tokio::spawn(servers::sample_processes(server.pid(), None, done_rx));
 
+    let state_before = world_state(&console).await;
     let sprint = Instant::now();
     say(console
         .run(&format!("tick sprint {}", options.sprint))
@@ -249,6 +273,7 @@ async fn run(options: Options, kind: Kind) -> Result<()> {
         }
     };
     let sprint_end = Instant::now();
+    let state_after = world_state(&console).await;
     let wall_s = sprint_end.duration_since(sprint).as_secs_f64();
     say(format!("sprint took {wall_s:.1}s wall clock"));
     if !options.watch.ops.is_empty() {
@@ -274,6 +299,7 @@ async fn run(options: Options, kind: Kind) -> Result<()> {
         "server": kind.name(),
         "machine": servers::machine(),
         "options": options.to_json(),
+        "state": {"before": state_before, "after": state_after},
         "flight": {
             "blocks": distance,
             "seconds": flight_s,
@@ -322,4 +348,21 @@ async fn run(options: Options, kind: Kind) -> Result<()> {
         std::fs::remove_dir_all(&instance)?;
     }
     Ok(())
+}
+
+async fn world_state(console: &servers::Console) -> Value {
+    let mut state = serde_json::Map::new();
+    for (key, selector) in [
+        ("entities", "@e"),
+        ("villagers", "@e[type=villager]"),
+        ("iron_golems", "@e[type=iron_golem]"),
+        ("items", "@e[type=item]"),
+    ] {
+        let answer = console
+            .run(&format!("execute if entity {selector}"))
+            .await
+            .unwrap_or_else(|error| format!("error: {error}"));
+        state.insert(key.to_string(), json!(answer));
+    }
+    Value::Object(state)
 }

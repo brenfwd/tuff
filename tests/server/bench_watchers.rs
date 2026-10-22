@@ -30,6 +30,18 @@ fn watch_defaults_to_an_ephemeral_loopback_port_with_no_ops() {
 
 #[tuff_core::watchdog]
 #[test]
+fn stress_simulation_distance_follows_view_distance_unless_given() {
+    let options = stress(&["--view_distance", "12"]).unwrap();
+    assert_eq!(options.simulation_distance, 12);
+    let options = stress(&["--view_distance", "10", "--simulation_distance", "32"]).unwrap();
+    assert_eq!(
+        (options.view_distance, options.simulation_distance),
+        (10, 32)
+    );
+}
+
+#[tuff_core::watchdog]
+#[test]
 fn stress_parses_ops_host_and_port_beside_other_flags() {
     let options = stress(&[
         "--ops",
