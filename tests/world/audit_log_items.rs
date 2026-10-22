@@ -145,3 +145,55 @@ async fn a_thrown_item_and_its_pickup_are_item_rows() {
     assert_eq!(taken[0].amount, 3);
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn item_violations_outside_a_region_are_audited() {
+    use tuff_core::world::conservation::ItemViolation;
+    use tuff_core::world::services::ViolationCulprit;
+
+    let dir = TestDir::new();
+    let world = start(dir.path());
+    let overworld = world.dimension(OVERWORLD);
+    let violation = |operation| ItemViolation {
+        operation,
+        player: None,
+        pos: BlockPos::new(1, 2, 3),
+        item: None,
+        detail: "the check was made to fail".to_owned(),
+    };
+    world.shared.services.item_violation(
+        ViolationCulprit::Player {
+            uuid: 7,
+            name: "Steve",
+        },
+        overworld,
+        &violation("drop into a region"),
+    );
+    world.shared.services.item_violation(
+        ViolationCulprit::Plugin("vault"),
+        overworld,
+        &violation("plugin stash merge"),
+    );
+
+    let logged = rows(&world, vec![Kind::Custom]).await;
+    assert_eq!(logged.len(), 2, "{logged:?}");
+    for row in &logged {
+        assert_eq!(row.material.as_deref(), Some("tuff:item_conservation"));
+        assert_eq!(row.pos, [1, 2, 3]);
+    }
+    assert_eq!(
+        (logged[0].uuid, logged[0].user.as_str()),
+        (Some(7), "Steve")
+    );
+    assert!(
+        logged[0]
+            .text
+            .as_deref()
+            .unwrap()
+            .starts_with("drop into a region refused")
+    );
+    assert_eq!(logged[1].uuid, None);
+    assert_eq!(logged[1].user, "#plugin:vault");
+    world.shutdown().await;
+}

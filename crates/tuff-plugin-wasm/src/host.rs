@@ -1127,6 +1127,9 @@ impl Actor {
     /// Carries out a call's effects and returns its replies.
     async fn apply(&mut self, id: &str, effects: Effects) -> Vec<String> {
         self.finish_routes(id, effects.responses);
+        if !effects.violations.is_empty() {
+            audit_stash_violations(&self.shared, id, effects.violations);
+        }
         if !effects.guard.is_empty()
             && let Some(plugin) = self.plugins.get_mut(id)
             && plugin.guard.apply(effects.guard, &mut self.guard_serial)
@@ -1315,6 +1318,36 @@ fn by_player<T>(ops: Vec<(u128, T)>) -> Vec<(u128, Vec<T>)> {
         }
     }
     grouped
+}
+
+/// Writes a plugin's refused stash moves to the item violation recorders,
+/// in the overworld (stashes belong to no dimension).
+fn audit_stash_violations(
+    shared: &Shared,
+    plugin: &str,
+    violations: Vec<crate::stash::StashViolation>,
+) {
+    let Some(dimension) = shared
+        .dimensions
+        .by_key(tuff_core::world::dimension::OVERWORLD)
+        .or_else(|| shared.dimensions.iter().next())
+        .map(|dimension| dimension.id)
+    else {
+        return;
+    };
+    for violation in violations {
+        shared.services.item_violation(
+            tuff_core::world::services::ViolationCulprit::Plugin(plugin),
+            dimension,
+            &tuff_core::world::conservation::ItemViolation {
+                operation: violation.operation,
+                player: None,
+                pos: tuff_world_model::BlockPos::new(0, 0, 0),
+                item: None,
+                detail: violation.detail,
+            },
+        );
+    }
 }
 
 #[cfg(test)]
