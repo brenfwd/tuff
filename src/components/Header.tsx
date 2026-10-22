@@ -19,7 +19,6 @@ function useTheme() {
 const nav = [
   { href: "/docs/introduction", label: "Docs", match: "/docs" },
   { href: "/docs/plugins", label: "Plugins", match: "/docs/plugins" },
-  { href: "/docs/performance", label: "Performance", match: "/docs/performance" },
   { href: "/blog", label: "Blog", match: "/blog" },
 ];
 

@@ -1,3 +1,4 @@
+import { SHOW_PERFORMANCE } from "../src/lib/site";
 // Renders content/docs/*.md and content/blog/*.md into JSON modules for the app and a search index.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +14,7 @@ const repoBlob = "https://github.com/brenfwd/tuff/blob/main/";
 
 type Meta = { slug: string; title: string; group: string; description: string };
 const manifest: { pages: Meta[]; commit: string } = JSON.parse(readFileSync(join(contentDir, "manifest.json"), "utf8"));
+if (!SHOW_PERFORMANCE) manifest.pages = manifest.pages.filter((p) => p.slug !== "performance");
 
 function rewriteHref(href: string) {
   if (/^(https?:|mailto:|#)/.test(href)) return href;

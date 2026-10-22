@@ -7,7 +7,7 @@ import { TickRace } from "../components/TickRace";
 import { ArrowRight, Check, GitHubIcon } from "../components/Icons";
 import { useParallax, useReveal } from "../lib/motion";
 import { useSeo } from "../lib/useSeo";
-import { REPO_URL } from "../lib/site";
+import { REPO_URL, SHOW_PERFORMANCE } from "../lib/site";
 
 const INSTALL = "git clone https://github.com/brenfwd/tuff.git tuff && cd tuff && scripts/install.sh";
 
@@ -383,10 +383,10 @@ export default function Home() {
   return (
     <main id="main" tabIndex={-1} className="outline-none">
       <Hero />
-      <Stats />
+      {SHOW_PERFORMANCE && <Stats />}
       <Architecture />
       <Features />
-      <Performance />
+      {SHOW_PERFORMANCE && <Performance />}
       <Plugins />
       <GetStarted />
     </main>

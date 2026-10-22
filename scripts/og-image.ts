@@ -1,3 +1,4 @@
+import { SHOW_PERFORMANCE } from "../src/lib/site";
 // Renders the Open Graph image and PNG icons into public/ with headless Chromium.
 import { chromium } from "playwright-core";
 import { readFileSync } from "node:fs";
@@ -36,7 +37,7 @@ svg.cubes{position:absolute;right:40px;bottom:30px}
 <div class="wrap"><div class="brand">${favicon.replace("<svg ", '<svg width="64" height="64" ')}tuff</div>
 <h1>The Minecraft server,<br><span>rebuilt in Rust.</span></h1>
 <p>A drop-in survival server for Java Edition 26.3 with sandboxed WebAssembly plugins.</p>
-<div class="stats"><div class="stat"><b>11.5x</b> vanilla tick rate</div><div class="stat"><b>6.5x</b> less memory</div><div class="stat"><b>20.35</b> TPS at 50 players</div></div></div>
+${SHOW_PERFORMANCE ? `<div class="stats"><div class="stat"><b>11.5x</b> vanilla tick rate</div><div class="stat"><b>6.5x</b> less memory</div><div class="stat"><b>20.35</b> TPS at 50 players</div></div>` : ""}</div>
 </body></html>`;
 
 const browser = await chromium.launch();

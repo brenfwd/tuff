@@ -1,7 +1,7 @@
 // Writes crawlable static snapshots, blog feeds, sitemap.xml and 404.html into dist/.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DESCRIPTION, SITE_NAME, SITE_URL as SITE } from "../src/lib/site";
+import { DESCRIPTION, SHOW_PERFORMANCE, SITE_NAME, SITE_URL as SITE } from "../src/lib/site";
 import { formatDate, sameDay, type BlogIndex, type Post, type PostMeta } from "../src/lib/blog";
 
 const root = join(import.meta.dir, "..");
@@ -66,7 +66,7 @@ const home = `<main data-snapshot style="max-width:72rem;margin:0 auto;padding:4
 <h1>tuff: the Minecraft server, rebuilt in Rust</h1>
 <p>tuff is a drop-in survival server for Minecraft Java Edition 26.3. The vanilla game runs as built-in features on an inert core, and external plugins are sandboxed WebAssembly modules.</p>
 <p><a href="${SITE}docs/introduction/">Get started</a> | <a href="${SITE}blog/">Blog</a> | <a href="https://github.com/brenfwd/tuff">GitHub</a></p>
-<h2>Performance</h2>
+${SHOW_PERFORMANCE ? `<h2>Performance</h2>
 <table><thead><tr><th>Benchmark</th><th>Metric</th><th>tuff</th><th>Vanilla</th></tr></thead><tbody>
 <tr><td>Village, 10-day sprint</td><td>ticks per second</td><td>1026</td><td>89.6</td></tr>
 <tr><td>Village</td><td>p99 tick (ms)</td><td>2.13</td><td>12.9</td></tr>
@@ -75,7 +75,7 @@ const home = `<main data-snapshot style="max-width:72rem;margin:0 auto;padding:4
 <tr><td>Stress</td><td>mean tick (ms)</td><td>48.2</td><td>190</td></tr>
 <tr><td>Stress</td><td>server memory (MiB)</td><td>2514</td><td>9005</td></tr>
 </tbody></table>
-<h2>Documentation</h2>${docNav}</main>`;
+` : ""}<h2>Documentation</h2>${docNav}</main>`;
 
 writeFileSync(join(dist, "index.html"), page({ title: "tuff - a fast Minecraft server in Rust with WebAssembly plugins", description: DESCRIPTION, url: SITE, body: home }));
 writeFileSync(join(dist, "404.html"), template.replace("<!--prerender-->", ""));
