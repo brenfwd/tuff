@@ -1065,6 +1065,30 @@ fn run_io(
             }
         },
     };
+    let prepared: Vec<tuff_storage::backend::PreparedWrite> = ops
+        .iter()
+        .filter_map(|(_, op)| match op {
+            IoOp::Write {
+                pos,
+                blocks,
+                entities,
+                pois,
+                ticket: Some(ticket),
+            } => Some(tuff_storage::backend::PreparedWrite {
+                pos: *pos,
+                epoch: ticket.epoch(),
+                chunk: blocks.is_some(),
+                entities: !matches!(entities, EntityWrite::Keep),
+                pois: !matches!(pois, EntityWrite::Keep),
+            }),
+            _ => None,
+        })
+        .collect();
+    if prepared.len() > 1
+        && let Err(err) = store.prepare_writes(&prepared)
+    {
+        log::warn!("cannot journal region {region:?} ahead of its writes: {err}");
+    }
     for (index, op) in ops {
         let result = match op {
             IoOp::Read(pos) => {
