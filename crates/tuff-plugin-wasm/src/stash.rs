@@ -14,10 +14,21 @@ pub const MAX_STASH_STACKS: usize = 256;
 
 /// One plugin's stashes, by handle. Handles count from 1 and are never
 /// reused. Whatever is left when the plugin goes is used up.
+///
+/// Moves between stashes are checked (`tuff.items.conservationChecks`):
+/// a failed check refuses the move and quarantines the stashes, which
+/// then refuse every operation that would hand items out, so nothing from
+/// an inconsistent stash reaches a player.
 #[derive(Default)]
 pub struct Stashes {
     last: u64,
     held: HashMap<u64, Vec<ItemStack>>,
+    quarantined: bool,
+    fail_next: bool,
+}
+
+fn total(stacks: &[ItemStack]) -> u64 {
+    stacks.iter().map(|stack| u64::from(stack.count())).sum()
 }
 
 impl Stashes {
@@ -39,9 +50,67 @@ impl Stashes {
         self.held.contains_key(&stash)
     }
 
-    /// Takes a stash and everything in it.
+    /// Takes a stash and everything in it; `None` while quarantined.
     pub fn remove(&mut self, stash: u64) -> Option<Vec<ItemStack>> {
+        if self.quarantined {
+            return None;
+        }
         self.held.remove(&stash)
+    }
+
+    /// Whether a failed check froze these stashes.
+    pub fn quarantined(&self) -> bool {
+        self.quarantined
+    }
+
+    /// Failure injection for tests: the next checked move fails before
+    /// anything moves.
+    pub fn fail_next_check(&mut self) {
+        self.fail_next = true;
+    }
+
+    /// Whether a move may start; an injected failure is a violation.
+    fn may_move(&mut self, operation: &str) -> bool {
+        if self.quarantined {
+            return false;
+        }
+        if std::mem::take(&mut self.fail_next) {
+            self.violated(operation, format_args!("the check was made to fail"));
+            return false;
+        }
+        true
+    }
+
+    fn violated(&mut self, operation: &str, detail: std::fmt::Arguments<'_>) {
+        tuff_item::item::conservation::violation(operation, detail);
+        self.quarantined = true;
+    }
+
+    /// Moves everything in `source` onto `target`, checked; `None` for
+    /// an unknown stash or a refused move.
+    pub fn merge(&mut self, target: u64, source: u64) -> Option<()> {
+        if target == source || !self.held.contains_key(&target) || !self.held.contains_key(&source)
+        {
+            return None;
+        }
+        if !self.may_move("plugin stash merge") {
+            return None;
+        }
+        let checks = tuff_item::item::conservation::checks();
+        let before = checks.then(|| total(&self.held[&target]) + total(&self.held[&source]));
+        let moved = self.held.remove(&source)?;
+        self.fill(target, moved);
+        if let Some(before) = before {
+            let after = total(&self.held[&target]);
+            if before != after {
+                self.violated(
+                    "plugin stash merge",
+                    format_args!("held {before} before and {after} after"),
+                );
+                return None;
+            }
+        }
+        Some(())
     }
 
     /// Adds `stacks` to `stash`, onto stacks they stack with first. A
@@ -56,7 +125,12 @@ impl Stashes {
     /// Moves up to `count` of `item` (of anything when `None`) out of
     /// `stash`; `None` for an unknown stash.
     pub fn split(&mut self, stash: u64, item: Option<Item>, count: u32) -> Option<Vec<ItemStack>> {
+        if !self.held.contains_key(&stash) || !self.may_move("plugin stash split") {
+            return None;
+        }
+        let checks = tuff_item::item::conservation::checks();
         let held = self.held.get_mut(&stash)?;
+        let before = checks.then(|| total(held));
         let mut left = count;
         let mut taken = Vec::new();
         for slot in held.iter_mut() {
@@ -71,6 +145,17 @@ impl Stashes {
             taken.push(part);
         }
         held.retain(|stack| !stack.is_empty());
+        if let Some(before) = before {
+            let (after, moved) = (total(held), total(&taken));
+            if before != after + moved || moved > u64::from(count) {
+                self.fill(stash, taken);
+                self.violated(
+                    "plugin stash split",
+                    format_args!("held {before}, kept {after} and moved {moved} of {count}"),
+                );
+                return None;
+            }
+        }
         Some(taken)
     }
 
@@ -176,5 +261,40 @@ mod tests {
         assert_ne!(stashes.create(), Some(first));
         while stashes.create().is_some() {}
         assert_eq!(stashes.held.len(), MAX_STASHES);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_merge_moves_everything_and_keeps_the_total() {
+        let mut stashes = Stashes::default();
+        let (a, b) = (stashes.create().unwrap(), stashes.create().unwrap());
+        stashes.fill(a, vec![stack(Item::Stone, 40)]);
+        stashes.fill(b, vec![stack(Item::Stone, 30), stack(Item::Dirt, 2)]);
+        assert_eq!(stashes.merge(a, b), Some(()));
+        assert!(!stashes.contains(b));
+        assert_eq!(
+            counts(&stashes, a),
+            vec![(Item::Stone, 64), (Item::Stone, 6), (Item::Dirt, 2)]
+        );
+        assert_eq!(stashes.merge(a, a), None);
+        assert!(!stashes.quarantined());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_failed_check_moves_nothing_and_freezes_the_stashes() {
+        let mut stashes = Stashes::default();
+        let (a, b) = (stashes.create().unwrap(), stashes.create().unwrap());
+        stashes.fill(a, vec![stack(Item::Stone, 10)]);
+        stashes.fill(b, vec![stack(Item::Stone, 5)]);
+        stashes.fail_next_check();
+        assert!(stashes.split(a, None, 4).is_none());
+        assert!(stashes.quarantined());
+        assert_eq!(counts(&stashes, a), vec![(Item::Stone, 10)]);
+        assert!(stashes.merge(a, b).is_none());
+        assert_eq!(counts(&stashes, b), vec![(Item::Stone, 5)]);
+        assert!(stashes.split(a, None, 4).is_none());
+        assert!(stashes.remove(a).is_none(), "nothing leaves a frozen stash");
+        assert_eq!(counts(&stashes, a), vec![(Item::Stone, 10)]);
     }
 }

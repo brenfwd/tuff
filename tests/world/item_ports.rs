@@ -246,3 +246,34 @@ async fn a_full_hopper_does_not_trigger_a_take() {
     assert!(probe.takes.load(Ordering::SeqCst) >= 1);
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_port_transfer_whose_check_fails_moves_nothing_and_quarantines_the_region() {
+    use crate::world::conservation::{Subject, Transfer};
+    let probe = Arc::new(Probe::default());
+    let (_dir, world, region) = start(vec![Box::new(PortFeature(probe.clone()))]).await;
+    set(&region, BlockPos::new(X, Y, Z), "minecraft:bookshelf", None).await;
+    world.shared.conservation.fail_next(Transfer::Port);
+    let top = BlockPos::new(X, Y + 1, Z);
+    set(
+        &region,
+        top,
+        "minecraft:hopper[facing=down]",
+        Some(items("minecraft:stick", 1, 1)),
+    )
+    .await;
+    world.ticks(20).await;
+    assert_eq!(hopper_slots(&region, top).await, 1, "the stick stays");
+    assert!(
+        probe.faces.lock().unwrap().is_empty(),
+        "nothing was offered"
+    );
+    assert!(
+        world
+            .shared
+            .conservation
+            .quarantined(Subject::Region(world.dimension(OVERWORLD), region.pos))
+    );
+    world.shutdown().await;
+}

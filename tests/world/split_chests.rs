@@ -1295,3 +1295,95 @@ async fn disconnecting_after_one_vote_returns_the_items_in_flight() {
 async fn disconnecting_after_both_votes_keeps_the_resolved_move() {
     disconnect_mid_transfer(2).await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_hopper_pull_whose_check_fails_moves_nothing_and_quarantines_the_owner() {
+    use crate::world::conservation::{Subject, Transfer};
+    let (alice, mut events) = PlayerHandle::new(100);
+    let split = split_chest(&mut [(&alice, &mut events)]).await;
+    stock(
+        &split,
+        &alice,
+        &mut events,
+        split.east_pos,
+        ItemStack::mint(Item::Apple, 2, MintReason::Test),
+        1,
+    )
+    .await;
+    split.world.ticks(3).await;
+    split.world.shared.conservation.fail_next(Transfer::Hopper);
+    let below = BlockPos::new(split.west_pos.x, split.west_pos.y - 1, split.west_pos.z);
+    hopper_setup(&split, &alice, &mut events, below, None).await;
+    split.world.ticks(40).await;
+    let east = Subject::Region(split.world.dimension(OVERWORLD), split.east.pos);
+    assert!(split.world.shared.conservation.quarantined(east));
+    split
+        .west
+        .request(RegionRequest::Place(place(&alice, below, Item::Torch, 2)))
+        .await;
+    let (_, hopper, _) = blocks(expect(&mut events, container_menu).await);
+    assert!(hopper.iter().all(Option::is_none), "nothing was pulled");
+    split
+        .east
+        .request(RegionRequest::Place(place(
+            &alice,
+            split.east_pos,
+            Item::Torch,
+            3,
+        )))
+        .await;
+    let (_, chest, _) = blocks(expect(&mut events, container_menu).await);
+    assert_eq!(
+        chest[0],
+        Some(ItemStack::mint(Item::Apple, 2, MintReason::Test))
+    );
+    split.world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_hopper_insert_whose_check_fails_sends_nothing_to_the_far_half() {
+    use crate::world::conservation::{Subject, Transfer};
+    let (alice, mut events) = PlayerHandle::new(100);
+    let split = split_chest(&mut [(&alice, &mut events)]).await;
+    split.world.ticks(3).await;
+    let above = BlockPos::new(split.west_pos.x, split.west_pos.y + 1, split.west_pos.z);
+    hopper_setup(
+        &split,
+        &alice,
+        &mut events,
+        above,
+        Some(ItemStack::mint(Item::Apple, 2, MintReason::Test)),
+    )
+    .await;
+    split.world.shared.conservation.fail_next(Transfer::Hopper);
+    split.world.ticks(40).await;
+    let west = Subject::Region(split.world.dimension(OVERWORLD), split.west.pos);
+    assert!(split.world.shared.conservation.quarantined(west));
+    let total = |slots: &[Option<ItemStack>]| -> u32 {
+        slots
+            .iter()
+            .flatten()
+            .map(|stack| u32::from(stack.count()))
+            .sum()
+    };
+    split
+        .west
+        .request(RegionRequest::Place(place(&alice, above, Item::Torch, 2)))
+        .await;
+    let (_, hopper, _) = blocks(expect(&mut events, container_menu).await);
+    split
+        .east
+        .request(RegionRequest::Place(place(
+            &alice,
+            split.east_pos,
+            Item::Torch,
+            3,
+        )))
+        .await;
+    let (_, chest, _) = blocks(expect(&mut events, container_menu).await);
+    assert_eq!(total(&hopper) + total(&chest), 2, "no item made or lost");
+    assert_eq!(total(&chest[..27]), 0, "nothing reached the far half");
+    split.world.shutdown().await;
+}

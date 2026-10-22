@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use super::RegionActor;
 use crate::world::block_entity::ContainerKind;
+use crate::world::conservation::Transfer;
 use crate::world::item_port::{ItemPort, PortAccess, Porter};
 use tuff_vanilla_data::block::Facing;
 use tuff_world_model::BlockPos;
@@ -55,6 +56,9 @@ impl RegionActor {
         face: Facing,
     ) -> Option<bool> {
         let (port, at) = self.port_at(target, face, Porter::Hopper(pos))?;
+        if !self.may_transfer(Transfer::Port, target, None) {
+            return Some(false);
+        }
         for slot in 0..ContainerKind::Hopper.size() {
             let Some(one) = self.take_one_out(pos, slot) else {
                 continue;
@@ -92,10 +96,10 @@ impl RegionActor {
                 0,
             )
         });
-        if room < shown.count() {
+        if room < shown.count() || !self.may_transfer(Transfer::Port, above, None) {
             return Some(false);
         }
-        if let Some(taken) = port.take(self, &at)
+        if let Some(taken) = self.take_from_port(&*port, &at, shown.count())
             && let Some(rest) = self.insert_into(ContainerKind::Hopper, &[pos], None, taken, None)
         {
             self.spawn_item_at(rest, pos.center(), [0.0; 3], 0);
@@ -110,14 +114,38 @@ impl RegionActor {
         let Some(shown) = port.peek(self, &at) else {
             return Some(false);
         };
-        if self.entity_insert_room(id, &shown) < shown.count() {
+        if self.entity_insert_room(id, &shown) < shown.count()
+            || !self.may_transfer(Transfer::Port, above, None)
+        {
             return Some(false);
         }
-        if let Some(taken) = port.take(self, &at)
+        if let Some(taken) = self.take_from_port(&*port, &at, shown.count())
             && let Some(rest) = self.insert_into_entity(id, taken)
         {
             self.spawn_item_at(rest, above.center(), [0.0; 3], 0);
         }
         Some(true)
+    }
+
+    /// Takes what a port showed; a port giving more than it showed made
+    /// items, which is a violation (the region is quarantined).
+    fn take_from_port(
+        &mut self,
+        port: &dyn ItemPort,
+        at: &PortAccess,
+        shown: u8,
+    ) -> Option<tuff_item::item::ItemStack> {
+        let taken = port.take(self, at)?;
+        if taken.count() > shown {
+            self.transfer_balanced(
+                Transfer::Port,
+                at.pos,
+                u64::from(shown),
+                0,
+                0,
+                u64::from(taken.count()),
+            );
+        }
+        Some(taken)
     }
 }

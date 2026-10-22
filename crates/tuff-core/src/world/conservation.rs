@@ -8,7 +8,7 @@
 //! from its unsaved state can reach saved state elsewhere.
 
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use tuff_item::item::ItemSnapshot;
@@ -26,44 +26,99 @@ pub enum Subject {
     Region(DimensionId, RegionPos),
 }
 
+/// A kind of cross-actor item transfer, for failure injection and the
+/// log.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Transfer {
+    /// A container or entity container menu transaction.
+    Settle = 1,
+    /// A player dropping items into a region.
+    Drop,
+    /// A hopper, dropper or cart moving items through an item port.
+    Port,
+    /// A hopper or copper golem moving items to or from a container part
+    /// another region owns.
+    Hopper,
+    /// Dropped items merging across a region border.
+    BorderMerge,
+}
+
+impl Transfer {
+    pub fn operation(self) -> &'static str {
+        match self {
+            Self::Settle => "container transaction",
+            Self::Drop => "drop into a region",
+            Self::Port => "item port transfer",
+            Self::Hopper => "cross-region hopper transfer",
+            Self::BorderMerge => "cross-region item merge",
+        }
+    }
+}
+
 /// The quarantined actors of one world.
 #[derive(Debug, Default)]
 pub struct Conservation {
     quarantined: Mutex<HashSet<Subject>>,
-    fail_next_check: AtomicBool,
+    /// How many subjects are quarantined, so the usual case takes no lock.
+    count: AtomicUsize,
+    fail_next: AtomicU8,
 }
 
 impl Conservation {
-    /// Failure injection for tests: the next cross-actor transfer check
-    /// fails before anything moves.
+    /// Failure injection for tests: the next menu transaction check fails
+    /// before anything moves.
     pub fn fail_next_check(&self) {
-        self.fail_next_check.store(true, Ordering::SeqCst);
+        self.fail_next(Transfer::Settle);
+    }
+
+    /// Failure injection for tests: the next check of a `transfer` fails
+    /// before anything moves.
+    pub fn fail_next(&self, transfer: Transfer) {
+        self.fail_next.store(transfer as u8, Ordering::SeqCst);
     }
 
     pub(crate) fn take_injected_failure(&self) -> bool {
-        self.fail_next_check.swap(false, Ordering::SeqCst)
+        self.take_injected(Transfer::Settle)
+    }
+
+    pub(crate) fn take_injected(&self, transfer: Transfer) -> bool {
+        let kind = transfer as u8;
+        self.fail_next.load(Ordering::Relaxed) == kind
+            && self
+                .fail_next
+                .compare_exchange(kind, 0, Ordering::SeqCst, Ordering::Relaxed)
+                .is_ok()
     }
 
     pub fn quarantine(&self, subject: Subject) {
-        self.quarantined
+        let mut held = self
+            .quarantined
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(subject);
+            .unwrap_or_else(PoisonError::into_inner);
+        if held.insert(subject) {
+            self.count.fetch_add(1, Ordering::SeqCst);
+        }
     }
 
     pub fn quarantined(&self, subject: Subject) -> bool {
-        self.quarantined
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .contains(&subject)
+        self.count.load(Ordering::Relaxed) != 0
+            && self
+                .quarantined
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .contains(&subject)
     }
 
     /// The subject reloaded from its last consistent save.
     pub fn release(&self, subject: Subject) {
-        self.quarantined
+        let mut held = self
+            .quarantined
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .remove(&subject);
+            .unwrap_or_else(PoisonError::into_inner);
+        if held.remove(&subject) {
+            self.count.fetch_sub(1, Ordering::SeqCst);
+        }
     }
 }
 

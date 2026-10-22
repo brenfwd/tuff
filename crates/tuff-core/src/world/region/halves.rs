@@ -10,6 +10,7 @@ use tuff_vanilla_data::block::{Facing, Type as ChestType};
 
 use super::{Column, RegionActor, block_at};
 use crate::world::block_entity::{self, ContainerKind};
+use crate::world::conservation::Transfer;
 use crate::world::messages::{RegionHandle, RegionInternal};
 use crate::world::placement;
 use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason, SlotsCow};
@@ -226,15 +227,19 @@ impl RegionActor {
     }
 
     pub(super) fn half_inserted(&mut self, pos: BlockPos, face: Option<Facing>, stack: ItemStack) {
+        let (before, received) = (self.held_at(pos), u64::from(stack.count()));
         let rest = match (self.half_kind(pos), self.owns(pos)) {
             (Some(kind), true) if self.block_entity(pos).is_some() => {
                 self.insert_into(kind, &[pos], face, stack, None)
             }
             _ => Some(stack),
         };
+        let spilled = rest.as_ref().map_or(0, |rest| u64::from(rest.count()));
         if let Some(rest) = rest {
             self.spill_stack(pos, rest);
         }
+        let after = self.held_at(pos);
+        self.transfer_balanced(Transfer::Hopper, pos, before, received, after, spilled);
     }
 
     pub(super) fn spill_stack(&mut self, pos: BlockPos, stack: ItemStack) {
@@ -274,7 +279,7 @@ impl RegionActor {
         at: BlockPos,
         reply: RegionHandle,
     ) {
-        if !self.owns(pos) {
+        if !self.owns(pos) || !self.may_transfer(Transfer::Hopper, pos, Some(reply.pos)) {
             return;
         }
         let Some((slot, taken)) = self.drain_local(pos, &stack) else {
@@ -338,7 +343,9 @@ impl RegionActor {
         else {
             return;
         };
-        if !kind.can_extract(slot, stack, face) {
+        if !kind.can_extract(slot, stack, face)
+            || !self.may_transfer(Transfer::Hopper, pos, Some(reply.pos))
+        {
             return;
         }
         let Some(one) = self.take_one_out(pos, slot) else {
@@ -356,14 +363,18 @@ impl RegionActor {
     }
 
     pub(super) fn half_arrived(&mut self, hopper: BlockPos, stack: ItemStack) {
+        let (before, received) = (self.held_at(hopper), u64::from(stack.count()));
         let rest = if self.owns(hopper) && self.block_entity(hopper).is_some() {
             self.insert_into(ContainerKind::Hopper, &[hopper], None, stack, None)
         } else {
             Some(stack)
         };
+        let spilled = rest.as_ref().map_or(0, |rest| u64::from(rest.count()));
         if let Some(rest) = rest {
             self.spill_stack(hopper, rest);
         }
+        let after = self.held_at(hopper);
+        self.transfer_balanced(Transfer::Hopper, hopper, before, received, after, spilled);
     }
 
     /// Whether `stack` would fit into the part of a container at `part`.
@@ -452,6 +463,9 @@ impl RegionActor {
         let Some(neighbour) = self.border.region_of_neighbour(part).cloned() else {
             return Some(stack);
         };
+        if !self.may_transfer(Transfer::Hopper, part, Some(neighbour.pos)) {
+            return Some(stack);
+        }
         let Some(Some(items)) = self.sim.redstone.far_halves.get(&part) else {
             return Some(stack);
         };
