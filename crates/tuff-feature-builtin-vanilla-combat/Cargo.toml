@@ -17,6 +17,7 @@ tuff-vanilla-common = { workspace = true }
 tuff-vanilla-data = { workspace = true }
 
 [dev-dependencies]
+tuff-item = { workspace = true, features = ["test-support"] }
 tuff-core = { workspace = true, features = ["test-hooks"] }
 tuff-storage = { workspace = true }
 tuff-test-support = { workspace = true }

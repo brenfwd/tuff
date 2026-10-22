@@ -30,7 +30,7 @@ name = "live_properties"
 path = "../../tests/live_properties.rs"
 
 [dev-dependencies]
-tuff-item = { workspace = true }
+tuff-item = { workspace = true, features = ["test-support"] }
 tuff = { path = "../.." }
 tuff-dylib = { workspace = true }
 anyhow = { workspace = true }

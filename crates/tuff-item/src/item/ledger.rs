@@ -333,7 +333,9 @@ impl ItemStack {
     }
 
     /// Tests and fixtures only: new items like this stack, minted for
-    /// [`MintReason::Test`].
+    /// [`MintReason::Test`]. Only built for this crate's tests and with the
+    /// `test-support` feature, which only dev-dependencies enable.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn test_copy(&self) -> Self {
         Self::mint_like(self, self.count, MintReason::Test)
     }

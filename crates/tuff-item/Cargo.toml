@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 license.workspace = true
 
+[features]
+# Test-only constructors such as `ItemStack::test_copy`. Enable it only from
+# dev-dependencies: production builds must never have it.
+test-support = []
+
 [dependencies]
 bytes = { workspace = true }
 log = { workspace = true }

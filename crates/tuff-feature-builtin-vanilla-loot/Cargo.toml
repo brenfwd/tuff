@@ -16,4 +16,5 @@ tuff-core = { workspace = true }
 tuff-vanilla-data = { workspace = true }
 
 [dev-dependencies]
+tuff-item = { workspace = true, features = ["test-support"] }
 tuff-feature-builtin-vanilla-recipes = { workspace = true }
