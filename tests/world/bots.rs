@@ -755,16 +755,16 @@ async fn a_bot_flies_an_elytra_200_blocks_over_flat_ground_and_lands_at_the_goal
     let Some(run) = Run::start(true).await else {
         return;
     };
-    run.server("forceload add -16 -16 15 255").await;
+    run.server("forceload add -32 -16 31 255").await;
     run.eventually(|| async {
-        run.server("fill -8 149 -8 8 149 230 stone")
+        run.server("fill -24 149 -8 24 149 230 stone")
             .await
             .contains("Successfully")
             .then_some(())
     })
     .await;
     for line in [
-        "fill -8 150 -8 8 190 230 air",
+        "fill -24 150 -8 24 190 230 air",
         "gamerule spawn_mobs false",
         "gamerule natural_health_regeneration false",
     ] {
