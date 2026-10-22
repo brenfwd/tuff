@@ -1,7 +1,7 @@
 //! Stacks a block click moves to the clicked block's region.
 
 use tuff_item::item::ItemStack;
-use tuff_vanilla_data::{Block, Item};
+use tuff_vanilla_data::{Block, BlockState, Item};
 use tuff_world_model::BlockPos;
 
 use super::PlayerSession;
@@ -34,8 +34,9 @@ impl PlayerSession {
     /// hand for blocks that take one (a lectern's book, a jukebox's disc,
     /// a firework launched off any block), the whole hand for a shelf
     /// swap, the hotbar for a powered shelf.
-    pub(super) fn place_offer(
+    pub(super) async fn place_offer(
         &mut self,
+        region: &RegionHandle,
         off_hand: bool,
         target: BlockPos,
         held: Option<Item>,
@@ -46,7 +47,10 @@ impl PlayerSession {
             return PlaceOffer::new(creative, Vec::new());
         };
         let slot = self.inventory.hand_slot(off_hand);
-        let block = self.view.mirror.block_at(target);
+        let block = match self.view.mirror.block_at(target) {
+            Some(block) => Some(block),
+            None => block_at(region, target).await,
+        };
         let shelf = block
             .filter(|state| tuff_vanilla_data::tag::block::WOODEN_SHELVES.contains(&state.block()));
         let stacks = match shelf {
@@ -62,7 +66,7 @@ impl PlayerSession {
                     .collect()
             }
             _ if held == Item::FireworkRocket
-                || block.is_some_and(|state| keeps_one(state.block())) =>
+                || block.is_some_and(|state| self.keeps_one(state, held)) =>
             {
                 ItemStack::take_from(self.inventory.slot_mut(slot), 1)
                     .map(|one| vec![(slot, one)])
@@ -72,18 +76,34 @@ impl PlayerSession {
         };
         PlaceOffer::new(creative, stacks)
     }
+
+    /// Whether a click with `held` on a block the client sees as `state`
+    /// can leave one item in it, so the item rides along with the click.
+    fn keeps_one(&self, state: BlockState, held: Item) -> bool {
+        use tuff_vanilla_data::tag::item as item_tags;
+        match state.block() {
+            Block::Lectern => {
+                state.get("has_book") != Some("true") && item_tags::LECTERN_BOOKS.contains(&held)
+            }
+            Block::Jukebox => {
+                state.get("has_record") != Some("true") && held.jukebox_song_id().is_some()
+            }
+            Block::Campfire | Block::SoulCampfire => self
+                .shared
+                .recipes()
+                .can_cook(crate::world::block_entity::ContainerKind::Campfire, held),
+            Block::ChiseledBookshelf => item_tags::BOOKSHELF_BOOKS.contains(&held),
+            Block::Composter => held.compostable().is_some(),
+            Block::DecoratedPot => true,
+            _ => false,
+        }
+    }
 }
 
-/// Blocks a click can leave one item of the hand in.
-fn keeps_one(block: Block) -> bool {
-    matches!(
-        block,
-        Block::Lectern
-            | Block::Jukebox
-            | Block::Campfire
-            | Block::SoulCampfire
-            | Block::ChiseledBookshelf
-            | Block::DecoratedPot
-            | Block::Composter
-    )
+/// The block at `pos` as its region has it, for a click on a block the
+/// client was never sent (a fake player).
+async fn block_at(region: &RegionHandle, pos: BlockPos) -> Option<BlockState> {
+    let (reply, answer) = tokio::sync::oneshot::channel();
+    region.request(RegionRequest::BlockAt { pos, reply }).await;
+    answer.await.ok().flatten()
 }

@@ -300,9 +300,10 @@ impl PlayerSession {
                     && !self.under_spawn_protection(target)
                     && self.dimension().block_within_border(target) =>
             {
-                let place = self.place_request(
+                let mut place = self.place_request(
                     off_hand, target, face, cursor, sequence, held, item, interact,
                 );
+                place.offer = self.place_offer(&region, off_hand, target, held).await;
                 self.send_place(&region, RegionRequest::Place(place)).await;
             }
             _ => {
@@ -349,7 +350,7 @@ impl PlayerSession {
 
     #[allow(clippy::too_many_arguments)]
     fn place_request(
-        &mut self,
+        &self,
         off_hand: bool,
         target: BlockPos,
         face: Face,
@@ -359,7 +360,7 @@ impl PlayerSession {
         item: Option<Item>,
         interact: bool,
     ) -> Place {
-        let mut place = Place {
+        Place {
             player: self.conn.handle.clone(),
             eye: self.eye(),
             target,
@@ -402,9 +403,7 @@ impl PlayerSession {
             context: None,
             offer: Default::default(),
             hand_slot: self.inventory.hand_slot(off_hand),
-        };
-        place.offer = self.place_offer(off_hand, target, held);
-        place
+        }
     }
 
     /// Hands a fluid bucket's use to the region around the player's eyes,
