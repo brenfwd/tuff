@@ -17,6 +17,7 @@ log = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tuff-core = { workspace = true }
+libm = { workspace = true }
 tuff-vanilla-common = { workspace = true }
 tuff-supervise = { workspace = true }
 tuff-vanilla-data = { workspace = true }

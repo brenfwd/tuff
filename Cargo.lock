@@ -3829,6 +3829,7 @@ name = "tuff-feature-builtin-vanilla-worldgen"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "libm",
  "log",
  "rayon",
  "serde_json",

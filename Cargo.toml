@@ -165,6 +165,7 @@ flate2 = { version = "1.1.10", default-features = false, features = [
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 indexmap = "2"
 libc = "0.2.189"
+libm = "0.2.16"
 log = "0.4"
 rand = "0.8"
 rayon = "1"

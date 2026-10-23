@@ -117,8 +117,8 @@ struct Rotation {
 impl Rotation {
     fn new(angle: f64) -> Self {
         Self {
-            cos: angle.cos(),
-            sin: angle.sin(),
+            cos: libm::cos(angle),
+            sin: libm::sin(angle),
         }
     }
 
@@ -699,7 +699,7 @@ mod tests {
             features[(seed % 2) as usize].place(&mut ctx, BlockPos::new(8, 63, 8));
             h = h.rotate_left(7) ^ hash(&region);
         }
-        assert_eq!(h, 10675924778561145211);
+        assert_eq!(h, 2524394771601770865);
     }
 
     const PINNED: [u64; 6] = [

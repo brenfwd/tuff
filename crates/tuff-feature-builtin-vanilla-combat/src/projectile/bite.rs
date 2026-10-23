@@ -3,6 +3,7 @@
 
 use rand::Rng;
 use rand::rngs::StdRng;
+use tuff_core::mth;
 use tuff_vanilla_data::registry::ParticleType;
 use tuff_world_model::BlockPos;
 
@@ -147,7 +148,8 @@ impl Line {
                 let drift = 9.188 * (rng.r#gen::<f64>() - rng.r#gen::<f64>());
                 let heading = heading + drift as f32;
                 *self = Self::Approaching { left, heading };
-                let (s, c) = ((heading * DEG).sin(), (heading * DEG).cos());
+                let angle = f64::from(heading * DEG);
+                let (s, c) = (mth::sin(angle), mth::cos(angle));
                 let fish = surface_above(at, (s, c), f64::from(left) * 0.1);
                 if water_under(fish) {
                     if rng.r#gen::<f32>() < 0.15 {
@@ -175,10 +177,13 @@ impl Line {
             Self::Waiting(n) => {
                 let left = n - step;
                 if rng.r#gen::<f32>() < lure_chance(left) {
-                    let bearing = rng.gen_range(0.0f32..360.0) * DEG;
+                    let bearing = f64::from(rng.gen_range(0.0f32..360.0) * DEG);
                     let range = rng.gen_range(25.0f32..60.0);
-                    let spot =
-                        surface_above(at, (bearing.sin() * range, bearing.cos() * range), 0.1);
+                    let spot = surface_above(
+                        at,
+                        (mth::sin(bearing) * range, mth::cos(bearing) * range),
+                        0.1,
+                    );
                     if water_under(spot) {
                         cue(Cue::Particles {
                             kind: ParticleType::Splash,
@@ -264,17 +269,17 @@ mod tests {
     }
 
     const PINNED: [u64; 12] = [
-        12287168231052280816,
-        2262887422215536076,
-        4694511735969000480,
-        2994004461118332662,
-        12423920870247726395,
-        12034765871461895032,
-        10121001413009219824,
-        17240009982809576067,
-        12642062867467231698,
-        11283920956411437246,
-        10122912780109702125,
-        17685783135153695663,
+        3213288231235325135,
+        11791984894915564557,
+        18067661530547022320,
+        11840221223671269254,
+        9656723519364926970,
+        14955959327713533001,
+        13492369529780661894,
+        13957455973086926655,
+        13478589839807323180,
+        12365495802277557852,
+        12631276976806135800,
+        2147318212684076479,
     ];
 }
