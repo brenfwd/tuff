@@ -8,7 +8,7 @@ use tuff_core::world::messages::{
 };
 use tuff_core::world::redstone::UPDATE_ALL;
 use tuff_core::world::region_api::{RegionHooks, RegionWorld};
-use tuff_item::item::ItemStack;
+use tuff_item::item::{ItemPicture, ItemStack};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::registry::{CustomStat, SoundEvent};
 use tuff_vanilla_data::tag::item as item_tags;
@@ -29,13 +29,20 @@ fn book(world: &dyn RegionWorld, pos: BlockPos) -> Option<(ItemStack, i32)> {
     Some((book, nbt.get_int("Page").unwrap_or(0)))
 }
 
+/// A picture of the book on the lectern at `pos`, which stays stored.
+fn shown_book(world: &dyn RegionWorld, pos: BlockPos) -> Option<(ItemPicture, i32)> {
+    let nbt = world.raw_block_entity(pos)?;
+    let book = nbt.get_compound("Book").and_then(ItemPicture::from_nbt)?;
+    Some((book, nbt.get_int("Page").unwrap_or(0)))
+}
+
 fn update_below(world: &mut dyn RegionWorld, pos: BlockPos) {
     world.update_neighbors_at(BlockPos::new(pos.x, pos.y - 1, pos.z), Block::Lectern);
 }
 
 fn open(world: &mut dyn RegionWorld, place: &Place) -> bool {
     let pos = place.target;
-    let Some((book, page)) = book(world, pos) else {
+    let Some((book, page)) = shown_book(world, pos) else {
         return false;
     };
     if !world.is_spectator(place.player.id) {
@@ -48,7 +55,7 @@ fn open(world: &mut dyn RegionWorld, place: &Place) -> bool {
         title: TextComponent::translate("container.lectern", []),
         source: MenuSource::Blocks {
             parts: vec![(pos, 1)],
-            contents: vec![Some(book.into_template())],
+            contents: vec![Some(book.into())],
             data: vec![page],
             remote: None,
         },

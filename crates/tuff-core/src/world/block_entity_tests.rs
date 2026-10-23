@@ -282,7 +282,7 @@ fn shulker_contents_round_trip_through_item_components() {
         .is_empty()
     );
     assert_eq!(
-        create(BlockEntityType::Bell, pos, &Components::default()),
+        create(BlockEntityType::Bell, pos, &Components::new()),
         Err(raw::new(BlockEntityType::Bell, pos))
     );
     let Err(bell) = create(BlockEntityType::Bell, pos, &components) else {

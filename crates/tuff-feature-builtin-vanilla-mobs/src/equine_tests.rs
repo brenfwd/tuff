@@ -69,7 +69,7 @@ fn a_tamed_saddled_horse_loads_as_drivable() {
             "equipment",
             Compound::new().with(
                 "saddle",
-                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
             ),
         ),
     );

@@ -91,13 +91,42 @@ impl<'a> From<&AnyItem<'a>> for AnyItem<'a> {
     }
 }
 
-impl AnyItem<'_> {
+impl<'a> AnyItem<'a> {
     pub fn item(self) -> Item {
         with_item!(self, |stack| stack.item())
     }
 
     pub fn count(self) -> u8 {
         with_item!(self, |stack| stack.count())
+    }
+
+    /// A picture of the stack as it is now.
+    pub fn picture(self) -> ItemPicture {
+        with_item!(self, |stack| ItemPicture::of(stack))
+    }
+
+    pub fn enchantments(self) -> Option<&'a super::Enchantments> {
+        with_item!(self, |stack| stack.components.enchantments.as_ref())
+    }
+
+    pub fn enchantment_level(self, id: &str) -> i32 {
+        with_item!(self, |stack| stack.enchantment_level(id))
+    }
+
+    pub fn attribute_modifiers(self) -> Vec<super::ModifierRef<'a>> {
+        with_item!(self, |stack| stack.attribute_modifiers())
+    }
+
+    pub fn max_stack_size(self) -> u8 {
+        with_item!(self, |stack| stack.max_stack_size())
+    }
+
+    pub fn max_damage(self) -> Option<u32> {
+        with_item!(self, |stack| stack.max_damage())
+    }
+
+    pub fn damage(self) -> u32 {
+        with_item!(self, |stack| stack.damage())
     }
 }
 
@@ -162,8 +191,7 @@ impl ItemPicture {
     }
 
     /// A picture of `count` of `item` with `components`.
-    pub fn describe(item: Item, count: u8, components: impl Into<Components<Picture>>) -> Self {
-        let mut components = components.into();
+    pub fn describe(item: Item, count: u8, mut components: Components<Picture>) -> Self {
         components.compact();
         Self::assemble(item, count, components, format_args!("describe"))
     }

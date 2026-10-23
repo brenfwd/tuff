@@ -590,7 +590,7 @@ impl Culprit {
     }
 
     /// Remembers the weapon's custom name, shown in bracketed form.
-    pub fn holding(mut self, weapon: Option<&ItemStack>) -> Self {
+    pub fn holding<M: tuff_item::item::Mode>(mut self, weapon: Option<&ItemStack<M>>) -> Self {
         self.held_name = weapon
             .and_then(|stack| stack.components.custom_name.as_deref())
             .map(|name| {

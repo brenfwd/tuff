@@ -32,7 +32,7 @@ async fn heights(simulation_distance: i32) -> (f64, f64) {
             EntityType::Item,
             Compound::new().with(
                 "Item",
-                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Stone, 1).to_nbt(),
             ),
             [x, y, 8.5],
         )
@@ -101,7 +101,7 @@ async fn a_distance_beyond_the_player_index_reach_is_honoured() {
             EntityType::Item,
             Compound::new().with(
                 "Item",
-                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Stone, 1).to_nbt(),
             ),
             [x as f64 + 0.5, y, 8.5],
         )
@@ -150,7 +150,7 @@ async fn a_spectator_alone_keeps_nearby_entities_ticking() {
             EntityType::Item,
             Compound::new().with(
                 "Item",
-                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Stone, 1).to_nbt(),
             ),
             [x, y, 8.5],
         )
@@ -199,7 +199,7 @@ async fn a_spectator_in_a_neighbouring_region_keeps_chunks_simulating() {
             EntityType::Item,
             Compound::new().with(
                 "Item",
-                ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Stone, 1).to_nbt(),
             ),
             [x, y, 8.5],
         )

@@ -1,9 +1,11 @@
 use super::*;
 use tuff_item::item::BurnReason;
-use tuff_item::item::{ItemSnapshot, MintReason};
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_wire::Buffer;
 use tuff_world_model::BlockPos;
+
+type NetworkComponent<'a> = tuff_item::item::NetworkComponent<'a, tuff_item::item::Picture>;
 
 fn reader(w: PacketWriter) -> PacketReader {
     let mut buf = Buffer::new();
@@ -371,7 +373,7 @@ fn slot_encoding_matches_the_game() {
         assert_eq!(hex(&w.into_bytes()), case.slot, "{:?}", case.stack);
     }
     let mut w = PacketWriter::new();
-    w.write_slot(None);
+    w.write_any_slot(None);
     assert_eq!(hex(&w.into_bytes()), "00");
 }
 
@@ -541,7 +543,7 @@ fn block_state_components_round_trip_on_the_wire() {
 #[test]
 fn a_sulfur_cube_bucket_sends_and_takes_back_what_it_holds() {
     let mut bucket = ItemStack::mint(Item::SulfurCubeBucket, 1, MintReason::Test);
-    let held = ItemStack::mint(Item::Tnt, 1, MintReason::Test).to_nbt();
+    let held = tuff_item::item::ItemPicture::new(Item::Tnt, 1).to_nbt();
     bucket
         .components
         .other
@@ -591,7 +593,7 @@ fn display_components_round_trip_on_the_wire() {
     w.write_item_template(stack.view());
     assert_eq!(
         reader(w).read_item_template(0).unwrap(),
-        Some(stack.test_copy())
+        Some(tuff_item::item::ItemPicture::of(&stack))
     );
 
     let mut short = ItemStack::mint(Item::Paper, 1, MintReason::Test);
@@ -693,13 +695,12 @@ fn pot_decorations_are_sent_as_optional_templates_per_side() {
     pot.components.other.insert(
         DataComponentType::PotDecorations.name(),
         tuff_item::item::pot_decorations_to_nbt(&[
-            Some(ItemStack::mint(
+            Some(tuff_item::item::ItemPicture::new(
                 Item::AnglerPotterySherd,
                 1,
-                MintReason::Test,
             )),
             None,
-            Some(ItemStack::mint(Item::Brick, 1, MintReason::Test)),
+            Some(tuff_item::item::ItemPicture::new(Item::Brick, 1)),
             None,
         ]),
     );

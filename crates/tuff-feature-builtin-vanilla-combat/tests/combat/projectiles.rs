@@ -275,7 +275,7 @@ async fn skeletons_shoot_the_tipped_arrows_they_hold() {
     let equipment = Compound::new()
         .with(
             "mainhand",
-            ItemStack::mint(Item::Bow, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Bow, 1).to_nbt(),
         )
         .with("offhand", poison.to_nbt());
     summon(

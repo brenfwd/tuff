@@ -163,8 +163,7 @@ async fn pillagers_load_and_fire_their_crossbow() {
         "equipment",
         Compound::new().with(
             "mainhand",
-            tuff_item::item::ItemStack::mint(Item::Crossbow, 1, tuff_item::item::MintReason::Test)
-                .to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Crossbow, 1).to_nbt(),
         ),
     );
     summon(
@@ -229,8 +228,7 @@ async fn illusioners_shoot_arrows() {
         "equipment",
         Compound::new().with(
             "mainhand",
-            tuff_item::item::ItemStack::mint(Item::Bow, 1, tuff_item::item::MintReason::Test)
-                .to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Bow, 1).to_nbt(),
         ),
     );
     summon(

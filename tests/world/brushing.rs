@@ -284,7 +284,7 @@ async fn unsupported_suspicious_sand_falls_and_shatters_without_a_drop() {
     edit_block_entity(&region, sand, |nbt| {
         nbt.insert(
             "item",
-            ItemStack::mint(Item::Diamond, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Diamond, 1).to_nbt(),
         );
     })
     .await;

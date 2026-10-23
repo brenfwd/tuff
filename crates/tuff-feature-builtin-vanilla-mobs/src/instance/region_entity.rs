@@ -367,7 +367,7 @@ impl<S: Species> RegionEntity for Mob<S> {
         })
     }
 
-    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> {
+    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::AnyItem<'_>>)> {
         self.core.equipment.visible()
     }
 
@@ -752,7 +752,7 @@ impl<S: Species> RegionEntity for Mob<S> {
         self.species.boost(&mut self.core, roll)
     }
 
-    fn mount_refused_by(&self, stack: Option<&ItemStack>) -> bool {
+    fn mount_refused_by(&self, stack: Option<&tuff_item::item::ItemPicture>) -> bool {
         let shears = stack.is_some_and(|s| s.item() == tuff_vanilla_data::Item::Shears)
             && SHEARABLE_SLOTS
                 .iter()

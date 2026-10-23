@@ -555,7 +555,7 @@ impl Species for Frog {
         Some(SoundEvent::EntityFrogEat)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         frog_food(stack.item())
     }
 

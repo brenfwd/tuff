@@ -30,7 +30,7 @@ const CROSSBOW_POWER: f32 = 1.6;
 const ARROW_DROP: f64 = 0.100_000_001_490_116_12;
 const ROCKET_DROP: f64 = 0.150_000_005_960_464_48;
 
-fn is_arrow(stack: &ItemStack) -> bool {
+fn is_arrow<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item())
 }
 
@@ -93,10 +93,10 @@ impl MobCore {
     }
 
     /// An arrow of `projectile` leaving `start`, fired from `weapon`.
-    fn arrow_from(
+    fn arrow_from<M: tuff_item::item::Mode, N: tuff_item::item::Mode>(
         &self,
-        projectile: &ItemStack,
-        weapon: Option<&ItemStack>,
+        projectile: &ItemStack<M>,
+        weapon: Option<&ItemStack<N>>,
         velocity: [f64; 3],
     ) -> ArrowShot {
         let mut item = ItemStack::mint_like(projectile, 1, MintReason::EntityDrop);

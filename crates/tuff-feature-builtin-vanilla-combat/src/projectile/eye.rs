@@ -46,7 +46,7 @@ impl EyeOfEnder {
         let base = EntityBase::new(EntityType::EyeOfEnder, id, rng.r#gen(), position, [0.0; 3]);
         let mut eye = Self {
             base,
-            item: item.keep(1, BurnReason::Template),
+            item: item.keep(1, BurnReason::Consumed),
             target: None,
             life: 0,
             survive_after_death: false,
@@ -193,7 +193,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     let item = take(nbt, "Item", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     })
-    .unwrap_or_else(|| ItemStack::mint(Item::EnderEye, 1, MintReason::Template));
+    .unwrap_or_else(|| ItemStack::mint(Item::EnderEye, 1, MintReason::Spawn));
     Some(Box::new(EyeOfEnder {
         base,
         item,

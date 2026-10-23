@@ -994,11 +994,11 @@ mod tests {
                 Compound::new()
                     .with(
                         "offhand",
-                        ItemStack::mint(Item::Torch, 3, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Torch, 3).to_nbt(),
                     )
                     .with(
                         "body",
-                        ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
                     ),
             )
             .with(

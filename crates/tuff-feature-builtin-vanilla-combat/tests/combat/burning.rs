@@ -237,7 +237,7 @@ async fn things_burning_in_lava_sizzle() {
         EntityType::Item,
         Compound::new().with(
             "Item",
-            ItemStack::mint(Item::Dirt, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Dirt, 1).to_nbt(),
         ),
         [9.5, SKY as f64 + 1.0, 9.5],
     )

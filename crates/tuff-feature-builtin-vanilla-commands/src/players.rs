@@ -74,7 +74,10 @@ fn players_of(targets: &[Target]) -> Vec<PlayerSnapshot> {
         .collect()
 }
 
-pub fn item_name(item: Item, components: &tuff_item::item::Components) -> TextComponent {
+pub fn item_name<M: tuff_item::item::Mode>(
+    item: Item,
+    components: &tuff_item::item::Components<M>,
+) -> TextComponent {
     if let Some(name) = &components.custom_name {
         return (**name).clone();
     }

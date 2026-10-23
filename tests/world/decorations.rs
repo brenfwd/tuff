@@ -240,7 +240,7 @@ async fn a_frame_falls_off_when_its_wall_goes() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn summoned_frames_keep_their_saved_state() {
     let s = scene(1003).await;
-    let item = ItemStack::mint(Item::Map, 1, MintReason::Test).to_nbt();
+    let item = tuff_item::item::ItemPicture::new(Item::Map, 1).to_nbt();
     let nbt = Compound::new()
         .with("Facing", 2i8)
         .with("Item", item)

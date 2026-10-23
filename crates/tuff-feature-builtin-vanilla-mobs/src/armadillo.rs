@@ -419,7 +419,7 @@ impl Species for Armadillo {
         Some(SoundEvent::EntityArmadilloEat)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         armadillo_food(stack.item())
     }
 

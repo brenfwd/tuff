@@ -37,7 +37,7 @@ const COW_VOLUME: f32 = 0.4;
 const EGG_TIME_MIN: i32 = 6000;
 const SHEEP_REGROW_SECONDS: i32 = 60;
 
-fn in_tag(tag: Key<Item>, stack: &ItemStack) -> bool {
+fn in_tag<M: tuff_item::item::Mode>(tag: Key<Item>, stack: &ItemStack<M>) -> bool {
     tuff_datapack::tags::is(tag, stack.item())
 }
 
@@ -130,7 +130,7 @@ impl Species for Cow {
         120
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         in_tag(tag::item::key::COW_FOOD, stack)
     }
 
@@ -327,7 +327,7 @@ impl Species for Mooshroom {
         120
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         in_tag(tag::item::key::COW_FOOD, stack)
     }
 
@@ -534,7 +534,11 @@ impl Species for Pig {
         })
     }
 
-    fn mount_refused(&self, _core: &MobCore, stack: Option<&ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        _core: &MobCore,
+        stack: Option<&ItemStack<M>>,
+    ) -> bool {
         stack.is_some_and(|s| pig_food(s.item()))
     }
 
@@ -586,7 +590,7 @@ impl Species for Pig {
         120
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         in_tag(tag::item::key::PIG_FOOD, stack)
     }
 
@@ -672,8 +676,8 @@ fn mixed_color(recipes: &RecipeSet, a: DyeColor, b: DyeColor) -> Option<DyeColor
     for first in dyes(a) {
         for second in dyes(b) {
             let probes = [
-                ItemStack::mint(first, 1, MintReason::Template),
-                ItemStack::mint(second, 1, MintReason::Template),
+                ItemStack::mint(first, 1, MintReason::Preview),
+                ItemStack::mint(second, 1, MintReason::Preview),
             ];
             let input = CraftingInput {
                 width: 2,
@@ -683,11 +687,11 @@ fn mixed_color(recipes: &RecipeSet, a: DyeColor, b: DyeColor) -> Option<DyeColor
             let color = recipes.find(&input).and_then(|(_, recipe)| {
                 let result = recipe.assemble(&input)?;
                 let color = result.item().dye();
-                result.burn(BurnReason::Template);
+                result.burn(BurnReason::Preview);
                 color
             });
             for probe in probes {
-                probe.burn(BurnReason::Template);
+                probe.burn(BurnReason::Preview);
             }
             if color.is_some() {
                 return color;
@@ -774,7 +778,7 @@ impl Species for Sheep {
         120
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         in_tag(tag::item::key::SHEEP_FOOD, stack)
     }
 
@@ -942,7 +946,7 @@ impl Species for Chicken {
         120
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         in_tag(tag::item::key::CHICKEN_FOOD, stack)
     }
 
@@ -1264,7 +1268,7 @@ impl Species for Rabbit {
         120
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         rabbit_food(stack.item())
     }
 

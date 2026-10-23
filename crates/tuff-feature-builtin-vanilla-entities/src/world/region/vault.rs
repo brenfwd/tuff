@@ -78,7 +78,7 @@ struct Config {
     loot_table: String,
     activation_range: f64,
     deactivation_range: f64,
-    key_item: Option<ItemStack>,
+    key_item: Option<tuff_item::item::ItemPicture>,
     display_table: Option<String>,
 }
 
@@ -99,10 +99,7 @@ struct Vault {
 /// keeps its items between ticks.
 impl Drop for Vault {
     fn drop(&mut self) {
-        tuff_item::item::conservation::release((
-            self.config.key_item.take(),
-            std::mem::take(&mut self.items_to_eject),
-        ));
+        tuff_item::item::conservation::release(std::mem::take(&mut self.items_to_eject));
     }
 }
 
@@ -135,8 +132,9 @@ fn uuids(nbt: &Compound, key: &str) -> Vec<u128> {
         .collect()
 }
 
-fn stack_in(nbt: &Compound, key: &str) -> Option<ItemStack> {
-    ItemStack::from_storage(nbt.get_compound(key)?)
+/// A stack the vault's data names (its key, what it displays): a picture.
+fn stack_in(nbt: &Compound, key: &str) -> Option<tuff_item::item::ItemPicture> {
+    tuff_item::item::ItemPicture::from_nbt(nbt.get_compound(key)?)
 }
 
 impl Vault {
@@ -162,7 +160,7 @@ impl Vault {
                     .get_str("override_loot_table_to_display")
                     .map(str::to_owned),
             },
-            display_item: stack_in(shared, "display_item").map(ItemStack::into_template),
+            display_item: stack_in(shared, "display_item").map(Into::into),
             connected: uuids(shared, "connected_players"),
             connected_range: double(
                 shared,
@@ -286,9 +284,9 @@ impl Vault {
             return;
         }
         let pick = world.rng().gen_range(0..items.len());
-        let shown = items.swap_remove(pick).into_template();
+        let shown = items.swap_remove(pick).into_picture().into();
         for rest in items {
-            rest.burn(tuff_item::item::BurnReason::Template);
+            rest.burn(tuff_item::item::BurnReason::Picture);
         }
         self.set_display(Some(shown));
     }

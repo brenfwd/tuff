@@ -113,7 +113,7 @@ pub fn mark(stack: &mut ItemStack, spec: &ExplorationSpec) {
     stack.components.other.insert(PENDING, spec.to_nbt());
 }
 
-pub fn pending(stack: &ItemStack) -> Option<ExplorationSpec> {
+pub fn pending<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> Option<ExplorationSpec> {
     ExplorationSpec::from_nbt(stack.components.other.get(PENDING)?.as_compound()?)
 }
 
@@ -127,7 +127,7 @@ pub struct ExploredMap {
 
 impl ExploredMap {
     /// Gives the stack its map and the target marker.
-    pub fn apply(&self, components: &mut tuff_item::item::Components) {
+    pub fn apply<M: tuff_item::item::Mode>(&self, components: &mut tuff_item::item::Components<M>) {
         components.remove_other(PENDING);
         components.map_id = Some(self.id);
         let marker = Compound::new()

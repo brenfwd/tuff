@@ -467,8 +467,12 @@ fn state_ranges_compare_enum_and_boolean_properties_by_order() {
 }
 
 fn stack_with(item: Item, key: &str, value: impl Into<Tag>) -> ItemStack {
-    ItemStack::mint(item, 1, MintReason::Test)
-        .with_components(Components::from_nbt(&Compound::new().with(key, value)))
+    ItemStack::mint_with(
+        item,
+        1,
+        &Components::from_nbt(&Compound::new().with(key, value)),
+        MintReason::Test,
+    )
 }
 
 #[tuff_core::watchdog]

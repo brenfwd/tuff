@@ -1708,7 +1708,7 @@ fn record(item: Item) -> tuff_nbt::Compound {
         .with("id", "minecraft:jukebox")
         .with(
             "RecordItem",
-            ItemStack::mint(item, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(item, 1).to_nbt(),
         )
 }
 
@@ -1752,7 +1752,7 @@ async fn a_comparator_reads_a_jukeboxs_record_and_follows_a_new_one() {
 async fn a_comparator_reads_a_lecterns_page() {
     let dir = TestDir::new();
     let (b, input, output) = comparator_bench(dir.path()).await;
-    let mut book = ItemStack::mint(Item::WritableBook, 1, MintReason::Test).to_nbt();
+    let mut book = tuff_item::item::ItemPicture::new(Item::WritableBook, 1).to_nbt();
     book.insert(
         "components",
         tuff_nbt::Compound::new().with(

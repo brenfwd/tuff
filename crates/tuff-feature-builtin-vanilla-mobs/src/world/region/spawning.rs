@@ -519,12 +519,12 @@ fn blocked_by_entity(world: &dyn RegionWorld, bounds: [f64; 6]) -> bool {
 /// Spawns a mob of `kind` from a spawn egg used on the block space `at`,
 /// standing on whatever is there (reaching a block further down when
 /// placed on top of one, `lower`).
-pub fn spawn_from_egg(
+pub fn spawn_from_egg<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     kind: EntityType,
     at: BlockPos,
     lower: bool,
-    components: &tuff_item::item::Components,
+    components: &tuff_item::item::Components<M>,
 ) -> bool {
     if !world.owns_chunk(ChunkPos::of_block(at)) {
         return false;

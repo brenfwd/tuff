@@ -738,7 +738,7 @@ impl Species for TraderLlama {
         self.0.sounds(core)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         self.0.is_food(stack)
     }
 
@@ -777,7 +777,11 @@ impl Species for TraderLlama {
         self.0.ridden_speed(core)
     }
 
-    fn mount_refused(&self, core: &MobCore, stack: Option<&ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        stack: Option<&ItemStack<M>>,
+    ) -> bool {
         self.0.mount_refused(core, stack)
     }
 
@@ -882,7 +886,6 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
-    use tuff_item::item::MintReason;
 
     use super::*;
     use tuff_core::world::entity::EntityBase;
@@ -906,7 +909,7 @@ mod tests {
             "equipment",
             Compound::new().with(
                 "saddle",
-                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
             ),
         );
         let entity = super::super::load::<Llama>(base, &mut nbt).expect("loads");

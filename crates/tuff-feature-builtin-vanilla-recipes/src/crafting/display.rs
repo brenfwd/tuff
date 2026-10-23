@@ -1,7 +1,6 @@
 //! What the recipe book shows for each vanilla recipe: the game's recipe
 //! display and slot display trees (Recipe Book Add, Place Ghost Recipe).
 
-use tuff_item::item::BurnReason;
 use tuff_vanilla_data::data_registry::TRIM_PATTERN;
 use tuff_vanilla_data::recipe::{Ingredient, Recipe};
 use tuff_vanilla_data::registry::{DataComponentType, RecipeBookCategory};
@@ -9,7 +8,7 @@ use tuff_vanilla_data::{Frozen, Item};
 
 use super::{Shaped, Shapeless};
 use tuff_core::world::crafting::{Recipe as _, crafting_category};
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::ItemPicture;
 
 pub use tuff_core::protocol::recipe::{DisplayEntry, RecipeDisplay, SlotDisplay};
 
@@ -48,7 +47,7 @@ fn ingredient(ingredient: &Ingredient) -> SlotDisplay {
     SlotDisplay::Ingredient(ingredient.clone())
 }
 
-fn stack(stack: ItemStack) -> SlotDisplay {
+fn stack(stack: ItemPicture) -> SlotDisplay {
     SlotDisplay::template(stack)
 }
 
@@ -79,26 +78,15 @@ pub fn displays_of(recipe: &Recipe) -> Vec<RecipeDisplay> {
                 let count = super::transmute_count(transmute, materials);
                 let result = match &transmute.result {
                     Some(result) => {
-                        let mut shown = tuff_core::world::crafting::result_template(result);
-                        shown.resize(
-                            count.min(99) as u8,
-                            MintReason::Template,
-                            BurnReason::Template,
-                        );
-                        stack(shown)
+                        let shown = tuff_core::world::crafting::result_template(result);
+                        stack(shown.with_count(count.min(99) as u8))
                     }
                     None => {
                         let items: &[Item] = transmute.input.items();
                         SlotDisplay::Composite(
                             items
                                 .iter()
-                                .map(|item| {
-                                    stack(ItemStack::mint(
-                                        *item,
-                                        count.min(99) as u8,
-                                        MintReason::Template,
-                                    ))
-                                })
+                                .map(|item| stack(ItemPicture::new(*item, count.min(99) as u8)))
                                 .collect(),
                         )
                     }

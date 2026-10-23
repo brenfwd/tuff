@@ -189,7 +189,7 @@ pub trait Interact: RegionWorld + Rest {
     /// the pot is empty or holds the same item below a full stack; anything
     /// else wobbles it in refusal.
     fn use_decorated_pot(&mut self, place: &Place) -> Option<ActionOutcome> {
-        use tuff_item::item::ItemStack;
+        use tuff_item::item::{ItemSnapshot, ItemStack, conservation};
         let pos = place.target;
         let interacted = ActionOutcome::Interacted {
             off_hand: place.off_hand,
@@ -198,33 +198,41 @@ pub trait Interact: RegionWorld + Rest {
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
-                .and_then(ItemStack::picture_from_nbt);
-            if stored
+                .and_then(ItemStack::from_storage);
+            let full = stored
                 .as_ref()
-                .is_some_and(|stored| stored.count() >= stored.item().max_stack_size())
-            {
-                return None;
-            }
-            let held = place.offer.keep_one(place.hand_slot)?;
+                .is_some_and(|stored| stored.count() >= stored.item().max_stack_size());
+            let held = match place.offer.keep_one(place.hand_slot) {
+                Some(held) if !full => held,
+                held => {
+                    if let Some(held) = held {
+                        place.offer.unkeep(place.hand_slot, held);
+                    }
+                    conservation::release(stored);
+                    return None;
+                }
+            };
             let old = stored.as_ref().map(tuff_item::item::ItemSnapshot::of);
             let next = match stored {
                 None => held,
                 Some(stored) => match ItemStack::merge(stored, held) {
                     Ok(next) => next,
-                    Err((_, held)) => {
+                    Err((stored, held)) => {
                         place.offer.unkeep(place.hand_slot, held);
+                        conservation::release(stored);
                         return None;
                     }
                 },
             };
             let ratio = f32::from(next.count()) / next.item().max_stack_size() as f32;
-            self.raw_block_entity_mut(pos)?
+            self.raw_block_entity_mut(pos)
+                .expect("the pot's block entity was read above")
                 .insert("item", next.to_storage());
             self.report_container_edit(
                 tuff_core::world::region_api::ContainerHolder::Block(pos),
-                &[(0, old.as_deref(), Some(&next))],
+                &[(0, old.as_ref().map(ItemSnapshot::any), Some(next.any()))],
             );
-            tuff_item::item::conservation::release(next);
+            conservation::release(next);
             Some((item, ratio))
         });
         let Some((item, ratio)) = inserted else {

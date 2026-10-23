@@ -13,7 +13,7 @@ use crate::script::{Event, Script, Timed};
 use crate::shared::{LeaderState, Shared};
 use crate::transform::{Transformer, encode};
 use tuff_core::protocol::play::{ContainerSetSlot, GameEvent, PlayerPosition, SystemChat};
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::ItemPicture;
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::packet::play::Clientbound as C;
@@ -294,14 +294,14 @@ impl Viewer {
                 window_id: 0,
                 state_id: 0,
                 slot: HOTBAR_FIRST_SLOT + i as i16,
-                item: if self.hotbar { Some(item.view()) } else { None },
+                item: if self.hotbar { Some(item.any()) } else { None },
             }));
         }
     }
 
-    fn hotbar_items(&self) -> [ItemStack; 5] {
+    fn hotbar_items(&self) -> [ItemPicture; 5] {
         let named = |item: Item, name: &str| {
-            let mut stack = ItemStack::mint(item, 1, MintReason::Template);
+            let mut stack = ItemPicture::new(item, 1);
             stack.components.custom_name = Some(Box::new(TextComponent::new(name).color("aqua")));
             stack
         };

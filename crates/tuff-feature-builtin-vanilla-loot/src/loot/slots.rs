@@ -3,15 +3,16 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 use tuff_core::world::predicate::slot_range;
 use tuff_datapack::slot_source::{SlotSource, SlotSourceRef};
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemPicture, ItemStack, MintReason};
 
 use super::{Context, functions, match_tool};
 
 const MAX_DEPTH: usize = 16;
 
 /// The stacks a `minecraft:slots` entry's source selects: container slots
-/// of the broken block's block entity. Entity inventories are not part of
-/// the loot context, so sources on entities select nothing.
+/// of the broken block's block entity, minted as loot. Entity inventories
+/// are not part of the loot context, so sources on entities select
+/// nothing.
 pub(super) fn provide(raw: &str, context: &Context) -> Vec<ItemStack> {
     let Ok(entry) = serde_json::from_str::<Value>(raw) else {
         return Vec::new();
@@ -30,8 +31,8 @@ pub(super) fn provide(raw: &str, context: &Context) -> Vec<ItemStack> {
     };
     slots(&reference, context, 0)
         .into_iter()
-        .map(|(_, stack)| stack)
-        .filter(|stack| stack.count() > 0)
+        .filter(|(_, picture)| picture.count() > 0)
+        .map(|(_, picture)| ItemStack::mint_like(&picture, picture.count(), MintReason::Loot))
         .collect()
 }
 
@@ -43,7 +44,7 @@ fn normalize(id: &str) -> String {
     }
 }
 
-fn slots(reference: &SlotSourceRef, context: &Context, depth: usize) -> Vec<(i32, ItemStack)> {
+fn slots(reference: &SlotSourceRef, context: &Context, depth: usize) -> Vec<(i32, ItemPicture)> {
     if depth > MAX_DEPTH {
         return Vec::new();
     }
@@ -57,7 +58,7 @@ fn slots(reference: &SlotSourceRef, context: &Context, depth: usize) -> Vec<(i32
     }
 }
 
-fn evaluate(source: &SlotSource, context: &Context, depth: usize) -> Vec<(i32, ItemStack)> {
+fn evaluate(source: &SlotSource, context: &Context, depth: usize) -> Vec<(i32, ItemPicture)> {
     match source {
         SlotSource::Empty => Vec::new(),
         SlotSource::Group(terms) => terms
@@ -90,13 +91,15 @@ fn evaluate(source: &SlotSource, context: &Context, depth: usize) -> Vec<(i32, I
             else {
                 return Vec::new();
             };
-            let mut found: Vec<(i32, ItemStack)> = items
+            let mut found: Vec<(i32, ItemPicture)> = items
                 .iter()
                 .filter_map(|tag| {
                     let entry = tag.as_compound()?;
                     let slot = i32::from(entry.get("Slot")?.as_byte()?);
-                    let stack = ItemStack::mint_from_nbt(entry, MintReason::Template)?;
-                    wanted.contains(&slot).then_some((slot, stack))
+                    if !wanted.contains(&slot) {
+                        return None;
+                    }
+                    Some((slot, ItemPicture::from_nbt(entry)?))
                 })
                 .collect();
             found.sort_by_key(|(slot, _)| *slot);
@@ -104,10 +107,7 @@ fn evaluate(source: &SlotSource, context: &Context, depth: usize) -> Vec<(i32, I
         }
         SlotSource::Contents { source, component } => slots(source, context, depth + 1)
             .into_iter()
-            .flat_map(|(_, stack)| {
-                let nbt = stack.components.to_nbt();
-                functions::component_stacks(component, &nbt)
-            })
+            .flat_map(|(_, mut picture)| functions::take_contents(&mut picture, component))
             .enumerate()
             .map(|(slot, stack)| (slot as i32, stack))
             .collect(),

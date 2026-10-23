@@ -130,12 +130,17 @@ pub enum Tamper {
 }
 
 /// Checks a client-made stack, its contents and their NBT.
-pub fn tampered(stack: tuff_item::item::ItemView<'_>) -> Option<Tamper> {
+pub fn tampered<M: tuff_item::item::Mode>(
+    stack: tuff_item::item::ItemView<'_, M>,
+) -> Option<Tamper> {
     let mut bytes = 0;
     walk(stack, &mut bytes).err()
 }
 
-fn walk(stack: tuff_item::item::ItemView<'_>, bytes: &mut usize) -> Result<(), Tamper> {
+fn walk<M: tuff_item::item::Mode>(
+    stack: tuff_item::item::ItemView<'_, M>,
+    bytes: &mut usize,
+) -> Result<(), Tamper> {
     let max = stack.max_stack_size();
     if stack.count() == 0 || stack.count() > max {
         return Err(Tamper::Count);

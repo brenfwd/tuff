@@ -81,7 +81,7 @@ fn usable(slot: EquipmentSlot) -> bool {
     !matches!(slot, EquipmentSlot::Body | EquipmentSlot::Saddle)
 }
 
-fn slot_for(stack: &ItemStack) -> EquipmentSlot {
+fn slot_for<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> EquipmentSlot {
     stack
         .item()
         .equippable()
@@ -168,7 +168,12 @@ impl ArmorStand {
         }
     }
 
-    fn equip_sound(&self, core: &MobCore, stack: &ItemStack, cx: &mut TickContext) {
+    fn equip_sound<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        stack: &ItemStack<M>,
+        cx: &mut TickContext,
+    ) {
         if let Some(equippable) = stack.equippable() {
             core.sound(equippable.equip_sound, 1.0, 1.0, cx);
         }
@@ -336,7 +341,7 @@ impl ArmorStand {
     }
 }
 
-fn prevents_drop(stack: &ItemStack) -> bool {
+fn prevents_drop<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     stack.has_enchantment_effect(|effects| effects.prevent_equipment_drop)
 }
 

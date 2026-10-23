@@ -105,7 +105,7 @@ pub fn song_output<M: Mode>(record: &ItemStack<M>) -> u8 {
 }
 
 /// The `jukebox_song` registry id of the song a record plays, if any.
-pub fn song_id(record: &ItemStack) -> Option<u32> {
+pub fn song_id<M: tuff_item::item::Mode>(record: &ItemStack<M>) -> Option<u32> {
     let components = &record.components;
     if components.is_removed(JUKEBOX_PLAYABLE) {
         return None;

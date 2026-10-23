@@ -8,13 +8,16 @@ use tuff_core::command::CommandError;
 use tuff_core::command::args::Value;
 use tuff_core::world::drops::EntityFacts;
 use tuff_core::world::messages::{Directive, RegionRequest, SlotFill};
-use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, MintReason};
+use tuff_item::item::{
+    BurnReason, ItemPicture, ItemSnapshot, ItemStack, MintReason, Mode, conservation,
+};
 use tuff_item::text::TextComponent;
 use tuff_nbt::Compound;
+use tuff_vanilla_data::Item;
 use tuff_world_model::pos::ChunkPos;
 
 use super::data::{find_entity, player_data};
-use super::item::{Holder, container, has_slot, read_slot, write_slot};
+use super::item::{Holder, container, has_slot, peek_slot, read_slot, write_slot};
 use super::players::item_name;
 use super::targets::{self, Target};
 use super::world::{copy_blocks, paste_blocks};
@@ -46,7 +49,7 @@ fn table_name(ctx: &Context<'_>) -> Result<String, CommandError> {
     Ok(name)
 }
 
-async fn held_item(ctx: &mut Context<'_>, slot: &str) -> Result<ItemStack, CommandError> {
+async fn held_item(ctx: &mut Context<'_>, slot: &str) -> Result<ItemPicture, CommandError> {
     let ids = tuff_core::world::predicate::slot_range(slot).unwrap_or_default();
     let no_items = |ctx: &Context<'_>| {
         CommandError::dynamic("commands.drop.no_held_items", [ctx.source.display_name()])
@@ -64,19 +67,19 @@ async fn held_item(ctx: &mut Context<'_>, slot: &str) -> Result<ItemStack, Comma
         }
     };
     ids.iter()
-        .find_map(|id| read_slot(&data, *id, holder))
-        .map(|stack| stack.unwrap_or_else(ItemStack::empty))
+        .find_map(|id| peek_slot(&data, *id, holder))
+        .map(|stack| stack.unwrap_or_else(|| ItemPicture::new(Item::Air, 0)))
         .ok_or_else(|| no_items(ctx))
 }
 
-async fn tool(ctx: &mut Context<'_>) -> Result<ItemStack, CommandError> {
+async fn tool(ctx: &mut Context<'_>) -> Result<ItemPicture, CommandError> {
     let literals = ctx.literals();
     match () {
         () if literals.contains(&"mainhand") => held_item(ctx, "weapon.mainhand").await,
         () if literals.contains(&"offhand") => held_item(ctx, "weapon.offhand").await,
         () => match ctx.arg("tool") {
-            Some(Value::ItemStack(input)) => Ok(input.stack(1)),
-            _ => Ok(ItemStack::empty()),
+            Some(Value::ItemStack(input)) => Ok(input.template(1).into_picture()),
+            _ => Ok(ItemPicture::new(Item::Air, 0)),
         },
     }
 }
@@ -96,7 +99,7 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
             let name = table_name(ctx)?;
             let tool = tool(ctx).await?;
             let items = if name == "minecraft:gameplay/fishing" {
-                loot.fishing(0.0, false, &tool, &mut rng)
+                loot.fishing(0.0, false, tool.any(), &mut rng)
             } else {
                 loot.roll(&name, &mut rng)
             };
@@ -158,8 +161,8 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
             let items = if tool.count() == 0 {
                 loot.destroyed(state, data.as_ref(), &mut rng)
             } else {
-                let mut items = loot.drops(state, Some(&tool), data.as_ref(), &mut rng);
-                if items.is_empty() && !loot.can_harvest(state, Some(&tool)) {
+                let mut items = loot.drops(state, Some(tool.any()), data.as_ref(), &mut rng);
+                if items.is_empty() && !loot.can_harvest(state, Some(tool.any())) {
                     items = loot.table(table, state, Some(tool.item()), &mut rng);
                 }
                 items
@@ -173,11 +176,11 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
     }
 }
 
-fn mint(template: &ItemStack) -> ItemStack {
+fn mint<M: Mode>(template: &ItemStack<M>) -> ItemStack {
     ItemStack::mint_like(template, template.count(), MintReason::Loot)
 }
 
-fn mint_some(template: &ItemStack) -> Option<ItemStack> {
+fn mint_some<M: Mode>(template: &ItemStack<M>) -> Option<ItemStack> {
     (template.count() > 0).then(|| mint(template))
 }
 
@@ -308,10 +311,10 @@ fn distribute(data: &mut Compound, holder: Holder, size: i32, mut stack: ItemSta
                     write_slot(data, slot, holder, Some(current));
                     changed = true;
                 } else {
-                    current.burn(BurnReason::Template);
+                    conservation::release(current);
                 }
             }
-            Some(other) => other.burn(BurnReason::Template),
+            Some(other) => conservation::release(other),
         }
     }
     if stack.count() > 0 {
@@ -415,11 +418,7 @@ impl Executor for Loot {
             let Drops { items, table } = drops(ctx, source).await?;
             let items: Vec<ItemSnapshot> = items
                 .into_iter()
-                .map(|stack| {
-                    let template = ItemSnapshot::of(&stack);
-                    stack.burn(BurnReason::Template);
-                    template
-                })
+                .map(|stack| stack.into_picture().into())
                 .collect();
             let mut tracked = Vec::new();
             match (destination, literals.contains(&"entity")) {

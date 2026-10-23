@@ -121,7 +121,7 @@ impl ItemSnapshot {
     pub fn describe(
         item: tuff_vanilla_data::Item,
         count: u8,
-        components: impl Into<Components<Picture>>,
+        components: Components<Picture>,
     ) -> Self {
         Self(Arc::new(ItemPicture::describe(item, count, components)))
     }

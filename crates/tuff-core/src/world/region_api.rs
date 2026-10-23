@@ -659,7 +659,12 @@ pub trait RegionWorld: GrowthLevel {
     /// Places `state` for the block item `stack` at `pos` as a dispenser
     /// does: the item's components go to the block entity, the place sound
     /// plays. False when it is not this region's or a player is in the way.
-    fn place_item_block(&mut self, pos: BlockPos, state: BlockState, stack: &ItemStack) -> bool;
+    fn place_item_block(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        stack: &tuff_item::item::ItemPicture,
+    ) -> bool;
     /// Sets a block without neighbour updates or placement hooks,
     /// forwarding it to the owning neighbour when it is not here.
     fn set_block_anywhere(&mut self, pos: BlockPos, state: BlockState);
@@ -804,7 +809,7 @@ pub trait RegionWorld: GrowthLevel {
     fn report_container_edit(
         &mut self,
         _holder: ContainerHolder,
-        _slots: &[(usize, Option<&ItemStack>, Option<&ItemStack>)],
+        _slots: &[(usize, Option<AnyItem<'_>>, Option<AnyItem<'_>>)],
     ) {
     }
 

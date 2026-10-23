@@ -101,7 +101,7 @@ pub enum MountArmor {
 }
 
 impl MountArmor {
-    pub fn fits(self, stack: &ItemStack) -> bool {
+    pub fn fits<M: tuff_item::item::Mode>(self, stack: &ItemStack<M>) -> bool {
         let body = stack
             .equippable()
             .is_some_and(|eq| eq.slot == EquipmentSlot::Body);

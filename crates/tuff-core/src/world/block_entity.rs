@@ -763,9 +763,9 @@ pub fn write_items(nbt: &mut Compound, items: &[Option<ItemStack>]) {
 /// all went in)
 /// and whether the walk reached an empty slot.
 /// How many of `stack` [`golem_place`] would put into `items`.
-pub fn golem_room<'a>(
+pub fn golem_room<'a, M: tuff_item::item::Mode>(
     items: impl IntoIterator<Item = &'a Option<ItemStack>>,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
 ) -> u8 {
     let mut room = 0u8;
     for item in items {
@@ -1020,7 +1020,7 @@ pub fn fill_missing(
         let Some(kind) = state.block().block_entity() else {
             continue;
         };
-        match create(kind, pos, &Components::default()) {
+        match create(kind, pos, &Components::new()) {
             Ok(entity) => {
                 typed.insert(pos, entity);
             }
@@ -1033,10 +1033,10 @@ pub fn fill_missing(
 
 /// A new block entity of `kind` at `pos` that took the components of the
 /// item placing it: modeled (`Ok`) or as saved NBT (`Err`).
-pub fn create(
+pub fn create<M: tuff_item::item::Mode>(
     kind: BlockEntityType,
     pos: BlockPos,
-    components: &Components,
+    components: &Components<M>,
 ) -> Result<BlockEntity, Compound> {
     let mut nbt = raw::new(kind, pos);
     raw::apply_components(kind, &mut nbt, components);

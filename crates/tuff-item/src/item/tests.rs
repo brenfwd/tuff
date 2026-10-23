@@ -173,7 +173,7 @@ fn nbt_round_trip_keeps_typed_raw_and_removed_components() {
         )
         .with("modded:thing", 4)
         .with("!minecraft:tool", Compound::new());
-    let nbt = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test)
+    let nbt = crate::item::ItemPicture::new(Item::DiamondPickaxe, 1)
         .to_nbt()
         .with("components", components);
     let stack = ItemStack::mint_from_nbt(&nbt, MintReason::Test).unwrap();
@@ -242,7 +242,7 @@ fn nbt_round_trip_of_suspicious_stew_effects() {
             Compound::new().with("id", "minecraft:hunger"),
         ],
     );
-    let nbt = ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Test)
+    let nbt = crate::item::ItemPicture::new(Item::SuspiciousStew, 1)
         .to_nbt()
         .with("components", components);
     let stack = ItemStack::mint_from_nbt(&nbt, MintReason::Test).unwrap();

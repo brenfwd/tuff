@@ -391,7 +391,7 @@ impl ItemUseExt for PlayerSession {
         if let Some(stack) = launched {
             self.item_action_hooks(
                 tuff_core::world::session::hooks::ItemAction::Shot,
-                stack.view(),
+                stack.any(),
             );
         }
         let id = self.shared.next_entity_id();
@@ -939,7 +939,7 @@ impl ItemUseExt for PlayerSession {
             .map(tuff_item::item::ItemSnapshot::of);
         if let Some(stack) = &consumed {
             self.fire(tuff_core::world::advancement::trigger::Event::ConsumeItem(
-                stack,
+                stack.any(),
             ));
         }
         let omen = (item == Item::OminousBottle).then(|| {

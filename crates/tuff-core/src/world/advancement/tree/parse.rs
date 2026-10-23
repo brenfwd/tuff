@@ -359,10 +359,7 @@ mod tests {
         assert_eq!(&*entry.name, "a:test");
         assert!(entry.parent_name.is_none());
         let display = entry.display.as_ref().unwrap();
-        assert_eq!(
-            display.icon,
-            ItemStack::mint(Item::Diamond, 3, MintReason::Test)
-        );
+        assert_eq!(display.icon, ItemPicture::new(Item::Diamond, 3));
         assert_eq!(display.frame, Frame::Task);
         assert!(display.show_toast && display.announce_to_chat && !display.hidden);
         assert_eq!(display.background.as_deref(), Some("minecraft:block/stone"));

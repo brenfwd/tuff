@@ -5,7 +5,7 @@ use super::*;
 use crate::storage::codec::WorldBackendExt as _;
 use crate::world::messages::HandEffect;
 use tuff_item::item::decor::BannerLayer;
-use tuff_item::item::{ComponentPatch, Components};
+use tuff_item::item::{ComponentPatch, Components, Picture};
 use tuff_vanilla_data::item::DyeColor;
 use tuff_vanilla_data::packet::play::Clientbound;
 use tuff_vanilla_data::registry::BlockEntityType;
@@ -26,7 +26,7 @@ async fn place_with(
     events: &mut mpsc::UnboundedReceiver<PlayerEvent>,
     (x, z): (i32, i32),
     item: Item,
-    components: Components,
+    components: Components<Picture>,
     sequence: i32,
 ) -> BlockPos {
     let floor = BlockPos::new(x, Generator::new(1).height(x, z), z);
@@ -41,7 +41,7 @@ async fn place_with(
     BlockPos::new(x, floor.y + 1, z)
 }
 
-fn patterned() -> Components {
+fn patterned() -> Components<Picture> {
     Components::from(ComponentPatch {
         banner_patterns: Some(vec![BannerLayer {
             inline: None,
@@ -53,7 +53,7 @@ fn patterned() -> Components {
     })
 }
 
-fn head(sound: &str) -> Components {
+fn head(sound: &str) -> Components<Picture> {
     Components::from(ComponentPatch {
         other: Compound::new()
             .with("minecraft:profile", Compound::new().with("name", "Steve"))
@@ -514,7 +514,7 @@ async fn block_entity_data_applies_only_for_operators_where_the_game_requires_it
     let (alice, mut alice_events) = PlayerHandle::new(100);
     subscribe(&region, &alice, &mut alice_events, &[pos]).await;
     let with_data = |id: &str, key: &str, value: Tag| {
-        Components::from(ComponentPatch {
+        Components::<Picture>::from(ComponentPatch {
             other: Compound::new().with(
                 "minecraft:block_entity_data",
                 Compound::new().with("id", id).with(key, value),

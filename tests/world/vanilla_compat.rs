@@ -132,7 +132,7 @@ fn compat_entities() -> [(Compound, [f64; 3]); 10] {
                     "equipment",
                     Compound::new().with(
                         "mainhand",
-                        ItemStack::mint(Item::Bow, 1, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Bow, 1).to_nbt(),
                     ),
                 )
                 .with("NoAI", true)

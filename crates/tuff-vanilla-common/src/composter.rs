@@ -21,7 +21,9 @@ pub fn with_level(state: BlockState, level: u8) -> BlockState {
 }
 
 /// The layer chance of a stack, if it is compostable.
-pub fn compostable(stack: &ItemStack) -> Option<&'static tuff_vanilla_data::provider::IntProvider> {
+pub fn compostable<M: tuff_item::item::Mode>(
+    stack: &ItemStack<M>,
+) -> Option<&'static tuff_vanilla_data::provider::IntProvider> {
     if stack.components.is_removed("minecraft:compostable") {
         return None;
     }

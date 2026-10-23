@@ -23,9 +23,12 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
     fn lock_admits(
         &self,
         lock: &tuff_nbt::Compound,
-        held: Option<&tuff_item::item::ItemStack>,
+        held: Option<tuff_item::item::AnyItem<'_>>,
     ) -> bool {
-        loot::lock_admits(lock, held)
+        match held {
+            None => loot::lock_admits::<tuff_item::item::Counted>(lock, None),
+            Some(held) => tuff_item::with_item!(held, |held| loot::lock_admits(lock, Some(held))),
+        }
     }
 
     fn container_loot(
@@ -73,7 +76,7 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
         &self,
         luck: f32,
         open_water: bool,
-        rod: &tuff_item::item::ItemStack,
+        rod: tuff_item::item::AnyItem<'_>,
         rng: &mut rand::rngs::StdRng,
     ) -> Vec<tuff_item::item::ItemStack> {
         loot::fishing_drops(&self.tables, luck, open_water, rod, rng)
@@ -82,7 +85,7 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
     fn can_harvest(
         &self,
         state: tuff_vanilla_data::BlockState,
-        tool: Option<&tuff_item::item::ItemStack>,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
     ) -> bool {
         loot::can_harvest(state, tool)
     }
@@ -90,7 +93,7 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
     fn drops(
         &self,
         state: tuff_vanilla_data::BlockState,
-        tool: Option<&tuff_item::item::ItemStack>,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
         block_entity: Option<&tuff_nbt::Compound>,
         rng: &mut rand::rngs::StdRng,
     ) -> Vec<tuff_item::item::ItemStack> {
@@ -100,7 +103,7 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
     fn drops_at(
         &self,
         state: tuff_vanilla_data::BlockState,
-        tool: Option<&tuff_item::item::ItemStack>,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
         block_entity: Option<&tuff_nbt::Compound>,
         at: &tuff_core::world::predicate::LocationFacts,
         world: Option<&dyn tuff_core::world::predicate::PredicateWorld>,
@@ -189,14 +192,14 @@ mod tests {
         let drops = loot.entity_drops("minecraft:entities/cow", &facts, &mut rng);
         assert!(drops.iter().any(|s| s.item() == Item::Beef));
         let rod = ItemStack::mint(Item::FishingRod, 1, MintReason::Test);
-        assert_eq!(loot.fishing(0.0, true, &rod, &mut rng).len(), 1);
+        assert_eq!(loot.fishing(0.0, true, rod.any(), &mut rng).len(), 1);
 
         let none = NoBlockLoot;
         assert!(
             none.roll("minecraft:chests/simple_dungeon", &mut rng)
                 .is_empty()
         );
-        assert!(none.fishing(0.0, true, &rod, &mut rng).is_empty());
+        assert!(none.fishing(0.0, true, rod.any(), &mut rng).is_empty());
     }
 
     #[tuff_core::watchdog]

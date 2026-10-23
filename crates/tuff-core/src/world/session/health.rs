@@ -247,7 +247,7 @@ impl PlayerSession {
     pub fn worn(&self) -> Vec<attributes::Equipped<'_>> {
         EQUIPMENT_SLOTS
             .into_iter()
-            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?)))
+            .filter_map(|slot| Some((slot, self.inventory.equipped(slot)?.any())))
             .collect()
     }
 

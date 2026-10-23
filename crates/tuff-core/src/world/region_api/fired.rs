@@ -22,7 +22,7 @@ impl Fired {
     /// Whether a hook may keep a dispensed `stack`, so the dispenser
     /// moves one out for it: projectiles, wearables and what a sulfur cube
     /// swallows. Items used in place (shears, buckets) stay in the slot.
-    pub fn keepable(stack: &ItemStack) -> bool {
+    pub fn keepable<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
         stack.item().dispense() != Some(tuff_vanilla_data::redstone::Dispense::Special)
             || stack
                 .equippable()

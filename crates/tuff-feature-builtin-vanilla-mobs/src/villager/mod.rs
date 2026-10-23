@@ -540,7 +540,7 @@ impl Villager {
 
     /// Whether it would pick up `stack`: food, what its profession wants,
     /// or the items every villager takes, if it has room.
-    pub fn wants(&self, stack: &ItemStack) -> bool {
+    pub fn wants<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         let wanted = tuff_datapack::tags::is(tag::item::key::VILLAGER_PICKS_UP, stack.item())
             || stack.item().villager_food().is_some()
             || self
@@ -553,7 +553,7 @@ impl Villager {
     }
 
     /// How many of `stack` its inventory can take.
-    pub fn room_for(&self, stack: &ItemStack) -> u32 {
+    pub fn room_for<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> u32 {
         let max = stack.max_stack_size() as u32;
         self.inventory
             .iter()

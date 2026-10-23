@@ -670,11 +670,7 @@ impl Villager {
         }
         let reach = crate::physics::inflate(core.bounds(), [1.0, 0.0, 1.0]);
         let wanted = |item: tuff_vanilla_data::Item, count: u8| {
-            let stack = tuff_item::item::ItemStack::mint(
-                item,
-                count,
-                tuff_item::item::MintReason::Template,
-            );
+            let stack = tuff_item::item::ItemPicture::new(item, count);
             self.wants(&stack)
                 .then(|| self.room_for(&stack).min(count as u32) as u8)
         };
@@ -700,7 +696,7 @@ impl Villager {
                         item: entity.id,
                         count: room,
                     }),
-                    Some(rest) => rest.burn(tuff_item::item::BurnReason::Template),
+                    Some(rest) => rest.burn(tuff_item::item::BurnReason::Destroyed),
                 }
                 return false;
             }

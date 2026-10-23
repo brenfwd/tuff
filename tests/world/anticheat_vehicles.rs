@@ -670,7 +670,7 @@ async fn a_galloping_jumping_horse_is_not_set_back_and_a_sped_up_one_is() {
             "equipment",
             Compound::new().with(
                 "saddle",
-                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
             ),
         )
         .with(
@@ -736,7 +736,7 @@ async fn a_horse_may_jump_but_not_fly() {
             "equipment",
             Compound::new().with(
                 "saddle",
-                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
             ),
         )
         .with(
@@ -793,7 +793,7 @@ async fn a_camel_that_flies_or_sprints_past_its_speed_is_set_back() {
         "equipment",
         Compound::new().with(
             "saddle",
-            ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
         ),
     );
     let _ = Tag::Byte(0);
@@ -876,7 +876,7 @@ fn saddled_tame() -> Compound {
             "equipment",
             Compound::new().with(
                 "saddle",
-                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
             ),
         )
 }
@@ -1049,7 +1049,7 @@ async fn a_camel_pig_and_strider_driven_far_past_their_run_are_held_to_it() {
         "equipment",
         Compound::new().with(
             "saddle",
-            ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
         ),
     );
     let (gain, corrections) = run_past_the_server_run(
@@ -1080,7 +1080,7 @@ async fn a_harnessed_happy_ghast_driven_far_past_its_flight_is_held_to_it() {
         "equipment",
         Compound::new().with(
             "body",
-            ItemStack::mint(Item::WhiteHarness, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::WhiteHarness, 1).to_nbt(),
         ),
     );
     let (gain, corrections) =

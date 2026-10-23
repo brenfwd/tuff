@@ -20,7 +20,6 @@ use tuff_core::world::physics::triangle;
 use tuff_core::world::projectile::{self, Pickup};
 use tuff_core::world::region_api::DispenseOutcome;
 use tuff_core::world::region_api::{RegionHooks, RegionWorld};
-use tuff_item::item::ItemStack;
 use tuff_vanilla_common::combat::{self, DamageContext, PostAttack, Side};
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::block::Facing;
@@ -165,7 +164,7 @@ impl RegionHooks for CombatRegionHooks {
             return;
         };
         for effect in combat::post_attack(
-            &[(EquipmentSlot::Mainhand, weapon)],
+            &[(EquipmentSlot::Mainhand, weapon.any())],
             Side::Attacker,
             &context,
             cx.rng,
@@ -202,7 +201,7 @@ fn armor_post_attack(
     cx: &mut TickContext,
 ) {
     let equipment = target.equipment();
-    let worn: Vec<(EquipmentSlot, &ItemStack)> = equipment
+    let worn: Vec<tuff_core::world::attributes::Equipped<'_>> = equipment
         .iter()
         .filter_map(|(slot, stack)| {
             let slot = match slot {
@@ -212,7 +211,7 @@ fn armor_post_attack(
                 5 => EquipmentSlot::Head,
                 _ => return None,
             };
-            Some((slot, stack.as_ref()?.get()))
+            Some((slot, (*stack)?))
         })
         .collect();
     if worn.is_empty() {

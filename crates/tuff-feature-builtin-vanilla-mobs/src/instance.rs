@@ -309,7 +309,7 @@ impl<S: Species> Mob<S> {
                 amount,
                 core.attribute(Attribute::Armor) as f32,
                 core.attribute(Attribute::ArmorToughness) as f32,
-                damage.weapon.as_deref(),
+                damage.weapon.as_deref().map(ItemStack::any),
                 &damage.context(kind),
                 cx.rng,
             );
@@ -1363,7 +1363,7 @@ const SHEARABLE_SLOTS: [tuff_vanilla_data::item::EquipmentSlot; 8] = {
 
 /// Whether shears take `worn` off: its equippable says so, and an item
 /// bound by an enchantment comes off only in creative.
-fn shearable(worn: Option<&ItemStack>, creative: bool) -> bool {
+fn shearable<M: tuff_item::item::Mode>(worn: Option<&ItemStack<M>>, creative: bool) -> bool {
     let Some(worn) = worn else {
         return false;
     };

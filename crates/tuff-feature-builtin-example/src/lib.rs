@@ -529,7 +529,7 @@ impl Recipe for DirtToDiamond {
     fn displays(&self) -> Vec<RecipeDisplay> {
         vec![RecipeDisplay::Shapeless {
             ingredients: vec![SlotDisplay::Ingredient(Self::DIRT)],
-            result: SlotDisplay::template(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting)),
+            result: SlotDisplay::template(tuff_item::item::ItemPicture::new(Item::Diamond, 1)),
             station: SlotDisplay::Item(Item::CraftingTable),
         }]
     }

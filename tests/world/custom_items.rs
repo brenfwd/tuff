@@ -254,7 +254,8 @@ async fn block_clicks_go_to_the_behaviour_and_hide_the_base_item() {
     .await;
     let click = |target, id: &str, sequence| {
         let mut click = place(&player, target, Item::FlintAndSteel, sequence);
-        click.components = std::mem::take(&mut stack(&world, id, 1).components).into();
+        click.components =
+            tuff_item::item::ComponentsSnapshot::of(&stack(&world, id, 1).components);
         click
     };
 

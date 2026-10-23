@@ -51,7 +51,7 @@ pub fn hit_slot(
     Some(section(x, columns) + row * columns)
 }
 
-fn is_enchanted(stack: &ItemStack) -> bool {
+fn is_enchanted<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     stack.item() == Item::EnchantedBook
 }
 
@@ -265,7 +265,7 @@ pub trait Shelves: RegionWorld {
     }
 }
 
-fn interact_vibrations(stack: &ItemStack) -> bool {
+fn interact_vibrations<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     stack.use_effects().interact_vibrations
 }
 

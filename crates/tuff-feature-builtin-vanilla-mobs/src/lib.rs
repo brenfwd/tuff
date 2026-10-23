@@ -388,8 +388,8 @@ impl tuff_core::feature::Feature for MobsFeature {
 
 /// The entity type a spawn egg stack hatches: its `entity_data`
 /// component's id, else the item's default.
-fn egg_entity_type(
-    stack: &tuff_item::item::ItemStack,
+fn egg_entity_type<M: tuff_item::item::Mode>(
+    stack: &tuff_item::item::ItemStack<M>,
 ) -> Option<tuff_vanilla_data::registry::EntityType> {
     match stack.components.other.get("minecraft:entity_data") {
         Some(tuff_nbt::Tag::Compound(data)) => data
@@ -440,11 +440,11 @@ fn merge_entity_data(
 }
 
 /// A dispenser hatches a spawn egg's mob in the block in front of it.
-fn dispense_spawn_egg(
+fn dispense_spawn_egg<M: tuff_item::item::Mode>(
     world: &mut dyn tuff_core::world::region_api::RegionWorld,
     pos: tuff_world_model::BlockPos,
     facing: tuff_vanilla_data::block::Facing,
-    stack: &tuff_item::item::ItemStack,
+    stack: &tuff_item::item::ItemStack<M>,
 ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
     use tuff_core::world::region_api::DispenseOutcome;
     let kind = egg_entity_type(stack)?;
@@ -486,9 +486,9 @@ fn dispense_spawn_egg(
 
 /// What a spawn egg's stack gives the mob it hatches: its custom name, and
 /// the components the mob takes on (a mannequin's profile).
-pub fn apply_egg_components(
+pub fn apply_egg_components<M: tuff_item::item::Mode>(
     entity: &mut Box<dyn tuff_core::world::entity::RegionEntity>,
-    components: &tuff_item::item::Components,
+    components: &tuff_item::item::Components<M>,
 ) {
     if let Some(name) = &components.custom_name {
         entity.base_mut().custom_name = Some(name.to_nbt());
@@ -577,7 +577,7 @@ impl tuff_core::world::region_api::RegionHooks for MobRegionHooks {
         &self,
         world: &mut dyn tuff_core::world::region_api::RegionWorld,
         action: &tuff_core::world::region_api::PlayerBlockAction,
-        tool: Option<&tuff_item::item::ItemStack>,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
     ) {
         hive::broken(world, action, tool);
     }

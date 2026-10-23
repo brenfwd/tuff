@@ -430,7 +430,7 @@ async fn a_comparator_reads_a_chest_minecart_on_a_detector_rail() {
         (0..3)
             .map(|slot| {
                 Tag::Compound(
-                    ItemStack::mint(Item::Stone, 64, MintReason::Test)
+                    tuff_item::item::ItemPicture::new(Item::Stone, 64)
                         .to_nbt()
                         .with("Slot", slot as i8),
                 )
@@ -468,7 +468,7 @@ async fn a_hopper_under_two_carts_pulls_from_either_at_random() {
             Compound::new().with(
                 "Items",
                 Tag::List(vec![Tag::Compound(
-                    ItemStack::mint(item, 64, MintReason::Test)
+                    tuff_item::item::ItemPicture::new(item, 64)
                         .to_nbt()
                         .with("Slot", 0i8),
                 )]),

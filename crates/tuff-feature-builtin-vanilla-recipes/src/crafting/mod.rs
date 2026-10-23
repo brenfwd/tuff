@@ -686,7 +686,7 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             let side = |x, y| {
                 input
                     .get(x, y)
-                    .map(|stack| ItemStack::mint_like(stack, 1, MintReason::Crafting))
+                    .map(|stack| tuff_item::item::ItemPicture::of(stack).with_count(1))
             };
             let mut result = result_stack(&pot.result);
             result.components.other.insert(

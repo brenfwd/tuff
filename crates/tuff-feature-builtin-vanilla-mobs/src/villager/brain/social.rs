@@ -174,7 +174,7 @@ pub type GossipRequests = super::super::Mail<i32>;
 /// A job site another villager gave up to the one it suits better.
 pub type JobOffers = super::super::Mail<BlockPos>;
 
-fn is_wanted_food(stack: &ItemStack) -> bool {
+fn is_wanted_food<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     stack.item().villager_food().is_some()
 }
 

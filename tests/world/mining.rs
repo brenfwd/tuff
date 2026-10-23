@@ -387,7 +387,12 @@ async fn crack_stages_reach_nearby_players_but_not_the_breaker() {
             sequence: 1,
         })
         .await;
-    let per_tick = player::destroy_progress(stone, None, &player::Miner::plain(true), false);
+    let per_tick = player::destroy_progress::<tuff_item::item::Counted>(
+        stone,
+        None,
+        &player::Miner::plain(true),
+        false,
+    );
     let first_change = (1..)
         .find(|ticks| player::crack_stage(per_tick, *ticks) == 1)
         .unwrap();

@@ -203,14 +203,14 @@ fn run_hooks(
         .find_map(|hook| hook.dispense(world, pos, facing, at, stack))
 }
 
-fn drop_into_target(
+fn drop_into_target<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     slot: usize,
     facing: Facing,
     target: BlockPos,
     state: BlockState,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
 ) -> bool {
     let mut one = None;
     world.edit_container_slot(pos, slot, &mut |held| {
@@ -280,11 +280,11 @@ fn forward(
 }
 
 /// Finishes a dispense once its hooks ran, given where the fired item is.
-fn complete(
+fn complete<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     slot: usize,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
     fate: Fate,
     outcome: DispenseOutcome,
 ) {

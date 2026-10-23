@@ -61,7 +61,7 @@ impl Thrown {
         Self {
             base,
             owner,
-            item: item.keep(1, BurnReason::Template),
+            item: item.keep(1, BurnReason::Consumed),
             ticks: 0,
         }
     }
@@ -392,7 +392,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     let item = take(nbt, "Item", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     })
-    .unwrap_or_else(|| ItemStack::mint(default, 1, MintReason::Template));
+    .unwrap_or_else(|| ItemStack::mint(default, 1, MintReason::Spawn));
     let mut owner = Owner::default();
     owner.load(nbt);
     Some(Box::new(Thrown {

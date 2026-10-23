@@ -202,7 +202,7 @@ async fn powder_snow_freezes_and_hurts_a_mob_and_saves_its_frozen_ticks() {
         [4.5, SKY as f64, 4.5],
     )
     .await;
-    let boots = ItemStack::mint(Item::LeatherBoots, 1, MintReason::Test).to_nbt();
+    let boots = tuff_item::item::ItemPicture::new(Item::LeatherBoots, 1).to_nbt();
     summon(
         &region,
         EntityType::Pig,

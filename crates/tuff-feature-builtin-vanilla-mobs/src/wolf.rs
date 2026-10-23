@@ -82,7 +82,7 @@ fn armor_crack_tier(damage: u32, max_damage: u32) -> usize {
         .count()
 }
 
-fn armor_tier(stack: Option<&ItemStack>) -> usize {
+fn armor_tier<M: tuff_item::item::Mode>(stack: Option<&ItemStack<M>>) -> usize {
     stack
         .filter(|stack| stack.is_damageable())
         .and_then(|stack| Some(armor_crack_tier(stack.damage(), stack.max_damage()?)))
@@ -282,7 +282,7 @@ impl Species for Wolf {
         120
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         core_owned_food(stack)
     }
 
@@ -465,7 +465,7 @@ impl Wolf {
     }
 }
 
-fn core_owned_food(stack: &ItemStack) -> bool {
+fn core_owned_food<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     wolf_food(stack.item())
 }
 

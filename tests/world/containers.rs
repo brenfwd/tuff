@@ -384,7 +384,7 @@ async fn a_loot_chest_explorer_map_is_finished_or_dropped() {
     }
     let finished = finished.expect("the map slot was finished or emptied");
     if let Some(map) = finished.1 {
-        assert!(!waiting(&map));
+        assert!(tuff_feature_builtin_vanilla_loot::exploration::pending(&*map).is_none());
         assert!(map.components.map_id.is_some());
     }
 
@@ -688,7 +688,7 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
     let shulker = BlockPos::new(5, floor.y + 1, 5);
     let apple = ItemStack::mint(Item::Apple, 4, MintReason::Test);
     let mut placing = place(&alice, floor, Item::ShulkerBox, 3);
-    placing.components.container = Some(vec![Some(apple.test_copy())]);
+    placing.components.container = Some(vec![Some(tuff_item::item::ItemPicture::of(&apple))]);
     region.request(RegionRequest::Place(placing)).await;
     expect(&mut alice_events, |event| match event {
         PlayerEvent::ActionResult {
@@ -750,7 +750,10 @@ async fn ender_chests_and_shulker_boxes_open_through_the_region() {
     })
     .await;
     assert_eq!(offered.item(), Item::ShulkerBox);
-    assert_eq!(offered.components.container, Some(vec![Some(apple)]));
+    assert_eq!(
+        offered.components.container,
+        Some(vec![Some(tuff_item::item::ItemPicture::of(&apple))])
+    );
     while let Ok(event) = bob_events.try_recv() {
         assert!(
             !matches!(event, PlayerEvent::OfferItem { .. }),

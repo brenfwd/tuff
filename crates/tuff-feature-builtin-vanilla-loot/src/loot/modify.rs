@@ -82,7 +82,7 @@ pub fn modify_item(functions: &[LootFunction], stack: ItemStack, rng: &mut impl 
                     );
                     let mut patch = stack.components.to_nbt();
                     patch.insert(target, name);
-                    stack.components = Components::from_nbt(&patch);
+                    stack.set_components_nbt(&patch, MintReason::Loot, BurnReason::Loot);
                 }
             }
             kind => stack = modify_stack(stack, kind, &params, &context, rng),

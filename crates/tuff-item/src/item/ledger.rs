@@ -43,11 +43,12 @@ pub enum MintReason {
     Command,
     /// A plugin with an item grant.
     Plugin,
-    /// A stand-in showing items in a slot without being them: a result
-    /// slot's preview (its items are made when taken), a session's mirror
-    /// of slots another actor owns, a click worked out on copies before
-    /// real stacks move. Counted and drop-checked like any stack, so one
-    /// cannot leak unnoticed; burned with [`BurnReason::Preview`].
+    /// A stand-in for items that are not real yet or are owned elsewhere,
+    /// where counted operations are needed: a result slot's preview (its
+    /// items are made when taken), a session's mirror of slots another
+    /// actor owns, a click worked out on copies before real stacks move, a
+    /// probe run through recipes. Counted and drop-checked like any stack,
+    /// so one cannot leak unnoticed; burned with [`BurnReason::Preview`].
     Preview,
     /// Tests and fixtures: real items like any other.
     Test,
@@ -351,8 +352,23 @@ impl<M: Mode> ItemStack<M> {
 
     /// How many items the stacks nested in this one hold, at every depth.
     pub fn nested_count(&self) -> u64 {
-        self.components
-            .nested()
+        self.components.nested_count()
+    }
+
+    /// Tests and fixtures only: new items like this stack, minted for
+    /// [`MintReason::Test`]. Only built for this crate's tests and with the
+    /// `test-support` feature, which only dev-dependencies enable.
+    #[cfg(any(test, feature = "test-support"))]
+    #[track_caller]
+    pub fn test_copy(&self) -> ItemStack {
+        ItemStack::mint_like(self, self.count, MintReason::Test)
+    }
+}
+
+impl<M: Mode> ComponentPatch<M> {
+    /// How many items the stacks nested in this patch hold, at every depth.
+    pub fn nested_count(&self) -> u64 {
+        self.nested()
             .filter(|stack| !stack.is_empty())
             .map(|stack| u64::from(stack.count) + stack.nested_count())
             .sum()
@@ -435,15 +451,6 @@ impl ItemStack {
         ItemPicture::describe(item, count, components.picture()).realize(Door::Mint(reason))
     }
 
-    /// Tests and fixtures only: new items like this stack, minted for
-    /// [`MintReason::Test`]. Only built for this crate's tests and with the
-    /// `test-support` feature, which only dev-dependencies enable.
-    #[cfg(any(test, feature = "test-support"))]
-    #[track_caller]
-    pub fn test_copy(&self) -> Self {
-        Self::mint_like(self, self.count, MintReason::Test)
-    }
-
     /// New items read from their `{id, count, components}` form.
     /// `None` for unknown items and air.
     #[track_caller]
@@ -487,6 +494,18 @@ impl ItemStack {
         if self.components.is_allocated() {
             conservation::release(std::mem::take(&mut self.components));
         }
+    }
+
+    /// Replaces the components with those `nbt` (their stored form)
+    /// describes: stacks nested in the old ones are burned for `burn`,
+    /// the ones `nbt` describes minted for `mint`.
+    #[track_caller]
+    pub fn set_components_nbt(&mut self, nbt: &Compound, mint: MintReason, burn: BurnReason) {
+        let new = Components::from_nbt(nbt).realize(Door::Mint(mint));
+        let old = std::mem::replace(&mut self.components, new);
+        conservation::burned(old.nested_count());
+        conservation::release(old);
+        self.note(format_args!("set components from nbt ({mint:?}, {burn:?})"));
     }
 
     /// Turns this stack into `count` of `item` keeping its components:
@@ -890,13 +909,16 @@ mod tests {
         taken.burn(BurnReason::Test);
     }
 
+    /// Off the test's own thread, so the drop is checked as an actor's.
+    #[tuff_core::watchdog]
     #[test]
-    #[should_panic(expected = "dropped without being stored or burned")]
     fn a_nested_stack_is_real_items() {
         let mut shulker = ItemStack::mint_like(&shulker_holding(5), 1, MintReason::Command);
         let slots = shulker.components.container.take().unwrap();
         shulker.burn(BurnReason::Destroyed);
-        drop(slots);
+        let before = conservation::totals();
+        let _ = std::thread::spawn(move || drop(slots)).join();
+        assert!(conservation::totals().since(before).lost >= 5);
     }
 
     /// The counters are process-wide and other tests run alongside, so

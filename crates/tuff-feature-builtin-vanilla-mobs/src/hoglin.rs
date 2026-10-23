@@ -488,7 +488,7 @@ impl Species for Hoglin {
         core.avoid.is_none()
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::HOGLIN_FOOD, stack.item())
     }
 

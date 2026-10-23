@@ -39,7 +39,7 @@ impl Pending {
         }
     }
 
-    fn add(&mut self, stack: &ItemStack, delta: i64, slot: usize) {
+    fn add<M: tuff_item::item::Mode>(&mut self, stack: &ItemStack<M>, delta: i64, slot: usize) {
         let one = ItemSnapshot::of(stack).with_count(1);
         match self.items.iter_mut().find(|net| net.stack == one) {
             Some(net) => {
@@ -224,10 +224,11 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
 
 /// The stack a row's item data names.
 pub fn stack_of(data: Option<&Compound>) -> Option<ItemSnapshot> {
-    let stack = ItemStack::mint_from_nbt(data?, MintReason::Template)?;
-    let one = ItemSnapshot::of(&stack).with_count(1);
-    stack.burn(BurnReason::Template);
-    Some(one)
+    Some(
+        tuff_item::item::ItemPicture::from_nbt(data?)?
+            .with_count(1)
+            .into(),
+    )
 }
 
 #[cfg(test)]

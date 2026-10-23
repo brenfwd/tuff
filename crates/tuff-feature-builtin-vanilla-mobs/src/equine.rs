@@ -165,9 +165,9 @@ fn ridden(core: &MobCore) -> bool {
 /// A click with a saddle on a mount that needs no taming (camel): it goes
 /// on if the slot is empty and the mount is grown, with the mount's own
 /// `sound` if it has one, else the saddle's.
-pub fn saddle_up(
+pub fn saddle_up<M: tuff_item::item::Mode>(
     core: &mut MobCore,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
     hand: &HandOffer,
     sound: Option<SoundEvent>,
     cx: &mut TickContext,
@@ -187,9 +187,9 @@ pub fn saddle_up(
 
 /// Sneak-click equipping on a tamed adult (a nautilus): a saddle, and
 /// with `allow_body` body armor, into an empty slot.
-pub fn try_equip(
+pub fn try_equip<M: tuff_item::item::Mode>(
     core: &mut MobCore,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
     hand: &HandOffer,
     allow_body: bool,
     cx: &mut TickContext,
@@ -363,7 +363,10 @@ impl MountInventory {
     }
 }
 
-fn equip_sound(slot: EquipmentSlot, stack: &ItemStack) -> Option<SoundEvent> {
+fn equip_sound<M: tuff_item::item::Mode>(
+    slot: EquipmentSlot,
+    stack: &ItemStack<M>,
+) -> Option<SoundEvent> {
     if slot == EquipmentSlot::Saddle {
         return Some(SoundEvent::EntityHorseSaddle);
     }
@@ -551,7 +554,12 @@ impl Equine {
         used
     }
 
-    fn can_equip_saddle(&self, core: &MobCore, profile: &Profile, stack: &ItemStack) -> bool {
+    fn can_equip_saddle<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        profile: &Profile,
+        stack: &ItemStack<M>,
+    ) -> bool {
         profile.saddles
             && is_tame(core)
             && !core.is_baby()
@@ -562,11 +570,21 @@ impl Equine {
                 .is_some_and(|eq| eq.equip_on_interact && eq.slot == EquipmentSlot::Saddle)
     }
 
-    fn can_equip_armor(&self, core: &MobCore, profile: &Profile, stack: &ItemStack) -> bool {
+    fn can_equip_armor<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        profile: &Profile,
+        stack: &ItemStack<M>,
+    ) -> bool {
         profile.armor.fits(stack) && core.equipment.get(EquipmentSlot::Body).is_none()
     }
 
-    fn can_equip_chest(&self, core: &MobCore, profile: &Profile, stack: &ItemStack) -> bool {
+    fn can_equip_chest<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        profile: &Profile,
+        stack: &ItemStack<M>,
+    ) -> bool {
         profile.chested && !self.has_chest && stack.item() == Item::Chest && is_tame(core)
     }
 
@@ -586,11 +604,11 @@ impl Equine {
 
     /// Whether a plain click holding `stack` does something other than
     /// getting on.
-    pub fn refuses_mount(
+    pub fn refuses_mount<M: tuff_item::item::Mode>(
         &self,
         core: &MobCore,
         profile: &Profile,
-        stack: Option<&ItemStack>,
+        stack: Option<&ItemStack<M>>,
     ) -> bool {
         if profile.tame_to_touch && !is_tame(core) {
             return true;
@@ -668,12 +686,12 @@ impl Equine {
     }
 
     /// A dispenser fires `stack` at it: a chest onto a tamed chested one.
-    pub fn dispensed_on(
+    pub fn dispensed_on<M: tuff_item::item::Mode>(
         &mut self,
         core: &mut MobCore,
         profile: &Profile,
         columns: u8,
-        stack: &ItemStack,
+        stack: &ItemStack<M>,
     ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
         if !self.can_equip_chest(core, profile, stack) {
             return None;
@@ -1012,7 +1030,7 @@ macro_rules! equine_species {
             data
         }
 
-        fn is_food(&self, stack: &ItemStack) -> bool {
+        fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
             (Self::PROFILE.food)(stack.item())
         }
 
@@ -1050,7 +1068,11 @@ macro_rules! equine_species {
             1.0
         }
 
-        fn mount_refused(&self, core: &MobCore, stack: Option<&ItemStack>) -> bool {
+        fn mount_refused<M: tuff_item::item::Mode>(
+            &self,
+            core: &MobCore,
+            stack: Option<&ItemStack<M>>,
+        ) -> bool {
             self.equine.refuses_mount(core, &Self::PROFILE, stack) || self.refuses_rider(core)
         }
 

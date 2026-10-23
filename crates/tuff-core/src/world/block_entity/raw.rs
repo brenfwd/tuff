@@ -600,7 +600,7 @@ mod tests {
     #[test]
     fn banner_patterns_and_names_move_between_item_and_block_entity() {
         let kind = BlockEntityType::Banner;
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             banner_patterns: Some(vec![BannerLayer {
                 inline: None,
                 pattern: "minecraft:stripe_top".into(),
@@ -630,7 +630,7 @@ mod tests {
     #[test]
     fn containers_skulls_signs_and_loot_map_to_their_fields() {
         let mut shelf = new(BlockEntityType::ChiseledBookshelf, BlockPos::default());
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             container: Some(vec![
                 Some(ItemStack::mint(Item::Book, 1, MintReason::Test)),
                 None,
@@ -655,7 +655,7 @@ mod tests {
 
         let mut skull = new(BlockEntityType::Skull, BlockPos::default());
         let profile = Compound::new().with("name", "Steve");
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             custom_name: Some(Box::new(TextComponent::new("Head"))),
             other: Compound::new()
                 .with("minecraft:profile", profile.clone())
@@ -673,7 +673,7 @@ mod tests {
 
         let mut sign = new(BlockEntityType::Sign, BlockPos::default());
         assert!(collect_components(BlockEntityType::Sign, &sign).is_empty());
-        let waxed = Components::from(ComponentPatch {
+        let waxed: Components = Components::from(ComponentPatch {
             other: Compound::new().with("minecraft:waxed", Compound::new()),
             ..Default::default()
         });
@@ -688,7 +688,7 @@ mod tests {
         let loot = Compound::new()
             .with("loot_table", "minecraft:chests/simple_dungeon")
             .with("seed", 5i64);
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             other: Compound::new().with("minecraft:container_loot", loot.clone()),
             ..Default::default()
         });

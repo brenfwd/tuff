@@ -651,7 +651,7 @@ fn displays_follow_the_game_shapes() {
             assert_eq!(ingredients.len(), 2);
             assert_eq!(
                 *result,
-                SlotDisplay::template(ItemStack::mint(Item::Torch, 4, MintReason::Test))
+                SlotDisplay::template(tuff_item::item::ItemPicture::new(Item::Torch, 4))
             );
             assert_eq!(*station, SlotDisplay::Item(Item::CraftingTable));
         }

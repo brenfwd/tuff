@@ -192,13 +192,13 @@ impl ItemFrame {
 
     pub fn set_item(&mut self, item: Option<ItemStack>) {
         if let Some(old) = self.replace_item(item) {
-            old.burn(BurnReason::Template);
+            old.burn(BurnReason::Destroyed);
         }
     }
 
     /// Puts `item` (one of it) in the frame and hands back what it held.
     pub fn replace_item(&mut self, item: Option<ItemStack>) -> Option<ItemStack> {
-        let item = item.map(|stack| stack.keep(1, BurnReason::Template));
+        let item = item.map(|stack| stack.keep(1, BurnReason::Destroyed));
         let had_map = self.has_map();
         let old = std::mem::replace(&mut self.item, item);
         self.changed.push(DATA_ITEM);

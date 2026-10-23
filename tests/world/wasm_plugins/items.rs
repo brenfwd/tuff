@@ -95,10 +95,10 @@ async fn drops_swaps_pickups_and_crafts_are_reported_and_cancelled_by_filter() {
     );
 
     let egg = ItemStack::mint(Item::Egg, 2, MintReason::Test);
-    assert!(!Pickups.allows_item_pickup(&client.session, egg.view()));
+    assert!(!Pickups.allows_item_pickup(&client.session, egg.any()));
     assert!(Pickups.allows_item_pickup(
         &client.session,
-        ItemStack::mint(Item::Stick, 2, MintReason::Test).view()
+        ItemStack::mint(Item::Stick, 2, MintReason::Test).any()
     ));
 
     *client.session.inventory.slot_mut(0) = Some(ItemStack::mint(Item::Stick, 4, MintReason::Test));

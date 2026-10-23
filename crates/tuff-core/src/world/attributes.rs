@@ -7,8 +7,6 @@ use serde_json::Value;
 use tuff_vanilla_data::item::{EquipmentSlot, EquipmentSlotGroup, ModifierOperation};
 use tuff_vanilla_data::registry::{Attribute, EntityType, MobEffect};
 
-use tuff_item::item::ItemStack;
-
 const MAX_KNOCKBACK_Y: f64 = 0.4;
 
 /// A modifier added by `/attribute`.
@@ -198,7 +196,7 @@ impl AttributeOverrides {
 }
 
 /// A worn or held item and the slot it is in.
-pub type Equipped<'a> = (EquipmentSlot, &'a ItemStack);
+pub type Equipped<'a> = (EquipmentSlot, tuff_item::item::AnyItem<'a>);
 
 /// What changes a player's attribute values.
 #[derive(Clone, Copy)]
@@ -248,8 +246,7 @@ impl<'a> Modifiers<'a> {
                     );
                 }
             }
-            for (_, def, level) in
-                tuff_item::enchantment::leveled(&registry, stack.components.enchantments.as_ref())
+            for (_, def, level) in tuff_item::enchantment::leveled(&registry, stack.enchantments())
             {
                 if !applies_in(def, *slot) {
                     continue;
@@ -445,7 +442,7 @@ pub fn modifier_operation(
 mod tests {
     use super::*;
     use crate::world::messages::{AttributeAnswer, AttributeCommand, AttributeOp};
-    use tuff_item::item::MintReason;
+    use tuff_item::item::{ItemStack, MintReason};
 
     #[tuff_core::watchdog]
     #[test]
@@ -487,10 +484,10 @@ mod tests {
         use tuff_vanilla_data::item::EquipmentSlot;
         for item in [Item::CarvedPumpkin, Item::ZombieHead, Item::DragonHead] {
             let stack = ItemStack::mint(item, 1, MintReason::Test);
-            let worn = [(EquipmentSlot::Head, &stack)];
+            let worn = [(EquipmentSlot::Head, stack.any())];
             let hidden = Modifiers::equipment(&worn).value(Attribute::WaypointTransmitRange);
             assert_eq!(hidden, 0.0, "{item:?}");
-            let carried = [(EquipmentSlot::Mainhand, &stack)];
+            let carried = [(EquipmentSlot::Mainhand, stack.any())];
             assert!(Modifiers::equipment(&carried).value(Attribute::WaypointTransmitRange) > 0.0);
         }
     }

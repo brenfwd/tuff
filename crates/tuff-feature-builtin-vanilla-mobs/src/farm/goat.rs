@@ -137,7 +137,7 @@ impl Species for Goat {
         170
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         goat_food(stack.item())
     }
 

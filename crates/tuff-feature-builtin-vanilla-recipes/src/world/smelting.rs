@@ -9,13 +9,13 @@ use tuff_core::world::crafting::smelting::{
 };
 use tuff_core::world::crafting::{RecipeSet, result_stack};
 use tuff_item::item::BurnReason;
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemPicture, ItemStack, MintReason};
 use tuff_vanilla_data::{BlockState, Item};
 
 const COOL_SPEED: i32 = 2;
 const CONTAINER_MAX_STACK: u8 = 99;
 
-fn can_burn(items: &[Option<ItemStack>], result: &ItemStack) -> bool {
+fn can_burn(items: &[Option<ItemStack>], result: &ItemPicture) -> bool {
     match &items[furnace::RESULT] {
         None => true,
         Some(current) => {
@@ -43,7 +43,7 @@ fn consume_fuel(items: &mut [Option<ItemStack>], drops: &mut Vec<ItemStack>) {
     }
 }
 
-fn burn(items: &mut [Option<ItemStack>], result: &ItemStack) {
+fn burn(items: &mut [Option<ItemStack>], result: &ItemPicture) {
     match &mut items[furnace::RESULT] {
         None => {
             items[furnace::RESULT] = Some(ItemStack::mint_like(

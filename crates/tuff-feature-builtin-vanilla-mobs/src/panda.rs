@@ -696,7 +696,7 @@ impl Species for Panda {
         Some(SoundEvent::EntityPandaEat)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         panda_food(stack.item())
     }
 

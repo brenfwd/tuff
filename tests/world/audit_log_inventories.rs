@@ -137,7 +137,7 @@ async fn log_pickup(shared: &Shared, name: &str, count: i32) {
 async fn write_stored(shared: &Shared, uuid: u128, diamonds: u8) {
     let backend = shared.backend.clone();
     tokio::task::spawn_blocking(move || {
-        let mut stack = ItemStack::mint(Item::Diamond, diamonds, MintReason::Test).to_nbt();
+        let mut stack = tuff_item::item::ItemPicture::new(Item::Diamond, diamonds).to_nbt();
         stack.insert("Slot", Tag::Byte(0));
         let root = Compound::new().with("Inventory", Tag::from(vec![stack]));
         player_data::save(backend.documents(), uuid, root).unwrap();

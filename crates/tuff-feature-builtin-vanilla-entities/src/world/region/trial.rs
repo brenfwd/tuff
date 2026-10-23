@@ -1198,7 +1198,10 @@ fn dispensing_items(
         .into_iter()
         .map(|stack| {
             let weight = u64::from(stack.count());
-            (stack.keep(1, BurnReason::Loot).into_template(), weight)
+            (
+                stack.keep(1, BurnReason::Loot).into_picture().into(),
+                weight,
+            )
         })
         .collect()
 }

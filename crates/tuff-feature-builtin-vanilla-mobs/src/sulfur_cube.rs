@@ -295,7 +295,7 @@ impl SulfurCube {
     /// Follows a change of the swallowed block: its archetypes' modifiers
     /// and effects, and the goals it only has while empty.
     fn sync_body(&mut self, core: &mut MobCore) {
-        if body(core) == self.applied.as_deref() {
+        if tuff_item::item::same_slot(body(core), self.applied.as_deref()) {
             return;
         }
         let current = body(core).map(tuff_item::item::ItemSnapshot::of);
@@ -801,7 +801,7 @@ impl Species for SulfurCube {
         Some(SoundEvent::EntitySmallSulfurCubeEat)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         food(stack.item())
     }
 

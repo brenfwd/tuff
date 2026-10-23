@@ -129,7 +129,7 @@ fn block_is(cx: &TickContext, pos: BlockPos, block: Block) -> bool {
     (cx.block)(pos).is_some_and(|s| s.block() == block)
 }
 
-fn has_potion_mismatch(a: &ItemStack, b: &ItemStack) -> bool {
+fn has_potion_mismatch<M: tuff_item::item::Mode>(a: &ItemStack<M>, b: &ItemStack<M>) -> bool {
     a.components.potion_contents != b.components.potion_contents
 }
 

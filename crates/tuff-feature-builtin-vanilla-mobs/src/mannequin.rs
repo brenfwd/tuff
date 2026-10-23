@@ -493,7 +493,7 @@ mod tests {
                 EntityBase::new(EntityType::Mannequin, 1, 1, [0.0; 3], [0.0; 3]),
                 &mut rng,
             ));
-        let mut components = tuff_item::item::Components::default();
+        let mut components = tuff_item::item::Components::new();
         components
             .other
             .insert("minecraft:profile", Tag::String("Dream".into()));

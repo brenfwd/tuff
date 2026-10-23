@@ -14,8 +14,7 @@ use tuff_core::world::item_port::{ItemPort, PortAccess, Porter};
 use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
 use tuff_core::world::redstone::UPDATE_ALL;
 use tuff_core::world::region_api::RegionWorld;
-use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
-use tuff_nbt::Compound;
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason, conservation};
 use tuff_vanilla_common::composter::{COMPOSTER_FILL, FULL, READY, compostable, level, with_level};
 use tuff_world_model::BlockPos;
 
@@ -124,7 +123,6 @@ impl ItemPort for ComposterPort {
         if !ripe(world, at) {
             return None;
         }
-        let meal = ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop);
         let state = world.block(at.pos)?;
         let by_hand = matches!(at.by, Porter::Mob(_) | Porter::Player(_));
         if by_hand {
@@ -133,11 +131,7 @@ impl ItemPort for ComposterPort {
         let empty = with_level(state, 0);
         world.set_block_flags(at.pos, empty, UPDATE_ALL);
         changed(world, at.pos, empty, at.by);
-        if by_hand {
-            meal.burn(tuff_item::item::BurnReason::Template);
-            return None;
-        }
-        Some(meal)
+        (!by_hand).then(|| ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop))
     }
 }
 
@@ -164,22 +158,23 @@ impl ItemPort for PotPort {
         let Some(nbt) = world.raw_block_entity_mut(at.pos) else {
             return Err(stack);
         };
-        let merged = match nbt
-            .get_compound(POT_ITEM)
-            .and_then(ItemStack::picture_from_nbt)
-        {
+        let merged = match nbt.get_compound(POT_ITEM).and_then(ItemStack::from_storage) {
             None => stack,
             Some(mut held) => {
-                if !held.stacks_with(&stack) || held.count() >= held.max_stack_size() {
+                let refused = if held.count() >= held.max_stack_size() {
+                    Err(stack)
+                } else {
+                    held.join(stack)
+                };
+                if let Err(stack) = refused {
+                    conservation::release(held);
                     return Err(stack);
                 }
-                held.join(stack)?;
                 held
             }
         };
-        let compound: Compound = merged.to_nbt();
-        tuff_item::item::conservation::release(merged);
-        nbt.insert(POT_ITEM, compound);
+        nbt.insert(POT_ITEM, merged.to_storage());
+        conservation::release(merged);
         world.mark_blocks_dirty(at.pos);
         Ok(())
     }

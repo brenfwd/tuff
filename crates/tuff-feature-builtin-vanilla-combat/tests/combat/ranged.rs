@@ -461,7 +461,7 @@ async fn drowned_with_tridents_throw_them() {
     let (player, mut events) = PlayerHandle::new(1000);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
-    let trident = ItemStack::mint(Item::Trident, 1, MintReason::Test).to_nbt();
+    let trident = tuff_item::item::ItemPicture::new(Item::Trident, 1).to_nbt();
     summon(
         &region,
         EntityType::Drowned,

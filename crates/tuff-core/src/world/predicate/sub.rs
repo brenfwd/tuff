@@ -675,6 +675,7 @@ mod tests {
     use super::super::{EntityFacts, LiveFacts, PlayerFacts, entity};
     use super::*;
     use crate::protocol::play::GameMode;
+    use tuff_item::item::MintReason;
 
     fn test(predicate: Value, facts: &EntityFacts) -> bool {
         entity(&predicate, facts, facts.position)
@@ -718,9 +719,9 @@ mod tests {
     #[test]
     fn slots_cover_equipment_inventory_and_ender_chest() {
         let mut saved = Compound::new();
-        let mut stone = ItemStack::mint(Item::Stone, 3, MintReason::Test).to_nbt();
+        let mut stone = tuff_item::item::ItemPicture::new(Item::Stone, 3).to_nbt();
         stone.insert("Slot", 4i8);
-        let mut pearl = ItemStack::mint(Item::EnderPearl, 1, MintReason::Test).to_nbt();
+        let mut pearl = tuff_item::item::ItemPicture::new(Item::EnderPearl, 1).to_nbt();
         pearl.insert("Slot", 2i8);
         saved.insert("Inventory", Tag::List(vec![Tag::Compound(stone)]));
         saved.insert("EnderItems", Tag::List(vec![Tag::Compound(pearl)]));
