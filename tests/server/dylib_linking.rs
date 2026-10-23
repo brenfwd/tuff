@@ -9,6 +9,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(not(target_os = "macos"))]
 fn dylib_path() -> Option<PathBuf> {
     std::fs::read_to_string("/proc/self/maps")
         .ok()?
@@ -16,6 +17,28 @@ fn dylib_path() -> Option<PathBuf> {
         .filter_map(|line| line.split_whitespace().nth(5))
         .find(|path| path.ends_with("/libtuff_dylib.so"))
         .map(PathBuf::from)
+}
+
+#[cfg(target_os = "macos")]
+fn dylib_path() -> Option<PathBuf> {
+    unsafe extern "C" {
+        fn _dyld_image_count() -> u32;
+        fn _dyld_get_image_name(index: u32) -> *const std::ffi::c_char;
+    }
+    (0..unsafe { _dyld_image_count() })
+        .map(|i| unsafe { std::ffi::CStr::from_ptr(_dyld_get_image_name(i)) })
+        .map(|name| name.to_string_lossy().into_owned())
+        .find(|path| path.ends_with("/libtuff_dylib.dylib"))
+        .map(PathBuf::from)
+}
+
+/// Mach-O symbol names carry a leading underscore that ELF names lack.
+fn unprefixed(name: &str) -> &str {
+    if cfg!(target_os = "macos") {
+        name.strip_prefix('_').unwrap_or(name)
+    } else {
+        name
+    }
 }
 
 /// `(kind, name)` of every symbol `path` defines, or `None` without `nm`.
@@ -33,7 +56,7 @@ fn defined_symbols(path: &Path) -> Option<Vec<(char, String)>> {
                 let mut parts = line.split_whitespace();
                 let _address = parts.next()?;
                 let kind = parts.next()?.chars().next()?;
-                Some((kind, parts.next()?.to_owned()))
+                Some((kind, unprefixed(parts.next()?).to_owned()))
             })
             .collect(),
     )
