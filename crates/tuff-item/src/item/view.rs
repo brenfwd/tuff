@@ -105,12 +105,13 @@ impl ItemSnapshot {
         count: u8,
         components: super::Components,
     ) -> Self {
-        Self(Arc::new(ItemStack {
+        Self(Arc::new(ItemStack::assemble(
             item,
             count,
             components,
-            tally: super::ledger::Tally::Picture,
-        }))
+            super::ledger::Tally::Picture,
+            format_args!("describe"),
+        )))
     }
 
     /// A picture of `count` of `item` with a copy of `components`.

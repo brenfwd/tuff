@@ -292,7 +292,7 @@ impl Equipment {
         for (((_, name, _), stack), chance) in SLOTS.iter().zip(&self.items).zip(self.drop_chances)
         {
             if let Some(stack) = stack {
-                equipment.insert(*name, stack.to_nbt());
+                equipment.insert(*name, stack.to_storage());
             }
             if chance != DEFAULT_DROP_CHANCE {
                 chances.insert(*name, chance);

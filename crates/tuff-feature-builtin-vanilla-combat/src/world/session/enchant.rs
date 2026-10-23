@@ -186,12 +186,22 @@ pub async fn post_piercing_attack(session: &mut PlayerSession, weapon: &ItemStac
     )];
     let facts = session.player_facts();
     for fired in fire(session, |e| &e.post_piercing_attack, &equipment, &facts) {
-        Box::pin(apply(session, fired.slot, fired.actions)).await;
+        apply(session, fired.slot, fired.actions).await;
     }
 }
 
 /// Applies `actions` of an enchantment on the item in `slot` to the player.
-pub async fn apply(session: &mut PlayerSession, slot: EquipmentSlot, actions: Vec<Action>) {
+/// Boxed so callers' futures are proven `Send` without the solver walking
+/// every session method this reaches.
+pub fn apply<'a>(
+    session: &'a mut PlayerSession,
+    slot: EquipmentSlot,
+    actions: Vec<Action>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+    Box::pin(apply_actions(session, slot, actions))
+}
+
+async fn apply_actions(session: &mut PlayerSession, slot: EquipmentSlot, actions: Vec<Action>) {
     let mut world = Vec::new();
     for action in actions {
         match action {

@@ -12,9 +12,11 @@ pub mod enchanting;
 pub mod equippable;
 pub mod gear;
 pub mod hash;
+mod history;
 pub mod identity;
 mod ledger;
 mod view;
+pub use history::History;
 pub use ledger::{BurnReason, LedgerTotals, MintReason, SlotsCow, conservation};
 pub use view::{AsItemView, ComponentsSnapshot, ItemSnapshot, ItemView, snapshot_slots};
 
@@ -89,6 +91,7 @@ pub struct ItemStack {
     /// reported as lost.
     pub components: Components,
     tally: ledger::Tally,
+    history: History,
 }
 
 /// A stack's component patch, stored sparsely: a stack without components
@@ -585,9 +588,11 @@ pub fn typed_entity_name(kind: DataComponentType, id: u32) -> Option<&'static st
 }
 
 impl ItemStack {
+    #[track_caller]
     pub fn with_components(mut self, components: impl Into<Components>) -> Self {
         self.components = components.into();
         self.components.compact();
+        self.note(format_args!("set components"));
         self
     }
 
@@ -649,17 +654,21 @@ impl ItemStack {
             .min(self.max_damage().unwrap_or(0))
     }
 
+    #[track_caller]
     pub fn set_damage(&mut self, value: u32) {
         let value = value.min(self.max_damage().unwrap_or(0));
         self.components.damage = (value != 0 || self.item.max_damage().is_none()).then_some(value);
+        self.note(format_args!("set damage {value}"));
     }
 
     /// Sets the Bad Omen amplifier an ominous bottle gives, leaving the
     /// patch empty where it matches the item's default.
+    #[track_caller]
     pub fn set_ominous_bottle_amplifier(&mut self, amplifier: u32) {
         let default = (self.item == Item::OminousBottle).then_some(0);
         self.components.ominous_bottle_amplifier =
             Some(amplifier.min(4)).filter(|a| Some(*a) != default);
+        self.note(format_args!("set ominous bottle amplifier {amplifier}"));
     }
 
     /// The Bad Omen amplifier drinking this gives, if it is ominous.
@@ -854,6 +863,7 @@ impl ItemStack {
     /// a survival player: Unbreaking may skip points, and reaching the
     /// maximum consumes one item. Creative and unbreakable stacks are the
     /// caller's job to skip.
+    #[track_caller]
     pub fn hurt(&mut self, amount: u32, rng: &mut impl Rng) -> Hurt {
         if amount == 0 || !self.is_damageable() {
             return Hurt::Unchanged;
@@ -867,6 +877,7 @@ impl ItemStack {
         self.set_damage(damage);
         if damage >= max {
             self.count = self.count.saturating_sub(1);
+            self.note(format_args!("broke"));
             Hurt::Broken
         } else {
             Hurt::Damaged
@@ -929,6 +940,7 @@ impl ItemStack {
     /// `repair_with_xp` effects turn experience into durability, capped by
     /// the current damage (so a nearly-full repair does not cost extra
     /// experience). Returns the experience actually spent.
+    #[track_caller]
     pub fn repair_with_experience(&mut self, xp: i32) -> i32 {
         if xp <= 0 {
             return 0;
@@ -1022,6 +1034,7 @@ impl ItemStack {
     }
 
     /// `None` for unknown items and air.
+    #[track_caller]
     pub(crate) fn decode_nbt(nbt: &Compound) -> Option<Self> {
         let item = Item::from_name(nbt.get_str("id")?)?;
         if item == Item::Air {
@@ -1032,12 +1045,13 @@ impl ItemStack {
             .get_compound("components")
             .map(Components::from_nbt)
             .unwrap_or_default();
-        Some(Self {
+        Some(Self::assemble(
             item,
-            count: count as u8,
+            count as u8,
             components,
-            tally: ledger::Tally::Picture,
-        })
+            ledger::Tally::Picture,
+            format_args!("decode"),
+        ))
     }
 }
 

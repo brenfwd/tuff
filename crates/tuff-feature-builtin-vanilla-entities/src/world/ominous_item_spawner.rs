@@ -86,7 +86,7 @@ impl RegionEntity for OminousItemSpawner {
 
     fn save(&self, out: &mut Compound) {
         if let Some(item) = &self.item {
-            out.insert("item", item.to_nbt());
+            out.insert("item", item.to_storage());
         }
         out.insert("spawn_item_after_ticks", self.spawn_after_ticks);
     }

@@ -524,7 +524,7 @@ impl BlockEntity {
         if self.kind != ContainerKind::Campfire {
             return None;
         }
-        Some(Compound::new().with(ITEMS, encode_items(&self.items)))
+        Some(Compound::new().with(ITEMS, encode_items_with(&self.items, ItemStack::to_nbt)))
     }
 
     /// Reads a stored block entity, or `None` for a kind this server does
@@ -719,12 +719,19 @@ pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemSt
 
 /// Saved `Items` entries: the non-empty stacks, each tagged with its slot.
 pub fn encode_items(items: &[Option<ItemStack>]) -> Vec<Compound> {
+    encode_items_with(items, ItemStack::to_storage)
+}
+
+fn encode_items_with(
+    items: &[Option<ItemStack>],
+    encode: fn(&ItemStack) -> Compound,
+) -> Vec<Compound> {
     items
         .iter()
         .enumerate()
         .filter_map(|(slot, stack)| {
             let mut entry = Compound::new().with("Slot", slot as i8);
-            for (key, value) in stack.as_ref()?.to_nbt() {
+            for (key, value) in encode(stack.as_ref()?) {
                 entry.insert(key, value);
             }
             Some(entry)

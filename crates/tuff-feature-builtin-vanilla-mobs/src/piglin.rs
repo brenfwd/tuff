@@ -1024,7 +1024,7 @@ impl Species for Piglin {
                     .iter()
                     .chain(&core.piglin.received)
                     .take(INVENTORY_SLOTS)
-                    .map(|stack| tuff_nbt::Tag::Compound(stack.to_nbt()))
+                    .map(|stack| tuff_nbt::Tag::Compound(stack.to_storage()))
                     .collect(),
             ),
         );

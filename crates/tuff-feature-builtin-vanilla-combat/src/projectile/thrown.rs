@@ -294,7 +294,7 @@ impl RegionEntity for Thrown {
 
     fn save(&self, out: &mut Compound) {
         self.owner.save(out);
-        out.insert("Item", self.item.to_nbt());
+        out.insert("Item", self.item.to_storage());
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {

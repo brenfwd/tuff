@@ -197,7 +197,7 @@ impl Species for Strider {
                         tuff_nbt::Compound::new().with(
                             "mainhand",
                             ItemStack::mint(Item::WarpedFungusOnAStick, 1, MintReason::Spawn)
-                                .to_nbt(),
+                                .to_storage(),
                         ),
                     )
                     .with(tuff_core::world::entity::FINALIZE_SPAWN, true),

@@ -219,7 +219,7 @@ pub trait Interact: RegionWorld + Rest {
             };
             let ratio = f32::from(next.count()) / next.item().max_stack_size() as f32;
             self.raw_block_entity_mut(pos)?
-                .insert("item", next.to_nbt());
+                .insert("item", next.to_storage());
             self.report_container_edit(
                 tuff_core::world::region_api::ContainerHolder::Block(pos),
                 &[(0, old.as_deref(), Some(&next))],

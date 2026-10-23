@@ -287,7 +287,7 @@ impl RegionEntity for FireworkRocket {
         self.owner.save(out);
         out.insert("Life", self.life);
         out.insert("LifeTime", self.lifetime);
-        out.insert("FireworksItem", self.item.to_nbt());
+        out.insert("FireworksItem", self.item.to_storage());
         out.insert("ShotAtAngle", self.shot_at_angle);
     }
 

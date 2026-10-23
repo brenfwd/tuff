@@ -129,7 +129,7 @@ impl RegionEntity for EyeOfEnder {
     }
 
     fn save(&self, out: &mut Compound) {
-        out.insert("Item", self.item.to_nbt());
+        out.insert("Item", self.item.to_storage());
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {

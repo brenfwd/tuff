@@ -172,7 +172,7 @@ fn unpack_loot(
     let mut rolled = rolled.into_iter();
     match rolled.next() {
         Some(stack) => {
-            nbt.insert(ITEM, stack.to_nbt());
+            nbt.insert(ITEM, stack.to_storage());
             tuff_item::item::conservation::release(stack);
         }
         None => {

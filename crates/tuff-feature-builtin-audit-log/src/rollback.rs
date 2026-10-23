@@ -409,7 +409,7 @@ fn undo_containers(
                 if let Some(nbt) = world.raw_block_entity_mut(pos) {
                     match &new {
                         Some(stack) => {
-                            nbt.insert("item", stack.to_nbt());
+                            nbt.insert("item", stack.to_storage());
                         }
                         None => {
                             nbt.remove("item");

@@ -821,7 +821,7 @@ impl Species for Villager {
             .inventory
             .iter()
             .flatten()
-            .map(ItemStack::to_nbt)
+            .map(ItemStack::to_storage)
             .collect();
         out.insert("Inventory", items);
         out.insert("VillagerData", self.data.to_nbt());

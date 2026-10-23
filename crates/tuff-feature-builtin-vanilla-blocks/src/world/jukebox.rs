@@ -87,7 +87,7 @@ pub fn insert<W: RegionWorld + ?Sized>(
     if nbt.contains_key(RECORD) {
         return Err(record);
     }
-    nbt.insert(RECORD, record.to_nbt());
+    nbt.insert(RECORD, record.to_storage());
     let song = song_id(&record);
     tuff_item::item::conservation::release(record);
     if song.is_some() {
@@ -132,7 +132,7 @@ pub fn replace<W: RegionWorld + ?Sized>(
     let was_playing = nbt.remove(TICKS).is_some();
     let song = record.as_ref().and_then(song_id);
     if let Some(record) = &record {
-        nbt.insert(RECORD, record.to_nbt());
+        nbt.insert(RECORD, record.to_storage());
     }
     if song.is_some() {
         nbt.insert(TICKS, Tag::Long(0));

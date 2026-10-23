@@ -620,7 +620,7 @@ impl Species for Allay {
             Tag::List(
                 self.inventory
                     .iter()
-                    .map(|stack| Tag::Compound(stack.to_nbt()))
+                    .map(|stack| Tag::Compound(stack.to_storage()))
                     .collect(),
             ),
         );

@@ -230,11 +230,15 @@ pub mod conservation {
         VIOLATIONS.fetch_add(1, Ordering::Relaxed);
         if cfg!(debug_assertions) && !std::thread::panicking() {
             panic!(
-                "item stack dropped without being stored or burned: {stack:?} at {}",
-                dropped_at()
+                "item stack dropped without being stored or burned: {stack:?} at {}\n{}",
+                dropped_at(),
+                stack.history.report()
             );
         }
-        log::error!("item conservation: {stack:?} dropped without being stored or burned");
+        log::error!(
+            "item conservation: {stack:?} dropped without being stored or burned\n{}",
+            stack.history.report()
+        );
     }
 
     fn dropped_at() -> String {
@@ -297,30 +301,35 @@ impl Drop for ItemStack {
 
 impl ItemStack {
     /// No item: air with a count of zero.
+    #[track_caller]
     pub fn empty() -> Self {
-        Self {
-            item: Item::Air,
-            count: 0,
-            components: Components::default(),
-            tally: Tally::Picture,
-        }
+        Self::assemble(
+            Item::Air,
+            0,
+            Components::default(),
+            Tally::Picture,
+            format_args!("empty"),
+        )
     }
 
     /// The door for new items.
+    #[track_caller]
     pub fn mint(item: Item, count: u8, reason: MintReason) -> Self {
         let tally = Tally::of(reason);
         if matches!(tally, Tally::Counted) && item != Item::Air {
             conservation::minted(count);
         }
-        Self {
+        Self::assemble(
             item,
             count,
-            components: Components::default(),
+            Components::default(),
             tally,
-        }
+            format_args!("mint {reason:?}"),
+        )
     }
 
     /// New items with the item and components of `template`.
+    #[track_caller]
     pub fn mint_like<'a>(template: impl Into<ItemView<'a>>, count: u8, reason: MintReason) -> Self {
         let template = template.into().get();
         Self::mint(template.item, count, reason).with_components(template.components.picture_copy())
@@ -328,6 +337,7 @@ impl ItemStack {
 
     /// New items of `item` carrying a copy of `components` (nested stacks
     /// included, minted with them).
+    #[track_caller]
     pub fn mint_with(item: Item, count: u8, components: &Components, reason: MintReason) -> Self {
         Self::mint(item, count, reason).with_components(components.picture_copy())
     }
@@ -336,50 +346,81 @@ impl ItemStack {
     /// [`MintReason::Test`]. Only built for this crate's tests and with the
     /// `test-support` feature, which only dev-dependencies enable.
     #[cfg(any(test, feature = "test-support"))]
+    #[track_caller]
     pub fn test_copy(&self) -> Self {
         Self::mint_like(self, self.count, MintReason::Test)
     }
 
     /// New items read from their `{id, count, components}` form.
     /// `None` for unknown items and air.
+    #[track_caller]
     pub fn mint_from_nbt(nbt: &Compound, reason: MintReason) -> Option<Self> {
         let mut stack = Self::decode_nbt(nbt)?;
         stack.tally = Tally::of(reason);
         if matches!(stack.tally, Tally::Counted) {
             conservation::minted(stack.count);
         }
+        stack.note(format_args!("mint from nbt {reason:?}"));
         Some(stack)
     }
 
     /// Stacks loaded from storage: they existed before the save.
     /// Only loaders call this.
+    #[track_caller]
     pub fn from_storage(nbt: &Compound) -> Option<Self> {
         let mut stack = Self::decode_nbt(nbt)?;
         stack.tally = Tally::Counted;
         conservation::loaded(stack.count);
+        stack.note(format_args!("load from storage"));
         Some(stack)
+    }
+
+    /// The door for stacks going to storage, the counterpart of
+    /// [`from_storage`](Self::from_storage). A picture is never real items
+    /// and must not be written as one; the save still goes through so
+    /// nothing is lost silently, counted as a violation.
+    #[track_caller]
+    pub fn to_storage(&self) -> Compound {
+        if self.is_picture() && !self.is_empty() && !conservation::is_releasing() {
+            conservation::violation(
+                "save",
+                format_args!(
+                    "picture {self:?} written to storage\n{}",
+                    self.history.report()
+                ),
+            );
+            debug_assert!(false, "a picture written to storage: {self:?}");
+        }
+        self.to_nbt()
     }
 
     /// A look at items kept in stored NBT, which stays their owner: a
     /// picture, never real items.
+    #[track_caller]
     pub fn picture_from_nbt(nbt: &Compound) -> Option<Self> {
         Self::decode_nbt(nbt)
     }
 
     /// The door for items leaving existence.
-    pub fn burn(mut self, _reason: BurnReason) {
+    #[track_caller]
+    pub fn burn(mut self, reason: BurnReason) {
         if matches!(self.tally, Tally::Counted) && !self.is_empty() {
             conservation::burned(self.count);
         }
+        self.note(format_args!("burn {reason:?}"));
         self.count = 0;
     }
 
     /// Turns this stack into `count` of `item` keeping its components:
     /// burns it and mints the result.
+    #[track_caller]
     pub fn into_item(mut self, item: Item, count: u8, mint: MintReason, burn: BurnReason) -> Self {
         let components = std::mem::take(&mut self.components);
+        let old = self.history.id();
         self.burn(burn);
-        Self::mint(item, count, mint).with_components(components)
+        let mut stack = Self::mint(item, count, mint).with_components(components);
+        stack.note(format_args!("from {old}"));
+        stack
     }
 
     /// The item this stack holds. It only changes through a mint, a burn
@@ -392,7 +433,8 @@ impl ItemStack {
     /// Turns this stack into `item` in place, keeping its count and
     /// components: the ledger records a burn of the old items and a mint of
     /// the new ones. A picture stays a picture.
-    pub fn transform(&mut self, item: Item, mint: MintReason, _burn: BurnReason) {
+    #[track_caller]
+    pub fn transform(&mut self, item: Item, mint: MintReason, burn: BurnReason) {
         if matches!(self.tally, Tally::Counted) {
             if !self.is_empty() {
                 conservation::burned(self.count);
@@ -402,6 +444,11 @@ impl ItemStack {
                 conservation::minted(self.count);
             }
         }
+        self.note(format_args!(
+            "transform {} -> {} ({mint:?}, {burn:?})",
+            self.item.name(),
+            item.name()
+        ));
         self.item = item;
     }
 
@@ -413,13 +460,15 @@ impl ItemStack {
 
     /// A copy for a picture or a template. Only the snapshot and mint
     /// doors call it.
+    #[track_caller]
     pub(crate) fn picture_copy(&self) -> Self {
-        Self {
-            item: self.item,
-            count: self.count,
-            components: self.components.picture_copy(),
-            tally: Tally::Picture,
-        }
+        Self::assemble(
+            self.item,
+            self.count,
+            self.components.picture_copy(),
+            Tally::Picture,
+            format_args!("picture of {}", self.history.id()),
+        )
     }
 
     pub fn count(&self) -> u8 {
@@ -428,29 +477,34 @@ impl ItemStack {
 
     /// Splits off `n` items (at least one, at most all): the taken part and
     /// what stays, `None` when everything was taken.
+    #[track_caller]
     pub fn split(self, n: u8) -> (Self, Option<Self>) {
         let n = n.clamp(1, self.count.max(1));
         if n >= self.count {
             return (self, None);
         }
         let mut rest = self;
-        let taken = Self {
-            item: rest.item,
-            count: n,
-            components: rest.components.picture_copy(),
-            tally: rest.tally,
-        };
+        let taken = Self::assemble(
+            rest.item,
+            n,
+            rest.components.picture_copy(),
+            rest.tally,
+            format_args!("split from {}", rest.history.id()),
+        );
         rest.count -= n;
+        rest.note(format_args!("split {n} off to {}", taken.history.id()));
         (taken, Some(rest))
     }
 
     /// One stack holding both, when they stack together and the total fits
     /// a count; otherwise both back unchanged.
+    #[track_caller]
     pub fn merge(a: Self, b: Self) -> Result<Self, (Self, Self)> {
         match a.count.checked_add(b.count) {
             Some(total) if a.stacks_with(&b) => {
                 let mut merged = a;
                 merged.count = total;
+                merged.note(format_args!("merge {} of {} in", b.count, b.history.id()));
                 merged.absorb_tally(b);
                 Ok(merged)
             }
@@ -471,15 +525,19 @@ impl ItemStack {
 
     /// Takes up to `n` items off this stack. Taking all leaves an empty
     /// husk (count zero) for the caller to clear.
+    #[track_caller]
     pub fn take(&mut self, n: u8) -> Self {
         let n = n.min(self.count);
         self.count -= n;
-        Self {
-            item: self.item,
-            count: n,
-            components: self.components.picture_copy(),
-            tally: self.tally,
-        }
+        let taken = Self::assemble(
+            self.item,
+            n,
+            self.components.picture_copy(),
+            self.tally,
+            format_args!("take from {}", self.history.id()),
+        );
+        self.note(format_args!("gave {n} to {}", taken.history.id()));
+        taken
     }
 
     /// Whether no items are left (an emptied husk or [`empty`](Self::empty)).
@@ -489,10 +547,16 @@ impl ItemStack {
 
     /// Adds all of `other` when it stacks with this one and the total fits
     /// a count; otherwise hands it back.
+    #[track_caller]
     pub fn join(&mut self, other: Self) -> Result<(), Self> {
         match self.count.checked_add(other.count) {
             Some(total) if self.stacks_with(&other) || other.count == 0 => {
                 self.count = total;
+                self.note(format_args!(
+                    "join {} of {} in",
+                    other.count,
+                    other.history.id()
+                ));
                 self.absorb_tally(other);
                 Ok(())
             }
@@ -503,6 +567,7 @@ impl ItemStack {
     /// Moves up to `n` items of `from` onto this stack when they stack
     /// together, possibly leaving `from` an empty husk; returns how many
     /// moved.
+    #[track_caller]
     pub fn transfer(&mut self, from: &mut Self, n: u8) -> u8 {
         if !self.stacks_with(from) {
             return 0;
@@ -510,6 +575,8 @@ impl ItemStack {
         let n = n.min(from.count).min(u8::MAX - self.count);
         from.count -= n;
         self.count += n;
+        from.note(format_args!("transfer {n} to {}", self.history.id()));
+        self.note(format_args!("transfer {n} from {}", from.history.id()));
         match (self.tally, from.tally) {
             (Tally::Counted, Tally::Picture) => conservation::minted(n),
             (Tally::Picture, Tally::Counted) => conservation::burned(n),
@@ -528,6 +595,7 @@ impl ItemStack {
     /// Moves as many items of `other` into this stack as keep it within
     /// `limit`; returns what is left of `other`. Stacks that do not stack
     /// together are returned whole.
+    #[track_caller]
     pub fn absorb(&mut self, other: Self, limit: u8) -> Option<Self> {
         if !self.stacks_with(&other) {
             return Some(other);
@@ -538,6 +606,11 @@ impl ItemStack {
         }
         let (moved, rest) = other.split(room);
         self.count += moved.count;
+        self.note(format_args!(
+            "absorb {} of {}",
+            moved.count,
+            moved.history.id()
+        ));
         self.absorb_tally(moved);
         rest
     }
@@ -573,24 +646,29 @@ impl ItemStack {
     }
 
     /// Adds `n` new items to this stack.
-    pub fn grow(&mut self, n: u8, _reason: MintReason) {
+    #[track_caller]
+    pub fn grow(&mut self, n: u8, reason: MintReason) {
         let before = self.count;
         self.count = self.count.saturating_add(n);
         if matches!(self.tally, Tally::Counted) && self.item != Item::Air {
             conservation::minted(self.count - before);
         }
+        self.note(format_args!("grow {} ({reason:?})", self.count - before));
     }
 
     /// Destroys up to `n` items of this stack, possibly leaving an empty
     /// husk.
+    #[track_caller]
     pub fn shrink(&mut self, n: u8, reason: BurnReason) {
         if n > 0 {
+            self.note(format_args!("shrink {} ({reason:?})", n.min(self.count)));
             self.take(n).burn(reason);
         }
     }
 
     /// Destroys up to `n` items of the stack in `slot`, emptying it when
     /// none are left; returns how many were destroyed.
+    #[track_caller]
     pub fn burn_from(slot: &mut Option<Self>, n: u8, reason: BurnReason) -> u8 {
         match Self::take_from(slot, n) {
             Some(part) => {
@@ -604,6 +682,7 @@ impl ItemStack {
 
     /// Takes up to `n` items out of `slot`, emptying it when none are
     /// left.
+    #[track_caller]
     pub fn take_from(slot: &mut Option<Self>, n: u8) -> Option<Self> {
         if n == 0 {
             return None;
@@ -614,6 +693,7 @@ impl ItemStack {
     }
 
     /// Puts `stack` back into `slot`, which it was taken from.
+    #[track_caller]
     pub fn put_back(slot: &mut Option<Self>, stack: Self) {
         match slot {
             Some(held) => {
@@ -631,6 +711,7 @@ impl ItemStack {
     }
 
     /// Keeps `count` items (at most all) and burns the rest.
+    #[track_caller]
     pub fn keep(mut self, count: u8, reason: BurnReason) -> Self {
         let excess = self.count.saturating_sub(count);
         self.shrink(excess, reason);
@@ -638,18 +719,21 @@ impl ItemStack {
     }
 
     /// Changes the count to `count` by minting or burning the difference.
+    #[track_caller]
     pub fn resize(&mut self, count: u8, mint: MintReason, burn: BurnReason) {
         match count.cmp(&self.count) {
             std::cmp::Ordering::Greater => self.grow(count - self.count, mint),
             std::cmp::Ordering::Less => {
                 let n = self.count - count;
                 self.count = count;
-                Self {
-                    item: self.item,
-                    count: n,
-                    components: Components::default(),
-                    tally: self.tally,
-                }
+                self.note(format_args!("resize down by {n} ({burn:?})"));
+                Self::assemble(
+                    self.item,
+                    n,
+                    Components::default(),
+                    self.tally,
+                    format_args!("resize excess of {}", self.history.id()),
+                )
                 .burn(burn);
             }
             std::cmp::Ordering::Equal => {}
@@ -698,6 +782,21 @@ mod tests {
 
     fn stack(count: u8) -> ItemStack {
         ItemStack::mint(Item::Stone, count, MintReason::Test)
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn counted_stacks_save_as_their_nbt() {
+        let stack = ItemStack::mint(Item::Stone, 3, MintReason::Command);
+        assert!(!stack.is_picture());
+        assert_eq!(stack.to_storage(), stack.to_nbt());
+        stack.burn(BurnReason::Destroyed);
+    }
+
+    #[test]
+    #[should_panic(expected = "a picture written to storage")]
+    fn a_picture_must_not_be_saved_outside_fixtures() {
+        let _ = stack(3).to_storage();
     }
 
     #[tuff_core::watchdog]

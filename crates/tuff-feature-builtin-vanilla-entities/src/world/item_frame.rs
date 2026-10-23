@@ -484,7 +484,7 @@ impl RegionEntity for ItemFrame {
             Tag::IntArray(vec![self.block_pos.x, self.block_pos.y, self.block_pos.z]),
         );
         if let Some(item) = &self.item {
-            out.insert("Item", item.to_nbt());
+            out.insert("Item", item.to_storage());
         }
         out.insert("ItemRotation", self.rotation as i8);
         out.insert("ItemDropChance", self.drop_chance);

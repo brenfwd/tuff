@@ -113,7 +113,7 @@ fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<Ite
     if let Holder::Container(_, Some(key)) = holder {
         if id == 0 {
             match value {
-                Some(stack) => nbt.insert(key, stack.to_nbt()),
+                Some(stack) => nbt.insert(key, stack.to_storage()),
                 None => nbt.remove(key),
             };
         }
@@ -122,7 +122,7 @@ fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<Ite
     if let Some(key) = equipment_key(id, holder) {
         let mut equipment = nbt.get_compound("equipment").cloned().unwrap_or_default();
         match value {
-            Some(stack) => equipment.insert(key, stack.to_nbt()),
+            Some(stack) => equipment.insert(key, stack.to_storage()),
             None => equipment.remove(key),
         };
         nbt.insert("equipment", equipment);
@@ -134,7 +134,9 @@ fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<Ite
     let mut entries = nbt.get_list(list).map(<[Tag]>::to_vec).unwrap_or_default();
     entries.retain(|entry| entry.as_compound().and_then(|e| e.get_byte("Slot")) != Some(slot));
     if let Some(stack) = value {
-        entries.push(Tag::Compound(stack.to_nbt().with("Slot", Tag::Byte(slot))));
+        entries.push(Tag::Compound(
+            stack.to_storage().with("Slot", Tag::Byte(slot)),
+        ));
     }
     nbt.insert(list, Tag::List(entries));
 }

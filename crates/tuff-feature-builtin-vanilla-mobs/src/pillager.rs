@@ -98,7 +98,7 @@ impl Species for Pillager {
             tuff_nbt::Tag::List(
                 self.inventory
                     .iter()
-                    .map(|stack| tuff_nbt::Tag::Compound(stack.to_nbt()))
+                    .map(|stack| tuff_nbt::Tag::Compound(stack.to_storage()))
                     .collect(),
             ),
         );

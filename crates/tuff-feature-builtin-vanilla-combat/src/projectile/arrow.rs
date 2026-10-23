@@ -825,9 +825,9 @@ impl RegionEntity for Arrow {
         out.insert("crit", self.crit);
         out.insert("PierceLevel", self.pierce as i8);
         out.insert("SoundEvent", self.sound.name());
-        out.insert("item", self.item.to_nbt());
+        out.insert("item", self.item.to_storage());
         if let Some(weapon) = &self.weapon {
-            out.insert("weapon", weapon.to_nbt());
+            out.insert("weapon", weapon.to_storage());
         }
         if self.base.kind == EntityType::SpectralArrow {
             out.insert("Duration", self.glow_ticks);

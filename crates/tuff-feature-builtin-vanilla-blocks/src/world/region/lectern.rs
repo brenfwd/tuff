@@ -125,7 +125,7 @@ fn store_book(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState, boo
         return;
     };
     if let Some(nbt) = world.raw_block_entity_mut(pos) {
-        nbt.insert("Book", book.to_nbt());
+        nbt.insert("Book", book.to_storage());
         nbt.insert("Page", 0i32);
     }
     world.put_block(pos, next);
