@@ -186,5 +186,13 @@ pub fn watchdog(args: TokenStream, item: TokenStream) -> TokenStream {
         let _watchdog = ::tuff_core::watchdog::arm(::tuff_core::watchdog::DEFAULT);
     };
     function.block.stmts.insert(0, guard);
+    // tuff-item's own tests link a second copy of the crate through
+    // tuff-core, whose fixture guard marks the other copy's thread.
+    if std::env::var("CARGO_CRATE_NAME").is_ok_and(|name| name == "tuff_item") {
+        let fixtures: syn::Stmt = syn::parse_quote! {
+            let _fixtures = crate::item::conservation::fixture_thread();
+        };
+        function.block.stmts.insert(1, fixtures);
+    }
     quote!(#function).into()
 }

@@ -8,7 +8,7 @@ use tuff_vanilla_data::registry::{
 };
 
 use crate::protocol::codec::WriteExt;
-use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack};
+use tuff_item::item::{ItemPicture, ItemSnapshot};
 use tuff_wire::PacketWriter;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,11 +39,9 @@ pub enum SlotDisplay {
 }
 
 impl SlotDisplay {
-    /// Shows `stack`, a template that never becomes a real item.
-    pub fn template(stack: ItemStack) -> Self {
-        let shown = ItemSnapshot::of(&stack);
-        stack.burn(BurnReason::Template);
-        Self::Stack(shown)
+    /// Shows `picture`, a template that never becomes a real item.
+    pub fn template(picture: ItemPicture) -> Self {
+        Self::Stack(picture.into())
     }
 }
 

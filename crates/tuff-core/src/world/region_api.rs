@@ -35,7 +35,7 @@ use crate::world::messages::{
     ActionOutcome, BoatPlace, BucketUse, Igniter, Packets, Place, PlayerHandle, PlayerId,
     RegionHandle, RespawnSpot,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{AnyItem, ItemStack};
 use tuff_world_model::pos::{ChunkPos, RegionPos};
 
 type RegionJob = Box<dyn FnOnce(&mut dyn RegionWorld) + Send>;
@@ -253,7 +253,11 @@ pub struct SlotEdit {
 }
 
 impl SlotEdit {
-    pub fn of(slot: usize, old: Option<&ItemStack>, new: Option<&ItemStack>) -> Self {
+    pub fn of<M: tuff_item::item::Mode, N: tuff_item::item::Mode>(
+        slot: usize,
+        old: Option<&ItemStack<M>>,
+        new: Option<&ItemStack<N>>,
+    ) -> Self {
         Self {
             slot,
             old: old.map(tuff_item::item::ItemSnapshot::of),
@@ -728,7 +732,7 @@ pub trait RegionWorld: GrowthLevel {
     /// A block entity's saved data, modeled or raw.
     fn saved_block_entity(&self, pos: BlockPos) -> Option<Compound>;
     /// An infested block broken without silk touch lets its silverfish out.
-    fn release_infestation(&mut self, pos: BlockPos, state: BlockState, tool: Option<&ItemStack>);
+    fn release_infestation(&mut self, pos: BlockPos, state: BlockState, tool: Option<AnyItem<'_>>);
 
     /// Sets off an explosion centred here.
     fn explode(&mut self, explosion: Explosion);
@@ -1145,7 +1149,7 @@ pub trait RegionHooks: Send + Sync {
         &self,
         _world: &mut dyn RegionWorld,
         _action: &PlayerBlockAction,
-        _tool: Option<&tuff_item::item::ItemStack>,
+        _tool: Option<AnyItem<'_>>,
     ) {
     }
 

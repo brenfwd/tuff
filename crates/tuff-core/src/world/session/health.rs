@@ -15,7 +15,7 @@ use crate::world::region_api::{PlayerEffectEvent, PlayerEffectTrigger, RegionTas
 use crate::world::stats::Stat;
 use crate::world::{EYE_HEIGHT, block_contact, framed, message_plain, packets};
 use rand::Rng;
-use tuff_item::item::{Hurt, ItemSnapshot, ItemStack, MintReason};
+use tuff_item::item::{Hurt, ItemSnapshot};
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::item::EquipmentSlot;
@@ -281,7 +281,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        ItemStack::mint(item, 1, MintReason::Template).view(),
+                        tuff_item::item::ItemPicture::new(item, 1).any(),
                     );
                     self.progress
                         .stats
@@ -379,7 +379,9 @@ impl PlayerSession {
                 }
             }
         }
-        self.fire(crate::world::advancement::trigger::Event::UsedTotem(&used));
+        self.fire(crate::world::advancement::trigger::Event::UsedTotem(
+            used.any(),
+        ));
         self.send_inventory();
         let event = packets([framed(&play::EntityEvent {
             entity_id: self.id,
@@ -587,7 +589,7 @@ impl PlayerSession {
                     let delta = damage_before as i32 - now.damage() as i32;
                     self.fire(
                         crate::world::advancement::trigger::Event::ItemDurabilityChanged {
-                            item: &now,
+                            item: now.any(),
                             delta,
                         },
                     );
@@ -599,7 +601,7 @@ impl PlayerSession {
                 let delta = damage_before as i32 - max as i32;
                 self.fire(
                     crate::world::advancement::trigger::Event::ItemDurabilityChanged {
-                        item: &stack,
+                        item: stack.any(),
                         delta,
                     },
                 );
@@ -624,7 +626,7 @@ impl PlayerSession {
                 if let Some(item) = held {
                     self.item_action_hooks(
                         super::hooks::ItemAction::Broken,
-                        ItemStack::mint(item, 1, MintReason::Template).view(),
+                        tuff_item::item::ItemPicture::new(item, 1).any(),
                     );
                     self.progress
                         .stats

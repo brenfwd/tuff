@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::MintReason;
 use tuff_world_model::BlockPos;
 
 fn read_text_nbt(reader: &mut PacketReader) -> Result<Option<TextComponent>> {
@@ -124,12 +123,12 @@ impl ReadExt for PacketReader {
     fn read_component(
         &mut self,
         kind: DataComponentType,
-        components: &mut Components,
+        components: &mut Components<Picture>,
     ) -> Result<bool> {
         self.read_component_at(kind, components, 0)
     }
 
-    fn read_container(&mut self, depth: u32) -> Result<Option<Vec<Option<ItemStack>>>> {
+    fn read_container(&mut self, depth: u32) -> Result<Option<Vec<Option<ItemPicture>>>> {
         if depth > MAX_CONTAINER_DEPTH {
             return Err(BufferError::InvalidEnum(depth as i32));
         }
@@ -151,7 +150,7 @@ impl ReadExt for PacketReader {
         Ok(Some(contents))
     }
 
-    fn read_bundle(&mut self, depth: u32) -> Result<Option<BundleContents>> {
+    fn read_bundle(&mut self, depth: u32) -> Result<Option<BundleContents<Picture>>> {
         if depth > MAX_CONTAINER_DEPTH {
             return Err(BufferError::InvalidEnum(depth as i32));
         }
@@ -169,7 +168,7 @@ impl ReadExt for PacketReader {
         Ok(Some(BundleContents::from_items(items)))
     }
 
-    fn read_charged_projectiles(&mut self, depth: u32) -> Result<Option<Vec<ItemStack>>> {
+    fn read_charged_projectiles(&mut self, depth: u32) -> Result<Option<Vec<ItemPicture>>> {
         if depth > MAX_CONTAINER_DEPTH {
             return Err(BufferError::InvalidEnum(depth as i32));
         }
@@ -187,7 +186,9 @@ impl ReadExt for PacketReader {
         Ok(Some(projectiles))
     }
 
-    fn read_item_template(&mut self, depth: u32) -> Result<Option<ItemStack>> {
+    /// A stack nested in a component, as a picture: creative set-slot
+    /// mints it with its holder.
+    fn read_item_template(&mut self, depth: u32) -> Result<Option<ItemPicture>> {
         let item = self.read_var_int()?;
         let item = u32::try_from(item)
             .ok()
@@ -222,21 +223,17 @@ impl ReadExt for PacketReader {
         if item == Item::Air || !supported {
             return Ok(None);
         }
-        let stack = ItemStack::mint(item, 1, MintReason::Network).with_components(components);
+        let stack = ItemPicture::describe(item, 1, components);
         if !(1..=stack.max_stack_size() as i32).contains(&count) {
             return Err(BufferError::InvalidEnum(count));
         }
-        Ok(Some(ItemStack::mint_like(
-            &stack,
-            count as u8,
-            MintReason::Network,
-        )))
+        Ok(Some(stack.with_count(count as u8)))
     }
 
     fn read_component_at(
         &mut self,
         kind: DataComponentType,
-        components: &mut Components,
+        components: &mut Components<Picture>,
         depth: u32,
     ) -> Result<bool> {
         let non_negative = |r: &mut Self| {
@@ -267,7 +264,7 @@ impl ReadExt for PacketReader {
             }
             Ok(Enchantments::new(entries))
         };
-        let component = match kind {
+        let component: NetworkComponent<'_, Picture> = match kind {
             DataComponentType::Damage => NetworkComponent::Damage(non_negative(self)?),
             DataComponentType::MaxDamage => {
                 let max = non_negative(self)?;

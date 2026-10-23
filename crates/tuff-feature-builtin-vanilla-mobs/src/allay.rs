@@ -854,14 +854,11 @@ mod tests {
             player_uuid: player,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item
-                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())),
+            stack: item.map(|item| tuff_item::item::ItemSnapshot::new(item, 5)),
             hand: tuff_core::world::entity::HandOffer::new(
-                (item.map(|item| {
-                    tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())
-                }))
-                .as_deref()
-                .map(tuff_item::item::ItemStack::test_copy),
+                (item.map(|item| tuff_item::item::ItemSnapshot::new(item, 5)))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
             ),
             off_hand,
             creative: false,

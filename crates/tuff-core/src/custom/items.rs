@@ -24,7 +24,7 @@ use crate::world::session::PlayerSession;
 use tuff_item::item::ComponentsSnapshot;
 use tuff_item::item::display::{ModelData, full_identifier};
 use tuff_item::item::identity::{IDENTITY_KEY, ITEM_KEY, PRIVATE_KEY, client_custom_data};
-use tuff_item::item::{Components, ItemSnapshot, ItemStack};
+use tuff_item::item::{Components, ItemSnapshot, ItemStack, Mode};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
 
@@ -83,7 +83,7 @@ impl std::fmt::Debug for ItemBehavior {
     }
 }
 
-fn identity(components: &Components) -> Option<&Compound> {
+fn identity<M: Mode>(components: &Components<M>) -> Option<&Compound> {
     components
         .other
         .get(CUSTOM_DATA)?
@@ -119,7 +119,7 @@ pub fn predicted_use_components(base: Item) -> impl Iterator<Item = DataComponen
 }
 
 /// The custom item id a component patch carries, if any.
-pub fn components_item_id(components: &Components) -> Option<&str> {
+pub fn components_item_id<M: Mode>(components: &Components<M>) -> Option<&str> {
     identity(components)?.get_str(ITEM_KEY)
 }
 
@@ -244,7 +244,10 @@ impl CustomContent {
         Some(self.item(id)?.stack(count))
     }
 
-    pub fn item_of_components(&self, components: &Components) -> Option<&Arc<CustomItemDef>> {
+    pub fn item_of_components<M: Mode>(
+        &self,
+        components: &Components<M>,
+    ) -> Option<&Arc<CustomItemDef>> {
         self.items.get(components_item_id(components)?)
     }
 
@@ -311,7 +314,7 @@ pub fn seen_by_entity(
 #[derive(Default)]
 struct PrivateStash(Vec<ItemSnapshot>);
 
-fn client_view(stack: &ItemStack) -> ComponentsSnapshot {
+fn client_view<M: Mode>(stack: &ItemStack<M>) -> ComponentsSnapshot {
     let mut components = ComponentsSnapshot::of(&stack.components);
     if let Some(view) = stack
         .components
@@ -326,7 +329,7 @@ fn client_view(stack: &ItemStack) -> ComponentsSnapshot {
     components
 }
 
-fn is_private(stack: &ItemStack) -> bool {
+fn is_private<M: Mode>(stack: &ItemStack<M>) -> bool {
     identity(&stack.components)
         .and_then(|identity| identity.get_bool(PRIVATE_KEY))
         .unwrap_or(false)

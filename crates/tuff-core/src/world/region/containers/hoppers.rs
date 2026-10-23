@@ -307,7 +307,12 @@ impl RegionActor {
 
     /// A copper golem `golem` takes from the container at `pos`; its hand
     /// is filled only with what the container gives up.
-    pub(crate) fn copper_golem_take(&mut self, golem: i32, pos: BlockPos, stack: &ItemStack) {
+    pub(crate) fn copper_golem_take<M: tuff_item::item::Mode>(
+        &mut self,
+        golem: i32,
+        pos: BlockPos,
+        stack: &ItemStack<M>,
+    ) {
         let Some(state) = self.block(pos) else {
             return;
         };
@@ -317,10 +322,10 @@ impl RegionActor {
 
     /// Removes up to `stack.count` from the first slot holding `stack`
     /// (same item and components); returns the slot and what was removed.
-    pub(crate) fn drain_local(
+    pub(crate) fn drain_local<M: tuff_item::item::Mode>(
         &mut self,
         pos: BlockPos,
-        stack: &ItemStack,
+        stack: &ItemStack<M>,
     ) -> Option<(usize, ItemStack)> {
         if self.menus.container_locks.contains_key(&pos) {
             return None;

@@ -244,7 +244,7 @@ mod tests {
         Undo {
             id: 1,
             entity: None,
-            stack: ItemSnapshot::describe(item, 1, Default::default()),
+            stack: ItemSnapshot::new(item, 1),
             any_components: false,
             amount,
             add,
@@ -306,11 +306,7 @@ mod tests {
         assert_eq!(records[1].amount, 5);
         assert_eq!(
             stack_of(records[1].data.as_ref()),
-            Some(tuff_item::item::ItemSnapshot::describe(
-                Item::Dirt,
-                1,
-                Default::default()
-            ))
+            Some(tuff_item::item::ItemSnapshot::new(Item::Dirt, 1))
         );
     }
 

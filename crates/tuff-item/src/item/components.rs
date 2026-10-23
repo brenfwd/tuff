@@ -1,6 +1,6 @@
 use super::*;
 
-impl Components {
+impl<M: Mode> Components<M> {
     /// `state` with the properties this patch's `block_state` sets, as a
     /// placed block item applies them. Unknown or invalid ones are skipped.
     pub fn apply_block_state(
@@ -27,8 +27,135 @@ impl Components {
             .is_ok()
     }
 
-    /// Reads a stored `components` compound. Typed components that fail to
-    /// parse stay in `other` as they were.
+    pub fn to_nbt(&self) -> Compound {
+        let mut nbt = Compound::new();
+        if let Some(damage) = self.damage {
+            nbt.insert(DataComponentType::Damage.name(), damage as i32);
+        }
+        if let Some(max) = self.max_damage {
+            nbt.insert(DataComponentType::MaxDamage.name(), max as i32);
+        }
+        if self.unbreakable {
+            nbt.insert(DataComponentType::Unbreakable.name(), Compound::new());
+        }
+        if let Some(name) = &self.custom_name {
+            nbt.insert(DataComponentType::CustomName.name(), name.to_nbt());
+        }
+        if let Some(enchantments) = &self.enchantments {
+            nbt.insert(
+                DataComponentType::Enchantments.name(),
+                enchantments.to_nbt(),
+            );
+        }
+        if let Some(enchantments) = &self.stored_enchantments {
+            nbt.insert(
+                DataComponentType::StoredEnchantments.name(),
+                enchantments.to_nbt(),
+            );
+        }
+        if let Some(contents) = &self.potion_contents {
+            nbt.insert(DataComponentType::PotionContents.name(), contents.to_nbt());
+        }
+        if let Some(cost) = self.repair_cost {
+            nbt.insert(DataComponentType::RepairCost.name(), cost as i32);
+        }
+        if let Some(amplifier) = self.ominous_bottle_amplifier {
+            nbt.insert(
+                DataComponentType::OminousBottleAmplifier.name(),
+                amplifier as i32,
+            );
+        }
+        if let Some(id) = self.map_id {
+            nbt.insert(DataComponentType::MapId.name(), id as i32);
+        }
+        if let Some(contents) = &self.container {
+            nbt.insert(
+                DataComponentType::Container.name(),
+                container_to_nbt(contents),
+            );
+        }
+        if let Some(projectiles) = &self.charged_projectiles {
+            nbt.insert(
+                DataComponentType::ChargedProjectiles.name(),
+                Tag::List(
+                    projectiles
+                        .iter()
+                        .map(|stack| Tag::Compound(stack.to_nbt()))
+                        .collect(),
+                ),
+            );
+        }
+        if let Some(contents) = &self.bundle_contents {
+            nbt.insert(DataComponentType::BundleContents.name(), contents.to_nbt());
+        }
+        if let Some(rgb) = self.dyed_color {
+            nbt.insert(DataComponentType::DyedColor.name(), rgb);
+        }
+        if let Some(color) = self.base_color {
+            nbt.insert(DataComponentType::BaseColor.name(), color.name());
+        }
+        if let Some(layers) = &self.banner_patterns {
+            nbt.insert(
+                DataComponentType::BannerPatterns.name(),
+                decor::banner_patterns_to_nbt(layers),
+            );
+        }
+        if let Some(trim) = &self.trim {
+            nbt.insert(DataComponentType::Trim.name(), trim.to_nbt());
+        }
+        if let Some(fireworks) = &self.fireworks {
+            nbt.insert(DataComponentType::Fireworks.name(), fireworks.to_nbt());
+        }
+        if let Some(explosion) = &self.firework_explosion {
+            nbt.insert(
+                DataComponentType::FireworkExplosion.name(),
+                explosion.to_nbt(),
+            );
+        }
+        if let Some(pages) = &self.writable_book {
+            nbt.insert(
+                DataComponentType::WritableBookContent.name(),
+                decor::writable_book_to_nbt(pages),
+            );
+        }
+        if let Some(book) = &self.written_book {
+            nbt.insert(DataComponentType::WrittenBookContent.name(), book.to_nbt());
+        }
+        if let Some(modifiers) = &self.attribute_modifiers {
+            nbt.insert(
+                DataComponentType::AttributeModifiers.name(),
+                gear::modifiers_to_nbt(modifiers),
+            );
+        }
+        if let Some(tool) = &self.tool {
+            nbt.insert(DataComponentType::Tool.name(), tool.to_nbt());
+        }
+        if let Some(weapon) = &self.weapon {
+            nbt.insert(
+                DataComponentType::Weapon.name(),
+                gear::weapon_to_nbt(weapon),
+            );
+        }
+        if let Some(effects) = &self.suspicious_stew_effects {
+            nbt.insert(
+                DataComponentType::SuspiciousStewEffects.name(),
+                suspicious_stew_effects_to_nbt(effects),
+            );
+        }
+        for (key, value) in self.other.iter() {
+            nbt.insert(key, value.clone());
+        }
+        for id in &self.removed {
+            nbt.insert(format!("{REMOVED_PREFIX}{id}"), Compound::new());
+        }
+        nbt
+    }
+}
+
+impl Components<Picture> {
+    /// Reads a stored `components` compound as a picture; counted stacks
+    /// read theirs through `ItemStack::from_storage` or a mint door. Typed
+    /// components that fail to parse stay in `other` as they were.
     pub fn from_nbt(nbt: &Compound) -> Self {
         let mut components = Self::default();
         for (key, value) in nbt.iter() {
@@ -162,135 +289,13 @@ impl Components {
         }
         true
     }
+}
 
-    pub fn to_nbt(&self) -> Compound {
-        let mut nbt = Compound::new();
-        if let Some(damage) = self.damage {
-            nbt.insert(DataComponentType::Damage.name(), damage as i32);
-        }
-        if let Some(max) = self.max_damage {
-            nbt.insert(DataComponentType::MaxDamage.name(), max as i32);
-        }
-        if self.unbreakable {
-            nbt.insert(DataComponentType::Unbreakable.name(), Compound::new());
-        }
-        if let Some(name) = &self.custom_name {
-            nbt.insert(DataComponentType::CustomName.name(), name.to_nbt());
-        }
-        if let Some(enchantments) = &self.enchantments {
-            nbt.insert(
-                DataComponentType::Enchantments.name(),
-                enchantments.to_nbt(),
-            );
-        }
-        if let Some(enchantments) = &self.stored_enchantments {
-            nbt.insert(
-                DataComponentType::StoredEnchantments.name(),
-                enchantments.to_nbt(),
-            );
-        }
-        if let Some(contents) = &self.potion_contents {
-            nbt.insert(DataComponentType::PotionContents.name(), contents.to_nbt());
-        }
-        if let Some(cost) = self.repair_cost {
-            nbt.insert(DataComponentType::RepairCost.name(), cost as i32);
-        }
-        if let Some(amplifier) = self.ominous_bottle_amplifier {
-            nbt.insert(
-                DataComponentType::OminousBottleAmplifier.name(),
-                amplifier as i32,
-            );
-        }
-        if let Some(id) = self.map_id {
-            nbt.insert(DataComponentType::MapId.name(), id as i32);
-        }
-        if let Some(contents) = &self.container {
-            nbt.insert(
-                DataComponentType::Container.name(),
-                container_to_nbt(contents),
-            );
-        }
-        if let Some(projectiles) = &self.charged_projectiles {
-            nbt.insert(
-                DataComponentType::ChargedProjectiles.name(),
-                Tag::List(
-                    projectiles
-                        .iter()
-                        .map(|stack| Tag::Compound(stack.to_nbt()))
-                        .collect(),
-                ),
-            );
-        }
-        if let Some(contents) = &self.bundle_contents {
-            nbt.insert(DataComponentType::BundleContents.name(), contents.to_nbt());
-        }
-        if let Some(rgb) = self.dyed_color {
-            nbt.insert(DataComponentType::DyedColor.name(), rgb);
-        }
-        if let Some(color) = self.base_color {
-            nbt.insert(DataComponentType::BaseColor.name(), color.name());
-        }
-        if let Some(layers) = &self.banner_patterns {
-            nbt.insert(
-                DataComponentType::BannerPatterns.name(),
-                decor::banner_patterns_to_nbt(layers),
-            );
-        }
-        if let Some(trim) = &self.trim {
-            nbt.insert(DataComponentType::Trim.name(), trim.to_nbt());
-        }
-        if let Some(fireworks) = &self.fireworks {
-            nbt.insert(DataComponentType::Fireworks.name(), fireworks.to_nbt());
-        }
-        if let Some(explosion) = &self.firework_explosion {
-            nbt.insert(
-                DataComponentType::FireworkExplosion.name(),
-                explosion.to_nbt(),
-            );
-        }
-        if let Some(pages) = &self.writable_book {
-            nbt.insert(
-                DataComponentType::WritableBookContent.name(),
-                decor::writable_book_to_nbt(pages),
-            );
-        }
-        if let Some(book) = &self.written_book {
-            nbt.insert(DataComponentType::WrittenBookContent.name(), book.to_nbt());
-        }
-        if let Some(modifiers) = &self.attribute_modifiers {
-            nbt.insert(
-                DataComponentType::AttributeModifiers.name(),
-                gear::modifiers_to_nbt(modifiers),
-            );
-        }
-        if let Some(tool) = &self.tool {
-            nbt.insert(DataComponentType::Tool.name(), tool.to_nbt());
-        }
-        if let Some(weapon) = &self.weapon {
-            nbt.insert(
-                DataComponentType::Weapon.name(),
-                gear::weapon_to_nbt(weapon),
-            );
-        }
-        if let Some(effects) = &self.suspicious_stew_effects {
-            nbt.insert(
-                DataComponentType::SuspiciousStewEffects.name(),
-                suspicious_stew_effects_to_nbt(effects),
-            );
-        }
-        for (key, value) in self.other.iter() {
-            nbt.insert(key, value.clone());
-        }
-        for id in &self.removed {
-            nbt.insert(format!("{REMOVED_PREFIX}{id}"), Compound::new());
-        }
-        nbt
-    }
-
+impl<M: Mode> Components<M> {
     /// The components a Slot carries, in the order they are written.
     /// Components without a wire encoding this server produces are left
     /// out; they still exist in storage.
-    pub fn network_added(&self) -> Vec<NetworkComponent<'_>> {
+    pub fn network_added(&self) -> Vec<NetworkComponent<'_, M>> {
         let mut added = Vec::new();
         if let Some(damage) = self.damage {
             added.push(NetworkComponent::Damage(damage));
@@ -392,7 +397,7 @@ impl Components {
             {
                 added.push(NetworkComponent::ClientData(view));
             } else if TEMPLATE_ON_WIRE.contains(&kind) {
-                if let Some(stack) = value.as_compound().and_then(ItemStack::decode_nbt) {
+                if let Some(stack) = value.as_compound().and_then(ItemPicture::from_nbt) {
                     added.push(NetworkComponent::Template(kind, Box::new(stack)));
                 }
             } else if NBT_ON_WIRE.contains(&kind) {
@@ -419,22 +424,22 @@ impl Components {
 
     /// Stores the nested stacks of a component received in a Slot, moving
     /// them in.
-    pub fn set_network_container(&mut self, contents: Vec<Option<ItemStack>>) {
+    pub fn set_network_container(&mut self, contents: Vec<Option<ItemStack<M>>>) {
         self.container = Some(contents);
     }
 
-    pub fn set_network_projectiles(&mut self, projectiles: Vec<ItemStack>) {
+    pub fn set_network_projectiles(&mut self, projectiles: Vec<ItemStack<M>>) {
         self.charged_projectiles = Some(projectiles);
     }
 
-    pub fn set_network_bundle(&mut self, contents: BundleContents) {
+    pub fn set_network_bundle(&mut self, contents: BundleContents<M>) {
         self.bundle_contents = Some(Box::new(contents));
     }
 
     /// Stores a component received in a Slot. Returns false for a type this
     /// server cannot hold (nested stacks go through the `set_network_*`
     /// moves).
-    pub fn set_network(&mut self, component: NetworkComponent<'_>) -> bool {
+    pub fn set_network(&mut self, component: NetworkComponent<'_, M>) -> bool {
         match component {
             NetworkComponent::Damage(damage) => self.damage = Some(damage),
             NetworkComponent::MaxDamage(max) => self.max_damage = Some(max),
@@ -567,7 +572,7 @@ impl Components {
     }
 }
 
-impl NetworkComponent<'_> {
+impl<M: Mode> NetworkComponent<'_, M> {
     pub fn kind(&self) -> DataComponentType {
         match self {
             Self::Damage(_) => DataComponentType::Damage,

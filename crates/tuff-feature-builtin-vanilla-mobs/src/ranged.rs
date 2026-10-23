@@ -89,9 +89,7 @@ impl MobCore {
         self.ammo_slot(weapon)
             .and_then(|slot| self.equipment.get(slot))
             .map(tuff_item::item::ItemSnapshot::of)
-            .unwrap_or_else(|| {
-                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default())
-            })
+            .unwrap_or_else(|| tuff_item::item::ItemSnapshot::new(Item::Arrow, 1))
     }
 
     /// An arrow of `projectile` leaving `start`, fired from `weapon`.

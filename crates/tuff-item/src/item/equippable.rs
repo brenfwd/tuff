@@ -41,7 +41,7 @@ fn parse(fields: &Compound) -> Option<Equippable> {
     })
 }
 
-impl ItemStack {
+impl<M: super::Mode> ItemStack<M> {
     /// What this stack can be worn as: its own `equippable` component when
     /// it carries one, else its item's, none when the component is removed.
     pub fn equippable(&self) -> Option<Equippable> {

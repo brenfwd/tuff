@@ -1,5 +1,4 @@
 use super::*;
-use tuff_item::item::MintReason;
 
 impl PlayerSession {
     pub async fn handle_event(&mut self, event: PlayerEvent) {
@@ -218,7 +217,7 @@ impl PlayerSession {
                     || region.dimension != self.dimension
                     || !hooks
                         .iter()
-                        .all(|hook| hook.allows_item_pickup(self, stack.view()))
+                        .all(|hook| hook.allows_item_pickup(self, stack.any()))
                 {
                     0
                 } else {
@@ -777,9 +776,9 @@ impl PlayerSession {
                 if item == Item::Bucket
                     && let HandEffect::Exchange(filled) = effect
                 {
-                    let filled = ItemStack::mint(filled, 1, MintReason::Transform);
+                    let filled = tuff_item::item::ItemPicture::new(filled, 1);
                     self.fire(crate::world::advancement::trigger::Event::FilledBucket(
-                        &filled,
+                        filled.any(),
                     ));
                 }
                 if self

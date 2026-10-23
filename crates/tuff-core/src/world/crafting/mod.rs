@@ -25,7 +25,7 @@ use tuff_vanilla_data::{Frozen, Item, tag};
 use crate::protocol::recipe::{DisplayEntry, RecipeDisplay, SlotDisplay};
 use crate::world::block_entity::{Campfire, ContainerKind, Furnace};
 use stacked::StackedContents;
-use tuff_item::item::{Components, ItemStack, MintReason};
+use tuff_item::item::{Components, ItemPicture, ItemStack, MintReason, Picture};
 use tuff_item::load::{LoadError, LoadErrorKind};
 use tuff_nbt::Compound;
 
@@ -296,18 +296,21 @@ impl Placement {
 /// The stack a data recipe's result describes.
 pub fn result_stack(result: &RecipeResult) -> ItemStack {
     let count = result.count.clamp(1, MAX_RESULT_COUNT) as u8;
-    ItemStack::mint(result.item, count, MintReason::Crafting)
-        .with_components(result_components(result))
+    ItemStack::mint_with(
+        result.item,
+        count,
+        &result_components(result),
+        MintReason::Crafting,
+    )
 }
 
 /// A picture of what `result` makes: for displays and previews.
-pub fn result_template(result: &RecipeResult) -> ItemStack {
+pub fn result_template(result: &RecipeResult) -> ItemPicture {
     let count = result.count.clamp(1, MAX_RESULT_COUNT) as u8;
-    ItemStack::mint(result.item, count, MintReason::Template)
-        .with_components(result_components(result))
+    ItemPicture::describe(result.item, count, result_components(result))
 }
 
-fn result_components(result: &RecipeResult) -> Components {
+fn result_components(result: &RecipeResult) -> Components<Picture> {
     result
         .components
         .as_deref()
@@ -345,7 +348,8 @@ pub fn with_input_components(
         if let Some(id) = key.strip_prefix('!') {
             components.removed.push(id.to_owned());
         } else {
-            let mut patch = Components::from_nbt(&Compound::new().with(key, value));
+            let mut patch =
+                Components::from_nbt(&Compound::new().with(key, value)).mint(MintReason::Crafting);
             let other = std::mem::take(&mut patch.other);
             merge_typed(components, patch);
             for (key, value) in other {
@@ -359,7 +363,14 @@ pub fn with_input_components(
 }
 
 fn merge_typed(into: &mut Components, from: Components) {
-    let from = from.into_patch();
+    let mut from = from.into_patch();
+    if let Some(container) = from.container.take()
+        && let Some(replaced) = into.container.replace(container)
+    {
+        for stack in replaced.into_iter().flatten() {
+            stack.burn(BurnReason::Transform);
+        }
+    }
     macro_rules! take {
         ($($field:ident),*) => {
             $(if from.$field.is_some() {
@@ -375,7 +386,6 @@ fn merge_typed(into: &mut Components, from: Components) {
         stored_enchantments,
         potion_contents,
         repair_cost,
-        container,
         dyed_color,
         base_color,
         banner_patterns,
@@ -950,7 +960,7 @@ impl RecipeSet {
     }
 
     /// Whether `stack` may go in a bottle slot.
-    pub fn is_potion_input(&self, stack: &ItemStack) -> bool {
+    pub fn is_potion_input<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         self.property_set("brewing_input")
             .binary_search_by_key(&stack.item().id(), |item| item.id())
             .is_ok()
@@ -958,13 +968,13 @@ impl RecipeSet {
     }
 
     /// Whether `stack` may go in the reagent slot.
-    pub fn is_brewing_reagent(&self, stack: &ItemStack) -> bool {
+    pub fn is_brewing_reagent<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         self.property_set("brewing_reagent")
             .binary_search_by_key(&stack.item().id(), |item| item.id())
             .is_ok()
     }
 
-    pub fn is_brewing_fuel(&self, stack: &ItemStack) -> bool {
+    pub fn is_brewing_fuel<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         stack.item().brewing_fuel().is_some()
     }
 }

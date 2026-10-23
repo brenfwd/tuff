@@ -300,10 +300,10 @@ impl RegionActor {
     /// `thrower` threw: the thrower's `thrown_item_picked_up_by_entity`
     /// when it is a player, and a picking player's
     /// `thrown_item_picked_up_by_player`, while the thrower is loaded.
-    pub(super) fn thrown_item_picked_up(
+    pub(super) fn thrown_item_picked_up<M: tuff_item::item::Mode>(
         &mut self,
         thrower: Option<u128>,
-        stack: &ItemStack,
+        stack: &ItemStack<M>,
         picker: crate::world::predicate::EntityFacts,
         picked_by: Option<&PlayerHandle>,
     ) {
@@ -378,10 +378,10 @@ impl RegionActor {
             .collect()
     }
 
-    pub(super) fn report_pickup(
+    pub(super) fn report_pickup<M: tuff_item::item::Mode>(
         &mut self,
         taker: crate::world::region_api::ItemTaker,
-        stack: &ItemStack,
+        stack: &ItemStack<M>,
         position: [f64; 3],
         thrower: Option<u128>,
     ) {

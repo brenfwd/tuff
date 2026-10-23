@@ -814,7 +814,7 @@ impl RegionActor {
                     tuff_item::item::ItemStack::mint_like(
                         &stack,
                         stack.count(),
-                        tuff_item::item::MintReason::Template,
+                        tuff_item::item::MintReason::Preview,
                     ),
                     position,
                     [0.0; 3],

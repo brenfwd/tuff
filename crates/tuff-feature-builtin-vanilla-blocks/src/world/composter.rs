@@ -117,7 +117,7 @@ impl ItemPort for ComposterPort {
     }
 
     fn peek(&self, world: &dyn RegionWorld, at: &PortAccess) -> Option<ItemSnapshot> {
-        ripe(world, at).then(|| ItemSnapshot::describe(Item::BoneMeal, 1, Default::default()))
+        ripe(world, at).then(|| ItemSnapshot::new(Item::BoneMeal, 1))
     }
 
     fn take(&self, world: &mut dyn RegionWorld, at: &PortAccess) -> Option<ItemStack> {

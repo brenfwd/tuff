@@ -77,12 +77,10 @@ impl RangedExt for PlayerSession {
             let stack = self.inventory.slots()[slot].as_ref()?;
             return Some((Some(slot), tuff_item::item::ItemSnapshot::of(stack)));
         }
-        self.mode.abilities.instabuild.then(|| {
-            (
-                None,
-                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default()),
-            )
-        })
+        self.mode
+            .abilities
+            .instabuild
+            .then(|| (None, tuff_item::item::ItemSnapshot::new(Item::Arrow, 1)))
     }
 
     async fn use_crossbow(&mut self, off_hand: bool) {

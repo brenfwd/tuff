@@ -7,7 +7,7 @@
 use crate::world::inventory::{Inventory, SLOTS};
 use tuff_item::item::BurnReason;
 use tuff_item::item::MintReason;
-use tuff_item::item::{ItemSnapshot, ItemStack};
+use tuff_item::item::{ItemPicture, ItemSnapshot, ItemStack};
 
 /// Slots an edit looks at: armor, main, hotbar and off hand (never the
 /// crafting grid or the cursor).
@@ -32,7 +32,7 @@ impl InventoryEdit {
     }
 }
 
-fn take(inventory: &mut Inventory, one: &ItemStack, count: u32) -> bool {
+fn take(inventory: &mut Inventory, one: &ItemPicture, count: u32) -> bool {
     let held: u32 = OWNED
         .filter_map(|slot| inventory.slots()[slot].as_ref())
         .filter(|stack| stack.stacks_with(one))
@@ -60,7 +60,7 @@ fn take(inventory: &mut Inventory, one: &ItemStack, count: u32) -> bool {
     true
 }
 
-fn give(inventory: &mut Inventory, one: &ItemStack, count: u32) -> bool {
+fn give(inventory: &mut Inventory, one: &ItemPicture, count: u32) -> bool {
     if count == 0 {
         return false;
     }

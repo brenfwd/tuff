@@ -1365,11 +1365,12 @@ pub fn picked_block_stack(
             components.insert(key, value.clone());
         }
     }
-    let stack = ItemStack::mint(item, 1, MintReason::Transform);
-    if components.is_empty() {
-        return Some(stack);
-    }
-    Some(stack.with_components(tuff_item::item::Components::from_nbt(&components)))
+    Some(ItemStack::mint_with(
+        item,
+        1,
+        &tuff_item::item::Components::from_nbt(&components),
+        MintReason::Transform,
+    ))
 }
 
 /// The item picking an entity of `kind` gives: a mob's spawn egg, a

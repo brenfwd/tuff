@@ -8,7 +8,10 @@ pub(super) fn section_block(chunk: ChunkPos, section_y: i32, index: u16) -> Bloc
     )
 }
 
-pub(super) fn block_experience_effects(tool: Option<&ItemStack>, amount: i32) -> i32 {
+pub(super) fn block_experience_effects<M: tuff_item::item::Mode>(
+    tool: Option<&ItemStack<M>>,
+    amount: i32,
+) -> i32 {
     let registry = tuff_item::enchantment::current();
     let mut rng = rand::thread_rng();
     let mut value = amount as f32;

@@ -125,7 +125,7 @@ fn entity_predicates_check_type_distance_location_and_equipment() {
     zombie.kind = Some(EntityType::Zombie);
     zombie.equipment = vec![(
         EquipmentSlot::Head,
-        tuff_item::item::ItemSnapshot::describe(Item::IronHelmet, 1, Default::default()),
+        tuff_item::item::ItemSnapshot::new(Item::IronHelmet, 1),
     )];
     let origin = [0.0, 64.0, 0.0];
     assert!(entity(

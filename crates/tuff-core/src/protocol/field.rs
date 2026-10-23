@@ -198,13 +198,13 @@ pub mod lp_vec3 {
 /// [`ReadExt::read_creative_slot`] or `read_hashed_slot`.
 pub mod slot {
     use super::*;
-    use tuff_item::item::ItemView;
+    use tuff_item::item::AnyItem;
 
     pub fn write<'a, V>(w: &mut PacketWriter, value: &'a Option<V>)
     where
-        &'a V: Into<ItemView<'a>>,
+        &'a V: Into<AnyItem<'a>>,
     {
-        w.write_slot(value.as_ref().map(Into::into));
+        w.write_any_slot(value.as_ref().map(Into::into));
     }
 }
 

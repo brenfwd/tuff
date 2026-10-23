@@ -206,7 +206,7 @@ impl RegionActor {
         &mut self,
         pos: BlockPos,
         state: tuff_vanilla_data::BlockState,
-        tool: Option<&ItemStack>,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
     ) {
         if state.block().infested_host().is_none() || !self.shared.rule_bool("block_drops") {
             return;
@@ -219,7 +219,7 @@ impl RegionActor {
                 )
                 .unwrap_or_default()
                 .iter()
-                .any(|id| tool.enchantment_level(id) > 0)
+                .any(|id| tuff_item::with_item!(tool, |tool| tool.enchantment_level(id)) > 0)
             })
         });
         if kept_in {

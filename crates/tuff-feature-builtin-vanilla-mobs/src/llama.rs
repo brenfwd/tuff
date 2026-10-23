@@ -927,19 +927,11 @@ mod tests {
                 player_uuid: 77,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(tuff_item::item::ItemSnapshot::describe(
-                    Item::Chest,
-                    1,
-                    Default::default(),
-                )),
+                stack: Some(tuff_item::item::ItemSnapshot::new(Item::Chest, 1)),
                 hand: tuff_core::world::entity::HandOffer::new(
-                    (Some(tuff_item::item::ItemSnapshot::describe(
-                        Item::Chest,
-                        1,
-                        Default::default(),
-                    )))
-                    .as_deref()
-                    .map(tuff_item::item::ItemStack::test_copy),
+                    (Some(tuff_item::item::ItemSnapshot::new(Item::Chest, 1)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
                 ),
                 off_hand: false,
                 creative: false,
@@ -951,19 +943,11 @@ mod tests {
             llama.interact(&chest, cx);
             assert_eq!(llama.container().unwrap().len(), 2 + 4 * 3);
             let carpet = EntityInteraction {
-                stack: Some(tuff_item::item::ItemSnapshot::describe(
-                    Item::RedCarpet,
-                    1,
-                    Default::default(),
-                )),
+                stack: Some(tuff_item::item::ItemSnapshot::new(Item::RedCarpet, 1)),
                 hand: tuff_core::world::entity::HandOffer::new(
-                    (Some(tuff_item::item::ItemSnapshot::describe(
-                        Item::RedCarpet,
-                        1,
-                        Default::default(),
-                    )))
-                    .as_deref()
-                    .map(tuff_item::item::ItemStack::test_copy),
+                    (Some(tuff_item::item::ItemSnapshot::new(Item::RedCarpet, 1)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
                 ),
                 player: chest.player,
                 player_uuid: chest.player_uuid,
@@ -978,19 +962,11 @@ mod tests {
             assert!(llama.mount_refused_by(carpet.stack.as_deref()));
             assert!(llama.interact(&carpet, cx).is_some());
             let saddle = EntityInteraction {
-                stack: Some(tuff_item::item::ItemSnapshot::describe(
-                    Item::Saddle,
-                    1,
-                    Default::default(),
-                )),
+                stack: Some(tuff_item::item::ItemSnapshot::new(Item::Saddle, 1)),
                 hand: tuff_core::world::entity::HandOffer::new(
-                    (Some(tuff_item::item::ItemSnapshot::describe(
-                        Item::Saddle,
-                        1,
-                        Default::default(),
-                    )))
-                    .as_deref()
-                    .map(tuff_item::item::ItemStack::test_copy),
+                    (Some(tuff_item::item::ItemSnapshot::new(Item::Saddle, 1)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
                 ),
                 ..chest
             };

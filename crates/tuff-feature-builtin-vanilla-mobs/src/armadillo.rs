@@ -533,19 +533,11 @@ mod tests {
             player_uuid: 1,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(tuff_item::item::ItemSnapshot::describe(
-                item,
-                1,
-                Default::default(),
-            )),
+            stack: Some(tuff_item::item::ItemSnapshot::new(item, 1)),
             hand: tuff_core::world::entity::HandOffer::new(
-                (Some(tuff_item::item::ItemSnapshot::describe(
-                    item,
-                    1,
-                    Default::default(),
-                )))
-                .as_deref()
-                .map(tuff_item::item::ItemStack::test_copy),
+                (Some(tuff_item::item::ItemSnapshot::new(item, 1)))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
             ),
             off_hand: false,
             creative: false,

@@ -5,7 +5,7 @@
 
 use tuff_vanilla_data::{Block, BlockState};
 
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemPicture, ItemStack, Mode};
 use tuff_nbt::Compound;
 
 /// Comparator readings features compute from runtime state (a creaking
@@ -41,14 +41,14 @@ pub fn block_entity_signal(
         Block::Lectern => lectern(state, nbt),
         Block::Jukebox => nbt
             .get_compound("RecordItem")
-            .and_then(ItemStack::picture_from_nbt)
+            .and_then(ItemPicture::from_nbt)
             .map_or(0, |record| song_output(&record)),
         Block::ChiseledBookshelf => nbt
             .get_int("last_interacted_slot")
             .map_or(0, |slot| (slot + 1).clamp(0, 15) as u8),
         Block::DecoratedPot => nbt
             .get_compound("item")
-            .and_then(ItemStack::picture_from_nbt)
+            .and_then(ItemPicture::from_nbt)
             .map_or(0, |stack| fullness(&[Some(stack)])),
         Block::Crafter => crafter(nbt),
         Block::CommandBlock | Block::ChainCommandBlock | Block::RepeatingCommandBlock => nbt
@@ -71,10 +71,7 @@ fn lectern(state: BlockState, nbt: &Compound) -> u8 {
     if state.get("has_book") != Some("true") {
         return 0;
     }
-    let Some(book) = nbt
-        .get_compound("Book")
-        .and_then(ItemStack::picture_from_nbt)
-    else {
+    let Some(book) = nbt.get_compound("Book").and_then(ItemPicture::from_nbt) else {
         return 0;
     };
     let pages = page_count(&book);
@@ -87,7 +84,7 @@ fn lectern(state: BlockState, nbt: &Compound) -> u8 {
     (progress * 14.0).floor() as u8 + 1
 }
 
-pub fn page_count(book: &ItemStack) -> usize {
+pub fn page_count<M: Mode>(book: &ItemStack<M>) -> usize {
     let components = &book.components;
     if let Some(written) = &components.written_book {
         return written.pages.len();
@@ -96,7 +93,7 @@ pub fn page_count(book: &ItemStack) -> usize {
 }
 
 /// The comparator output of the song a record plays, 0 if it plays none.
-pub fn song_output(record: &ItemStack) -> u8 {
+pub fn song_output<M: Mode>(record: &ItemStack<M>) -> u8 {
     let components = &record.components;
     if components.is_removed(JUKEBOX_PLAYABLE) {
         return 0;
@@ -134,8 +131,7 @@ fn shelf(state: BlockState, nbt: &Compound, direction: tuff_vanilla_data::block:
             continue;
         };
         let slot = entry.get_byte("Slot").map_or(-1, i32::from);
-        if (0..3).contains(&slot) && ItemStack::mint_from_nbt(entry, MintReason::Template).is_some()
-        {
+        if (0..3).contains(&slot) && ItemPicture::from_nbt(entry).is_some() {
             bits |= 1 << slot;
         }
     }
@@ -150,9 +146,7 @@ fn crafter(nbt: &Compound) -> u8 {
             continue;
         };
         let slot = entry.get_byte("Slot").map_or(-1, i32::from);
-        if (0..CRAFTER_SLOTS as i32).contains(&slot)
-            && ItemStack::mint_from_nbt(entry, MintReason::Template).is_some()
-        {
+        if (0..CRAFTER_SLOTS as i32).contains(&slot) && ItemPicture::from_nbt(entry).is_some() {
             filled[slot as usize] = true;
         }
     }
@@ -165,7 +159,7 @@ fn crafter(nbt: &Compound) -> u8 {
 }
 
 /// How full a container with these slots is, 0 to 15.
-fn fullness(slots: &[Option<ItemStack>]) -> u8 {
+fn fullness<M: Mode>(slots: &[Option<ItemStack<M>>]) -> u8 {
     let total: f32 = slots
         .iter()
         .flatten()

@@ -19,8 +19,8 @@ use tuff_item::item::gear::{
     AttributeModifier, BlockSet, MAX_MODIFIERS, MAX_TOOL_RULES, ModifierDisplay, Tool, ToolRule,
 };
 use tuff_item::item::{
-    Components, EffectDetails, Enchantments, ItemStack, ItemView, NetworkComponent, PotionContents,
-    PotionEffect, SuspiciousEffect, typed_entity_name,
+    Components, EffectDetails, Enchantments, ItemPicture, ItemView, Mode, NetworkComponent,
+    Picture, PotionContents, PotionEffect, SuspiciousEffect, typed_entity_name,
 };
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
@@ -133,11 +133,12 @@ pub trait WriteExt {
     fn write_position(&mut self, pos: BlockPos);
     fn write_angle(&mut self, degrees: f32);
     fn write_lp_vec3(&mut self, v: [f64; 3]);
-    fn write_slot(&mut self, stack: Option<ItemView<'_>>);
+    fn write_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>);
+    fn write_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>);
     /// A non-empty stack as item, count and component patch, with no Slot
     /// count prefix (recipe book stack displays, container contents).
-    fn write_item_template(&mut self, stack: ItemView<'_>);
-    fn write_component(&mut self, component: &NetworkComponent<'_>);
+    fn write_item_template<M: Mode>(&mut self, stack: ItemView<'_, M>);
+    fn write_component<M: Mode>(&mut self, component: &NetworkComponent<'_, M>);
     fn write_text(&mut self, text: &TextComponent);
     fn write_effect_details(&mut self, details: &EffectDetails);
     fn write_bitset(&mut self, words: &[u64]);
@@ -158,28 +159,28 @@ pub trait ReadExt {
     fn read_component(
         &mut self,
         kind: DataComponentType,
-        components: &mut Components,
+        components: &mut Components<Picture>,
     ) -> Result<bool>;
     /// Reads a component nested `depth` container items deep.
     fn read_component_at(
         &mut self,
         kind: DataComponentType,
-        components: &mut Components,
+        components: &mut Components<Picture>,
         depth: u32,
     ) -> Result<bool>;
     /// A `container` component's stacks; `None` if one of them holds a
     /// component this server cannot decode.
-    fn read_container(&mut self, depth: u32) -> Result<Option<Vec<Option<ItemStack>>>>;
+    fn read_container(&mut self, depth: u32) -> Result<Option<Vec<Option<ItemPicture>>>>;
     /// A `charged_projectiles` component's stacks; `None` if one of them
     /// holds a component this server cannot keep.
-    fn read_charged_projectiles(&mut self, depth: u32) -> Result<Option<Vec<ItemStack>>>;
+    fn read_charged_projectiles(&mut self, depth: u32) -> Result<Option<Vec<ItemPicture>>>;
     /// One item template (id, count, patch); `None` for one this server
     /// cannot keep.
     /// A `bundle_contents` component's stacks; `None` if one of them holds
     /// a component this server cannot decode.
-    fn read_bundle(&mut self, depth: u32) -> Result<Option<BundleContents>>;
+    fn read_bundle(&mut self, depth: u32) -> Result<Option<BundleContents<Picture>>>;
     /// An item, count and component patch with no Slot count prefix.
-    fn read_item_template(&mut self, depth: u32) -> Result<Option<ItemStack>>;
+    fn read_item_template(&mut self, depth: u32) -> Result<Option<ItemPicture>>;
     fn read_effect_details(&mut self, depth: u32) -> Result<EffectDetails>;
     fn read_explosion(&mut self) -> Result<FireworkExplosion>;
     fn read_filterable_string(&mut self, max_chars: usize) -> Result<Filterable<String>>;

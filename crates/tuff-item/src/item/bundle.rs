@@ -4,12 +4,12 @@
 //! it holds, and anything carrying bees a full unit.
 
 use crate::item::hash::Canon;
-use crate::item::{ItemStack, MAX_CONTAINER_SLOTS};
+use crate::item::{ItemPicture, ItemStack, MAX_CONTAINER_SLOTS, Mode, Picture};
 use tuff_nbt::Tag;
 use tuff_vanilla_data::tag;
 
 /// Shulker boxes cannot go inside shulker boxes.
-pub fn fits_inside_container_item(stack: &ItemStack) -> bool {
+pub fn fits_inside_container_item<M: Mode>(stack: &ItemStack<M>) -> bool {
     !stack
         .item
         .block()
@@ -92,7 +92,7 @@ impl Fraction {
 }
 
 /// The weight of one item of `stack`, or `None` when it overflows.
-pub fn item_weight(stack: &ItemStack) -> Option<Fraction> {
+pub fn item_weight<M: Mode>(stack: &ItemStack<M>) -> Option<Fraction> {
     if let Some(inner) = &stack.components.bundle_contents {
         return inner.weight()?.add(NESTED_BUNDLE_WEIGHT);
     }
@@ -109,27 +109,39 @@ pub fn item_weight(stack: &ItemStack) -> Option<Fraction> {
 }
 
 /// Whether `stack` may go into a bundle.
-pub fn can_fit(stack: &ItemStack) -> bool {
+pub fn can_fit<M: Mode>(stack: &ItemStack<M>) -> bool {
     stack.count > 0 && fits_inside_container_item(stack)
 }
 
 #[derive(Debug, Default)]
-pub struct BundleContents {
-    items: Vec<ItemStack>,
+pub struct BundleContents<M: Mode = crate::item::Counted> {
+    items: Vec<ItemStack<M>>,
     selected: i32,
 }
 
-impl PartialEq for BundleContents {
-    fn eq(&self, other: &Self) -> bool {
+impl<M: Mode, N: Mode> PartialEq<BundleContents<N>> for BundleContents<M> {
+    fn eq(&self, other: &BundleContents<N>) -> bool {
         self.items == other.items
     }
 }
 
-impl BundleContents {
-    /// A copy for a picture or a template.
-    pub(crate) fn picture_copy(&self) -> Self {
-        Self {
-            items: self.items.iter().map(ItemStack::picture_copy).collect(),
+impl<M: Mode> BundleContents<M> {
+    pub(crate) fn copy_nested<N: Mode>(
+        &self,
+        nested: impl FnMut(&ItemStack<M>) -> ItemStack<N>,
+    ) -> BundleContents<N> {
+        BundleContents {
+            items: self.items.iter().map(nested).collect(),
+            selected: self.selected,
+        }
+    }
+
+    pub(crate) fn map_nested<N: Mode>(
+        self,
+        nested: impl FnMut(ItemStack<M>) -> ItemStack<N>,
+    ) -> BundleContents<N> {
+        BundleContents {
+            items: self.items.into_iter().map(nested).collect(),
             selected: self.selected,
         }
     }
@@ -141,29 +153,19 @@ impl BundleContents {
         }
     }
 
-    pub fn from_items(items: Vec<ItemStack>) -> Self {
+    pub fn from_items(items: Vec<ItemStack<M>>) -> Self {
         Self {
             items,
             selected: NO_SELECTION,
         }
     }
 
-    /// Stacks inserted one by one into an empty bundle, as a loot or
-    /// container rewrite does; what does not fit is dropped.
-    pub fn filled_from(stacks: impl IntoIterator<Item = ItemStack>) -> Self {
-        let mut contents = Self::new();
-        for mut stack in stacks {
-            contents.try_insert(&mut stack);
-        }
-        contents
-    }
-
-    pub fn items(&self) -> &[ItemStack] {
+    pub fn items(&self) -> &[ItemStack<M>] {
         &self.items
     }
 
     /// The stacks inside, moved out of the bundle.
-    pub fn into_items(self) -> Vec<ItemStack> {
+    pub fn into_items(self) -> Vec<ItemStack<M>> {
         self.items
     }
 
@@ -179,7 +181,7 @@ impl BundleContents {
         self.selected
     }
 
-    pub fn selected_item(&self) -> Option<&ItemStack> {
+    pub fn selected_item(&self) -> Option<&ItemStack<M>> {
         usize::try_from(self.selected)
             .ok()
             .and_then(|index| self.items.get(index))
@@ -209,6 +211,77 @@ impl BundleContents {
             Some(free) => free.whole_units_of(weight),
             None => 0,
         }
+    }
+
+    fn index_if_selected(&self) -> Option<usize> {
+        usize::try_from(self.selected)
+            .ok()
+            .filter(|index| *index < self.items.len())
+    }
+
+    /// Selects `index`, or clears the selection when it is already
+    /// selected or out of range.
+    pub fn toggle_selected(&mut self, index: i32) {
+        let outside = index < 0 || index as usize >= self.items.len();
+        self.selected = if self.selected == index || outside {
+            NO_SELECTION
+        } else {
+            index
+        };
+    }
+
+    /// How many stacks the tooltip grid shows.
+    pub fn items_to_show(&self) -> usize {
+        let stacks = self.items.len();
+        let available = if stacks > 12 { 11 } else { 12 };
+        let on_last_row = stacks % 4;
+        let empty = if on_last_row == 0 { 0 } else { 4 - on_last_row };
+        stacks.min(available - empty)
+    }
+
+    pub fn to_nbt(&self) -> Tag {
+        Tag::List(
+            self.items
+                .iter()
+                .map(|stack| Tag::Compound(stack.to_nbt()))
+                .collect(),
+        )
+    }
+
+    pub fn canon(&self) -> Canon {
+        Canon::List(self.items.iter().map(ItemStack::canon).collect())
+    }
+}
+
+impl BundleContents<Picture> {
+    pub fn from_nbt(tag: &Tag) -> Option<Self> {
+        let entries = tag.as_list()?;
+        if entries.len() > MAX_CONTAINER_SLOTS {
+            return None;
+        }
+        let mut items = Vec::with_capacity(entries.len());
+        for entry in entries {
+            items.push(ItemPicture::from_nbt(entry.as_compound()?)?);
+        }
+        Some(Self::from_items(items))
+    }
+}
+
+impl BundleContents {
+    /// Stacks inserted one by one into an empty bundle, as a loot or
+    /// container rewrite does; what does not fit goes to `spill`.
+    pub fn filled_from(
+        stacks: impl IntoIterator<Item = ItemStack>,
+        spill: &mut Vec<ItemStack>,
+    ) -> Self {
+        let mut contents = Self::new();
+        for mut stack in stacks {
+            contents.try_insert(&mut stack);
+            if !stack.is_empty() {
+                spill.push(stack);
+            }
+        }
+        contents
     }
 
     /// Inserts as much of `stack` as fits, taking it from `stack`;
@@ -256,60 +329,9 @@ impl BundleContents {
         self.selected = NO_SELECTION;
         Some(removed)
     }
-
-    fn index_if_selected(&self) -> Option<usize> {
-        usize::try_from(self.selected)
-            .ok()
-            .filter(|index| *index < self.items.len())
-    }
-
-    /// Selects `index`, or clears the selection when it is already
-    /// selected or out of range.
-    pub fn toggle_selected(&mut self, index: i32) {
-        let outside = index < 0 || index as usize >= self.items.len();
-        self.selected = if self.selected == index || outside {
-            NO_SELECTION
-        } else {
-            index
-        };
-    }
-
-    /// How many stacks the tooltip grid shows.
-    pub fn items_to_show(&self) -> usize {
-        let stacks = self.items.len();
-        let available = if stacks > 12 { 11 } else { 12 };
-        let on_last_row = stacks % 4;
-        let empty = if on_last_row == 0 { 0 } else { 4 - on_last_row };
-        stacks.min(available - empty)
-    }
-
-    pub fn from_nbt(tag: &Tag) -> Option<Self> {
-        let entries = tag.as_list()?;
-        if entries.len() > MAX_CONTAINER_SLOTS {
-            return None;
-        }
-        let mut items = Vec::with_capacity(entries.len());
-        for entry in entries {
-            items.push(ItemStack::decode_nbt(entry.as_compound()?)?);
-        }
-        Some(Self::from_items(items))
-    }
-
-    pub fn to_nbt(&self) -> Tag {
-        Tag::List(
-            self.items
-                .iter()
-                .map(|stack| Tag::Compound(stack.to_nbt()))
-                .collect(),
-        )
-    }
-
-    pub fn canon(&self) -> Canon {
-        Canon::List(self.items.iter().map(ItemStack::canon).collect())
-    }
 }
 
-impl ItemStack {
+impl<M: Mode> ItemStack<M> {
     /// Whether this is a bundle (it can hold the contents component).
     pub fn is_bundle(&self) -> bool {
         self.item.name().ends_with("bundle")
@@ -325,7 +347,7 @@ impl ItemStack {
 
     /// Changes the bundle's contents through `edit`, keeping the stored
     /// patch minimal (an empty bundle is the item's default).
-    pub fn edit_bundle<R>(&mut self, edit: impl FnOnce(&mut BundleContents) -> R) -> R {
+    pub fn edit_bundle<R>(&mut self, edit: impl FnOnce(&mut BundleContents<M>) -> R) -> R {
         let mut contents = self.components.bundle_contents.take().unwrap_or_default();
         let result = edit(&mut contents);
         self.components.bundle_contents = (!contents.is_empty()).then_some(contents);

@@ -186,8 +186,8 @@ impl RegionActor {
         }
     }
 
-    /// Keeps a far half's pictured contents as template stacks hoppers,
-    /// golems and comparators here read; they are never real items.
+    /// Keeps a far half's pictured contents as stand-in stacks hoppers,
+    /// golems and comparators here read (see `MintReason::Preview`).
     pub(super) fn half_snapshot(
         &mut self,
         pos: BlockPos,
@@ -198,12 +198,16 @@ impl RegionActor {
                 .iter()
                 .map(|slot| {
                     slot.as_ref().map(|shown| {
-                        ItemStack::mint_like(shown, shown.count(), MintReason::Template)
+                        ItemStack::mint_like(shown, shown.count(), MintReason::Preview)
                     })
                 })
                 .collect()
         });
-        self.sim.redstone.far_halves.insert(pos, mirror);
+        if let Some(Some(old)) = self.sim.redstone.far_halves.insert(pos, mirror) {
+            for stack in old.into_iter().flatten() {
+                stack.burn(BurnReason::Preview);
+            }
+        }
         for near in Self::horizontal_neighbours(pos) {
             if self.owns(near) {
                 self.sim.redstone.container_changes.insert(near);
@@ -407,10 +411,10 @@ impl RegionActor {
     /// A copper golem's take from the parts of a joined container: the
     /// first slot holding `stack` (with its components) gives up to
     /// `stack.count`, and the golem is handed only what was removed.
-    pub(super) fn take_joined(
+    pub(super) fn take_joined<M: tuff_item::item::Mode>(
         &mut self,
         parts: &[BlockPos],
-        stack: &ItemStack,
+        stack: &ItemStack<M>,
         golem: i32,
         at: BlockPos,
     ) {
@@ -433,7 +437,7 @@ impl RegionActor {
                     && let Some(held) = items[slot].as_mut()
                 {
                     let left = held.count().saturating_sub(stack.count());
-                    held.resize(left, MintReason::Template, BurnReason::Template);
+                    held.resize(left, MintReason::Preview, BurnReason::Preview);
                     if left == 0 {
                         items[slot] = None;
                     }
@@ -476,14 +480,14 @@ impl RegionActor {
             return Some(stack);
         }
         let (moving, rest) = stack.split(inserted);
-        let shown = ItemStack::mint_like(&moving, moving.count(), MintReason::Template);
+        let shown = ItemStack::mint_like(&moving, moving.count(), MintReason::Preview);
         if let Err(message) = neighbour.try_internal(RegionInternal::HalfInsert {
             pos: part,
             face,
             stack: moving,
             cause: self.sim.cause,
         }) {
-            shown.burn(BurnReason::Template);
+            shown.burn(BurnReason::Preview);
             let RegionInternal::HalfInsert { stack: back, .. } = *message else {
                 return rest;
             };
@@ -503,7 +507,7 @@ impl RegionActor {
             if let Some(left) =
                 block_entity::insert(&recipes, kind, items, face, shown, &mut changed, 0)
             {
-                left.burn(BurnReason::Template);
+                left.burn(BurnReason::Preview);
             }
         }
         rest
@@ -515,7 +519,7 @@ impl RegionActor {
             && let Some(stack) = items[slot].as_mut()
         {
             let left = stack.count().saturating_sub(1);
-            stack.resize(left, MintReason::Template, BurnReason::Template);
+            stack.resize(left, MintReason::Preview, BurnReason::Preview);
             if left == 0 {
                 items[slot] = None;
             }

@@ -92,7 +92,7 @@ pub struct AdvancementEntry<'a> {
 pub struct AdvancementDisplay<'a> {
     pub title: &'a TextComponent,
     pub description: &'a TextComponent,
-    pub icon: ItemView<'a>,
+    pub icon: ItemView<'a, tuff_item::item::Picture>,
     pub frame: u8,
     pub background: Option<&'a str>,
     pub show_toast: bool,

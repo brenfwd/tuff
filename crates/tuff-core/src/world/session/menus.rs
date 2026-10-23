@@ -117,18 +117,18 @@ impl PlayerSession {
         );
         if self.inventory.slots()[0] != result {
             if let Some(old) = std::mem::replace(self.inventory.slot_mut(0), result) {
-                old.burn(BurnReason::Template);
+                old.burn(BurnReason::Preview);
             }
             let state_id = self.inventory.next_state_id();
             let packet = framed(&play::ContainerSetSlot {
                 window_id: 0,
                 state_id,
                 slot: 0,
-                item: self.inventory.slots()[0].as_ref().map(ItemStack::view),
+                item: self.inventory.slots()[0].as_ref().map(ItemStack::any),
             });
             self.send_raw(packet);
         } else if let Some(result) = result {
-            result.burn(BurnReason::Template);
+            result.burn(BurnReason::Preview);
         }
     }
 
@@ -149,7 +149,7 @@ impl PlayerSession {
             window_id,
             state_id,
             slot: wire as i16,
-            item: menu.container[slot].as_ref().map(ItemStack::view),
+            item: menu.container[slot].as_ref().map(ItemStack::any),
         });
         self.send_raw(packet);
     }
@@ -260,7 +260,7 @@ impl PlayerSession {
                 if let Some(old) =
                     std::mem::replace(&mut menu.container[anvil::RESULT], fresh.result.take())
                 {
-                    old.burn(BurnReason::Template);
+                    old.burn(BurnReason::Preview);
                 }
                 let cost = fresh.cost;
                 *outcome = fresh;
@@ -278,8 +278,10 @@ impl PlayerSession {
                     menu.container[grindstone::ADDITIONAL].as_ref(),
                 );
                 if menu.container[grindstone::RESULT] != result {
-                    menu.container[grindstone::RESULT] = result;
+                    menu::show_preview(&mut menu.container[grindstone::RESULT], result);
                     self.send_menu_slot(grindstone::RESULT);
+                } else if let Some(result) = result {
+                    result.burn(BurnReason::Preview);
                 }
             }
             Some(Station::Loom { patterns, selected }) => {
@@ -294,7 +296,7 @@ impl PlayerSession {
                 let index_changed = *selected != fresh.selected;
                 *selected = fresh.selected;
                 let result_changed = menu.container[loom::RESULT] != fresh.result;
-                menu.container[loom::RESULT] = fresh.result;
+                menu::show_preview(&mut menu.container[loom::RESULT], fresh.result);
                 if result_changed {
                     self.send_menu_slot(loom::RESULT);
                 }
@@ -304,10 +306,9 @@ impl PlayerSession {
             }
             Some(Station::Cartography { inputs, stale }) => {
                 let slots = [cartography::MAP, cartography::ADDITIONAL];
-                let changed = slots
-                    .iter()
-                    .zip(inputs.iter())
-                    .any(|(&slot, seen)| menu.container[slot].as_ref() != seen.as_deref());
+                let changed = slots.iter().zip(inputs.iter()).any(|(&slot, seen)| {
+                    !tuff_item::item::same_slot(menu.container[slot].as_ref(), seen.as_deref())
+                });
                 if changed {
                     **inputs = slots.map(|slot| {
                         menu.container[slot]
@@ -316,7 +317,7 @@ impl PlayerSession {
                     });
                     *stale = inputs.iter().all(Option::is_some);
                     if let Some(old) = menu.container[cartography::RESULT].take() {
-                        old.burn(tuff_item::item::BurnReason::Template);
+                        old.burn(tuff_item::item::BurnReason::Preview);
                         self.send_menu_slot(cartography::RESULT);
                     }
                 }
@@ -417,7 +418,7 @@ impl PlayerSession {
         }
         self.progress.stats.award_custom(CustomStat::EnchantItem, 1);
         self.fire(crate::world::advancement::trigger::Event::EnchantedItem {
-            item: &item_for_trigger,
+            item: item_for_trigger.any(),
             levels: price,
         });
         self.send_menu_slot(enchantment::ITEM);
@@ -656,7 +657,7 @@ impl PlayerSession {
             window_id: 0,
             state_id,
             slots: self.inventory.slots().into(),
-            carried: self.inventory.carried().map(ItemStack::view),
+            carried: self.inventory.carried().map(ItemStack::any),
         };
         let bytes = framed(&packet);
         self.send_raw(bytes);
@@ -873,17 +874,17 @@ impl PlayerSession {
         };
         let state_id = menu.next_state_id();
         let window_id = menu.window_id;
-        let mut slots: Vec<Option<tuff_item::item::ItemView<'_>>> = menu
+        let mut slots: Vec<Option<tuff_item::item::AnyItem<'_>>> = menu
             .container
             .iter()
-            .map(|slot| slot.as_ref().map(ItemStack::view))
+            .map(|slot| slot.as_ref().map(ItemStack::any))
             .collect();
         for slot in 0..menu.kind.player_section() {
             let index = menu
                 .kind
                 .inventory_slot(menu.container.len() + slot)
                 .expect("player section slot");
-            slots.push(self.inventory.slots()[index].as_ref().map(ItemStack::view));
+            slots.push(self.inventory.slots()[index].as_ref().map(ItemStack::any));
         }
         if menu.kind == MenuKind::Crafter {
             let preview = slots.remove(menu::crafter::PREVIEW);
@@ -893,7 +894,7 @@ impl PlayerSession {
             window_id,
             state_id,
             slots: slots.as_slice().into(),
-            carried: self.inventory.carried().map(ItemStack::view),
+            carried: self.inventory.carried().map(ItemStack::any),
         };
         let bytes = framed(&packet);
         self.send_raw(bytes);

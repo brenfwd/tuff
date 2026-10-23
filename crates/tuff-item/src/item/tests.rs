@@ -23,10 +23,10 @@ fn stacks_without_components_stay_small_and_unallocated() {
     assert!(!stone.components.is_allocated());
     assert!(!stone.test_copy().components.is_allocated());
     assert!(!Components::from_nbt(&Compound::new()).is_allocated());
-    assert!(!Components::from(ComponentPatch::default()).is_allocated());
+    assert!(!Components::from(ComponentPatch::new()).is_allocated());
     assert!(
         !stone
-            .with_components(ComponentPatch::default())
+            .with_components(ComponentPatch::new())
             .components
             .is_allocated()
     );
@@ -35,8 +35,8 @@ fn stacks_without_components_stay_small_and_unallocated() {
 #[tuff_core::watchdog]
 #[test]
 fn an_emptied_patch_equals_no_patch() {
-    let plain = Components::default();
-    let mut emptied = Components::from(ComponentPatch {
+    let plain = Components::new();
+    let mut emptied: Components = Components::from(ComponentPatch {
         damage: Some(3),
         ..Default::default()
     });
@@ -48,19 +48,19 @@ fn an_emptied_patch_equals_no_patch() {
     assert!(emptied.is_empty());
     assert_eq!(emptied, plain);
     assert_eq!(plain, emptied);
-    assert!(!emptied.picture_copy().is_allocated());
+    assert!(!emptied.picture().is_allocated());
     emptied.compact();
     assert!(!emptied.is_allocated());
     assert_eq!(
         format!("{emptied:?}"),
-        format!("{:?}", ComponentPatch::default())
+        format!("{:?}", ComponentPatch::new())
     );
 }
 
 #[tuff_core::watchdog]
 #[test]
 fn removing_an_unmodelled_component_never_allocates() {
-    let mut plain = Components::default();
+    let mut plain = Components::new();
     assert_eq!(plain.remove_other("minecraft:rarity"), None);
     assert!(!plain.is_allocated());
     let mut rare = Components::from_nbt(&Compound::new().with("minecraft:rarity", "epic"));
@@ -342,7 +342,7 @@ fn gear_components_are_typed_and_round_trip() {
     let c = Components::from_nbt(&broken);
     assert_eq!(c.tool, None);
     assert_eq!(c.to_nbt(), broken, "a tool this server cannot read is kept");
-    let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test).with_components(c);
+    let sword = ItemStack::mint_with(Item::DiamondSword, 1, &c, MintReason::Test);
     assert!(sword.tool().is_some(), "and the item default still applies");
 }
 
@@ -651,7 +651,7 @@ fn network_view_hashes_like_the_client() {
 #[tuff_core::watchdog]
 #[test]
 fn network_view_drops_what_cannot_be_encoded() {
-    let mut components = Components::default();
+    let mut components = Components::new();
     components
         .other
         .insert("minecraft:custom_data", Compound::new().with("k", 1));
@@ -668,7 +668,7 @@ fn network_view_drops_what_cannot_be_encoded() {
         vec![DataComponentType::CustomData, DataComponentType::Lore]
     );
     assert_eq!(components.network_removed(), vec![DataComponentType::Tool]);
-    let mut received = Components::default();
+    let mut received = Components::new();
     for component in added {
         assert!(received.set_network(component));
     }
@@ -794,17 +794,7 @@ fn transform_records_a_burn_and_a_mint_and_keeps_count_and_components() {
     assert_eq!(stack.item(), Item::Book);
     assert_eq!(stack.count(), 5);
     assert_eq!(stack.components.repair_cost, Some(3));
-    assert!(!stack.is_picture());
     assert!(after.burned >= before.burned + 5);
     assert!(after.minted >= before.minted + 5);
     stack.burn(BurnReason::Test);
-
-    let mut picture = ItemStack::mint(Item::Map, 1, MintReason::Test);
-    picture.transform(
-        Item::WoodlandMansionMap,
-        MintReason::Transform,
-        BurnReason::Transform,
-    );
-    assert_eq!(picture.item(), Item::WoodlandMansionMap);
-    assert!(picture.is_picture());
 }

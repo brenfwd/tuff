@@ -16,7 +16,7 @@ use crate::world::messages::{
     AttributeAnswer, AttributeOp, DialogRef, Directive, DirectiveReply, DirectiveSource,
     PostEffectOp, SlotFill, Teleport, TitleAction,
 };
-use tuff_item::item::{ItemSnapshot, ItemStack, ItemView, MintReason};
+use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 
 #[derive(Clone, Copy)]
@@ -115,8 +115,7 @@ impl PlayerSession {
                 self.reply(1, changed, None)
             }
             Directive::Give { stack, count } => {
-                self.give_items(stack.view(), count, MintReason::Command)
-                    .await;
+                self.give_items(&stack, count, MintReason::Command).await;
                 self.reply(1, true, None)
             }
             Directive::Clear {
@@ -689,7 +688,12 @@ impl PlayerSession {
     /// `/give`: mints `count` items like `template` for `reason`, stacked
     /// up to the item's size and dropped at the player when the inventory
     /// is full.
-    pub async fn give_items(&mut self, template: ItemView<'_>, count: i32, reason: MintReason) {
+    pub async fn give_items(
+        &mut self,
+        template: &tuff_item::item::ItemPicture,
+        count: i32,
+        reason: MintReason,
+    ) {
         let max = i32::from(template.max_stack_size().max(1));
         let mut remaining = count;
         let mut parts = Vec::new();

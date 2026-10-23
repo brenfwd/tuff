@@ -608,7 +608,7 @@ fn container_packets_round_trip() {
             components: Default::default(),
         },
         buy_b: None,
-        sell: tuff_item::item::ItemSnapshot::describe(Item::Bread, 4, Default::default()),
+        sell: tuff_item::item::ItemSnapshot::new(Item::Bread, 4),
         uses: 0,
         max_uses: 12,
         reward_exp: true,

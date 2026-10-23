@@ -3,7 +3,7 @@
 use tuff_vanilla_data::Item;
 
 use super::CustomContent;
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemPicture, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 
 pub const ROWS: u8 = 6;
@@ -60,24 +60,18 @@ impl Catalog {
     }
 
     /// The filled slots: the page's items then the paging arrows.
-    pub fn slots(&self, content: &CustomContent) -> Vec<(u8, ItemStack)> {
-        let mut slots: Vec<(u8, ItemStack)> = content
+    pub fn slots(&self, content: &CustomContent) -> Vec<(u8, ItemPicture)> {
+        let mut slots: Vec<(u8, ItemPicture)> = content
             .catalog_page(self.page, PAGE_SIZE)
             .into_iter()
             .enumerate()
             .map(|(i, stack)| (i as u8, stack))
             .collect();
         if self.page > 0 {
-            slots.push((
-                PREVIOUS_SLOT,
-                ItemStack::mint(Item::Arrow, 1, MintReason::Template),
-            ));
+            slots.push((PREVIOUS_SLOT, ItemPicture::new(Item::Arrow, 1)));
         }
         if self.page + 1 < content.catalog_pages(PAGE_SIZE) {
-            slots.push((
-                NEXT_SLOT,
-                ItemStack::mint(Item::Arrow, 1, MintReason::Template),
-            ));
+            slots.push((NEXT_SLOT, ItemPicture::new(Item::Arrow, 1)));
         }
         slots
     }
@@ -92,7 +86,13 @@ impl Catalog {
                 .catalog_page(self.page, PAGE_SIZE)
                 .into_iter()
                 .nth(usize::from(s))
-                .map_or(CatalogClick::Nothing, CatalogClick::Take),
+                .map_or(CatalogClick::Nothing, |picture| {
+                    CatalogClick::Take(ItemStack::mint_like(
+                        &picture,
+                        picture.count(),
+                        MintReason::Command,
+                    ))
+                }),
             _ => CatalogClick::Nothing,
         }
     }

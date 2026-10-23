@@ -56,9 +56,9 @@ impl Fired {
 }
 
 impl std::ops::Deref for Fired {
-    type Target = ItemStack;
+    type Target = tuff_item::item::ItemPicture;
 
-    fn deref(&self) -> &ItemStack {
+    fn deref(&self) -> &tuff_item::item::ItemPicture {
         &self.shown
     }
 }

@@ -348,12 +348,10 @@ impl ItemUseExt for PlayerSession {
             let stack = self.inventory.slots()[slot].as_ref()?;
             return Some((Some(slot), tuff_item::item::ItemSnapshot::of(stack)));
         }
-        self.mode.abilities.instabuild.then(|| {
-            (
-                None,
-                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default()),
-            )
-        })
+        self.mode
+            .abilities
+            .instabuild
+            .then(|| (None, tuff_item::item::ItemSnapshot::new(Item::Arrow, 1)))
     }
 
     /// The velocity of something this player shoots or throws along its

@@ -616,7 +616,12 @@ impl RegionWorld for RegionActor {
         RegionActor::saved_block_entity(self, pos)
     }
 
-    fn release_infestation(&mut self, pos: BlockPos, state: BlockState, tool: Option<&ItemStack>) {
+    fn release_infestation(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
+    ) {
         RegionActor::release_infestation(self, pos, state, tool);
     }
 
@@ -1099,7 +1104,7 @@ impl RegionActor {
         player: PlayerId,
         pos: BlockPos,
         state: BlockState,
-        tool: Option<&tuff_item::item::ItemStack>,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
     ) {
         let action = PlayerBlockAction {
             player,

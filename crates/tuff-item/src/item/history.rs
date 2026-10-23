@@ -9,8 +9,7 @@ use std::panic::Location;
 
 use tuff_vanilla_data::Item;
 
-use super::ledger::Tally;
-use super::{Components, ItemStack};
+use super::{Components, Counted, ItemStack, Mode};
 
 #[cfg(debug_assertions)]
 const KEPT: usize = 64;
@@ -41,15 +40,18 @@ impl fmt::Debug for History {
 }
 
 impl History {
-    fn begin() -> Self {
+    #[track_caller]
+    pub(super) fn begin(item: Item, count: u8, origin: fmt::Arguments<'_>) -> Self {
         let mut id: [u8; 16] = rand::random();
         id[6] = (id[6] & 0x0f) | 0x40;
         id[8] = (id[8] & 0x3f) | 0x80;
-        Self {
+        let mut history = Self {
             id,
             #[cfg(debug_assertions)]
             entries: Vec::new(),
-        }
+        };
+        history.record(format_args!("{origin}: {count} {}", item.name()));
+        history
     }
 
     /// The stack's id as a hyphenated UUID.
@@ -134,36 +136,32 @@ impl Entry {
     }
 }
 
-impl ItemStack {
+impl<M: Mode> ItemStack<M> {
     /// The only place a stack is put together; everything else goes
     /// through a door that calls this.
     #[track_caller]
     pub(crate) fn assemble(
         item: Item,
         count: u8,
-        components: Components,
-        tally: Tally,
+        components: Components<M>,
         origin: fmt::Arguments<'_>,
     ) -> Self {
-        let mut stack = Self {
+        Self {
             item,
             count,
             components,
-            tally,
-            history: History::begin(),
-        };
-        stack
-            .history
-            .record(format_args!("{origin}: {count} {}", item.name()));
-        stack
-    }
-
-    pub fn history(&self) -> &History {
-        &self.history
+            extra: M::begin(item, count, origin),
+        }
     }
 
     #[track_caller]
     pub(crate) fn note(&mut self, what: fmt::Arguments<'_>) {
-        self.history.record(what);
+        M::record(&mut self.extra, what);
+    }
+}
+
+impl ItemStack<Counted> {
+    pub fn history(&self) -> &History {
+        &self.extra
     }
 }

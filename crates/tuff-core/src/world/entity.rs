@@ -895,7 +895,7 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// What it wears and holds in each slot it has, by equipment slot id,
     /// for viewers.
-    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> {
+    fn equipment(&self) -> Vec<(u8, Option<tuff_item::item::AnyItem<'_>>)> {
         Vec::new()
     }
 
@@ -1281,7 +1281,7 @@ pub trait RegionEntity: Any + Send + Debug {
 
     /// Whether a plain click holding `stack` is not meant to mount it
     /// (feeding a pig).
-    fn mount_refused_by(&self, _stack: Option<&ItemStack>) -> bool {
+    fn mount_refused_by(&self, _stack: Option<&tuff_item::item::ItemPicture>) -> bool {
         false
     }
 

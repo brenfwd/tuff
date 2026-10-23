@@ -234,12 +234,12 @@ impl ContainerKind {
 
     /// Whether an automated transfer may put `stack` in `slot` of a
     /// container holding `items`, reached through `face`.
-    pub fn can_insert(
+    pub fn can_insert<M: tuff_item::item::Mode>(
         self,
         recipes: &RecipeSet,
         items: &[Option<ItemStack>],
         slot: usize,
-        stack: &ItemStack,
+        stack: &ItemStack<M>,
         _face: Option<Facing>,
         disabled: u16,
     ) -> bool {
@@ -861,12 +861,12 @@ pub fn insert(
 /// How many of `count` of `stack` [`insert`] would put into `items`,
 /// reading them only. Exact for containers whose slots accept items
 /// regardless of the others (chests).
-pub fn insert_room(
+pub fn insert_room<M: tuff_item::item::Mode>(
     recipes: &RecipeSet,
     kind: ContainerKind,
     items: &[Option<ItemStack>],
     face: Option<Facing>,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
     count: u8,
     disabled: u16,
 ) -> u8 {

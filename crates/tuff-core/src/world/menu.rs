@@ -748,7 +748,7 @@ impl View<'_> {
                 return None;
             }
             let stack = ItemStack::mint_like(preview, made, reason);
-            ItemStack::burn_from(entry, made, BurnReason::Template);
+            ItemStack::burn_from(entry, made, BurnReason::Preview);
             return Some(stack);
         }
         let entry = self.get_mut(slot);
@@ -905,8 +905,8 @@ impl View<'_> {
         }
         if !moved {
             if self.is_result(slot) && self.kind.result_is_preview() {
-                let preview = ItemStack::mint_like(&stack, stack.count(), MintReason::Template);
-                stack.burn(BurnReason::Template);
+                let preview = ItemStack::mint_like(&stack, stack.count(), MintReason::Preview);
+                stack.burn(BurnReason::Preview);
                 ItemStack::put_back(self.get_mut(slot), preview);
             } else {
                 ItemStack::put_back(self.get_mut(slot), stack);
@@ -931,6 +931,13 @@ pub struct Click {
     pub slot: i16,
     pub button: i8,
     pub mode: i32,
+}
+
+/// Puts `preview` in a result slot, burning the stand-in it replaces.
+pub fn show_preview(slot: &mut Option<ItemStack>, preview: Option<ItemStack>) {
+    if let Some(old) = std::mem::replace(slot, preview) {
+        old.burn(BurnReason::Preview);
+    }
 }
 
 /// What a click needs beyond the menu itself.

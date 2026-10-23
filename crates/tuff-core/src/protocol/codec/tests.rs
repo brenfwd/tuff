@@ -98,10 +98,7 @@ fn creative_slot_accepts_plain_stacks_only() {
     assert_eq!(slot(-5, 0, 0, 0), (CreativeSlot::Empty, 0));
     assert_eq!(
         slot(64, stone, 0, 0),
-        (
-            CreativeSlot::Stack(ItemSnapshot::describe(Item::Stone, 64, Default::default())),
-            0
-        )
+        (CreativeSlot::Stack(ItemSnapshot::new(Item::Stone, 64)), 0)
     );
     assert_eq!(slot(65, stone, 0, 0).0, CreativeSlot::Invalid);
     assert_eq!(slot(2, sword, 0, 0).0, CreativeSlot::Invalid);
