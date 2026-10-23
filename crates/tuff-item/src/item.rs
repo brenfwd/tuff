@@ -16,7 +16,7 @@ pub mod identity;
 mod ledger;
 mod view;
 pub use ledger::{BurnReason, LedgerTotals, MintReason, SlotsCow, conservation};
-pub use view::{ComponentsSnapshot, ItemSnapshot, ItemView, snapshot_slots};
+pub use view::{AsItemView, ComponentsSnapshot, ItemSnapshot, ItemView, snapshot_slots};
 
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;

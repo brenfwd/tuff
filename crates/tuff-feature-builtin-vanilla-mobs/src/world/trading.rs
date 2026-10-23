@@ -452,9 +452,9 @@ mod tests {
         );
         let emeralds = ItemStack::mint(Item::Emerald, 7, MintReason::Test);
         let book = ItemStack::mint(Item::Book, 1, MintReason::Test);
-        assert!(offer.satisfied_by(Some(&emeralds), Some(&book)));
-        assert!(!offer.satisfied_by(Some(&book), Some(&emeralds)));
-        assert!(!offer.satisfied_by(Some(&emeralds), None));
+        assert!(offer.satisfied_by(Some(emeralds.view()), Some(book.view())));
+        assert!(!offer.satisfied_by(Some(book.view()), Some(emeralds.view())));
+        assert!(!offer.satisfied_by(Some(emeralds.view()), None));
         let (mut a, mut b) = (Some(emeralds), Some(book));
         assert!(offer.take(&mut a, &mut b));
         assert_eq!(a.map(|s| s.count()), Some(2));
@@ -462,8 +462,11 @@ mod tests {
         let offers = [offer];
         let pay = ItemStack::mint(Item::Emerald, 5, MintReason::Test);
         let book = ItemStack::mint(Item::Book, 1, MintReason::Test);
-        assert_eq!(recipe_for(&offers, Some(&pay), Some(&book), 0), Some(0));
-        assert_eq!(recipe_for(&offers, Some(&pay), None, 0), None);
+        assert_eq!(
+            recipe_for(&offers, Some(pay.view()), Some(book.view()), 0),
+            Some(0)
+        );
+        assert_eq!(recipe_for(&offers, Some(pay.view()), None, 0), None);
     }
 
     #[tuff_core::watchdog]
@@ -497,13 +500,28 @@ mod tests {
         set_potion(&mut water, Potion::Water);
         let mut awkward = ItemStack::mint(Item::Potion, 1, MintReason::Test);
         set_potion(&mut awkward, Potion::Awkward);
-        assert!(offer.buy.matches(&water));
-        assert!(!offer.buy.matches(&awkward));
+        assert!(offer.buy.matches(water.view()));
+        assert!(!offer.buy.matches(awkward.view()));
         assert!(
             !offer
                 .buy
-                .matches(&ItemStack::mint(Item::Potion, 1, MintReason::Test))
+                .matches(ItemStack::mint(Item::Potion, 1, MintReason::Test).view())
         );
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn cost_components_match_as_a_subset() {
+        let trade = Trade::builtin("minecraft:wandering_trader/water_bottle_emerald").unwrap();
+        let offer = offer_from_trade(trade, None, &mut rng()).unwrap();
+        let mut water = ItemStack::mint(Item::Potion, 1, MintReason::Test);
+        set_potion(&mut water, Potion::Water);
+        water.components.repair_cost = Some(3);
+        assert!(offer.buy.matches(water.view()));
+        let mut awkward = ItemStack::mint(Item::Potion, 1, MintReason::Test);
+        set_potion(&mut awkward, Potion::Awkward);
+        awkward.components.repair_cost = Some(3);
+        assert!(!offer.buy.matches(awkward.view()));
     }
 
     #[tuff_core::watchdog]

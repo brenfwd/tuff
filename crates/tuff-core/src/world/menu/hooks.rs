@@ -1,3 +1,5 @@
+use tuff_item::item::AsItemView;
+
 use super::*;
 
 /// What a cartography table's second slot accepts.
@@ -266,9 +268,9 @@ pub fn merchant_sell_item(
     offers: &[MerchantOffer],
     hint: usize,
 ) -> (Option<usize>, Option<ItemStack>) {
-    let (a, b) = match &container[merchant::PAYMENT_A] {
-        None => (container[merchant::PAYMENT_B].as_ref(), None),
-        Some(a) => (Some(a), container[merchant::PAYMENT_B].as_ref()),
+    let (a, b) = match container[merchant::PAYMENT_A].view() {
+        None => (container[merchant::PAYMENT_B].view(), None),
+        Some(a) => (Some(a), container[merchant::PAYMENT_B].view()),
     };
     if a.is_none() || offers.is_empty() {
         return (None, None);
@@ -378,7 +380,7 @@ pub fn merchant_move_items(
             let Some(item) = view.get(window) else {
                 continue;
             };
-            if !cost.matches(item) {
+            if !cost.matches(item.view()) {
                 continue;
             }
             if view.container[slot]

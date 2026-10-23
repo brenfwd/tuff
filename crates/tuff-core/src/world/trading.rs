@@ -2,11 +2,9 @@
 //! how payment slots pick an offer. What merchants offer comes from the
 //! feature that owns them.
 
-use tuff_item::item::BurnReason;
-use tuff_vanilla_data::Item;
-
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{AsItemView, BurnReason, ItemSnapshot, ItemStack, ItemView, MintReason};
 use tuff_nbt::{Compound, Tag};
+use tuff_vanilla_data::Item;
 
 /// A player taking the results of a merchant's offers.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,26 +47,28 @@ impl ItemCost {
     }
 
     /// The stack the cost shows: its item, count and components.
-    pub fn stack(&self) -> ItemStack {
+    pub fn snapshot(&self) -> ItemSnapshot {
         let mut nbt = Compound::new()
             .with("id", self.item.name())
             .with("count", self.count.clamp(1, 99));
         if !self.components.is_empty() {
             nbt.insert("components", self.components.clone());
         }
-        ItemStack::mint_from_nbt(&nbt, MintReason::Trade)
-            .unwrap_or_else(|| ItemStack::mint(self.item, 1, MintReason::Trade))
+        // Mint and immediately burn into template
+        let minted = ItemStack::mint_from_nbt(&nbt, MintReason::Trade)
+            .unwrap_or_else(|| ItemStack::mint(self.item, 1, MintReason::Trade));
+        minted.into_template()
     }
 
     /// Whether `stack` is this item with every required component equal.
-    pub fn matches(&self, stack: &ItemStack) -> bool {
+    pub fn matches(&self, stack: ItemView) -> bool {
         if stack.item() != self.item {
             return false;
         }
         if self.components.is_empty() {
             return true;
         }
-        let wanted = self.stack().components.to_nbt();
+        let wanted = self.snapshot().components.to_nbt();
         let have = stack.components.to_nbt();
         self.components
             .keys()
@@ -158,8 +158,8 @@ impl MerchantOffer {
     }
 
     /// Whether the two payment stacks buy this offer, in that order.
-    pub fn satisfied_by(&self, a: Option<&ItemStack>, b: Option<&ItemStack>) -> bool {
-        let Some(a) = a.filter(|a| self.buy.matches(a)) else {
+    pub fn satisfied_by(&self, a: Option<ItemView>, b: Option<ItemView>) -> bool {
+        let Some(a) = a.filter(|a| self.buy.matches(*a)) else {
             return false;
         };
         if (a.count() as i32) < self.cost_a() {
@@ -173,7 +173,7 @@ impl MerchantOffer {
 
     /// Pays for the offer from the two stacks; false if they fall short.
     pub fn take(&self, a: &mut Option<ItemStack>, b: &mut Option<ItemStack>) -> bool {
-        if !self.satisfied_by(a.as_ref(), b.as_ref()) {
+        if !self.satisfied_by(a.view(), b.view()) {
             return false;
         }
         shrink(a, self.cost_a());
@@ -283,8 +283,8 @@ pub fn offers_from_nbt(nbt: &Compound) -> Vec<MerchantOffer> {
 /// past the first offer, else the first one they satisfy.
 pub fn recipe_for(
     offers: &[MerchantOffer],
-    a: Option<&ItemStack>,
-    b: Option<&ItemStack>,
+    a: Option<ItemView>,
+    b: Option<ItemView>,
     hint: usize,
 ) -> Option<usize> {
     if hint > 0 && hint < offers.len() {

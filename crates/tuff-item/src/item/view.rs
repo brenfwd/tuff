@@ -64,6 +64,16 @@ impl PartialEq<ItemStack> for ItemView<'_> {
     }
 }
 
+pub trait AsItemView {
+    fn view(&self) -> Option<ItemView<'_>>;
+}
+
+impl AsItemView for Option<ItemStack> {
+    fn view(&self) -> Option<ItemView<'_>> {
+        self.as_ref().map(ItemView::from)
+    }
+}
+
 /// An owned, shareable, read-only picture of a stack at one moment, for
 /// data that outlives the borrow or crosses to another actor. Cloning it
 /// shares the picture; it never yields a stack.

@@ -140,7 +140,7 @@ pub struct MerchantOffers<'a> {
 fn write_trade_item(w: &mut PacketWriter, cost: &crate::world::trading::ItemCost) {
     w.write_var_int(cost.item.id() as i32);
     w.write_var_int(cost.count);
-    let stack = cost.stack().into_template();
+    let stack = cost.snapshot();
     let components = stack.components.network_added();
     w.write_var_int(components.len() as i32);
     for component in &components {
