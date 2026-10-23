@@ -288,6 +288,15 @@ impl RegionActor {
                     for id in ids {
                         self.remove_entity(id, &[]);
                     }
+                    if let Some(column) = self.columns.get_mut(&pos) {
+                        let stacks = column.meta.block_entities.values_mut();
+                        for stack in stacks
+                            .flat_map(|e| e.items.iter_mut())
+                            .flat_map(Option::take)
+                        {
+                            stack.burn(tuff_item::item::BurnReason::Discarded);
+                        }
+                    }
                     self.drop_column(pos);
                 }
                 self.chunk_io.pregen.removed.remove(&pos);

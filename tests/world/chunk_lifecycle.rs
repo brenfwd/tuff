@@ -559,3 +559,34 @@ async fn peeking_never_makes_chunks_but_follows_those_made_for_others() {
     assert!(got, "an existing chunk is sent to a peeker");
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn unloading_a_saved_chunk_releases_its_container_items() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let (viewer, mut events) = PlayerHandle::new(1000);
+    let chunk = ChunkPos::new(2, 2);
+    let region = world.region(chunk.region()).await;
+    subscribe(&region, &viewer, &mut events, &[chunk]).await;
+    let items = tuff_nbt::Tag::List(vec![tuff_nbt::Tag::Compound(
+        Compound::new()
+            .with("Slot", 0i8)
+            .with("id", "minecraft:water_bucket")
+            .with("count", 1i32),
+    )]);
+    let chest = Block::Chest.default_state();
+    let data = Compound::new().with("Items", items);
+    super::jukebox::set(&region, BlockPos::new(37, 200, 38), chest, Some(data)).await;
+    let before = tuff_item::item::conservation::totals();
+    region
+        .request(RegionRequest::Unsubscribe {
+            player: viewer.id,
+            chunks: vec![chunk],
+        })
+        .await;
+    world.ticks(300).await;
+    let lost = tuff_item::item::conservation::totals().since(before).lost;
+    assert_eq!(lost, 0, "unloaded items were lost");
+    world.shutdown().await;
+}
