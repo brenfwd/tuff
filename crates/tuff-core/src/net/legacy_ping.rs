@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use crate::protocol::VERSION_NAME;
@@ -129,6 +129,7 @@ pub async fn try_answer(
     let Some(ping) = classify(&buffer[..peeked]) else {
         return Ok(Some(socket));
     };
+    socket.read_exact(&mut buffer[..peeked]).await?;
     let reply = kick_packet(&response_body(ping, list));
     socket.write_all(&reply).await?;
     socket.shutdown().await?;
@@ -139,7 +140,6 @@ pub async fn try_answer(
 mod tests {
     use std::sync::Arc;
 
-    use tokio::io::AsyncReadExt;
     use tokio::net::TcpListener;
 
     use super::*;
