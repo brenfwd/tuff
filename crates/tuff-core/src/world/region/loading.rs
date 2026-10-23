@@ -915,6 +915,7 @@ impl RegionActor {
                 neighbor.internal(RegionInternal::Halo { pos, chunk: None });
             }
         }
+        tuff_item::item::conservation::releasing(|| drop(column));
     }
 
     pub(super) fn start_save(&mut self, pos: ChunkPos) {
