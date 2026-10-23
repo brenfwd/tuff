@@ -1,7 +1,7 @@
-//! Every stack carries an id and, in debug builds, a log of the operations
-//! applied to it: what happened, where in the source, and which function
-//! did it. The lost-item report prints the log so a dropped stack can be
-//! traced back through its life.
+//! In debug builds every counted stack carries an id and a log of the
+//! operations applied to it: what happened, where in the source, and which
+//! function did it. The lost-item report prints the log so a dropped stack
+//! can be traced back through its life. Release builds keep neither.
 
 use std::fmt;
 #[cfg(debug_assertions)]
@@ -15,7 +15,8 @@ use super::{Components, Counted, ItemStack, Mode};
 const KEPT: usize = 64;
 
 pub struct History {
-    id: [u8; 16],
+    #[cfg(debug_assertions)]
+    id: StackId,
     #[cfg(debug_assertions)]
     entries: Vec<Entry>,
 }
@@ -27,6 +28,41 @@ struct Entry {
     backtrace: std::backtrace::Backtrace,
 }
 
+/// A stack's id, shown as a hyphenated UUID. Debug builds only: in release
+/// builds it is empty and formats as nothing, so log arguments naming it
+/// cost nothing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct StackId(#[cfg(debug_assertions)] [u8; 16]);
+
+impl fmt::Display for StackId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[cfg(debug_assertions)]
+        {
+            let id = u128::from_be_bytes(self.0);
+            write!(
+                f,
+                "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+                (id >> 96) as u32,
+                (id >> 80) as u16,
+                (id >> 64) as u16,
+                (id >> 48) as u16,
+                id & 0xffff_ffff_ffff
+            )
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            let _ = f;
+            Ok(())
+        }
+    }
+}
+
+impl fmt::Debug for StackId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 impl PartialEq for History {
     fn eq(&self, _: &Self) -> bool {
         true
@@ -35,36 +71,38 @@ impl PartialEq for History {
 
 impl fmt::Debug for History {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.id())
+        fmt::Display::fmt(&self.id(), f)
     }
 }
 
 impl History {
     #[track_caller]
     pub(super) fn begin(item: Item, count: u8, origin: fmt::Arguments<'_>) -> Self {
-        let mut id: [u8; 16] = rand::random();
-        id[6] = (id[6] & 0x0f) | 0x40;
-        id[8] = (id[8] & 0x3f) | 0x80;
-        let mut history = Self {
-            id,
-            #[cfg(debug_assertions)]
-            entries: Vec::new(),
+        #[cfg(debug_assertions)]
+        let mut history = {
+            let mut id: [u8; 16] = rand::random();
+            id[6] = (id[6] & 0x0f) | 0x40;
+            id[8] = (id[8] & 0x3f) | 0x80;
+            Self {
+                id: StackId(id),
+                entries: Vec::new(),
+            }
         };
+        #[cfg(not(debug_assertions))]
+        let mut history = Self {};
         history.record(format_args!("{origin}: {count} {}", item.name()));
         history
     }
 
-    /// The stack's id as a hyphenated UUID.
-    pub fn id(&self) -> String {
-        let id = u128::from_be_bytes(self.id);
-        format!(
-            "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-            (id >> 96) as u32,
-            (id >> 80) as u16,
-            (id >> 64) as u16,
-            (id >> 48) as u16,
-            id & 0xffff_ffff_ffff
-        )
+    pub fn id(&self) -> StackId {
+        #[cfg(debug_assertions)]
+        {
+            self.id
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            StackId()
+        }
     }
 
     #[track_caller]
@@ -84,13 +122,15 @@ impl History {
         let _ = what;
     }
 
-    /// The log as text, oldest entry first. Only the id outside debug builds.
+    /// The log as text, oldest entry first; nothing beyond "item" outside
+    /// debug builds.
     pub fn report(&self) -> String {
-        let mut out = format!("item {}", self.id());
+        #[cfg_attr(not(debug_assertions), allow(unused_mut))]
+        let mut out = String::from("item");
         #[cfg(debug_assertions)]
         {
             use fmt::Write;
-            let _ = write!(out, " ({} operations kept)", self.entries.len());
+            let _ = write!(out, " {} ({} operations kept)", self.id, self.entries.len());
             for (i, entry) in self.entries.iter().enumerate() {
                 let _ = write!(
                     out,

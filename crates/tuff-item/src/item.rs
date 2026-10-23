@@ -17,7 +17,7 @@ pub mod identity;
 mod ledger;
 mod picture;
 mod view;
-pub use history::History;
+pub use history::{History, StackId};
 pub use ledger::{BurnReason, LedgerTotals, MintReason, SlotsCow, conservation};
 pub use picture::{AnyItem, Counted, ItemPicture, Mode, Picture};
 pub use view::{AsItemView, ComponentsSnapshot, ItemSnapshot, ItemView, snapshot_slots};

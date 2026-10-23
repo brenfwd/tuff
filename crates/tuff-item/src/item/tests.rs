@@ -15,9 +15,11 @@ fn stacks_without_components_stay_small_and_unallocated() {
     );
     assert!(size_of::<ComponentPatch>() <= 440);
     #[cfg(not(debug_assertions))]
-    assert!(size_of::<ItemStack>() <= 32);
+    assert!(size_of::<ItemStack>() <= 16);
     #[cfg(not(debug_assertions))]
-    assert!(size_of::<Option<ItemStack>>() <= 32);
+    assert!(size_of::<Option<ItemStack>>() <= 16);
+    #[cfg(not(debug_assertions))]
+    assert_eq!(size_of::<ItemStack>(), size_of::<ItemPicture>());
     assert_eq!(size_of::<Components>(), size_of::<usize>());
     let stone = ItemStack::mint(Item::Stone, 64, MintReason::Test);
     assert!(!stone.components.is_allocated());
