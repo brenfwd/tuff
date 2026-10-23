@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tuff_core::command::args::Value;
 use tuff_core::command::{CommandError, CommandNode, CommandNodeKind};
 use tuff_core::world::commands::{Context, SourceKind, text};
-use tuff_item::text::TextComponent;
+use tuff_item::text::{ClickEvent, TextComponent};
 use tuff_storage::admin::PermissionLevel;
 use tuff_web_ui as web;
 use tuff_web_ui::Principal;
@@ -276,9 +276,9 @@ pub async fn run(ctx: &mut Context<'_>) -> Result<i32, CommandError> {
             ctx.reply(
                 text("Web panel login code: ")
                     .append(TextComponent::copy_on_click(code))
-                    .append(text(format!(
-                        " (single use, expires in 2 minutes). Enter it at {url}"
-                    ))),
+                    .append(" (single use, expires in 2 minutes). Enter it at ")
+                    .append(TextComponent::click(text(&url), ClickEvent::OpenUrl(url)).color("aqua"))
+                    .append("."),
             );
             Ok(1)
         }
