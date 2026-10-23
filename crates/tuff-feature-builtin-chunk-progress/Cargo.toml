@@ -1,5 +1,5 @@
 [package]
-name = "tuff-feature-builtin-example-chunk-progress"
+name = "tuff-feature-builtin-chunk-progress"
 version = "0.1.0"
 edition = "2024"
 license.workspace = true

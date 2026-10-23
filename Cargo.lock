@@ -3307,9 +3307,9 @@ dependencies = [
  "tuff-core",
  "tuff-datapack",
  "tuff-feature-builtin-audit-log",
+ "tuff-feature-builtin-chunk-progress",
  "tuff-feature-builtin-core-commands",
  "tuff-feature-builtin-example",
- "tuff-feature-builtin-example-chunk-progress",
  "tuff-feature-builtin-moving-block-entities",
  "tuff-feature-builtin-vanilla-anticheat",
  "tuff-feature-builtin-vanilla-blocks",
@@ -3462,9 +3462,9 @@ dependencies = [
  "tuff-core",
  "tuff-datapack",
  "tuff-feature-builtin-audit-log",
+ "tuff-feature-builtin-chunk-progress",
  "tuff-feature-builtin-core-commands",
  "tuff-feature-builtin-example",
- "tuff-feature-builtin-example-chunk-progress",
  "tuff-feature-builtin-moving-block-entities",
  "tuff-feature-builtin-vanilla-anticheat",
  "tuff-feature-builtin-vanilla-blocks",
@@ -3515,6 +3515,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tuff-feature-builtin-chunk-progress"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "serde_json",
+ "tokio",
+ "tuff",
+ "tuff-core",
+ "tuff-item",
+ "tuff-test-support",
+ "tuff-vanilla-data",
+]
+
+[[package]]
 name = "tuff-feature-builtin-core-commands"
 version = "0.1.0"
 dependencies = [
@@ -3543,20 +3557,6 @@ dependencies = [
  "tuff-test-support",
  "tuff-vanilla-data",
  "tuff-web-ui",
-]
-
-[[package]]
-name = "tuff-feature-builtin-example-chunk-progress"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "serde_json",
- "tokio",
- "tuff",
- "tuff-core",
- "tuff-item",
- "tuff-test-support",
- "tuff-vanilla-data",
 ]
 
 [[package]]
@@ -4106,9 +4106,9 @@ dependencies = [
  "tuff-datapack",
  "tuff-dylib",
  "tuff-feature-builtin-audit-log",
+ "tuff-feature-builtin-chunk-progress",
  "tuff-feature-builtin-core-commands",
  "tuff-feature-builtin-example",
- "tuff-feature-builtin-example-chunk-progress",
  "tuff-feature-builtin-moving-block-entities",
  "tuff-feature-builtin-vanilla-anticheat",
  "tuff-feature-builtin-vanilla-blocks",

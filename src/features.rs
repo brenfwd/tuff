@@ -121,7 +121,7 @@ fn warden_spawn_tracker_command() -> Box<dyn Feature> {
 }
 
 fn chunk_progress() -> Box<dyn Feature> {
-    Box::new(tuff_feature_builtin_example_chunk_progress::ExampleChunkFeature)
+    Box::new(tuff_feature_builtin_chunk_progress::ExampleChunkFeature)
 }
 
 pub const FEATURES: &[OptionalFeature] = &[
@@ -141,7 +141,7 @@ pub const FEATURES: &[OptionalFeature] = &[
         make: example,
     },
     OptionalFeature {
-        id: tuff_feature_builtin_example_chunk_progress::ID,
+        id: tuff_feature_builtin_chunk_progress::ID,
         summary: "a bossbar showing each player how many chunks in view have been sent",
         make: chunk_progress,
     },
@@ -191,7 +191,7 @@ const IDS: &[&str] = &[
     tuff_feature_builtin_moving_block_entities::ID,
     tuff_feature_builtin_world_map::ID,
     tuff_feature_builtin_example::ID,
-    tuff_feature_builtin_example_chunk_progress::ID,
+    tuff_feature_builtin_chunk_progress::ID,
     tuff_feature_builtin_audit_log::ID,
     tuff_feature_builtin_vanilla_commands::serverpack::ID,
     tuff_feature_builtin_vanilla_commands::chase::ID,
@@ -655,7 +655,7 @@ mod tests {
     fn the_chunk_progress_bar_loads_only_when_enabled() {
         let hooks = |features: &[Box<dyn Feature>]| load(features).session_hooks.len();
         assert_eq!(
-            hooks(&shipped(&[tuff_feature_builtin_example_chunk_progress::ID.to_owned()]).unwrap()),
+            hooks(&shipped(&[tuff_feature_builtin_chunk_progress::ID.to_owned()]).unwrap()),
             hooks(&shipped(&[]).unwrap()) + 1
         );
     }

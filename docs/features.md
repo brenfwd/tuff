@@ -17,7 +17,7 @@ Optional built-in features change vanilla behaviour and are off by default:
 | `tuff-feature-builtin-moving-block-entities` | Pistons move blocks with block entities (chests, furnaces and others) and their data |
 | `world-map` | A live, zoomable world map page in the web panel, with chunk pre-generation (permissions `map.view`, level 2, and `map.generate`, level 4) |
 | `tuff-feature-builtin-example` | The built-in feature API example (`crates/tuff-feature-builtin-example`): `/gold`, extra recipes, a custom item, block and entity, and a Gold panel page |
-| `tuff-feature-builtin-example-chunk-progress` | A "Loading Chunks" boss bar showing each player how many chunks in view have been sent |
+| `tuff-feature-builtin-chunk-progress` | A "Loading Chunks" boss bar showing each player how many chunks in view have been sent |
 | `audit-log` | A world audit log in its own SQLite file beside the world (`<world>.audit.sqlite`, or `tuff.features.audit-log.database`): block breaks and placements, explosions, chat, commands and sessions, with `/tuff audit lookup`, `rollback`, `restore`, `purge` and `status`. Retention is set by `tuff.features.audit-log.retention` and old entries are purged in the background |
 
 Turn one on with `--config tuff.features.<id>.enabled true` or by setting

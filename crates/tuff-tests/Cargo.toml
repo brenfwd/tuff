@@ -76,7 +76,7 @@ tuff-feature-builtin-vanilla-dimensions = { workspace = true }
 tuff-feature-builtin-vanilla-commands = { workspace = true }
 tuff-feature-builtin-vanilla-anticheat = { workspace = true }
 tuff-feature-builtin-example = { workspace = true }
-tuff-feature-builtin-example-chunk-progress = { workspace = true }
+tuff-feature-builtin-chunk-progress = { workspace = true }
 tuff-feature-builtin-moving-block-entities = { workspace = true }
 tuff-replay = { workspace = true }
 tuff-feature-builtin-world-map = { workspace = true }

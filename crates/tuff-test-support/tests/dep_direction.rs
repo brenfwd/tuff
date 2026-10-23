@@ -157,7 +157,7 @@ fn leaf_crates_do_not_depend_on_each_other() {
         "tuff-bot",
         "tuff-client-harness",
         "tuff-feature-builtin-example",
-        "tuff-feature-builtin-example-chunk-progress",
+        "tuff-feature-builtin-chunk-progress",
         "tuff-feature-builtin-moving-block-entities",
     ]
     .into();

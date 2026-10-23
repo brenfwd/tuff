@@ -132,7 +132,7 @@ members = [
     "crates/tuff-feature-builtin-moving-block-entities",
     "crates/tuff-bot",
     "crates/tuff-replay",
-    "crates/tuff-feature-builtin-example-chunk-progress",
+    "crates/tuff-feature-builtin-chunk-progress",
     "crates/tuff-web-ui",
     "crates/tuff-feature-builtin-world-map",
     "crates/tuff-feature-builtin-audit-log",
@@ -236,7 +236,7 @@ tuff-feature-builtin-vanilla-commands = { path = "crates/tuff-feature-builtin-va
 tuff-feature-builtin-vanilla-anticheat = { path = "crates/tuff-feature-builtin-vanilla-anticheat" }
 tuff-feature-builtin-example = { path = "crates/tuff-feature-builtin-example" }
 tuff-feature-builtin-moving-block-entities = { path = "crates/tuff-feature-builtin-moving-block-entities" }
-tuff-feature-builtin-example-chunk-progress = { path = "crates/tuff-feature-builtin-example-chunk-progress" }
+tuff-feature-builtin-chunk-progress = { path = "crates/tuff-feature-builtin-chunk-progress" }
 tuff-web-ui = { path = "crates/tuff-web-ui" }
 tuff-feature-builtin-world-map = { path = "crates/tuff-feature-builtin-world-map" }
 tuff-feature-builtin-audit-log = { path = "crates/tuff-feature-builtin-audit-log" }
@@ -273,7 +273,7 @@ tuff-feature-builtin-vanilla-dimensions = { workspace = true }
 tuff-feature-builtin-vanilla-commands = { workspace = true }
 tuff-feature-builtin-vanilla-anticheat = { workspace = true }
 tuff-feature-builtin-example = { workspace = true }
-tuff-feature-builtin-example-chunk-progress = { workspace = true }
+tuff-feature-builtin-chunk-progress = { workspace = true }
 tuff-feature-builtin-moving-block-entities = { workspace = true }
 tuff-replay = { workspace = true }
 tuff-feature-builtin-world-map = { workspace = true }
