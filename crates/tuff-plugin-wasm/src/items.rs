@@ -3,7 +3,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use tuff_item::item::ItemSnapshot;
+use tuff_item::item::{AnyItem, ItemSnapshot};
 
 use tuff_core::protocol::play::{PlayerActionStatus, Serverbound};
 use tuff_core::world::inventory::Inventory;
@@ -22,22 +22,18 @@ pub fn kind_flag(kind: ItemActionKind) -> EventKinds {
     }
 }
 
-fn has_tag(stack: tuff_item::item::ItemView<'_>, tag: &str) -> bool {
-    stack
-        .components
-        .other
-        .get("minecraft:custom_data")
-        .and_then(|data| data.as_compound())
-        .is_some_and(|data| data.get(tag).is_some())
+fn has_tag(stack: AnyItem<'_>, tag: &str) -> bool {
+    tuff_item::with_item!(stack, |stack| {
+        stack
+            .components
+            .other
+            .get("minecraft:custom_data")
+            .and_then(|data| data.as_compound())
+            .is_some_and(|data| data.get(tag).is_some())
+    })
 }
 
-/// Reports the action when plugins listen; whether a filter cancels it.
-fn act(
-    session: &PlayerSession,
-    kind: ItemActionKind,
-    stack: tuff_item::item::ItemView<'_>,
-    count: u8,
-) -> bool {
+fn act(session: &PlayerSession, kind: ItemActionKind, stack: AnyItem<'_>, count: u8) -> bool {
     let Some(host) = session.shared.services.get::<WasmHost>() else {
         return false;
     };
@@ -105,14 +101,14 @@ fn hand_action(session: &mut PlayerSession, status: PlayerActionStatus) -> Verdi
             } else {
                 stack.count()
             };
-            act(session, ItemActionKind::Drop, stack.view(), count)
+            act(session, ItemActionKind::Drop, stack.any(), count)
         }
         PlayerActionStatus::SwapItemWithOffhand => {
             let Some(stack) = main.or_else(|| session.inventory.hand(true).map(ItemSnapshot::of))
             else {
                 return Verdict::Allow;
             };
-            act(session, ItemActionKind::Swap, stack.view(), stack.count())
+            act(session, ItemActionKind::Swap, stack.any(), stack.count())
         }
         _ => return Verdict::Allow,
     };
@@ -144,7 +140,7 @@ fn craft(session: &mut PlayerSession, window: i32, slot: i16) -> Verdict {
     let Some(stack) = result else {
         return Verdict::Allow;
     };
-    if !act(session, ItemActionKind::Craft, stack.view(), stack.count()) {
+    if !act(session, ItemActionKind::Craft, stack.any(), stack.count()) {
         return Verdict::Allow;
     }
     if window == 0 {
@@ -187,12 +183,9 @@ impl SessionHooks for Pickups {
         );
     }
 
-    fn allows_item_pickup(
-        &self,
-        session: &PlayerSession,
-        stack: tuff_item::item::ItemView<'_>,
-    ) -> bool {
-        if session.inventory.room_for(stack.get()) == 0 {
+    fn allows_item_pickup(&self, session: &PlayerSession, stack: AnyItem<'_>) -> bool {
+        let room = tuff_item::with_item!(stack, |stack| session.inventory.room_for(stack));
+        if room == 0 {
             return true;
         }
         !act(session, ItemActionKind::Pickup, stack, stack.count())

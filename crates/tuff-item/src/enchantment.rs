@@ -329,7 +329,7 @@ pub enum EntityEffect {
 
 /// Evaluates a requirement about an item alone (its enchantment `level`
 /// and the tool), for effects that have no entity to look at.
-pub type ItemCondition = fn(&Value, &crate::item::ItemStack, u32, &mut dyn rand::RngCore) -> bool;
+pub type ItemCondition = fn(&Value, crate::item::AnyItem<'_>, u32, &mut dyn rand::RngCore) -> bool;
 
 static ITEM_CONDITION: OnceLock<ItemCondition> = OnceLock::new();
 
@@ -341,14 +341,14 @@ pub fn install_item_condition(condition: ItemCondition) {
 
 /// Whether `requirement` holds for an effect of an enchantment at `level`
 /// on `tool`.
-pub fn item_requirement(
+pub fn item_requirement<M: crate::item::Mode>(
     requirement: Option<&Requirement>,
-    tool: &crate::item::ItemStack,
+    tool: &crate::item::ItemStack<M>,
     level: u32,
     rng: &mut dyn rand::RngCore,
 ) -> bool {
     requirement.is_none_or(|requirement| match ITEM_CONDITION.get() {
-        Some(condition) => condition(&requirement.condition, tool, level, rng),
+        Some(condition) => condition(&requirement.condition, tool.any(), level, rng),
         None => crate::item::tool_requirement(&requirement.condition, tool.item()),
     })
 }

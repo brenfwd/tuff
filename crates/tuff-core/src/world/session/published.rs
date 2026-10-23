@@ -246,7 +246,7 @@ impl PlayerSession {
                     items: &EQUIPMENT_SLOTS.map(|slot| {
                         (
                             equipment_slot_id(slot),
-                            self.inventory.equipped(slot).map(ItemStack::view),
+                            self.inventory.equipped(slot).map(ItemStack::any),
                         )
                     }),
                 }),
@@ -453,17 +453,19 @@ impl PlayerSession {
         let equipment_changed = EQUIPMENT_SLOTS
             .into_iter()
             .zip(&self.published.last_equipment)
-            .any(|(slot, last)| self.inventory.equipped(slot) != last.as_deref());
+            .any(|(slot, last)| {
+                !tuff_item::item::same_slot(self.inventory.equipped(slot), last.as_deref())
+            });
         if equipment_changed || force {
             let equipment = self.equipment_snapshot();
             blast_state.0 = self.attribute(Attribute::ExplosionKnockbackResistance);
-            let items: Vec<(u8, Option<tuff_item::item::ItemView<'_>>)> = EQUIPMENT_SLOTS
+            let items: Vec<(u8, Option<tuff_item::item::AnyItem<'_>>)> = EQUIPMENT_SLOTS
                 .into_iter()
                 .zip(&equipment)
                 .map(|(slot, stack)| {
                     (
                         equipment_slot_id(slot),
-                        stack.as_ref().map(tuff_item::item::ItemSnapshot::view),
+                        stack.as_ref().map(tuff_item::item::ItemSnapshot::any),
                     )
                 })
                 .collect();
@@ -528,7 +530,7 @@ impl PlayerSession {
         self.published.seq += 1;
         let grounded = self.pose.on_ground && !self.is_dead() && self.ride.riding.is_none();
         let feet_now = self.inventory.equipped(EquipmentSlot::Feet);
-        if feet_now != self.published.last_feet.as_deref() {
+        if !tuff_item::item::same_slot(feet_now, self.published.last_feet.as_deref()) {
             self.published.last_feet = feet_now.map(tuff_item::item::ItemSnapshot::of);
         }
         let feet = self.published.last_feet.clone();

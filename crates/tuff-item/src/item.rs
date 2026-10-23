@@ -12,14 +12,18 @@ pub mod enchanting;
 pub mod equippable;
 pub mod gear;
 pub mod hash;
+mod history;
 pub mod identity;
 mod ledger;
+mod picture;
 mod view;
+pub use history::{History, StackId};
 pub use ledger::{BurnReason, LedgerTotals, MintReason, SlotsCow, conservation};
+pub use picture::{AnyItem, Counted, ItemPicture, Mode, Picture};
 pub use view::{AsItemView, ComponentsSnapshot, ItemSnapshot, ItemView, snapshot_slots};
 
+use std::fmt;
 use std::ops::{Deref, DerefMut};
-use std::sync::LazyLock;
 
 use rand::Rng;
 use tuff_vanilla_data::Item;
@@ -77,25 +81,66 @@ const TYPED_NBT_ON_WIRE: [DataComponentType; 2] = [
     DataComponentType::BlockEntityData,
 ];
 
-#[derive(Debug, PartialEq)]
+/// Items: an item, a count and the components that differ from the item's
+/// defaults. `ItemStack` (the default, [`Counted`]) is real items;
+/// [`ItemPicture`] only shows them (see [`Mode`]).
 #[must_use = "items must be stored, moved or burned"]
-pub struct ItemStack {
+pub struct ItemStack<M: Mode = Counted> {
     item: Item,
     count: u8,
     /// Public: editing components never changes how many items exist.
-    /// Stacks nested in components (containers, bundles, charged
-    /// projectiles) are stacks of their own, accounted for by their own
-    /// mint, burn and drop checks, so an edit that drops one is still
-    /// reported as lost.
-    pub components: Components,
-    tally: ledger::Tally,
+    /// Stacks nested in a counted stack's components (containers, bundles,
+    /// charged projectiles) are counted stacks of their own, moved in and
+    /// out, so an edit that drops one is reported as lost.
+    pub components: Components<M>,
+    extra: M::Extra,
+}
+
+impl<M: Mode> fmt::Debug for ItemStack<M> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut out = f.debug_struct("ItemStack");
+        out.field("item", &self.item)
+            .field("count", &self.count)
+            .field("components", &self.components);
+        if size_of::<M::Extra>() != 0 {
+            out.field("id", &self.extra);
+        }
+        out.finish()
+    }
+}
+
+/// Same item, count and components, whatever the kind of either stack.
+impl<M: Mode, N: Mode> PartialEq<ItemStack<N>> for ItemStack<M> {
+    fn eq(&self, other: &ItemStack<N>) -> bool {
+        self.item == other.item && self.count == other.count && self.components == other.components
+    }
+}
+
+/// Whether two optional slots hold the same, whatever kind of stack each
+/// holds.
+pub fn same_slot<M: Mode, N: Mode>(a: Option<&ItemStack<M>>, b: Option<&ItemStack<N>>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a == b,
+        (a, b) => a.is_none() && b.is_none(),
+    }
+}
+
+impl<M: Mode> Drop for ItemStack<M> {
+    fn drop(&mut self) {
+        M::on_drop(self);
+    }
 }
 
 /// A stack's component patch, stored sparsely: a stack without components
 /// carries no allocation. Reads go through `Deref` to an empty patch;
 /// writes through `DerefMut` allocate it. An empty patch equals none.
-#[derive(Default)]
-pub struct Components(Option<Box<ComponentPatch>>);
+pub struct Components<M: Mode = Counted>(Option<Box<ComponentPatch<M>>>);
+
+impl<M: Mode> Default for Components<M> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
 
 /// A use cooldown of a stack: its length and the group it shares, the
 /// item's own id when `None`.
@@ -106,9 +151,9 @@ pub struct StackCooldown {
 }
 
 /// The values a stack sets on top of its item's defaults and the defaults
-/// removed from it.
-#[derive(Debug, Default, PartialEq)]
-pub struct ComponentPatch {
+/// removed from it. Nested stacks are of the same kind as the stack.
+#[derive(Debug, Default)]
+pub struct ComponentPatch<M: Mode = Counted> {
     pub damage: Option<u32>,
     pub max_damage: Option<u32>,
     pub unbreakable: bool,
@@ -122,11 +167,11 @@ pub struct ComponentPatch {
     pub map_id: Option<u32>,
     /// The contents of a container item (shulker boxes): the slots up to
     /// the last occupied one.
-    pub container: Option<Vec<Option<ItemStack>>>,
+    pub container: Option<Vec<Option<ItemStack<M>>>>,
     /// What a loaded crossbow will fire.
-    pub charged_projectiles: Option<Vec<ItemStack>>,
+    pub charged_projectiles: Option<Vec<ItemStack<M>>>,
     /// What a bundle holds; absent when empty.
-    pub bundle_contents: Option<Box<BundleContents>>,
+    pub bundle_contents: Option<Box<BundleContents<M>>>,
     /// RGB of dyed leather.
     pub dyed_color: Option<i32>,
     pub base_color: Option<DyeColor>,
@@ -149,13 +194,98 @@ pub struct ComponentPatch {
     pub removed: Vec<String>,
 }
 
-static EMPTY_PATCH: LazyLock<ComponentPatch> = LazyLock::new(ComponentPatch::default);
+fn slots_eq<M: Mode, N: Mode>(a: &[Option<ItemStack<M>>], b: &[Option<ItemStack<N>>]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|pair| match pair {
+            (Some(a), Some(b)) => a == b,
+            (None, None) => true,
+            _ => false,
+        })
+}
 
-impl ComponentPatch {
-    /// A copy for a picture or a template, nested stacks included. Only
-    /// the snapshot and mint doors call it.
-    #[allow(clippy::clone_on_copy)] // every field is copied the same way
-    pub(crate) fn picture_copy(&self) -> Self {
+fn option_eq<A: PartialEq<B> + ?Sized, B: ?Sized>(a: Option<&A>, b: Option<&B>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a == b,
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+impl<M: Mode, N: Mode> PartialEq<ComponentPatch<N>> for ComponentPatch<M> {
+    fn eq(&self, other: &ComponentPatch<N>) -> bool {
+        let Self {
+            damage,
+            max_damage,
+            unbreakable,
+            custom_name,
+            enchantments,
+            stored_enchantments,
+            potion_contents,
+            repair_cost,
+            ominous_bottle_amplifier,
+            map_id,
+            container,
+            charged_projectiles,
+            bundle_contents,
+            dyed_color,
+            base_color,
+            banner_patterns,
+            trim,
+            fireworks,
+            firework_explosion,
+            writable_book,
+            written_book,
+            attribute_modifiers,
+            tool,
+            weapon,
+            suspicious_stew_effects,
+            other: unmodelled,
+            removed,
+        } = self;
+        *damage == other.damage
+            && *max_damage == other.max_damage
+            && *unbreakable == other.unbreakable
+            && *custom_name == other.custom_name
+            && *enchantments == other.enchantments
+            && *stored_enchantments == other.stored_enchantments
+            && *potion_contents == other.potion_contents
+            && *repair_cost == other.repair_cost
+            && *ominous_bottle_amplifier == other.ominous_bottle_amplifier
+            && *map_id == other.map_id
+            && match (container, &other.container) {
+                (Some(a), Some(b)) => slots_eq(a, b),
+                (a, b) => a.is_none() && b.is_none(),
+            }
+            && option_eq(
+                charged_projectiles.as_deref(),
+                other.charged_projectiles.as_deref(),
+            )
+            && option_eq(bundle_contents.as_deref(), other.bundle_contents.as_deref())
+            && *dyed_color == other.dyed_color
+            && *base_color == other.base_color
+            && *banner_patterns == other.banner_patterns
+            && *trim == other.trim
+            && *fireworks == other.fireworks
+            && *firework_explosion == other.firework_explosion
+            && *writable_book == other.writable_book
+            && *written_book == other.written_book
+            && *attribute_modifiers == other.attribute_modifiers
+            && *tool == other.tool
+            && *weapon == other.weapon
+            && *suspicious_stew_effects == other.suspicious_stew_effects
+            && *unmodelled == other.other
+            && *removed == other.removed
+    }
+}
+
+impl<M: Mode> ComponentPatch<M> {
+    /// This patch with every value cloned and each nested stack copied
+    /// through `nested`, or left out without it.
+    #[allow(clippy::clone_on_copy)] // every value is copied the same way
+    fn copy_nested<N: Mode, F: FnMut(&ItemStack<M>) -> ItemStack<N>>(
+        &self,
+        mut nested: Option<F>,
+    ) -> ComponentPatch<N> {
         let Self {
             damage,
             max_damage,
@@ -185,7 +315,7 @@ impl ComponentPatch {
             other,
             removed,
         } = self;
-        Self {
+        ComponentPatch {
             damage: damage.clone(),
             max_damage: max_damage.clone(),
             unbreakable: unbreakable.clone(),
@@ -196,18 +326,23 @@ impl ComponentPatch {
             repair_cost: repair_cost.clone(),
             ominous_bottle_amplifier: ominous_bottle_amplifier.clone(),
             map_id: map_id.clone(),
-            container: container.as_ref().map(|slots| {
-                slots
-                    .iter()
-                    .map(|slot| slot.as_ref().map(ItemStack::picture_copy))
-                    .collect()
-            }),
-            charged_projectiles: charged_projectiles
-                .as_ref()
-                .map(|stacks| stacks.iter().map(ItemStack::picture_copy).collect()),
-            bundle_contents: bundle_contents
-                .as_ref()
-                .map(|contents| Box::new(contents.picture_copy())),
+            container: nested
+                .as_mut()
+                .zip(container.as_ref())
+                .map(|(nested, slots)| {
+                    slots
+                        .iter()
+                        .map(|slot| slot.as_ref().map(&mut *nested))
+                        .collect()
+                }),
+            charged_projectiles: nested
+                .as_mut()
+                .zip(charged_projectiles.as_ref())
+                .map(|(nested, stacks)| stacks.iter().map(nested).collect()),
+            bundle_contents: nested
+                .as_mut()
+                .zip(bundle_contents.as_ref())
+                .map(|(nested, contents)| Box::new(contents.copy_nested(nested))),
             dyed_color: dyed_color.clone(),
             base_color: base_color.clone(),
             banner_patterns: banner_patterns.clone(),
@@ -225,12 +360,28 @@ impl ComponentPatch {
         }
     }
 
+    /// A picture of this patch, nested stacks included.
+    pub fn picture(&self) -> ComponentPatch<Picture> {
+        self.copy_nested(Some(|stack: &ItemStack<M>| ItemPicture::of(stack)))
+    }
+
+    /// The stacks nested directly in this patch.
+    pub fn nested(&self) -> impl Iterator<Item = &ItemStack<M>> {
+        let container = self.container.iter().flatten().flatten();
+        let charged = self.charged_projectiles.iter().flatten();
+        let bundle = self
+            .bundle_contents
+            .iter()
+            .flat_map(|contents| contents.items());
+        container.chain(charged).chain(bundle)
+    }
+
     pub fn is_empty(&self) -> bool {
-        *self == *EMPTY_PATCH
+        *self == *M::empty_patch()
     }
 }
 
-impl Components {
+impl<M: Mode> Components<M> {
     /// Drops the allocation when the patch is empty.
     pub fn compact(&mut self) {
         if self.0.as_deref().is_some_and(ComponentPatch::is_empty) {
@@ -242,7 +393,7 @@ impl Components {
         self.0.as_deref().is_none_or(ComponentPatch::is_empty)
     }
 
-    pub fn into_patch(self) -> ComponentPatch {
+    pub fn into_patch(self) -> ComponentPatch<M> {
         self.0.map(|patch| *patch).unwrap_or_default()
     }
 
@@ -258,52 +409,82 @@ impl Components {
     pub fn is_allocated(&self) -> bool {
         self.0.is_some()
     }
-}
 
-impl Deref for Components {
-    type Target = ComponentPatch;
+    /// A picture of these components, nested stacks included.
+    pub fn picture(&self) -> Components<Picture> {
+        self.copy_nested(Some(|stack: &ItemStack<M>| ItemPicture::of(stack)))
+    }
 
-    fn deref(&self) -> &ComponentPatch {
-        self.0.as_deref().unwrap_or(&EMPTY_PATCH)
+    fn copy_nested<N: Mode, F: FnMut(&ItemStack<M>) -> ItemStack<N>>(
+        &self,
+        nested: Option<F>,
+    ) -> Components<N> {
+        match self.0.as_deref() {
+            Some(patch) if !patch.is_empty() => {
+                Components(Some(Box::new(patch.copy_nested(nested))))
+            }
+            _ => Components(None),
+        }
+    }
+
+    /// A copy without the nested stacks.
+    pub(crate) fn without_nested(&self) -> Self {
+        let mut copy = self.copy_nested(None::<fn(&ItemStack<M>) -> ItemStack<M>>);
+        copy.compact();
+        copy
     }
 }
 
-impl DerefMut for Components {
-    fn deref_mut(&mut self) -> &mut ComponentPatch {
+impl Components {
+    /// No components, on a counted stack. [`Default`] gives the same for
+    /// either kind where the kind is known.
+    pub fn new() -> Self {
+        Self(None)
+    }
+}
+
+impl ComponentPatch {
+    /// An empty patch for a counted stack.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<M: Mode> Deref for Components<M> {
+    type Target = ComponentPatch<M>;
+
+    fn deref(&self) -> &ComponentPatch<M> {
+        self.0.as_deref().unwrap_or(M::empty_patch())
+    }
+}
+
+impl<M: Mode> DerefMut for Components<M> {
+    fn deref_mut(&mut self) -> &mut ComponentPatch<M> {
         self.0.get_or_insert_with(Box::default)
     }
 }
 
-impl From<ComponentPatch> for Components {
-    fn from(patch: ComponentPatch) -> Self {
+impl<M: Mode> From<ComponentPatch<M>> for Components<M> {
+    fn from(patch: ComponentPatch<M>) -> Self {
         let mut components = Self(Some(Box::new(patch)));
         components.compact();
         components
     }
 }
 
-impl Components {
-    /// A copy for a picture or a template, nested stacks included.
-    pub(crate) fn picture_copy(&self) -> Self {
-        match self.0.as_deref() {
-            Some(patch) if !patch.is_empty() => Self(Some(Box::new(patch.picture_copy()))),
-            _ => Self(None),
-        }
-    }
-}
-
-impl PartialEq for Components {
-    fn eq(&self, other: &Self) -> bool {
+impl<M: Mode, N: Mode> PartialEq<Components<N>> for Components<M> {
+    fn eq(&self, other: &Components<N>) -> bool {
         match (self.0.as_deref(), other.0.as_deref()) {
             (Some(a), Some(b)) => a == b,
-            (Some(patch), None) | (None, Some(patch)) => patch.is_empty(),
+            (Some(patch), None) => patch.is_empty(),
+            (None, Some(patch)) => patch.is_empty(),
             (None, None) => true,
         }
     }
 }
 
-impl std::fmt::Debug for Components {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<M: Mode> fmt::Debug for Components<M> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (**self).fmt(f)
     }
 }
@@ -456,7 +637,7 @@ pub enum Hurt {
 
 /// A component as it is sent in a Slot, borrowed from a stack.
 #[derive(Debug, PartialEq)]
-pub enum NetworkComponent<'a> {
+pub enum NetworkComponent<'a, M: Mode = Counted> {
     Damage(u32),
     MaxDamage(u32),
     Unbreakable,
@@ -467,9 +648,9 @@ pub enum NetworkComponent<'a> {
     RepairCost(u32),
     OminousBottleAmplifier(u32),
     MapId(u32),
-    Container(&'a [Option<ItemStack>]),
-    ChargedProjectiles(&'a [ItemStack]),
-    BundleContents(&'a BundleContents),
+    Container(&'a [Option<ItemStack<M>>]),
+    ChargedProjectiles(&'a [ItemStack<M>]),
+    BundleContents(&'a BundleContents<M>),
     DyedColor(i32),
     BaseColor(DyeColor),
     BannerPatterns(&'a [BannerLayer]),
@@ -505,7 +686,7 @@ pub enum NetworkComponent<'a> {
     ClientData(Compound),
     LodestoneTracker(LodestoneTracker),
     /// A component holding one item stack template.
-    Template(DataComponentType, Box<ItemStack>),
+    Template(DataComponentType, Box<ItemPicture>),
 }
 
 /// The sides of a decorated pot, as `pot_decorations` and the pot's
@@ -513,7 +694,7 @@ pub enum NetworkComponent<'a> {
 pub const POT_SIDES: [&str; 4] = ["back", "left", "right", "front"];
 
 /// A decorated pot's decorations: an item per side in [`POT_SIDES`] order.
-pub type PotSides = [Option<ItemStack>; 4];
+pub type PotSides = [Option<ItemPicture>; 4];
 
 /// Reads `pot_decorations` (or a pot's `sherds`): one item template per
 /// side, each `{id, count, components}` or a bare item id. A plain list of item
@@ -523,8 +704,8 @@ pub fn pot_decorations_from_nbt(tag: &Tag) -> Option<PotSides> {
     let template = |tag: &Tag| match tag {
         Tag::String(id) => Item::from_name(id)
             .filter(|item| *item != Item::Air)
-            .map(|item| ItemStack::mint(item, 1, MintReason::Template)),
-        Tag::Compound(nbt) => ItemStack::decode_nbt(nbt),
+            .map(|item| ItemPicture::new(item, 1)),
+        Tag::Compound(nbt) => ItemPicture::from_nbt(nbt),
         _ => None,
     };
     let mut sides: PotSides = Default::default();
@@ -540,7 +721,7 @@ pub fn pot_decorations_from_nbt(tag: &Tag) -> Option<PotSides> {
             for (index, side) in sides.iter_mut().enumerate() {
                 *side = Some(match ids.get(index) {
                     Some(tag) => template(tag)?,
-                    None => ItemStack::mint(Item::Brick, 1, MintReason::Template),
+                    None => ItemPicture::new(Item::Brick, 1),
                 });
             }
         }
@@ -584,10 +765,12 @@ pub fn typed_entity_name(kind: DataComponentType, id: u32) -> Option<&'static st
     }
 }
 
-impl ItemStack {
-    pub fn with_components(mut self, components: impl Into<Components>) -> Self {
+impl<M: Mode> ItemStack<M> {
+    #[track_caller]
+    pub fn with_components(mut self, components: impl Into<Components<M>>) -> Self {
         self.components = components.into();
         self.components.compact();
+        self.note(format_args!("set components"));
         self
     }
 
@@ -610,7 +793,7 @@ impl ItemStack {
 
     /// Whether `other` can merge into this stack: same item, same
     /// components.
-    pub fn stacks_with(&self, other: &ItemStack) -> bool {
+    pub fn stacks_with<N: Mode>(&self, other: &ItemStack<N>) -> bool {
         self.item == other.item && self.components == other.components
     }
 
@@ -649,17 +832,21 @@ impl ItemStack {
             .min(self.max_damage().unwrap_or(0))
     }
 
+    #[track_caller]
     pub fn set_damage(&mut self, value: u32) {
         let value = value.min(self.max_damage().unwrap_or(0));
         self.components.damage = (value != 0 || self.item.max_damage().is_none()).then_some(value);
+        self.note(format_args!("set damage {value}"));
     }
 
     /// Sets the Bad Omen amplifier an ominous bottle gives, leaving the
     /// patch empty where it matches the item's default.
+    #[track_caller]
     pub fn set_ominous_bottle_amplifier(&mut self, amplifier: u32) {
         let default = (self.item == Item::OminousBottle).then_some(0);
         self.components.ominous_bottle_amplifier =
             Some(amplifier.min(4)).filter(|a| Some(*a) != default);
+        self.note(format_args!("set ominous bottle amplifier {amplifier}"));
     }
 
     /// The Bad Omen amplifier drinking this gives, if it is ominous.
@@ -752,7 +939,7 @@ impl ItemStack {
     pub fn use_remainder(&self) -> Option<ItemStack> {
         const ID: &str = "minecraft:use_remainder";
         if let Some(Tag::Compound(nbt)) = self.components.other.get(ID) {
-            return ItemStack::decode_nbt(nbt);
+            return ItemStack::mint_from_nbt(nbt, MintReason::Remainder);
         }
         if self.components.is_removed(ID) {
             return None;
@@ -850,29 +1037,6 @@ impl ItemStack {
             .map_or(0, |enchantments| enchantments.level(id))
     }
 
-    /// Applies `amount` points of durability loss the way the game does for
-    /// a survival player: Unbreaking may skip points, and reaching the
-    /// maximum consumes one item. Creative and unbreakable stacks are the
-    /// caller's job to skip.
-    pub fn hurt(&mut self, amount: u32, rng: &mut impl Rng) -> Hurt {
-        if amount == 0 || !self.is_damageable() {
-            return Hurt::Unchanged;
-        }
-        let amount = self.after_unbreaking(amount, rng);
-        if amount == 0 {
-            return Hurt::Unchanged;
-        }
-        let max = self.max_damage().unwrap_or(0);
-        let damage = self.damage().saturating_add(amount).min(max);
-        self.set_damage(damage);
-        if damage >= max {
-            self.count = self.count.saturating_sub(1);
-            Hurt::Broken
-        } else {
-            Hurt::Damaged
-        }
-    }
-
     /// Whether any enchantment on the stack has an effect `has` accepts.
     pub fn has_enchantment_effect(
         &self,
@@ -881,6 +1045,17 @@ impl ItemStack {
         let registry = crate::enchantment::current();
         crate::enchantment::leveled(&registry, self.components.enchantments.as_ref())
             .any(|(_, def, _)| has(&def.effects))
+    }
+
+    /// Whether this stack is eligible for Mending to spend orb experience
+    /// on it: an enchantment repairs it with experience, it is damageable,
+    /// and currently damaged.
+    pub fn wants_mending(&self) -> bool {
+        let registry = crate::enchantment::current();
+        crate::enchantment::leveled(&registry, self.components.enchantments.as_ref())
+            .any(|(_, def, _)| !def.effects.repair_with_xp.is_empty())
+            && self.is_damageable()
+            && self.damage() > 0
     }
 
     /// Runs a value effect component of the stack's enchantments over
@@ -914,57 +1089,8 @@ impl ItemStack {
         value
     }
 
-    /// Whether this stack is eligible for Mending to spend orb experience
-    /// on it: an enchantment repairs it with experience, it is damageable,
-    /// and currently damaged.
-    pub fn wants_mending(&self) -> bool {
-        let registry = crate::enchantment::current();
-        crate::enchantment::leveled(&registry, self.components.enchantments.as_ref())
-            .any(|(_, def, _)| !def.effects.repair_with_xp.is_empty())
-            && self.is_damageable()
-            && self.damage() > 0
-    }
-
-    /// Repairs durability with orb experience the way Mending does: the
-    /// `repair_with_xp` effects turn experience into durability, capped by
-    /// the current damage (so a nearly-full repair does not cost extra
-    /// experience). Returns the experience actually spent.
-    pub fn repair_with_experience(&mut self, xp: i32) -> i32 {
-        if xp <= 0 {
-            return 0;
-        }
-        let damage = self.damage();
-        if damage == 0 {
-            return 0;
-        }
-        let registry = crate::enchantment::current();
-        let mut rng = rand::thread_rng();
-        let mut durability = xp as f32;
-        for (_, def, level) in
-            crate::enchantment::leveled(&registry, self.components.enchantments.as_ref())
-        {
-            for entry in &def.effects.repair_with_xp {
-                if crate::enchantment::item_requirement(
-                    entry.requirements.as_ref(),
-                    self,
-                    level,
-                    &mut rng,
-                ) {
-                    durability = entry.effect.process(level, &mut rng, durability);
-                }
-            }
-        }
-        let durability = durability.max(0.0) as u32;
-        if durability == 0 {
-            return 0;
-        }
-        let repaired = durability.min(damage);
-        self.set_damage(damage - repaired);
-        (u64::from(repaired) * xp as u64 / u64::from(durability)) as i32
-    }
-
     /// Wear after the `item_damage` effects (Unbreaking may skip points).
-    fn after_unbreaking(&self, amount: u32, rng: &mut impl Rng) -> u32 {
+    pub(crate) fn after_unbreaking(&self, amount: u32, rng: &mut impl Rng) -> u32 {
         let registry = crate::enchantment::current();
         let mut value = amount as f32;
         for (_, def, level) in
@@ -1020,41 +1146,90 @@ impl ItemStack {
         }
         Canon::Map(fields)
     }
+}
 
-    /// `None` for unknown items and air.
-    pub(crate) fn decode_nbt(nbt: &Compound) -> Option<Self> {
-        let item = Item::from_name(nbt.get_str("id")?)?;
-        if item == Item::Air {
-            return None;
+impl ItemStack {
+    /// Applies `amount` points of durability loss the way the game does for
+    /// a survival player: Unbreaking may skip points, and reaching the
+    /// maximum consumes one item. Creative and unbreakable stacks are the
+    /// caller's job to skip.
+    #[track_caller]
+    pub fn hurt(&mut self, amount: u32, rng: &mut impl Rng) -> Hurt {
+        if amount == 0 || !self.is_damageable() {
+            return Hurt::Unchanged;
         }
-        let count = nbt.get_int("count").unwrap_or(1).clamp(1, MAX_COUNT);
-        let components = nbt
-            .get_compound("components")
-            .map(Components::from_nbt)
-            .unwrap_or_default();
-        Some(Self {
-            item,
-            count: count as u8,
-            components,
-            tally: ledger::Tally::Picture,
-        })
+        let amount = self.after_unbreaking(amount, rng);
+        if amount == 0 {
+            return Hurt::Unchanged;
+        }
+        let max = self.max_damage().unwrap_or(0);
+        let damage = self.damage().saturating_add(amount).min(max);
+        self.set_damage(damage);
+        if damage >= max {
+            self.shrink(1, BurnReason::Broken);
+            Hurt::Broken
+        } else {
+            Hurt::Damaged
+        }
+    }
+
+    /// Repairs durability with orb experience the way Mending does: the
+    /// `repair_with_xp` effects turn experience into durability, capped by
+    /// the current damage (so a nearly-full repair does not cost extra
+    /// experience). Returns the experience actually spent.
+    #[track_caller]
+    pub fn repair_with_experience(&mut self, xp: i32) -> i32 {
+        if xp <= 0 {
+            return 0;
+        }
+        let damage = self.damage();
+        if damage == 0 {
+            return 0;
+        }
+        let registry = crate::enchantment::current();
+        let mut rng = rand::thread_rng();
+        let mut durability = xp as f32;
+        for (_, def, level) in
+            crate::enchantment::leveled(&registry, self.components.enchantments.as_ref())
+        {
+            for entry in &def.effects.repair_with_xp {
+                if crate::enchantment::item_requirement(
+                    entry.requirements.as_ref(),
+                    self,
+                    level,
+                    &mut rng,
+                ) {
+                    durability = entry.effect.process(level, &mut rng, durability);
+                }
+            }
+        }
+        let durability = durability.max(0.0) as u32;
+        if durability == 0 {
+            return 0;
+        }
+        let repaired = durability.min(damage);
+        self.set_damage(damage - repaired);
+        (u64::from(repaired) * xp as u64 / u64::from(durability)) as i32
     }
 }
 
 /// Reads the stored `container` component: `[{slot, item}]`, sparse.
-fn container_from_nbt(tag: &Tag) -> Option<Vec<Option<ItemStack>>> {
+fn container_from_nbt<M: Mode>(
+    tag: &Tag,
+    nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+) -> Option<Vec<Option<ItemStack<M>>>> {
     let entries = tag.as_list()?;
     if entries.len() > MAX_CONTAINER_SLOTS {
         return None;
     }
-    let mut contents: Vec<Option<ItemStack>> = Vec::new();
+    let mut contents: Vec<Option<ItemStack<M>>> = Vec::new();
     for entry in entries {
         let entry = entry.as_compound()?;
         let slot = entry.get_int("slot")?;
         if !(0..MAX_CONTAINER_SLOTS as i32).contains(&slot) {
             return None;
         }
-        let stack = ItemStack::decode_nbt(entry.get_compound("item")?)?;
+        let stack = nested(entry.get_compound("item")?)?;
         let slot = slot as usize;
         if contents.len() <= slot {
             contents.resize_with(slot + 1, || None);
@@ -1064,7 +1239,7 @@ fn container_from_nbt(tag: &Tag) -> Option<Vec<Option<ItemStack>>> {
     Some(contents)
 }
 
-fn container_to_nbt(contents: &[Option<ItemStack>]) -> Tag {
+fn container_to_nbt<M: Mode>(contents: &[Option<ItemStack<M>>]) -> Tag {
     Tag::List(
         contents
             .iter()
@@ -1082,14 +1257,17 @@ fn container_to_nbt(contents: &[Option<ItemStack>]) -> Tag {
 }
 
 /// Reads the stored `charged_projectiles` component: a list of stacks.
-fn charged_from_nbt(tag: &Tag) -> Option<Vec<ItemStack>> {
+fn charged_from_nbt<M: Mode>(
+    tag: &Tag,
+    nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+) -> Option<Vec<ItemStack<M>>> {
     let entries = tag.as_list()?;
     if entries.len() > MAX_CHARGED_PROJECTILES {
         return None;
     }
     entries
         .iter()
-        .map(|entry| ItemStack::decode_nbt(entry.as_compound()?))
+        .map(|entry| nested(entry.as_compound()?))
         .collect()
 }
 
@@ -1119,7 +1297,10 @@ fn known_component(id: &str) -> Option<DataComponentType> {
 
 /// A stored display component in its wire form; `None` for another kind
 /// or a value the client could not read.
-fn display_component(kind: DataComponentType, value: &Tag) -> Option<NetworkComponent<'_>> {
+fn display_component<M: Mode>(
+    kind: DataComponentType,
+    value: &Tag,
+) -> Option<NetworkComponent<'_, M>> {
     Some(match kind {
         DataComponentType::MaxStackSize => NetworkComponent::MaxStackSize(
             value

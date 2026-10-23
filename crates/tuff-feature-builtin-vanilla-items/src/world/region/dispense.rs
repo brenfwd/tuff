@@ -132,7 +132,7 @@ fn swallow(
     world.dispense_on_entity_in(target, stack)
 }
 
-fn acts_on_target(item: Item, stack: &ItemStack) -> bool {
+fn acts_on_target<M: tuff_item::item::Mode>(item: Item, stack: &ItemStack<M>) -> bool {
     matches!(
         item,
         Item::Bucket
@@ -169,12 +169,12 @@ fn is_shulker_box(block: Block) -> bool {
     tuff_datapack::tags::is(tuff_vanilla_data::tag::block::key::SHULKER_BOXES, block)
 }
 
-fn pour(
+fn pour<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     target: BlockPos,
     fluid: Block,
     mob: Option<tuff_vanilla_data::registry::EntityType>,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
 ) -> DispenseOutcome {
     if !world.owns(target) || !world.dimension_info().contains_block(target) {
         return DispenseOutcome::Dropped;
@@ -257,11 +257,11 @@ fn fill_bottle(world: &mut dyn RegionWorld, target: BlockPos) -> DispenseOutcome
     }
 }
 
-fn water_to_mud(
+fn water_to_mud<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     target: BlockPos,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
 ) -> DispenseOutcome {
     let water = stack
         .components
@@ -369,7 +369,7 @@ fn place_shulker_box(
     world: &mut dyn RegionWorld,
     target: BlockPos,
     facing: Facing,
-    stack: &ItemStack,
+    stack: &tuff_item::item::ItemPicture,
 ) -> DispenseOutcome {
     let Some(block) = stack.item().block() else {
         return DispenseOutcome::Failed;

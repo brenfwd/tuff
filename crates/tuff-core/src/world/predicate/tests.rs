@@ -125,7 +125,7 @@ fn entity_predicates_check_type_distance_location_and_equipment() {
     zombie.kind = Some(EntityType::Zombie);
     zombie.equipment = vec![(
         EquipmentSlot::Head,
-        tuff_item::item::ItemSnapshot::describe(Item::IronHelmet, 1, Default::default()),
+        tuff_item::item::ItemSnapshot::new(Item::IronHelmet, 1),
     )];
     let origin = [0.0, 64.0, 0.0];
     assert!(entity(
@@ -467,8 +467,12 @@ fn state_ranges_compare_enum_and_boolean_properties_by_order() {
 }
 
 fn stack_with(item: Item, key: &str, value: impl Into<Tag>) -> ItemStack {
-    ItemStack::mint(item, 1, MintReason::Test)
-        .with_components(Components::from_nbt(&Compound::new().with(key, value)))
+    ItemStack::mint_with(
+        item,
+        1,
+        &Components::from_nbt(&Compound::new().with(key, value)),
+        MintReason::Test,
+    )
 }
 
 #[tuff_core::watchdog]

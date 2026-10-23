@@ -203,7 +203,7 @@ fn sound(tag: &Tag) -> Option<SoundEvent> {
     SoundEvent::from_name(id).or_else(|| SoundEvent::from_name(strip(id)))
 }
 
-impl ItemStack {
+impl<M: super::Mode> ItemStack<M> {
     /// The stack's own raw component, `Err` when the stack removes it.
     fn own_component(&self, id: &str) -> Result<Option<&Compound>, ()> {
         match self.components.other.get(id) {

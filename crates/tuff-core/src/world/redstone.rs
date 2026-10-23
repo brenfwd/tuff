@@ -219,7 +219,7 @@ pub enum CarriedLook {
     /// An item display of `item`, transformed from the block's corner, for
     /// looks only the item carries (banner patterns).
     ItemDisplay {
-        item: Box<tuff_item::item::ItemStack>,
+        item: Box<tuff_item::item::ItemPicture>,
         translation: [f32; 3],
         rotation: [f32; 4],
     },

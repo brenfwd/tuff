@@ -55,8 +55,7 @@ fn hit(damage: f32, from: [f64; 3], weapon: Option<Item>) -> PlayerEvent {
         attacker,
         attacker_name: "Attacker".to_owned(),
         attacker_uuid: 0,
-        weapon: weapon
-            .map(|item| tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())),
+        weapon: weapon.map(|item| tuff_item::item::ItemSnapshot::new(item, 1)),
         attacker_position: from,
         attacker_yaw: 180.0,
         damage,

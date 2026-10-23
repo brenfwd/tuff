@@ -8,7 +8,7 @@ use tuff_datapack::loot::{Predicates, parse_item_modifier};
 fn patch(stack: &mut ItemStack, edit: impl FnOnce(&mut Compound)) {
     let mut nbt = stack.components.to_nbt();
     edit(&mut nbt);
-    stack.components = Components::from_nbt(&nbt);
+    stack.set_components_nbt(&nbt, MintReason::Loot, BurnReason::Loot);
 }
 
 fn take_list(nbt: &Compound, key: &str) -> Vec<Tag> {
@@ -148,37 +148,49 @@ fn contents_component(params: &Value) -> Option<&str> {
     }
 }
 
-fn stacks_to_component(component: &str, stacks: &[ItemStack]) -> Tag {
-    let items = stacks.iter().map(|stack| Tag::Compound(stack.to_nbt()));
-    if component == "minecraft:container" {
-        Tag::List(
-            stacks
-                .iter()
-                .enumerate()
-                .map(|(slot, stack)| {
-                    Tag::Compound(
-                        Compound::new()
-                            .with("slot", slot as i32)
-                            .with("item", stack.to_nbt()),
-                    )
-                })
-                .collect(),
-        )
-    } else {
-        Tag::List(items.collect())
+/// Moves the stacks out of `stack`'s contents `component`.
+pub(super) fn take_contents<M: Mode>(
+    stack: &mut ItemStack<M>,
+    component: &str,
+) -> Vec<ItemStack<M>> {
+    let components = &mut stack.components;
+    match component {
+        "minecraft:container" => components
+            .container
+            .take()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect(),
+        "minecraft:bundle_contents" => components
+            .bundle_contents
+            .take()
+            .map_or_else(Vec::new, |contents| contents.into_items()),
+        "minecraft:charged_projectiles" => {
+            components.charged_projectiles.take().unwrap_or_default()
+        }
+        _ => Vec::new(),
     }
 }
 
-pub(super) fn component_stacks(component: &str, nbt: &Compound) -> Vec<ItemStack> {
-    let list = take_list(nbt, component);
-    if component == "minecraft:container" {
-        let items: Vec<Tag> = list
-            .iter()
-            .filter_map(|entry| entry.as_compound()?.get("item").cloned())
-            .collect();
-        item_stacks(&items)
-    } else {
-        item_stacks(&list)
+/// Moves `stacks` in as `stack`'s contents `component`, burning what it
+/// held there before.
+fn put_contents(stack: &mut ItemStack, component: &str, mut stacks: Vec<ItemStack>) {
+    for old in take_contents(stack, component) {
+        old.burn(BurnReason::Loot);
+    }
+    stacks.retain(|stack| !stack.is_empty());
+    let components = &mut stack.components;
+    match component {
+        "minecraft:container" => {
+            components.container = Some(stacks.into_iter().map(Some).collect());
+        }
+        "minecraft:bundle_contents" => {
+            components.bundle_contents = Some(Box::new(
+                tuff_item::item::bundle::BundleContents::from_items(stacks),
+            ));
+        }
+        _ => components.charged_projectiles = Some(stacks),
     }
 }
 
@@ -281,12 +293,11 @@ fn filtered(stack: ItemStack, params: &Value, context: &Context, rng: &mut impl 
         charted.edit_components(|components| components.map_id = Some(0));
         probe = Some(charted);
     }
-    let tested = probe.as_deref().unwrap_or(&stack);
-    let branch = if match_tool(&params["item_filter"], Some(tested)) {
-        "on_pass"
-    } else {
-        "on_fail"
+    let passed = match &probe {
+        Some(charted) => match_tool(&params["item_filter"], Some(charted)),
+        None => match_tool(&params["item_filter"], Some(&stack)),
     };
+    let branch = if passed { "on_pass" } else { "on_fail" };
     let Some(modifier) = params.get(branch) else {
         return stack;
     };
@@ -583,21 +594,15 @@ pub(super) fn apply(
             ) {
                 let mut stacks = Vec::new();
                 roll_table(&table, context, rng, &mut stacks);
-                stacks.retain(|s| s.count() > 0);
-                patch(&mut stack, |nbt| {
-                    nbt.insert(component, stacks_to_component(component, &stacks));
-                });
+                put_contents(&mut stack, component, stacks);
             }
         }
         "minecraft:modify_contents" => {
             if let Some(component) = contents_component(params) {
                 let functions = modifier_functions(&params["modifier"]);
-                let mut nbt = stack.components.to_nbt();
-                let mut stacks = component_stacks(component, &nbt);
+                let mut stacks = take_contents(&mut stack, component);
                 modify_stacks(&functions, &mut stacks, context, rng);
-                stacks.retain(|s| s.count() > 0);
-                nbt.insert(component, stacks_to_component(component, &stacks));
-                stack.components = Components::from_nbt(&nbt);
+                put_contents(&mut stack, component, stacks);
             }
         }
         _ => {}

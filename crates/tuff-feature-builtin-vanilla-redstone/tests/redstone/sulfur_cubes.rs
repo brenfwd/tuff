@@ -29,7 +29,7 @@ async fn pen_world() -> (
 fn holding(item: Item) -> Compound {
     Compound::new().with("Size", 1).with("NoAI", true).with(
         "equipment",
-        Compound::new().with("body", ItemStack::mint(item, 1, MintReason::Test).to_nbt()),
+        Compound::new().with("body", tuff_item::item::ItemPicture::new(item, 1).to_nbt()),
     )
 }
 
@@ -93,7 +93,7 @@ async fn a_cube_swallows_a_loose_block_it_touches() {
         Compound::new()
             .with(
                 "Item",
-                ItemStack::mint(Item::MagmaBlock, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::MagmaBlock, 1).to_nbt(),
             )
             .with("PickupDelay", 0i16),
         [8.5, FLOOR, 8.5],
@@ -448,7 +448,7 @@ async fn a_dispenser_empties_a_sulfur_cube_bucket() {
     let mut bucket = ItemStack::mint(Item::SulfurCubeBucket, 1, MintReason::Test);
     bucket.components.other.insert(
         "minecraft:sulfur_cube_content",
-        Tag::Compound(ItemStack::mint(Item::SoulSand, 1, MintReason::Test).to_nbt()),
+        Tag::Compound(tuff_item::item::ItemPicture::new(Item::SoulSand, 1).to_nbt()),
     );
     let dir = TestDir::new();
     let (mut b, _, button) = dispenser_bench(dir.path(), vec![bucket]).await;

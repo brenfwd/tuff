@@ -13,7 +13,7 @@ use tuff_vanilla_data::registry::{EntityType, MobEffect};
 use tuff_vanilla_data::{Block, BlockState, Item};
 
 use crate::protocol::play::GameMode;
-use tuff_item::item::{Enchantments, ItemStack};
+use tuff_item::item::{Enchantments, ItemStack, Mode};
 use tuff_nbt::{Compound, Tag};
 
 mod numbers;
@@ -214,7 +214,7 @@ pub struct Context<'a> {
     pub target: Option<&'a EntityFacts>,
     pub origin: [f64; 3],
     pub location: Option<&'a LocationFacts>,
-    pub tool: Option<&'a ItemStack>,
+    pub tool: Option<tuff_item::item::AnyItem<'a>>,
     /// The level of the enchantment being applied, for level based values.
     pub enchantment_level: Option<i32>,
 }
@@ -353,7 +353,11 @@ fn component_value(entity: &EntityFacts, id: &str) -> Option<String> {
 
 /// An item predicate: `items`, `count`, exact `components` and component
 /// `predicates`.
-pub fn item(predicate: &Value, stack: &ItemStack) -> bool {
+pub fn item<'a>(predicate: &Value, stack: impl Into<tuff_item::item::AnyItem<'a>>) -> bool {
+    tuff_item::with_item!(stack.into(), |stack| item_of(predicate, stack))
+}
+
+fn item_of<M: Mode>(predicate: &Value, stack: &ItemStack<M>) -> bool {
     let Some(fields) = predicate.as_object() else {
         return false;
     };
@@ -388,7 +392,7 @@ pub fn item(predicate: &Value, stack: &ItemStack) -> bool {
 
 /// The prototype value of the item component `id` on `stack` for the
 /// components the item type fixes.
-fn default_component(stack: &ItemStack, id: &str) -> Option<Tag> {
+fn default_component<M: Mode>(stack: &ItemStack<M>, id: &str) -> Option<Tag> {
     let item = stack.item();
     let int = |value: u32| Tag::Int(i32::try_from(value).unwrap_or(i32::MAX));
     match id {
@@ -400,7 +404,7 @@ fn default_component(stack: &ItemStack, id: &str) -> Option<Tag> {
     }
 }
 
-fn item_sub_predicate(id: &str, predicate: &Value, stack: &ItemStack) -> bool {
+fn item_sub_predicate<M: Mode>(id: &str, predicate: &Value, stack: &ItemStack<M>) -> bool {
     match qualified(id).as_str() {
         "minecraft:enchantments" => enchantments(predicate, stack.components.enchantments.as_ref()),
         "minecraft:stored_enchantments" => {
@@ -1168,9 +1172,11 @@ pub fn condition_in(
                         .or_else(|| condition.get("state"))
                         .is_none_or(|p| state_properties(p, state))
             }),
-        Some("minecraft:match_tool") => context
-            .tool
-            .is_some_and(|tool| condition.get("predicate").is_none_or(|p| item(p, tool))),
+        Some("minecraft:match_tool") => context.tool.is_some_and(|tool| {
+            condition
+                .get("predicate")
+                .is_none_or(|p| tuff_item::with_item!(tool, |tool| item(p, tool)))
+        }),
         Some("minecraft:inverted") => !test(&condition["term"]),
         Some("minecraft:any_of") => terms().iter().any(test),
         Some("minecraft:all_of") => terms().iter().all(test),
@@ -1191,7 +1197,9 @@ pub fn condition_in(
             .is_some_and(|active| condition["active"].as_bool() == Some(active)),
         Some("minecraft:table_bonus") => {
             let level = condition["enchantment"].as_str().map_or(0, |id| {
-                context.tool.map_or(0, |tool| tool.enchantment_level(id))
+                context.tool.map_or(0, |tool| {
+                    tuff_item::with_item!(tool, |tool| tool.enchantment_level(id))
+                })
             });
             let chances = condition["chances"]
                 .as_array()

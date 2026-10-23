@@ -654,17 +654,24 @@ fn carried_drops(
     state: BlockState,
     rng: &mut rand::rngs::StdRng,
 ) -> Vec<tuff_item::item::ItemStack> {
-    let tool = tuff_item::item::enchanting::enchant_from_provider(
-        tuff_item::item::ItemStack::mint(
-            tuff_vanilla_data::Item::DiamondAxe,
-            1,
-            tuff_item::item::MintReason::Spawn,
-        ),
+    let tool = carried_block_tool(rng);
+    loot.drops(state, Some(tool.any()), None, rng)
+}
+
+/// The stand-in tool the carried block is mined with: a picture, never a
+/// real item.
+fn carried_block_tool(rng: &mut rand::rngs::StdRng) -> tuff_item::item::ItemPicture {
+    let mut tool = tuff_item::item::ItemPicture::new(tuff_vanilla_data::Item::DiamondAxe, 1);
+    let chosen = tuff_item::item::enchanting::provider_enchantments(
+        &tool,
         "minecraft:enderman_loot_drop",
         0.0,
         rng,
     );
-    loot.drops(state, Some(&tool), None, rng)
+    if !chosen.is_empty() {
+        tool.components.enchantments = Some(tuff_item::item::Enchantments::new(chosen));
+    }
+    tool
 }
 
 pub fn register(registry: &mut tuff_core::world::entity::Registry) {
@@ -858,5 +865,13 @@ mod tests {
         );
         assert_eq!(drops.len(), 1);
         assert_eq!(drops[0].item(), tuff_vanilla_data::Item::GrassBlock);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn the_carried_block_tool_is_never_a_real_item() {
+        let mut rng = StdRng::seed_from_u64(1);
+        let tool: tuff_item::item::ItemPicture = carried_block_tool(&mut rng);
+        assert_eq!(tool.enchantment_level("minecraft:silk_touch"), 1);
     }
 }

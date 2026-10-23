@@ -305,7 +305,7 @@ impl Bobber {
             let items =
                 cx.shared
                     .block_loot()
-                    .fishing(self.luck, self.open_water, &self.rod, cx.rng);
+                    .fishing(self.luck, self.open_water, self.rod.any(), cx.rng);
             for stack in items {
                 if tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::FISHES, stack.item())
                 {

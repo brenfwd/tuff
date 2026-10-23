@@ -277,7 +277,9 @@ pub async fn run(ctx: &mut Context<'_>) -> Result<i32, CommandError> {
                 text("Web panel login code: ")
                     .append(TextComponent::copy_on_click(code))
                     .append(" (single use, expires in 2 minutes). Enter it at ")
-                    .append(TextComponent::click(text(&url), ClickEvent::OpenUrl(url)).color("aqua"))
+                    .append(
+                        TextComponent::click(text(&url), ClickEvent::OpenUrl(url)).color("aqua"),
+                    )
                     .append("."),
             );
             Ok(1)

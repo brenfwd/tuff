@@ -207,25 +207,26 @@ impl PlayerSession {
     pub fn scan_inventory(&mut self) {
         let slots = self.inventory.slots();
         let same = |slot: usize| {
-            slots[slot].as_ref()
-                == self
-                    .progress
+            tuff_item::item::same_slot(
+                slots[slot].as_ref(),
+                self.progress
                     .last_inventory
                     .get(slot)
-                    .and_then(Option::as_deref)
+                    .and_then(Option::as_deref),
+            )
         };
         if slots.len() == self.progress.last_inventory.len() && (0..slots.len()).all(same) {
             return;
         }
         let changed: Vec<usize> = UNLOCK_WATCHED_SLOTS.filter(|slot| !same(*slot)).collect();
         let last = tuff_item::item::snapshot_slots(slots);
-        let view = |slot: usize| last[slot].as_ref().map(tuff_item::item::ItemSnapshot::view);
-        let mut inventory: Vec<Option<tuff_item::item::ItemView<'_>>> =
+        let view = |slot: usize| last[slot].as_ref().map(tuff_item::item::AnyItem::from);
+        let mut inventory: Vec<Option<tuff_item::item::AnyItem<'_>>> =
             INVENTORY_ORDER.iter().map(|&slot| view(slot)).collect();
         inventory.extend(std::iter::repeat_n(None, ALWAYS_EMPTY_SLOTS));
         for &slot in &changed {
             self.fire(Event::InventoryChanged {
-                changed: view(slot).map(tuff_item::item::ItemView::get),
+                changed: view(slot),
                 inventory: &inventory,
             });
         }
@@ -246,18 +247,16 @@ impl PlayerSession {
             .hand(off_hand)
             .filter(|stack| stack.item() == item)
             .map(tuff_item::item::ItemSnapshot::of)
-            .unwrap_or_else(|| {
-                tuff_item::item::ItemSnapshot::describe(item, 1, Default::default())
-            });
+            .unwrap_or_else(|| tuff_item::item::ItemSnapshot::new(item, 1));
         if let Some(placed) = &placement.placed {
             self.fire(Event::PlacedBlock {
                 location: placed,
-                item: &stack,
+                item: stack.any(),
             });
         }
         self.fire(Event::ItemUsedOnBlock {
             location: &placement.used_on,
-            item: &stack,
+            item: stack.any(),
         });
     }
 
@@ -352,7 +351,7 @@ impl PlayerSession {
                     .find(|stack| stack.item() == tuff_vanilla_data::Item::FishingRod);
                 if let Some(rod) = rod {
                     self.fire(Event::FishingRodHooked {
-                        rod: &rod,
+                        rod: rod.any(),
                         entity: &entity,
                         items: &items,
                     });
@@ -374,7 +373,7 @@ impl PlayerSession {
             AdvancementEvent::InteractedWithEntity { item, entity } => {
                 let entity = here(entity);
                 self.fire(Event::PlayerInteractedWithEntity {
-                    item: item.as_deref(),
+                    item: item.as_deref().map(ItemStack::any),
                     entity: &entity,
                 });
             }
@@ -393,15 +392,11 @@ impl PlayerSession {
                     .hand(off_hand)
                     .map(tuff_item::item::ItemSnapshot::of)
                     .unwrap_or_else(|| {
-                        tuff_item::item::ItemSnapshot::describe(
-                            tuff_vanilla_data::Item::Air,
-                            0,
-                            Default::default(),
-                        )
+                        tuff_item::item::ItemSnapshot::new(tuff_vanilla_data::Item::Air, 0)
                     });
                 self.fire(Event::AnyBlockUse {
                     location: &location,
-                    item: &item,
+                    item: item.any(),
                 });
             }
             AdvancementEvent::ConstructBeacon(level) => {
@@ -434,34 +429,34 @@ impl PlayerSession {
             AdvancementEvent::BeeNestDestroyed { block, item, bees } => {
                 self.fire(Event::BeeNestDestroyed {
                     block,
-                    item: item.as_deref(),
+                    item: item.as_deref().map(ItemStack::any),
                     bees,
                 });
             }
             AdvancementEvent::AllayDropItemOnBlock { item, location } => {
                 self.fire(Event::AllayDropItemOnBlock {
                     location: &location,
-                    item: &item,
+                    item: item.any(),
                 });
             }
             AdvancementEvent::ThrownItemPickedUpByEntity { item, entity } => {
                 let entity = here(entity);
                 self.fire(Event::ThrownItemPickedUpByEntity {
-                    item: &item,
+                    item: item.any(),
                     entity: &entity,
                 });
             }
             AdvancementEvent::ThrownItemPickedUpByPlayer { item, thrower } => {
                 let thrower = here(thrower);
                 self.fire(Event::ThrownItemPickedUpByPlayer {
-                    item: &item,
+                    item: item.any(),
                     entity: &thrower,
                 });
             }
             AdvancementEvent::ShearedEquipment { item, entity } => {
                 let entity = here(entity);
                 self.fire(Event::PlayerShearedEquipment {
-                    item: &item,
+                    item: item.any(),
                     entity: &entity,
                 });
             }
@@ -556,7 +551,7 @@ impl PlayerSession {
         for (victims, weapon) in group_arrow_kills(pending) {
             self.fire(Event::KilledByArrow {
                 victims: &victims,
-                weapon: weapon.as_deref(),
+                weapon: weapon.as_deref().map(ItemStack::any),
             });
         }
     }
@@ -720,7 +715,7 @@ impl PlayerSession {
             for _ in 0..times {
                 self.fire(Event::VillagerTrade {
                     villager: &villager,
-                    item: &offer.sell,
+                    item: offer.sell.any(),
                 });
             }
         }
@@ -780,7 +775,7 @@ impl PlayerSession {
                 .filter(|stack| stack.item() == using.item)
                 .map(tuff_item::item::ItemSnapshot::of)
         {
-            self.fire(Event::UsingItem(&stack));
+            self.fire(Event::UsingItem(stack.any()));
         }
     }
 

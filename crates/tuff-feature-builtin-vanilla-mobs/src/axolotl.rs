@@ -452,7 +452,7 @@ impl Species for Axolotl {
         }
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         tuff_datapack::tags::is(tag::item::key::AXOLOTL_FOOD, stack.item())
     }
 

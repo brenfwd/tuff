@@ -373,10 +373,10 @@ pub fn interact<S: Species>(
 
 /// A spawn egg used on an animal of its own kind: a baby appears where the
 /// animal stands, with the egg's components, and the egg is used up.
-fn spawn_egg_baby<S: Species>(
+fn spawn_egg_baby<S: Species, M: tuff_item::item::Mode>(
     mob: &mut Mob<S>,
     species: S,
-    stack: &tuff_item::item::ItemStack,
+    stack: &tuff_item::item::ItemStack<M>,
     cx: &mut TickContext,
 ) -> InteractOutcome {
     let mut base = EntityBase::new(

@@ -115,7 +115,7 @@ impl FireworkRocket {
         Self {
             base,
             owner,
-            item: item.keep(1, tuff_item::item::BurnReason::Template),
+            item: item.keep(1, tuff_item::item::BurnReason::Consumed),
             life: 0,
             lifetime,
             shot_at_angle: false,
@@ -287,7 +287,7 @@ impl RegionEntity for FireworkRocket {
         self.owner.save(out);
         out.insert("Life", self.life);
         out.insert("LifeTime", self.lifetime);
-        out.insert("FireworksItem", self.item.to_nbt());
+        out.insert("FireworksItem", self.item.to_storage());
         out.insert("ShotAtAngle", self.shot_at_angle);
     }
 
@@ -387,7 +387,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     let item = take(nbt, "FireworksItem", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     })
-    .unwrap_or_else(|| ItemStack::mint(Item::FireworkRocket, 1, MintReason::Template));
+    .unwrap_or_else(|| ItemStack::mint(Item::FireworkRocket, 1, MintReason::Spawn));
     Some(Box::new(FireworkRocket {
         base,
         owner,

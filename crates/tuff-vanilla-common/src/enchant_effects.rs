@@ -120,7 +120,7 @@ pub fn holds(
     requirement: Option<&Requirement>,
     this: Option<&EntityFacts>,
     origin: [f64; 3],
-    tool: Option<&ItemStack>,
+    tool: Option<tuff_item::item::AnyItem<'_>>,
     level: u32,
     world: &EffectWorld<'_>,
 ) -> bool {
@@ -479,7 +479,7 @@ pub struct Fired {
 /// The `component` effects of the enchanted `equipment` of the entity
 /// `this` whose requirements hold.
 pub fn run(
-    equipment: &[(EquipmentSlot, &ItemStack)],
+    equipment: &[tuff_core::world::attributes::Equipped<'_>],
     component: fn(&EnchantmentEffects) -> &[Conditional<EntityEffect>],
     this: &EntityFacts,
     body: &Body,
@@ -488,9 +488,7 @@ pub fn run(
     let registry = enchantment::current();
     let mut fired = Vec::new();
     for (slot, stack) in equipment {
-        for (_, def, level) in
-            enchantment::leveled(&registry, stack.components.enchantments.as_ref())
-        {
+        for (_, def, level) in enchantment::leveled(&registry, stack.enchantments()) {
             if !applies_in(def, *slot) {
                 continue;
             }
@@ -499,7 +497,7 @@ pub fn run(
                     entry.requirements.as_ref(),
                     Some(this),
                     this.position,
-                    Some(stack),
+                    Some(*stack),
                     level,
                     world,
                 ) {
@@ -518,8 +516,8 @@ pub fn run(
 /// The `component` effects of `weapon` on a projectile or the entity it
 /// was shot or thrown from; the weapon is held, not worn, so slots do not
 /// apply.
-pub fn run_weapon(
-    weapon: &ItemStack,
+pub fn run_weapon<M: tuff_item::item::Mode>(
+    weapon: &ItemStack<M>,
     component: fn(&EnchantmentEffects) -> &[Conditional<EntityEffect>],
     this: &EntityFacts,
     origin: [f64; 3],
@@ -535,7 +533,7 @@ pub fn run_weapon(
                 entry.requirements.as_ref(),
                 Some(this),
                 origin,
-                Some(weapon),
+                Some(weapon.any()),
                 level,
                 world,
             ) {
@@ -566,7 +564,7 @@ pub struct LocationChange {
 /// requirements hold, given whether it was active before, is active now
 /// and fires; one that stops holding is deactivated.
 pub fn location_changed(
-    equipment: &[(EquipmentSlot, &ItemStack)],
+    equipment: &[tuff_core::world::attributes::Equipped<'_>],
     this: &EntityFacts,
     body: &Body,
     was_active: &BTreeSet<ActiveKey>,
@@ -575,9 +573,7 @@ pub fn location_changed(
     let registry = enchantment::current();
     let mut change = LocationChange::default();
     for (slot, stack) in equipment {
-        for (id, def, level) in
-            enchantment::leveled(&registry, stack.components.enchantments.as_ref())
-        {
+        for (id, def, level) in enchantment::leveled(&registry, stack.enchantments()) {
             if !applies_in(def, *slot) {
                 continue;
             }
@@ -588,7 +584,7 @@ pub fn location_changed(
                     entry.requirements.as_ref(),
                     Some(this),
                     this.position,
-                    Some(stack),
+                    Some(*stack),
                     level,
                     world,
                 ) {
@@ -1108,8 +1104,8 @@ impl PredicateWorld for TickWorld<'_, '_> {
 
 /// The weapon's `hit_block` effects for a projectile of `kind` that struck
 /// a block at `position` (inside the block).
-pub fn projectile_hit_block(
-    weapon: &ItemStack,
+pub fn projectile_hit_block<M: tuff_item::item::Mode>(
+    weapon: &ItemStack<M>,
     kind: EntityType,
     position: [f64; 3],
     movement: [f64; 3],
@@ -1139,8 +1135,8 @@ pub struct Spawned {
 
 /// The weapon's `projectile_spawned` effects on a projectile of `kind`
 /// leaving `position` at `velocity`, facing `yaw`/`pitch`.
-pub fn projectile_spawned(
-    weapon: &ItemStack,
+pub fn projectile_spawned<M: tuff_item::item::Mode>(
+    weapon: &ItemStack<M>,
     kind: EntityType,
     position: [f64; 3],
     velocity: [f64; 3],
@@ -1184,9 +1180,9 @@ pub fn projectile_spawned(
 
 /// Applies the weapon's `projectile_spawned` effects to an arrow or trident
 /// shot from `position` facing `look`; returns its world actions.
-pub fn arrow_spawned(
+pub fn arrow_spawned<M: tuff_item::item::Mode>(
     shot: &mut tuff_core::world::projectile::ArrowShot,
-    weapon: &ItemStack,
+    weapon: &ItemStack<M>,
     position: [f64; 3],
     look: (f32, f32),
     rng: &mut dyn RngCore,

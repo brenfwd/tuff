@@ -436,12 +436,12 @@ fn item_record(
     kind: Kind,
     world: &dyn RegionWorld,
     at: [f64; 3],
-    stack: tuff_item::item::ItemView<'_>,
+    stack: tuff_item::item::AnyItem<'_>,
 ) -> Record {
     let mut record = Record::new(now_ms(), who, kind, world.dimension_id(), world_pos(at));
     record.material = Some(stack.item().name().to_owned());
     record.amount = i32::from(stack.count());
-    record.data = Some(stack.to_nbt());
+    record.data = Some(tuff_item::with_item!(stack, |stack| stack.to_nbt()));
     record
 }
 
@@ -472,7 +472,7 @@ impl RegionHooks for ItemHooks {
             Kind::ItemRemove,
             world,
             item.base.position,
-            item.stack.view(),
+            item.stack.any(),
         ));
     }
 
@@ -490,7 +490,7 @@ impl RegionHooks for ItemHooks {
             Kind::ItemAdd,
             world,
             pickup.position,
-            pickup.stack.view(),
+            pickup.stack.any(),
         ));
     }
 
@@ -575,11 +575,11 @@ fn session_record(session: &PlayerSession, kind: Kind) -> Record {
 fn action_record(
     mut record: Record,
     action: ItemAction,
-    stack: tuff_item::item::ItemView<'_>,
+    stack: tuff_item::item::AnyItem<'_>,
 ) -> Record {
     record.material = Some(stack.item().name().to_owned());
     record.amount = i32::from(stack.count());
-    record.data = Some(stack.to_nbt());
+    record.data = Some(tuff_item::with_item!(stack, |stack| stack.to_nbt()));
     record.text = Some(action.name().to_owned());
     record
 }
@@ -598,7 +598,7 @@ impl SessionHooks for Sessions {
         &self,
         session: &PlayerSession,
         action: ItemAction,
-        stack: tuff_item::item::ItemView<'_>,
+        stack: tuff_item::item::AnyItem<'_>,
     ) {
         let kind = match action {
             ItemAction::Crafted => Kind::ItemAdd,
@@ -843,12 +843,7 @@ mod action_tests {
         let row = action_record(
             base,
             ItemAction::Broken,
-            tuff_item::item::ItemStack::mint(
-                tuff_vanilla_data::Item::IronPickaxe,
-                1,
-                tuff_item::item::MintReason::Test,
-            )
-            .view(),
+            tuff_item::item::ItemPicture::new(tuff_vanilla_data::Item::IronPickaxe, 1).any(),
         );
         assert_eq!(row.text.as_deref(), Some("break"));
         assert_eq!(row.material.as_deref(), Some("minecraft:iron_pickaxe"));

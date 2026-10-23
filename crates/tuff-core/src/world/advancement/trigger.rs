@@ -12,7 +12,7 @@ use tuff_vanilla_data::registry::TriggerType;
 use tuff_vanilla_data::{BlockState, Item};
 
 use crate::world::predicate::{self, Context, DamageFacts, EntityFacts, LocationFacts};
-use tuff_item::item::ItemStack;
+use tuff_item::item::AnyItem;
 
 /// Something a player did or had happen that criteria may count.
 #[derive(Debug, Clone, Copy)]
@@ -20,23 +20,23 @@ pub enum Event<'a> {
     /// A slot of the player's inventory changed to `changed` (possibly
     /// empty). `inventory` is every inventory slot, equipment included.
     InventoryChanged {
-        changed: Option<&'a ItemStack>,
-        inventory: &'a [Option<tuff_item::item::ItemView<'a>>],
+        changed: Option<AnyItem<'a>>,
+        inventory: &'a [Option<AnyItem<'a>>],
     },
     RecipeUnlocked(&'a str),
     RecipeCrafted {
         recipe: &'a str,
         ingredients: &'a [tuff_item::item::ItemSnapshot],
     },
-    ConsumeItem(&'a ItemStack),
+    ConsumeItem(AnyItem<'a>),
     /// A block placed by the player, the item it came from.
     PlacedBlock {
         location: &'a LocationFacts,
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
     },
     ItemUsedOnBlock {
         location: &'a LocationFacts,
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
     },
     PlayerKilledEntity {
         victim: &'a EntityFacts,
@@ -65,14 +65,14 @@ pub enum Event<'a> {
     /// The player helped win a raid.
     RaidWin,
     EnchantedItem {
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
         levels: i32,
     },
     BrewedPotion(Option<&'a str>),
-    FilledBucket(&'a ItemStack),
+    FilledBucket(AnyItem<'a>),
     VillagerTrade {
         villager: &'a EntityFacts,
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
     },
     /// An eye of ender thrown `distance_sqr` (horizontal) from its target.
     UsedEnderEye {
@@ -83,26 +83,26 @@ pub enum Event<'a> {
         villager: &'a EntityFacts,
     },
     PlayerGeneratesContainerLoot(&'a str),
-    ShotCrossbow(&'a ItemStack),
+    ShotCrossbow(AnyItem<'a>),
     TameAnimal(&'a EntityFacts),
     /// A bobber reeled in `items` (none when it held an entity).
     FishingRodHooked {
-        rod: &'a ItemStack,
+        rod: AnyItem<'a>,
         entity: &'a EntityFacts,
         items: &'a [tuff_item::item::ItemSnapshot],
     },
     SummonedEntity(&'a EntityFacts),
-    UsedTotem(&'a ItemStack),
+    UsedTotem(AnyItem<'a>),
     PlayerInteractedWithEntity {
-        item: Option<&'a ItemStack>,
+        item: Option<AnyItem<'a>>,
         entity: &'a EntityFacts,
     },
     PlayerShearedEquipment {
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
         entity: &'a EntityFacts,
     },
     ItemDurabilityChanged {
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
         delta: i32,
     },
     EntityHurtPlayer {
@@ -138,7 +138,7 @@ pub enum Event<'a> {
     /// Arrows from `weapon` killed these entities.
     KilledByArrow {
         victims: &'a [EntityFacts],
-        weapon: Option<&'a ItemStack>,
+        weapon: Option<AnyItem<'a>>,
     },
     /// Each tick while levitating: where the levitation began and how
     /// many ticks ago.
@@ -151,12 +151,12 @@ pub enum Event<'a> {
         start: [f64; 3],
     },
     /// Each tick an item is being used.
-    UsingItem(&'a ItemStack),
+    UsingItem(AnyItem<'a>),
     /// A right click on a block did something, holding `item` after the
     /// use; `location` is the clicked block as it is now.
     AnyBlockUse {
         location: &'a LocationFacts,
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
     },
     /// An empty-handed style use of a block (opening, toggling) that the
     /// held item did not take over.
@@ -186,7 +186,7 @@ pub enum Event<'a> {
     /// The player broke a bee nest or hive holding `bees` bees.
     BeeNestDestroyed {
         block: BlockState,
-        item: Option<&'a ItemStack>,
+        item: Option<AnyItem<'a>>,
         bees: i32,
     },
     /// Thrown by an explosion at `start`, the player began to fall.
@@ -203,16 +203,16 @@ pub enum Event<'a> {
     /// An allay dropped `item` onto a block for the player.
     AllayDropItemOnBlock {
         location: &'a LocationFacts,
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
     },
     /// `entity` picked up an item the player threw.
     ThrownItemPickedUpByEntity {
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
         entity: &'a EntityFacts,
     },
     /// The player picked up an item `entity` threw.
     ThrownItemPickedUpByPlayer {
-        item: &'a ItemStack,
+        item: AnyItem<'a>,
         entity: &'a EntityFacts,
     },
     /// A spear charge hit `count` living entities.

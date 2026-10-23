@@ -76,7 +76,7 @@ async fn drop_item(region: &RegionHandle, item: Item, count: u8, at: [f64; 3]) {
         EntityType::Item,
         Compound::new().with(
             "Item",
-            ItemStack::mint(item, count, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(item, count).to_nbt(),
         ),
         at,
     )
@@ -217,7 +217,7 @@ async fn piglins_with_crossbows_shoot_players_without_gold() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
     let y = SKY as f64 + 1.0;
-    let crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test).to_nbt();
+    let crossbow = tuff_item::item::ItemPicture::new(Item::Crossbow, 1).to_nbt();
     summon(
         &region,
         EntityType::Piglin,
@@ -245,7 +245,7 @@ async fn piglins_hunt_adult_hoglins_after_a_rest() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
     let y = SKY as f64 + 1.0;
-    let sword = ItemStack::mint(Item::GoldenSword, 1, MintReason::Test).to_nbt();
+    let sword = tuff_item::item::ItemPicture::new(Item::GoldenSword, 1).to_nbt();
     summon(
         &region,
         EntityType::Piglin,
@@ -465,7 +465,7 @@ async fn piglins_with_crossbows_back_away_from_close_players() {
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
     let y = SKY as f64 + 1.0;
-    let crossbow = ItemStack::mint(Item::Crossbow, 1, MintReason::Test).to_nbt();
+    let crossbow = tuff_item::item::ItemPicture::new(Item::Crossbow, 1).to_nbt();
     summon(
         &region,
         EntityType::Piglin,

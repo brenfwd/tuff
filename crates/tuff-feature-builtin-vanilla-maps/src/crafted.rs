@@ -38,9 +38,9 @@ pub fn take_post_processing(stack: &mut ItemStack) -> Option<Derivation> {
 
 /// What a cartography table makes of `map` (whose saved data is `data`)
 /// and the item in its second slot.
-pub fn cartography_result(
-    map: &ItemStack,
-    additional: &ItemStack,
+pub fn cartography_result<M: tuff_item::item::Mode>(
+    map: &ItemStack<M>,
+    additional: &ItemStack<M>,
     data: &MapData,
 ) -> Option<ItemStack> {
     match additional.item() {

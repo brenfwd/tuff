@@ -197,7 +197,7 @@ impl Species for Strider {
                         tuff_nbt::Compound::new().with(
                             "mainhand",
                             ItemStack::mint(Item::WarpedFungusOnAStick, 1, MintReason::Spawn)
-                                .to_nbt(),
+                                .to_storage(),
                         ),
                     )
                     .with(tuff_core::world::entity::FINALIZE_SPAWN, true),
@@ -272,7 +272,11 @@ impl Species for Strider {
         })
     }
 
-    fn mount_refused(&self, _core: &MobCore, stack: Option<&ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        _core: &MobCore,
+        stack: Option<&ItemStack<M>>,
+    ) -> bool {
         stack.is_some_and(|s| strider_food(s.item()))
     }
 
@@ -305,7 +309,7 @@ impl Species for Strider {
         Some(SoundEvent::EntityStriderEat)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         strider_food(stack.item())
     }
 

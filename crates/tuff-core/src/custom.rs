@@ -16,7 +16,7 @@ use bytes::Bytes;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::registry::EntityType;
 
-use tuff_item::item::{Components, ItemStack, MintReason};
+use tuff_item::item::{Components, ItemPicture, ItemStack, MintReason, Mode, Picture};
 use tuff_item::load::{LoadError, LoadErrorKind};
 use tuff_item::registry::Registry;
 use tuff_nbt::{Compound, Tag};
@@ -70,7 +70,8 @@ impl CustomItemDef {
         self
     }
 
-    pub fn with_components(mut self, components: Components) -> Self {
+    pub fn with_components(mut self, components: impl Into<Components<Picture>>) -> Self {
+        let components = components.into();
         self.components = tuff_item::item::ComponentsSnapshot::describing(components);
         self
     }
@@ -82,7 +83,12 @@ impl CustomItemDef {
 
     /// A picture of one of this item, never a real item.
     pub fn template(&self) -> tuff_item::item::ItemSnapshot {
-        tuff_item::item::ItemSnapshot::describe_with(self.base, 1, &self.components())
+        self.picture(1).into()
+    }
+
+    /// A picture of `count` of this item.
+    pub fn picture(&self, count: u8) -> ItemPicture {
+        ItemPicture::describe(self.base, count, (*self.components()).clone())
     }
 
     fn components(&self) -> tuff_item::item::ComponentsSnapshot {
@@ -91,7 +97,7 @@ impl CustomItemDef {
         snapshot
     }
 
-    fn finish_components(&self, components: &mut Components) {
+    fn finish_components(&self, components: &mut Components<Picture>) {
         if let Some(model) = &self.model {
             components.other.insert(ITEM_MODEL, model.as_str());
         }
@@ -116,7 +122,7 @@ impl CustomItemDef {
 }
 
 /// The custom item id a stack carries, if any.
-pub fn item_id(stack: &ItemStack) -> Option<&str> {
+pub fn item_id<M: Mode>(stack: &ItemStack<M>) -> Option<&str> {
     stack
         .components
         .other
@@ -436,7 +442,7 @@ impl CustomContent {
     }
 
     /// The custom item definition a stack is an instance of.
-    pub fn item_of(&self, stack: &ItemStack) -> Option<&Arc<CustomItemDef>> {
+    pub fn item_of<M: Mode>(&self, stack: &ItemStack<M>) -> Option<&Arc<CustomItemDef>> {
         self.items.get(item_id(stack)?)
     }
 
@@ -463,13 +469,13 @@ impl CustomContent {
 
     /// Custom items in id order, `page_size` per page; a page past the end
     /// is empty. The stacks a catalog menu shows.
-    pub fn catalog_page(&self, page: usize, page_size: usize) -> Vec<ItemStack> {
+    pub fn catalog_page(&self, page: usize, page_size: usize) -> Vec<ItemPicture> {
         let mut ids: Vec<&String> = self.items.keys().collect();
         ids.sort();
         ids.into_iter()
             .skip(page.saturating_mul(page_size))
             .take(page_size)
-            .map(|id| self.items[id].stack(1))
+            .map(|id| self.items[id].picture(1))
             .collect()
     }
 

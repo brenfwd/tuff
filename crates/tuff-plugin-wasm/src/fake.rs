@@ -215,7 +215,7 @@ impl Fakes {
         let handle = self.owned.get(&uuid_of(fake))?;
         let observed = handle.observed.borrow();
         let body = &observed.body;
-        let stack = |stack: &tuff_item::item::ItemStack| WitStack {
+        let stack = |stack: &tuff_item::item::ItemPicture| WitStack {
             item: stack.item().name().to_owned(),
             count: stack.count(),
         };

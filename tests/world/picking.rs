@@ -276,7 +276,7 @@ async fn picking_an_item_frame_gives_the_framed_item() {
                 .with("TileZ", 8)
                 .with(
                     "Item",
-                    ItemStack::mint(Item::Diamond, 1, MintReason::Test).to_nbt(),
+                    tuff_item::item::ItemPicture::new(Item::Diamond, 1).to_nbt(),
                 ),
             position: [4.5, 150.97, 8.5],
             fresh: false,

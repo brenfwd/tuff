@@ -6,7 +6,7 @@ use tuff_item::item::ItemSnapshot;
 
 use tuff_core::world::entity::TickContext;
 use tuff_core::world::predicate::EntityFacts;
-use tuff_item::item::{Enchantments, ItemStack};
+use tuff_item::item::Enchantments;
 use tuff_vanilla_common::enchant_effects::{
     self as fx, Action, ActiveKey, Body, EffectWorld, Executor, TickWorld,
 };
@@ -32,7 +32,7 @@ impl<S: Species> Mob<S> {
             .equipment
             .worn()
             .iter()
-            .any(|(_, stack)| stack.components.enchantments.is_some());
+            .any(|(_, stack)| stack.enchantments().is_some());
         if !enchanted && core.enchanted_location.is_none() {
             return;
         }
@@ -40,10 +40,12 @@ impl<S: Species> Mob<S> {
             .equipment
             .worn()
             .into_iter()
-            .map(|(slot, stack)| (slot, ItemSnapshot::of(stack)))
+            .map(|(slot, stack)| (slot, ItemSnapshot::from(stack.picture())))
             .collect();
-        let worn: Vec<(EquipmentSlot, &ItemStack)> =
-            gear.iter().map(|(slot, stack)| (*slot, &**stack)).collect();
+        let worn: Vec<tuff_vanilla_common::combat::Equipped<'_>> = gear
+            .iter()
+            .map(|(slot, stack)| (*slot, stack.any()))
+            .collect();
         let facts = EntityFacts {
             kind: Some(core.base.kind),
             entity_id: Some(core.base.id),

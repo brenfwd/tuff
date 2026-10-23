@@ -5,7 +5,7 @@ pub use tuff_core::world::advancement::trigger::{Event, Handler, Registry};
 use tuff_core::world::predicate::{
     self, Context, DamageFacts, EntityFacts, LocationFacts, bounds, bounds_sqr, in_set,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{AnyItem, ItemSnapshot};
 use tuff_vanilla_data::BlockState;
 use tuff_vanilla_data::registry::TriggerType;
 
@@ -32,7 +32,8 @@ fn handler(f: fn(&Value, &Event<'_>, &EntityFacts) -> bool) -> Handler {
 }
 
 /// An optional item predicate field.
-fn item_field(conditions: &Value, key: &str, stack: &ItemStack) -> bool {
+fn item_field<'a>(conditions: &Value, key: &str, stack: impl Into<AnyItem<'a>>) -> bool {
+    let stack = stack.into();
     conditions
         .get(key)
         .is_none_or(|predicate| predicate::item(predicate, stack))
@@ -117,7 +118,7 @@ fn bystander_field(conditions: &Value, bystanders: &[EntityFacts], player: &Enti
 fn location_field(
     conditions: &Value,
     location: &LocationFacts,
-    item: Option<&ItemStack>,
+    item: Option<&AnyItem<'_>>,
     player: &EntityFacts,
 ) -> bool {
     conditions.get("location").is_none_or(|condition| {
@@ -128,7 +129,7 @@ fn location_field(
                 target: None,
                 origin: location.position,
                 location: Some(location),
-                tool: item,
+                tool: item.copied(),
                 enchantment_level: None,
             },
         )
@@ -167,7 +168,7 @@ fn travelled(conditions: &Value, start: [f64; 3], player: &EntityFacts) -> bool 
 
 fn picked_up(
     conditions: &Value,
-    item: &ItemStack,
+    item: &AnyItem<'_>,
     entity: &EntityFacts,
     player: &EntityFacts,
 ) -> bool {
@@ -188,7 +189,7 @@ fn loot_tables(conditions: &Value, table: &str) -> bool {
     })
 }
 
-fn slots_match(slots: &Value, inventory: &[Option<tuff_item::item::ItemView<'_>>]) -> bool {
+fn slots_match(slots: &Value, inventory: &[Option<AnyItem<'_>>]) -> bool {
     let Some(fields) = slots.as_object() else {
         return false;
     };
@@ -200,7 +201,7 @@ fn slots_match(slots: &Value, inventory: &[Option<tuff_item::item::ItemView<'_>>
             None => empty += 1,
             Some(stack) => {
                 occupied += 1;
-                if stack.count() >= stack.max_stack_size() {
+                if stack.count() >= tuff_item::with_item!(*stack, |stack| stack.max_stack_size()) {
                     full += 1;
                 }
             }
@@ -233,7 +234,7 @@ fn inventory_changed(conditions: &Value, event: &Event<'_>, _: &EntityFacts) -> 
         _ => {
             let mut remaining: Vec<&Value> = items.iter().collect();
             for stack in inventory.iter().flatten() {
-                remaining.retain(|predicate| !predicate::item(predicate, stack.get()));
+                remaining.retain(|predicate| !predicate::item(predicate, stack));
                 if remaining.is_empty() {
                     break;
                 }
@@ -254,7 +255,7 @@ fn recipe_crafted(conditions: &Value, event: &Event<'_>, _: &EntityFacts) -> boo
     if !id_field(conditions, "recipes", recipe) {
         return false;
     }
-    let mut remaining: Vec<&ItemStack> = ingredients.iter().map(|s| &**s).collect();
+    let mut remaining: Vec<&ItemSnapshot> = ingredients.iter().collect();
     conditions
         .get("ingredients")
         .and_then(Value::as_array)
@@ -263,7 +264,7 @@ fn recipe_crafted(conditions: &Value, event: &Event<'_>, _: &EntityFacts) -> boo
         .all(|wanted| {
             match remaining
                 .iter()
-                .position(|stack| predicate::item(wanted, stack))
+                .position(|stack| predicate::item(wanted, *stack))
             {
                 Some(found) => {
                     remaining.swap_remove(found);
@@ -416,9 +417,10 @@ fn builtin(kind: TriggerType) -> Handler {
             let Event::ItemDurabilityChanged { item, delta } = event else {
                 return false;
             };
-            let durability = item
-                .max_damage()
-                .map_or(0.0, |max| f64::from(max) - f64::from(item.damage()));
+            let durability = tuff_item::with_item!(*item, |item| {
+                item.max_damage()
+                    .map_or(0.0, |max| f64::from(max) - f64::from(item.damage()))
+            });
             item_field(c, "item", item)
                 && c.get("durability").is_none_or(|b| bounds(b, durability))
                 && c.get("delta").is_none_or(|b| bounds(b, f64::from(*delta)))
@@ -585,7 +587,7 @@ fn builtin(kind: TriggerType) -> Handler {
 mod tests {
     use super::*;
     use serde_json::json;
-    use tuff_item::item::MintReason;
+    use tuff_item::item::{ItemStack, MintReason};
     use tuff_vanilla_data::Item;
 
     fn player() -> EntityFacts {
@@ -642,7 +644,7 @@ mod tests {
                 criterion.trigger,
                 &conditions,
                 &Event::PlayerInteractedWithEntity {
-                    item: Some(&tnt),
+                    item: Some(tnt.any()),
                     entity,
                 },
                 &player(),
@@ -680,7 +682,7 @@ mod tests {
                 criterion.trigger,
                 &conditions,
                 &Event::FishingRodHooked {
-                    rod: &rod,
+                    rod: rod.any(),
                     entity: &hook,
                     items: &items,
                 },
@@ -714,13 +716,13 @@ mod tests {
         };
         let armor = ItemStack::mint(Item::WolfArmor, 1, MintReason::Test);
         let event = Event::PlayerShearedEquipment {
-            item: &armor,
+            item: armor.any(),
             entity: &wolf,
         };
         assert!(registry.matches(criterion.trigger, &conditions, &event, &player()));
         let saddle = ItemStack::mint(Item::Saddle, 1, MintReason::Test);
         let other = Event::PlayerShearedEquipment {
-            item: &saddle,
+            item: saddle.any(),
             entity: &wolf,
         };
         assert!(!registry.matches(criterion.trigger, &conditions, &other, &player()));
@@ -732,9 +734,9 @@ mod tests {
         let registry = builtin_registry();
         let trigger = TriggerType::InventoryChanged.name();
         let iron = ItemStack::mint(Item::IronIngot, 1, MintReason::Test);
-        let inventory = vec![Some(iron.view()), None];
+        let inventory = vec![Some(iron.any()), None];
         let event = Event::InventoryChanged {
-            changed: Some(&iron),
+            changed: Some(iron.any()),
             inventory: &inventory,
         };
         let one = json!({"items": [{"items": "minecraft:iron_ingot"}]});
@@ -768,12 +770,12 @@ mod tests {
         let event =
             |victims: &'static [EntityFacts], weapon| Event::KilledByArrow { victims, weapon };
         let both: &'static [EntityFacts] = Box::leak(Box::new(both));
-        assert!(registry.matches(trigger, &two, &event(both, Some(&crossbow)), &player()));
-        assert!(!registry.matches(trigger, &two, &event(both, Some(&bow)), &player()));
+        assert!(registry.matches(trigger, &two, &event(both, Some(crossbow.any())), &player()));
+        assert!(!registry.matches(trigger, &two, &event(both, Some(bow.any())), &player()));
         assert!(!registry.matches(
             trigger,
             &two,
-            &event(&both[..1], Some(&crossbow)),
+            &event(&both[..1], Some(crossbow.any())),
             &player()
         ));
         let unique = json!({"unique_entity_types": 2});
@@ -889,7 +891,7 @@ mod tests {
         let any = TriggerType::AnyBlockUse.name();
         let event = Event::AnyBlockUse {
             location: &lever,
-            item: &stick,
+            item: stick.any(),
         };
         assert!(registry.matches(any, &holding, &event, &player()));
         assert!(!registry.matches(default, &holding, &event, &player()));
@@ -938,7 +940,7 @@ mod tests {
         let shears = ItemStack::mint(Item::Shears, 1, MintReason::Test);
         let destroyed = |block: tuff_vanilla_data::Block, bees| Event::BeeNestDestroyed {
             block: block.default_state(),
-            item: Some(&shears),
+            item: Some(shears.any()),
             bees,
         };
         assert!(registry.matches(
@@ -1045,12 +1047,12 @@ mod tests {
         let conditions = json!({"item": {"items": "minecraft:gold_ingot"}});
         let dropped = Event::AllayDropItemOnBlock {
             location: &location,
-            item: &gold,
+            item: gold.any(),
         };
         assert!(registry.matches(name, &json!({}), &dropped, &player()));
         let used = Event::ItemUsedOnBlock {
             location: &location,
-            item: &gold,
+            item: gold.any(),
         };
         assert!(!registry.matches(name, &conditions, &used, &player()));
     }
@@ -1073,17 +1075,17 @@ mod tests {
             item,
             entity: &piglin,
         };
-        assert!(registry.matches(by_entity, &distract, &picked(&gold), &player()));
-        assert!(!registry.matches(by_entity, &distract, &picked(&iron), &player()));
+        assert!(registry.matches(by_entity, &distract, &picked(gold.any()), &player()));
+        assert!(!registry.matches(by_entity, &distract, &picked(iron.any()), &player()));
         assert!(!registry.matches(
             TriggerType::ThrownItemPickedUpByPlayer.name(),
             &distract,
-            &picked(&gold),
+            &picked(gold.any()),
             &player()
         ));
         let sheared = TriggerType::PlayerShearedEquipment.name();
         let event = Event::PlayerShearedEquipment {
-            item: &gold,
+            item: gold.any(),
             entity: &piglin,
         };
         assert!(registry.matches(sheared, &distract, &event, &player()));

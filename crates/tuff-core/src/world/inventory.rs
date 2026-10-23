@@ -6,7 +6,7 @@ use std::ops::RangeInclusive;
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-use tuff_item::item::{BurnReason, Hurt, ItemStack};
+use tuff_item::item::{BurnReason, Hurt, ItemStack, Mode};
 
 fn prevents_equipment_drop(stack: &ItemStack) -> bool {
     let registry = tuff_item::enchantment::current();
@@ -383,12 +383,12 @@ impl Inventory {
     }
 
     /// How many of `stack` `add` would take, without adding them.
-    pub fn room_for(&self, stack: &ItemStack) -> u8 {
+    pub fn room_for<M: Mode>(&self, stack: &ItemStack<M>) -> u8 {
         self.total_room_for(stack).min(u32::from(stack.count())) as u8
     }
 
     /// How many items like `stack` `add` could take in total.
-    pub fn total_room_for(&self, stack: &ItemStack) -> u32 {
+    pub fn total_room_for<M: Mode>(&self, stack: &ItemStack<M>) -> u32 {
         let limit = stack.max_stack_size();
         let mut room = 0u32;
         for slot in [OFFHAND].into_iter().chain(HOTBAR).chain(MAIN) {
@@ -486,12 +486,12 @@ impl Inventory {
         drops
     }
 
-    /// Template copies of the slots and the cursor, for working a click
-    /// out on pictures; never items.
+    /// Stand-in copies of the slots and the cursor, for working a click
+    /// out before real stacks move (see `MintReason::Preview`).
     pub fn template_copy(&self) -> Self {
         let template = |slot: &Option<ItemStack>| {
             slot.as_ref().map(|stack| {
-                ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Template)
+                ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Preview)
             })
         };
         Self {

@@ -12,7 +12,7 @@
 
 use super::*;
 use crate::world::menu::settle::{self, Balance};
-use tuff_item::item::{ItemSnapshot, MintReason};
+use tuff_item::item::{ItemSnapshot, MintReason, Mode};
 
 /// A place on the session's side a click can change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,7 +56,7 @@ impl Sim {
             .chain(self.container.into_iter().flatten())
             .chain(self.drops);
         for stack in stacks {
-            stack.burn(BurnReason::Template);
+            stack.burn(BurnReason::Preview);
         }
     }
 }
@@ -72,7 +72,7 @@ pub struct Reasons {
 /// A template copy of a slot, for pictures that work like stacks.
 pub fn template(slot: &Option<ItemStack>) -> Option<ItemStack> {
     slot.as_ref()
-        .map(|stack| ItemStack::mint_like(stack, stack.count(), MintReason::Template))
+        .map(|stack| ItemStack::mint_like(stack, stack.count(), MintReason::Preview))
 }
 
 /// Template stacks showing what `pictures` show, for a screen mirroring
@@ -82,7 +82,7 @@ pub fn mirror_of(pictures: &[Option<ItemSnapshot>]) -> Vec<Option<ItemStack>> {
         .iter()
         .map(|slot| {
             slot.as_ref()
-                .map(|shown| ItemStack::mint_like(shown, shown.count(), MintReason::Template))
+                .map(|shown| ItemStack::mint_like(shown, shown.count(), MintReason::Preview))
         })
         .collect()
 }
@@ -90,9 +90,9 @@ pub fn mirror_of(pictures: &[Option<ItemSnapshot>]) -> Vec<Option<ItemStack>> {
 /// Shows `shown` in a mirrored slot.
 fn mirror_slot(slot: &mut Option<ItemStack>, shown: Option<&ItemSnapshot>) {
     let mirrored =
-        shown.map(|shown| ItemStack::mint_like(shown, shown.count(), MintReason::Template));
+        shown.map(|shown| ItemStack::mint_like(shown, shown.count(), MintReason::Preview));
     if let Some(old) = std::mem::replace(slot, mirrored) {
-        old.burn(BurnReason::Template);
+        old.burn(BurnReason::Preview);
     }
 }
 
@@ -174,9 +174,12 @@ impl PlayerSession {
         screen: &ScreenChanges,
         trade: bool,
     ) -> Result<(Balance, Option<Reasons>), Balance> {
-        let mut losses = Vec::new();
-        let mut gains = Vec::new();
-        let mut count = |before: Option<&ItemStack>, after: Option<&ItemStack>| {
+        fn count<M: Mode, N: Mode>(
+            before: Option<&ItemStack<M>>,
+            after: Option<&ItemStack<N>>,
+            losses: &mut Vec<ItemSnapshot>,
+            gains: &mut Vec<ItemSnapshot>,
+        ) {
             let (lose, gain) = settle::delta(before, after);
             if lose > 0
                 && let Some(before) = before
@@ -184,12 +187,14 @@ impl PlayerSession {
                 losses.push(ItemSnapshot::of(before).with_count(lose));
             }
             gains.extend(gain);
-        };
+        }
+        let mut losses = Vec::new();
+        let mut gains = Vec::new();
         for place in self.local_places() {
-            count(self.real(place), sim.place(place));
+            count(self.real(place), sim.place(place), &mut losses, &mut gains);
         }
         for (_, before, after) in screen {
-            count(before.as_deref(), after.as_deref());
+            count(before.as_deref(), after.as_deref(), &mut losses, &mut gains);
         }
         gains.extend(sim.drops.iter().map(ItemSnapshot::of));
         let balance = Balance::of(losses.iter(), gains.iter());
@@ -284,7 +289,7 @@ impl PlayerSession {
                 if let Some(slot) = menu.container.get_mut(index)
                     && let Some(old) = std::mem::replace(slot, shown.take())
                 {
-                    old.burn(BurnReason::Template);
+                    old.burn(BurnReason::Preview);
                 }
             }
         }
@@ -749,7 +754,7 @@ impl PlayerSession {
                 window_id,
                 state_id,
                 slot,
-                item: item.as_ref().map(ItemSnapshot::view),
+                item: item.as_ref().map(ItemSnapshot::any),
             });
         }
     }
@@ -893,7 +898,7 @@ impl PlayerSession {
                 window_id,
                 state_id,
                 slot,
-                item: item.as_ref().map(ItemSnapshot::view),
+                item: item.as_ref().map(ItemSnapshot::any),
             });
         }
     }

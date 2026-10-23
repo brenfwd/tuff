@@ -40,7 +40,7 @@ pub trait CombatExt {
     /// in front of the eye, all at once, with the item's own `damage_type`
     /// (not `player_attack`) instead of the usual cooldown-scaled hit.
     async fn stab(&mut self);
-    async fn post_piercing_attack(&mut self, weapon: &ItemStack);
+    async fn post_piercing_attack(&mut self, weapon: &tuff_item::item::ItemPicture);
     /// One tick of a held kinetic weapon (a spear charged by holding use):
     /// past the item's delay, whatever lies along the look ray inside the
     /// attack range is hit by the user's own speed, once per contact
@@ -83,7 +83,7 @@ pub trait CombatExt {
     );
     async fn sweep(
         &mut self,
-        weapon: Option<&ItemStack>,
+        weapon: Option<&tuff_item::item::ItemPicture>,
         target: PlayerId,
         target_position: [f64; 3],
         sweep: combat::Sweep,
@@ -166,7 +166,7 @@ impl CombatExt for PlayerSession {
         let effects = self.effect_levels();
         let worn: Vec<combat::Equipped> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, &**stack))
+            .map(|(slot, stack)| (*slot, stack.any()))
             .collect();
         let attacker = combat::Attacker {
             modifiers: combat::Modifiers {
@@ -397,7 +397,7 @@ impl CombatExt for PlayerSession {
         self.post_piercing_attack(&stack).await;
     }
 
-    async fn post_piercing_attack(&mut self, weapon: &ItemStack) {
+    async fn post_piercing_attack(&mut self, weapon: &tuff_item::item::ItemPicture) {
         let effects: Pin<Box<dyn Future<Output = ()> + Send + '_>> = Box::pin(
             crate::world::session::enchant::post_piercing_attack(self, weapon),
         );
@@ -464,7 +464,7 @@ impl CombatExt for PlayerSession {
         let context =
             combat::DamageContext::melee(victim).with_attacker_state(fall_distance, false);
         let bursts: Vec<_> = combat::post_attack(
-            &[(EquipmentSlot::Mainhand, &*weapon)],
+            &[(EquipmentSlot::Mainhand, weapon.any())],
             combat::Side::Attacker,
             &context,
             &mut self.rng,
@@ -655,7 +655,7 @@ impl CombatExt for PlayerSession {
 
     async fn sweep(
         &mut self,
-        weapon: Option<&ItemStack>,
+        weapon: Option<&tuff_item::item::ItemPicture>,
         target: PlayerId,
         target_position: [f64; 3],
         sweep: combat::Sweep,
@@ -683,7 +683,8 @@ impl CombatExt for PlayerSession {
             .map(|(id, kind, _, position)| (id, kind, position))
             .collect();
         for (id, kind, _) in caught_entities {
-            let damage = combat::sweep_damage(weapon, sweep, kind, &mut self.rng);
+            let damage =
+                combat::sweep_damage(weapon.map(ItemStack::any), sweep, kind, &mut self.rng);
             let attack = tuff_core::world::entity::EntityAttack {
                 attacker: self.id,
                 attacker_uuid: self.profile.id,
@@ -701,7 +702,12 @@ impl CombatExt for PlayerSession {
             self.attack_entity(id, attack, None).await;
         }
         for handle in caught {
-            let damage = combat::sweep_damage(weapon, sweep, EntityType::Player, &mut self.rng);
+            let damage = combat::sweep_damage(
+                weapon.map(ItemStack::any),
+                sweep,
+                EntityType::Player,
+                &mut self.rng,
+            );
             handle.send(PlayerEvent::Attacked(Attack {
                 attacker: self.conn.handle.clone(),
                 attacker_name: self.profile.name.clone(),
@@ -920,12 +926,12 @@ impl CombatExt for PlayerSession {
         let equipment = self.equipment();
         let worn: Vec<combat::Equipped> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, &**stack))
+            .map(|(slot, stack)| (*slot, stack.any()))
             .collect();
         let own = combat::post_attack(&worn, combat::Side::Victim, context, &mut self.rng);
         let weapon = match &attack.weapon {
             Some(weapon) => combat::post_attack(
-                &[(EquipmentSlot::Mainhand, weapon)],
+                &[(EquipmentSlot::Mainhand, weapon.any())],
                 combat::Side::Attacker,
                 context,
                 &mut self.rng,
@@ -994,7 +1000,7 @@ impl CombatExt for PlayerSession {
         let equipment = self.equipment();
         let worn: Vec<combat::Equipped> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, &**stack))
+            .map(|(slot, stack)| (*slot, stack.any()))
             .collect();
         if combat::immune_to_damage(&worn, &damage_context(&source), &mut self.rng) {
             return HurtResult::default();
@@ -1178,9 +1184,9 @@ impl CombatExt for PlayerSession {
         let kind = source.kind;
         let mut amount = amount;
         let equipment = self.equipment();
-        let worn: Vec<(EquipmentSlot, &ItemStack)> = equipment
+        let worn: Vec<tuff_core::world::attributes::Equipped<'_>> = equipment
             .iter()
-            .map(|(slot, stack)| (*slot, &**stack))
+            .map(|(slot, stack)| (*slot, stack.any()))
             .collect();
         if !damage_type_in_tag(kind, "minecraft:bypasses_armor") {
             self.hurt_equipment(kind, amount, &ARMOR_SLOTS).await;
@@ -1189,7 +1195,7 @@ impl CombatExt for PlayerSession {
                 amount,
                 armor,
                 toughness,
-                source.weapon.as_deref(),
+                source.weapon.as_deref().map(ItemStack::any),
                 &damage_context(source),
                 &mut self.rng,
             );

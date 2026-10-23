@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use tuff_core::world::advancement::Id;
-use tuff_item::item::{Components, ItemStack, MintReason};
+use tuff_item::item::{Components, ItemPicture};
 use tuff_item::registries::codecs::json_to_nbt;
 use tuff_item::text::TextComponent;
 use tuff_vanilla_data::Frozen;
@@ -22,7 +22,7 @@ pub const MAX_DEPTH: usize = 256;
 pub struct Display {
     pub title: TextComponent,
     pub description: TextComponent,
-    pub icon: ItemStack,
+    pub icon: ItemPicture,
     pub frame: Frame,
     /// Roots only: the texture behind the tab.
     pub background: Option<Frozen<str>>,
@@ -199,12 +199,12 @@ impl Entry {
     }
 }
 
-fn icon_stack(icon: &data::Icon) -> ItemStack {
+fn icon_stack(icon: &data::Icon) -> ItemPicture {
     let components = icon
         .components
         .and_then(|json| serde_json::from_str::<Value>(json).ok())
         .and_then(|value| json_to_nbt(&value))
         .and_then(|tag| tag.as_compound().map(Components::from_nbt))
         .unwrap_or_default();
-    ItemStack::mint(icon.item, icon.count, MintReason::Template).with_components(components)
+    ItemPicture::describe(icon.item, icon.count, components)
 }

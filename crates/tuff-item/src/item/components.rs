@@ -1,6 +1,6 @@
 use super::*;
 
-impl Components {
+impl<M: Mode> Components<M> {
     /// `state` with the properties this patch's `block_state` sets, as a
     /// placed block item applies them. Unknown or invalid ones are skipped.
     pub fn apply_block_state(
@@ -25,142 +25,6 @@ impl Components {
         self.removed
             .binary_search_by(|removed| removed.as_str().cmp(id))
             .is_ok()
-    }
-
-    /// Reads a stored `components` compound. Typed components that fail to
-    /// parse stay in `other` as they were.
-    pub fn from_nbt(nbt: &Compound) -> Self {
-        let mut components = Self::default();
-        for (key, value) in nbt.iter() {
-            if let Some(id) = key.strip_prefix(REMOVED_PREFIX) {
-                components.removed.push(id.to_owned());
-            } else if !components.parse_typed(key, value) {
-                components.other.insert(key, value.clone());
-            }
-        }
-        components.removed.sort();
-        components.removed.dedup();
-        components.compact();
-        components
-    }
-
-    pub(super) fn parse_typed(&mut self, key: &str, value: &Tag) -> bool {
-        match known_component(key) {
-            Some(DataComponentType::Damage) => match as_u32(value) {
-                Some(damage) => self.damage = Some(damage),
-                None => return false,
-            },
-            Some(DataComponentType::MaxDamage) => match as_u32(value).filter(|max| *max > 0) {
-                Some(max) => self.max_damage = Some(max),
-                None => return false,
-            },
-            Some(DataComponentType::Unbreakable) => match value.as_compound() {
-                Some(_) => self.unbreakable = true,
-                None => return false,
-            },
-            Some(DataComponentType::CustomName) => match TextComponent::from_nbt(value) {
-                Some(name) => self.custom_name = Some(Box::new(name)),
-                None => return false,
-            },
-            Some(DataComponentType::Enchantments) => match Enchantments::from_nbt(value) {
-                Some(enchantments) => self.enchantments = Some(enchantments),
-                None => return false,
-            },
-            Some(DataComponentType::StoredEnchantments) => match Enchantments::from_nbt(value) {
-                Some(enchantments) => self.stored_enchantments = Some(enchantments),
-                None => return false,
-            },
-            Some(DataComponentType::PotionContents) => match PotionContents::from_nbt(value) {
-                Some(contents) => self.potion_contents = Some(Box::new(contents)),
-                None => return false,
-            },
-            Some(DataComponentType::RepairCost) => match as_u32(value) {
-                Some(cost) => self.repair_cost = Some(cost),
-                None => return false,
-            },
-            Some(DataComponentType::OminousBottleAmplifier) => match as_u32(value) {
-                Some(amplifier) if amplifier <= 4 => {
-                    self.ominous_bottle_amplifier = Some(amplifier)
-                }
-                _ => return false,
-            },
-            Some(DataComponentType::MapId) => match as_u32(value) {
-                Some(id) => self.map_id = Some(id),
-                None => return false,
-            },
-            Some(DataComponentType::Container) => match container_from_nbt(value) {
-                Some(contents) => self.container = Some(contents),
-                None => return false,
-            },
-            Some(DataComponentType::ChargedProjectiles) => match charged_from_nbt(value) {
-                Some(projectiles) => self.charged_projectiles = Some(projectiles),
-                None => return false,
-            },
-            Some(DataComponentType::BundleContents) => match BundleContents::from_nbt(value) {
-                Some(contents) => self.bundle_contents = Some(Box::new(contents)),
-                None => return false,
-            },
-            Some(DataComponentType::DyedColor) => match decor::dyed_color_from_nbt(value) {
-                Some(rgb) => self.dyed_color = Some(rgb),
-                None => return false,
-            },
-            Some(DataComponentType::BaseColor) => {
-                match value.as_str().and_then(DyeColor::from_name) {
-                    Some(color) => self.base_color = Some(color),
-                    None => return false,
-                }
-            }
-            Some(DataComponentType::BannerPatterns) => {
-                match decor::banner_patterns_from_nbt(value) {
-                    Some(layers) => self.banner_patterns = Some(layers),
-                    None => return false,
-                }
-            }
-            Some(DataComponentType::Trim) => match ArmorTrim::from_nbt(value) {
-                Some(trim) => self.trim = Some(Box::new(trim)),
-                None => return false,
-            },
-            Some(DataComponentType::Fireworks) => match Fireworks::from_nbt(value) {
-                Some(fireworks) => self.fireworks = Some(Box::new(fireworks)),
-                None => return false,
-            },
-            Some(DataComponentType::FireworkExplosion) => {
-                match FireworkExplosion::from_nbt(value) {
-                    Some(explosion) => self.firework_explosion = Some(Box::new(explosion)),
-                    None => return false,
-                }
-            }
-            Some(DataComponentType::WritableBookContent) => {
-                match decor::writable_book_from_nbt(value) {
-                    Some(pages) => self.writable_book = Some(pages),
-                    None => return false,
-                }
-            }
-            Some(DataComponentType::WrittenBookContent) => match WrittenBook::from_nbt(value) {
-                Some(book) => self.written_book = Some(Box::new(book)),
-                None => return false,
-            },
-            Some(DataComponentType::AttributeModifiers) => match gear::modifiers_from_nbt(value) {
-                Some(modifiers) => self.attribute_modifiers = Some(modifiers),
-                None => return false,
-            },
-            Some(DataComponentType::Tool) => match Tool::from_nbt(value) {
-                Some(tool) => self.tool = Some(Box::new(tool)),
-                None => return false,
-            },
-            Some(DataComponentType::Weapon) => match gear::weapon_from_nbt(value) {
-                Some(weapon) => self.weapon = Some(weapon),
-                None => return false,
-            },
-            Some(DataComponentType::SuspiciousStewEffects) => {
-                match suspicious_stew_effects_from_nbt(value) {
-                    Some(effects) => self.suspicious_stew_effects = Some(effects),
-                    None => return false,
-                }
-            }
-            _ => return false,
-        }
-        true
     }
 
     pub fn to_nbt(&self) -> Compound {
@@ -286,11 +150,170 @@ impl Components {
         }
         nbt
     }
+}
 
+impl Components<Picture> {
+    /// Reads a stored `components` compound as a picture; counted stacks
+    /// read theirs through `ItemStack::from_storage` or a mint door. Typed
+    /// components that fail to parse stay in `other` as they were.
+    pub fn from_nbt(nbt: &Compound) -> Self {
+        Self::decode(nbt, &mut ItemPicture::from_nbt)
+    }
+}
+
+impl<M: Mode> Components<M> {
+    /// Reads a stored `components` compound, building nested stacks with
+    /// `nested`: only the picture decoder and the doors pass one.
+    pub(super) fn decode(
+        nbt: &Compound,
+        nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+    ) -> Self {
+        let mut components = Self::default();
+        for (key, value) in nbt.iter() {
+            if let Some(id) = key.strip_prefix(REMOVED_PREFIX) {
+                components.removed.push(id.to_owned());
+            } else if !components.parse_typed(key, value, nested) {
+                components.other.insert(key, value.clone());
+            }
+        }
+        components.removed.sort();
+        components.removed.dedup();
+        components.compact();
+        components
+    }
+
+    fn parse_typed(
+        &mut self,
+        key: &str,
+        value: &Tag,
+        nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+    ) -> bool {
+        match known_component(key) {
+            Some(DataComponentType::Damage) => match as_u32(value) {
+                Some(damage) => self.damage = Some(damage),
+                None => return false,
+            },
+            Some(DataComponentType::MaxDamage) => match as_u32(value).filter(|max| *max > 0) {
+                Some(max) => self.max_damage = Some(max),
+                None => return false,
+            },
+            Some(DataComponentType::Unbreakable) => match value.as_compound() {
+                Some(_) => self.unbreakable = true,
+                None => return false,
+            },
+            Some(DataComponentType::CustomName) => match TextComponent::from_nbt(value) {
+                Some(name) => self.custom_name = Some(Box::new(name)),
+                None => return false,
+            },
+            Some(DataComponentType::Enchantments) => match Enchantments::from_nbt(value) {
+                Some(enchantments) => self.enchantments = Some(enchantments),
+                None => return false,
+            },
+            Some(DataComponentType::StoredEnchantments) => match Enchantments::from_nbt(value) {
+                Some(enchantments) => self.stored_enchantments = Some(enchantments),
+                None => return false,
+            },
+            Some(DataComponentType::PotionContents) => match PotionContents::from_nbt(value) {
+                Some(contents) => self.potion_contents = Some(Box::new(contents)),
+                None => return false,
+            },
+            Some(DataComponentType::RepairCost) => match as_u32(value) {
+                Some(cost) => self.repair_cost = Some(cost),
+                None => return false,
+            },
+            Some(DataComponentType::OminousBottleAmplifier) => match as_u32(value) {
+                Some(amplifier) if amplifier <= 4 => {
+                    self.ominous_bottle_amplifier = Some(amplifier)
+                }
+                _ => return false,
+            },
+            Some(DataComponentType::MapId) => match as_u32(value) {
+                Some(id) => self.map_id = Some(id),
+                None => return false,
+            },
+            Some(DataComponentType::Container) => match container_from_nbt(value, nested) {
+                Some(contents) => self.container = Some(contents),
+                None => return false,
+            },
+            Some(DataComponentType::ChargedProjectiles) => match charged_from_nbt(value, nested) {
+                Some(projectiles) => self.charged_projectiles = Some(projectiles),
+                None => return false,
+            },
+            Some(DataComponentType::BundleContents) => {
+                match BundleContents::decode(value, nested) {
+                    Some(contents) => self.bundle_contents = Some(Box::new(contents)),
+                    None => return false,
+                }
+            }
+            Some(DataComponentType::DyedColor) => match decor::dyed_color_from_nbt(value) {
+                Some(rgb) => self.dyed_color = Some(rgb),
+                None => return false,
+            },
+            Some(DataComponentType::BaseColor) => {
+                match value.as_str().and_then(DyeColor::from_name) {
+                    Some(color) => self.base_color = Some(color),
+                    None => return false,
+                }
+            }
+            Some(DataComponentType::BannerPatterns) => {
+                match decor::banner_patterns_from_nbt(value) {
+                    Some(layers) => self.banner_patterns = Some(layers),
+                    None => return false,
+                }
+            }
+            Some(DataComponentType::Trim) => match ArmorTrim::from_nbt(value) {
+                Some(trim) => self.trim = Some(Box::new(trim)),
+                None => return false,
+            },
+            Some(DataComponentType::Fireworks) => match Fireworks::from_nbt(value) {
+                Some(fireworks) => self.fireworks = Some(Box::new(fireworks)),
+                None => return false,
+            },
+            Some(DataComponentType::FireworkExplosion) => {
+                match FireworkExplosion::from_nbt(value) {
+                    Some(explosion) => self.firework_explosion = Some(Box::new(explosion)),
+                    None => return false,
+                }
+            }
+            Some(DataComponentType::WritableBookContent) => {
+                match decor::writable_book_from_nbt(value) {
+                    Some(pages) => self.writable_book = Some(pages),
+                    None => return false,
+                }
+            }
+            Some(DataComponentType::WrittenBookContent) => match WrittenBook::from_nbt(value) {
+                Some(book) => self.written_book = Some(Box::new(book)),
+                None => return false,
+            },
+            Some(DataComponentType::AttributeModifiers) => match gear::modifiers_from_nbt(value) {
+                Some(modifiers) => self.attribute_modifiers = Some(modifiers),
+                None => return false,
+            },
+            Some(DataComponentType::Tool) => match Tool::from_nbt(value) {
+                Some(tool) => self.tool = Some(Box::new(tool)),
+                None => return false,
+            },
+            Some(DataComponentType::Weapon) => match gear::weapon_from_nbt(value) {
+                Some(weapon) => self.weapon = Some(weapon),
+                None => return false,
+            },
+            Some(DataComponentType::SuspiciousStewEffects) => {
+                match suspicious_stew_effects_from_nbt(value) {
+                    Some(effects) => self.suspicious_stew_effects = Some(effects),
+                    None => return false,
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+}
+
+impl<M: Mode> Components<M> {
     /// The components a Slot carries, in the order they are written.
     /// Components without a wire encoding this server produces are left
     /// out; they still exist in storage.
-    pub fn network_added(&self) -> Vec<NetworkComponent<'_>> {
+    pub fn network_added(&self) -> Vec<NetworkComponent<'_, M>> {
         let mut added = Vec::new();
         if let Some(damage) = self.damage {
             added.push(NetworkComponent::Damage(damage));
@@ -392,7 +415,7 @@ impl Components {
             {
                 added.push(NetworkComponent::ClientData(view));
             } else if TEMPLATE_ON_WIRE.contains(&kind) {
-                if let Some(stack) = value.as_compound().and_then(ItemStack::decode_nbt) {
+                if let Some(stack) = value.as_compound().and_then(ItemPicture::from_nbt) {
                     added.push(NetworkComponent::Template(kind, Box::new(stack)));
                 }
             } else if NBT_ON_WIRE.contains(&kind) {
@@ -419,22 +442,22 @@ impl Components {
 
     /// Stores the nested stacks of a component received in a Slot, moving
     /// them in.
-    pub fn set_network_container(&mut self, contents: Vec<Option<ItemStack>>) {
+    pub fn set_network_container(&mut self, contents: Vec<Option<ItemStack<M>>>) {
         self.container = Some(contents);
     }
 
-    pub fn set_network_projectiles(&mut self, projectiles: Vec<ItemStack>) {
+    pub fn set_network_projectiles(&mut self, projectiles: Vec<ItemStack<M>>) {
         self.charged_projectiles = Some(projectiles);
     }
 
-    pub fn set_network_bundle(&mut self, contents: BundleContents) {
+    pub fn set_network_bundle(&mut self, contents: BundleContents<M>) {
         self.bundle_contents = Some(Box::new(contents));
     }
 
     /// Stores a component received in a Slot. Returns false for a type this
     /// server cannot hold (nested stacks go through the `set_network_*`
     /// moves).
-    pub fn set_network(&mut self, component: NetworkComponent<'_>) -> bool {
+    pub fn set_network(&mut self, component: NetworkComponent<'_, M>) -> bool {
         match component {
             NetworkComponent::Damage(damage) => self.damage = Some(damage),
             NetworkComponent::MaxDamage(max) => self.max_damage = Some(max),
@@ -567,7 +590,7 @@ impl Components {
     }
 }
 
-impl NetworkComponent<'_> {
+impl<M: Mode> NetworkComponent<'_, M> {
     pub fn kind(&self) -> DataComponentType {
         match self {
             Self::Damage(_) => DataComponentType::Damage,

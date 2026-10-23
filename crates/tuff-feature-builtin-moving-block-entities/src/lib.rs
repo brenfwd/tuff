@@ -22,7 +22,7 @@ use tuff_core::storage::chunk_nbt::decode_block_state;
 use tuff_core::storage::normalise::{SaveNormaliser, SaveNormaliserEntry, SaveView};
 use tuff_core::world::block_entity::raw;
 use tuff_core::world::redstone::{BlockEntityCarrier, CarriedLook};
-use tuff_item::item::{Components, ItemStack, MintReason};
+use tuff_item::item::{Components, ItemPicture};
 use tuff_item::load::{LoadError, Phase};
 use tuff_nbt::Compound;
 
@@ -108,7 +108,7 @@ fn patterned_banner(state: BlockState, nbt: &Compound) -> Option<CarriedLook> {
         .into_patch()
         .banner_patterns
         .filter(|layers| !layers.is_empty())?;
-    let mut item = ItemStack::mint(state.block().item()?, 1, MintReason::Template);
+    let mut item = ItemPicture::new(state.block().item()?, 1);
     item.components.banner_patterns = Some(patterns);
     let half = -(f32::from(rotation) * 22.5 + 180.0).to_radians() / 2.0;
     Some(CarriedLook::ItemDisplay {
@@ -136,11 +136,7 @@ fn sign_board(state: BlockState) -> Option<CarriedLook> {
     };
     let half = f32::to_radians(angle) / 2.0;
     Some(CarriedLook::ItemDisplay {
-        item: Box::new(ItemStack::mint(
-            state.block().item()?,
-            1,
-            MintReason::Template,
-        )),
+        item: Box::new(ItemPicture::new(state.block().item()?, 1)),
         translation: [0.5 + offset[0], 0.5, 0.5 + offset[1]],
         rotation: [0.0, half.sin(), 0.0, half.cos()],
     })
@@ -158,8 +154,7 @@ fn profiled_head(state: BlockState, nbt: &Compound) -> Option<CarriedLook> {
     let rotation = standing_turn(state)?;
     let components = Components::from_nbt(&raw::collect_components(BlockEntityType::Skull, nbt));
     components.other.get("minecraft:profile")?;
-    let mut item = ItemStack::mint(state.block().item()?, 1, MintReason::Template);
-    item.components = components;
+    let item = ItemPicture::describe(state.block().item()?, 1, components);
     Some(CarriedLook::ItemDisplay {
         item: Box::new(item),
         translation: [0.5; 3],

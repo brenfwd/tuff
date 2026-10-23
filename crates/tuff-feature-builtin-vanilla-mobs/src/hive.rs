@@ -477,7 +477,7 @@ pub fn full(state: BlockState) -> bool {
 pub fn broken(
     world: &mut dyn RegionWorld,
     action: &tuff_core::world::region_api::PlayerBlockAction,
-    tool: Option<&tuff_item::item::ItemStack>,
+    tool: Option<tuff_item::item::AnyItem<'_>>,
 ) {
     if !is_hive(action.state) {
         return;
@@ -487,7 +487,7 @@ pub fn broken(
         .iter()
         .any(|p| p.handle.id == action.player && p.looks.creative);
     let silk = tool.is_some_and(|tool| {
-        tool.components.enchantments.as_ref().is_some_and(|e| {
+        tool.enchantments().is_some_and(|e| {
             tuff_datapack::tags::with(|tags| {
                 e.entries().iter().any(|(id, _)| {
                     tags.contains(

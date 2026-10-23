@@ -321,7 +321,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn hashes_match_the_game() {
-        use crate::item::NetworkComponent as N;
+        type N<'a> = crate::item::NetworkComponent<'a>;
         let cases = [
             (
                 N::Identifier(DataComponentType::ItemModel, Cow::Borrowed("ex:ruby")),

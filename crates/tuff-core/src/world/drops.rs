@@ -5,7 +5,7 @@
 use rand::rngs::StdRng;
 use tuff_vanilla_data::BlockState;
 
-use tuff_item::item::ItemStack;
+use tuff_item::item::{AnyItem, ItemStack};
 use tuff_nbt::Compound;
 
 /// The component marking a rolled explorer map still waiting for its map.
@@ -63,7 +63,7 @@ pub trait BlockLoot: Send + Sync {
 
     /// Whether `held` opens a container locked with `lock` (an item
     /// predicate). Without loot rules locks are ignored.
-    fn lock_admits(&self, _lock: &Compound, _held: Option<&ItemStack>) -> bool {
+    fn lock_admits(&self, _lock: &Compound, _held: Option<AnyItem<'_>>) -> bool {
         true
     }
 
@@ -117,21 +117,21 @@ pub trait BlockLoot: Send + Sync {
         &self,
         _luck: f32,
         _open_water: bool,
-        _rod: &ItemStack,
+        _rod: AnyItem<'_>,
         _rng: &mut StdRng,
     ) -> Vec<ItemStack> {
         Vec::new()
     }
 
     /// Whether breaking `state` with `tool` (or bare hands) yields drops.
-    fn can_harvest(&self, state: BlockState, tool: Option<&ItemStack>) -> bool;
+    fn can_harvest(&self, state: BlockState, tool: Option<AnyItem<'_>>) -> bool;
 
     /// The drops of `state` broken with `tool`, or destroyed by the world
     /// (no tool). `block_entity` is its saved block entity, if any.
     fn drops(
         &self,
         state: BlockState,
-        tool: Option<&ItemStack>,
+        tool: Option<AnyItem<'_>>,
         block_entity: Option<&Compound>,
         rng: &mut StdRng,
     ) -> Vec<ItemStack>;
@@ -141,7 +141,7 @@ pub trait BlockLoot: Send + Sync {
     fn drops_at(
         &self,
         state: BlockState,
-        tool: Option<&ItemStack>,
+        tool: Option<AnyItem<'_>>,
         block_entity: Option<&Compound>,
         _at: &crate::world::predicate::LocationFacts,
         _world: Option<&dyn crate::world::predicate::PredicateWorld>,
@@ -186,14 +186,14 @@ pub trait BlockLoot: Send + Sync {
 pub struct NoBlockLoot;
 
 impl BlockLoot for NoBlockLoot {
-    fn can_harvest(&self, _: BlockState, _: Option<&ItemStack>) -> bool {
+    fn can_harvest(&self, _: BlockState, _: Option<AnyItem<'_>>) -> bool {
         true
     }
 
     fn drops(
         &self,
         _: BlockState,
-        _: Option<&ItemStack>,
+        _: Option<AnyItem<'_>>,
         _: Option<&Compound>,
         _: &mut StdRng,
     ) -> Vec<ItemStack> {

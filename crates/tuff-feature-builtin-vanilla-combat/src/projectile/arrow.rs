@@ -132,7 +132,7 @@ impl Arrow {
         } else {
             EntityType::Arrow
         };
-        let item = item.keep(1, tuff_item::item::BurnReason::Template);
+        let item = item.keep(1, tuff_item::item::BurnReason::Consumed);
         Self::of(kind, item, id, position, velocity, owner)
     }
 
@@ -173,7 +173,7 @@ impl Arrow {
         owner: Owner,
     ) -> Self {
         let trident = trident_state(&item);
-        let item = item.keep(1, tuff_item::item::BurnReason::Template);
+        let item = item.keep(1, tuff_item::item::BurnReason::Consumed);
         let mut arrow = Self::of(EntityType::Trident, item, id, position, velocity, owner);
         arrow.trident = Some(trident);
         arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&arrow.item));
@@ -182,7 +182,7 @@ impl Arrow {
 }
 
 /// The loyalty and glint a thrown trident `item` flies with.
-fn trident_state(item: &ItemStack) -> Trident {
+fn trident_state<M: tuff_item::item::Mode>(item: &ItemStack<M>) -> Trident {
     Trident {
         loyalty: tuff_vanilla_common::ranged::trident_loyalty(item),
         foil: item
@@ -446,9 +446,9 @@ impl Arrow {
 
     /// The weapon's `hit_block` enchantment effects (Channeling calling
     /// lightning onto a rod), at the hit clamped inside the block.
-    fn hit_block_effects(
+    fn hit_block_effects<M: tuff_item::item::Mode>(
         &mut self,
-        weapon: &ItemStack,
+        weapon: &ItemStack<M>,
         hit: tuff_core::world::raycast::Hit,
         movement: [f64; 3],
         cx: &mut TickContext,
@@ -825,7 +825,7 @@ impl RegionEntity for Arrow {
         out.insert("crit", self.crit);
         out.insert("PierceLevel", self.pierce as i8);
         out.insert("SoundEvent", self.sound.name());
-        out.insert("item", self.item.to_nbt());
+        out.insert("item", self.item.to_storage());
         if let Some(weapon) = &self.weapon {
             out.insert("weapon", weapon.to_nbt());
         }
@@ -1033,10 +1033,7 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         arrow.sound = sound;
     }
     arrow.weapon = take(nbt, "weapon", |tag| {
-        let weapon = ItemStack::from_storage(tag.as_compound()?)?;
-        let snapshot = tuff_item::item::ItemSnapshot::of(&weapon);
-        weapon.burn(tuff_item::item::BurnReason::Template);
-        Some(snapshot)
+        tuff_item::item::ItemPicture::from_nbt(tag.as_compound()?).map(Into::into)
     });
     if let Some(ticks) = take_number(nbt, "Duration") {
         arrow.glow_ticks = ticks as i32;

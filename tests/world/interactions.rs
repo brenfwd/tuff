@@ -838,7 +838,10 @@ async fn right_clicking_cave_vines_picks_the_glow_berries() {
     s.world.shutdown().await;
 }
 
-fn adventure_components(key: &str, block: &str) -> tuff_item::item::Components {
+fn adventure_components(
+    key: &str,
+    block: &str,
+) -> tuff_item::item::Components<tuff_item::item::Picture> {
     let mut predicate = tuff_nbt::Compound::new();
     predicate.insert("blocks", tuff_nbt::Tag::String(block.to_owned()));
     let mut components = tuff_item::item::Components::default();
@@ -887,13 +890,16 @@ async fn adventure_breaking_needs_a_matching_can_break_predicate() {
     place_blocks(&s.world, &s.region, [(target, Block::Dirt.default_state())]).await;
     let eye = [1.5, target.y as f64 + 1.62, 2.5];
     for (seq, block, broken) in [(1, "minecraft:stone", false), (2, "minecraft:dirt", true)] {
-        let mut tool = ItemStack::mint(Item::Stick, 1, MintReason::Test);
-        tool.components = adventure_components("minecraft:can_break", block);
+        let tool = tuff_item::item::ItemPicture::describe(
+            Item::Stick,
+            1,
+            adventure_components("minecraft:can_break", block),
+        );
         s.region
             .request(RegionRequest::BreakRestricted {
                 player: s.player.clone(),
                 pos: target,
-                tool: Some(tuff_item::item::ItemSnapshot::of(&tool)),
+                tool: Some(tool.into()),
                 mode: BreakMode::Verified {
                     ticks: 1000,
                     eye,

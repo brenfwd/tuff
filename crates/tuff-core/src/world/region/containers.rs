@@ -153,10 +153,10 @@ impl RegionActor {
     }
 
     /// [`Self::apply_placed_item`] for an item placed by anything.
-    pub(super) fn apply_placed_components(
+    pub(super) fn apply_placed_components<M: tuff_item::item::Mode>(
         &mut self,
         pos: BlockPos,
-        components: &Components,
+        components: &Components<M>,
         game_master: bool,
     ) {
         let Some(mut nbt) = self.saved_block_entity(pos) else {
@@ -545,7 +545,7 @@ impl RegionActor {
                 contents.push(
                     recipes
                         .grid_result(&entity.items, 3, 3)
-                        .map(ItemStack::into_template),
+                        .map(|preview| preview.into_picture().into()),
                 );
             }
         }
@@ -708,10 +708,10 @@ impl RegionActor {
 
     /// Whether the container at `pos` refuses `held` (its `lock` predicate
     /// does not admit it). Spectators bypass every lock.
-    pub(super) fn container_locked(
+    pub(super) fn container_locked<M: tuff_item::item::Mode>(
         &self,
         pos: BlockPos,
-        held: Option<&ItemStack>,
+        held: Option<&ItemStack<M>>,
         spectator: bool,
     ) -> bool {
         if spectator {
@@ -725,7 +725,10 @@ impl RegionActor {
             .get(block_entity::raw::LOCK)
             .and_then(Tag::as_compound)
         {
-            Some(lock) => !self.shared.block_loot().lock_admits(lock, held),
+            Some(lock) => !self
+                .shared
+                .block_loot()
+                .lock_admits(lock, held.map(ItemStack::any)),
             None => false,
         }
     }
@@ -1030,11 +1033,8 @@ impl RegionActor {
         if let Some(preview) = self.crafter_preview(pos) {
             slots.push((
                 crate::world::menu::crafter::PREVIEW,
-                preview.as_ref().map(ItemSnapshot::of),
+                preview.map(|preview| preview.into_picture().into()),
             ));
-            if let Some(preview) = preview {
-                preview.burn(tuff_item::item::BurnReason::Template);
-            }
         }
         let Some(viewers) = self.menus.viewers.get_mut(&pos) else {
             return;

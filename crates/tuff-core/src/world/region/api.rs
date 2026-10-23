@@ -515,7 +515,12 @@ impl RegionWorld for RegionActor {
         RegionActor::put_block(self, pos, state);
     }
 
-    fn place_item_block(&mut self, pos: BlockPos, state: BlockState, stack: &ItemStack) -> bool {
+    fn place_item_block(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        stack: &tuff_item::item::ItemPicture,
+    ) -> bool {
         RegionActor::place_item_block(self, pos, state, stack)
     }
 
@@ -616,7 +621,12 @@ impl RegionWorld for RegionActor {
         RegionActor::saved_block_entity(self, pos)
     }
 
-    fn release_infestation(&mut self, pos: BlockPos, state: BlockState, tool: Option<&ItemStack>) {
+    fn release_infestation(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
+    ) {
         RegionActor::release_infestation(self, pos, state, tool);
     }
 
@@ -776,14 +786,22 @@ impl RegionWorld for RegionActor {
     fn report_container_edit(
         &mut self,
         holder: crate::world::region_api::ContainerHolder,
-        slots: &[(usize, Option<&ItemStack>, Option<&ItemStack>)],
+        slots: &[(
+            usize,
+            Option<tuff_item::item::AnyItem<'_>>,
+            Option<tuff_item::item::AnyItem<'_>>,
+        )],
     ) {
         if !self.observes_containers() {
             return;
         }
         let slots = slots
             .iter()
-            .map(|(slot, old, new)| crate::world::region_api::SlotEdit::of(*slot, *old, *new))
+            .map(|&(slot, old, new)| crate::world::region_api::SlotEdit {
+                slot,
+                old: old.map(|old| old.picture().into()),
+                new: new.map(|new| new.picture().into()),
+            })
             .collect();
         RegionActor::report_container_edit(self, holder, slots);
     }
@@ -1099,7 +1117,7 @@ impl RegionActor {
         player: PlayerId,
         pos: BlockPos,
         state: BlockState,
-        tool: Option<&tuff_item::item::ItemStack>,
+        tool: Option<tuff_item::item::AnyItem<'_>>,
     ) {
         let action = PlayerBlockAction {
             player,

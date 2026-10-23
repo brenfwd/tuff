@@ -5,13 +5,16 @@
 
 use std::collections::HashMap;
 
-use tuff_item::item::{ItemSnapshot, ItemStack};
+use tuff_item::item::{ItemSnapshot, ItemStack, Mode};
 use tuff_vanilla_data::Item;
 
 /// How a slot changes from `before` to `after`: how many of what it held
 /// leave it, and a picture of what then arrives (its count the number
 /// that arrive).
-pub fn delta(before: Option<&ItemStack>, after: Option<&ItemStack>) -> (u8, Option<ItemSnapshot>) {
+pub fn delta<M: Mode, N: Mode>(
+    before: Option<&ItemStack<M>>,
+    after: Option<&ItemStack<N>>,
+) -> (u8, Option<ItemSnapshot>) {
     match (before, after) {
         (None, None) => (0, None),
         (Some(before), None) => (before.count(), None),
@@ -33,7 +36,11 @@ pub fn delta(before: Option<&ItemStack>, after: Option<&ItemStack>) -> (u8, Opti
 
 /// Moves the stacks `gain` pictures out of `pool` into `slot`; returns how
 /// many could not be found.
-pub fn gain(slot: &mut Option<ItemStack>, gain: &ItemStack, pool: &mut Vec<ItemStack>) -> u8 {
+pub fn gain<M: Mode>(
+    slot: &mut Option<ItemStack>,
+    gain: &ItemStack<M>,
+    pool: &mut Vec<ItemStack>,
+) -> u8 {
     let mut missing = gain.count();
     let mut index = 0;
     while missing > 0 && index < pool.len() {
@@ -67,7 +74,7 @@ pub fn gain(slot: &mut Option<ItemStack>, gain: &ItemStack, pool: &mut Vec<ItemS
 }
 
 /// Takes the stacks `wanted` pictures out of `pool`, as many as it holds.
-pub fn take_out(pool: &mut Vec<ItemStack>, wanted: &ItemStack) -> Vec<ItemStack> {
+pub fn take_out<M: Mode>(pool: &mut Vec<ItemStack>, wanted: &ItemStack<M>) -> Vec<ItemStack> {
     let mut taken = Vec::new();
     let mut missing = wanted.count();
     let mut index = 0;
@@ -90,11 +97,11 @@ pub fn take_out(pool: &mut Vec<ItemStack>, wanted: &ItemStack) -> Vec<ItemStack>
 }
 
 /// Whether `available` holds enough of each picture in `wanted`.
-pub fn covers<'a>(
-    available: impl Iterator<Item = &'a ItemStack> + Clone,
-    wanted: impl Iterator<Item = &'a ItemStack>,
+pub fn covers<'a, M: Mode, N: Mode>(
+    available: impl Iterator<Item = &'a ItemStack<M>> + Clone,
+    wanted: impl Iterator<Item = &'a ItemStack<N>>,
 ) -> bool {
-    let mut needs: Vec<(&ItemStack, u32)> = Vec::new();
+    let mut needs: Vec<(&ItemStack<N>, u32)> = Vec::new();
     for want in wanted {
         match needs.iter_mut().find(|(kind, _)| kind.stacks_with(want)) {
             Some((_, need)) => *need += u32::from(want.count()),
@@ -290,7 +297,7 @@ fn tally(stacks: &[(ItemSnapshot, u32)]) -> HashMap<Item, u64> {
     counts
 }
 
-fn count_into(stack: &ItemStack, times: u64, counts: &mut HashMap<Item, u64>) {
+fn count_into<M: Mode>(stack: &ItemStack<M>, times: u64, counts: &mut HashMap<Item, u64>) {
     *counts.entry(stack.item()).or_default() += times;
     let components = &stack.components;
     if let Some(contents) = &components.bundle_contents {
@@ -316,7 +323,7 @@ mod tests {
     }
 
     fn picture(item: Item, count: u8) -> Option<ItemSnapshot> {
-        Some(ItemSnapshot::describe(item, count, Default::default()))
+        Some(ItemSnapshot::new(item, count))
     }
 
     #[tuff_core::watchdog]

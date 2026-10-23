@@ -53,7 +53,7 @@ async fn drop_item(region: &RegionHandle, item: Item, count: u8, at: [f64; 3]) -
         EntityType::Item,
         Compound::new().with(
             "Item",
-            ItemStack::mint(item, count, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(item, count).to_nbt(),
         ),
         at,
     )
@@ -116,7 +116,7 @@ fn holding(item: Item) -> Compound {
         "equipment",
         Compound::new().with(
             "mainhand",
-            ItemStack::mint(item, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(item, 1).to_nbt(),
         ),
     )
 }
@@ -393,7 +393,7 @@ async fn allay_memories_and_inventory_survive_saving_and_loading() {
         .with(
             "Inventory",
             Tag::List(vec![Tag::Compound(
-                ItemStack::mint(Item::Cobblestone, 7, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Cobblestone, 7).to_nbt(),
             )]),
         )
         .with("Brain", Compound::new().with("memories", memories_in));

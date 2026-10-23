@@ -738,7 +738,7 @@ impl Species for TraderLlama {
         self.0.sounds(core)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         self.0.is_food(stack)
     }
 
@@ -777,7 +777,11 @@ impl Species for TraderLlama {
         self.0.ridden_speed(core)
     }
 
-    fn mount_refused(&self, core: &MobCore, stack: Option<&ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        stack: Option<&ItemStack<M>>,
+    ) -> bool {
         self.0.mount_refused(core, stack)
     }
 
@@ -882,7 +886,6 @@ pub fn register(registry: &mut tuff_core::world::entity::Registry) {
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
-    use tuff_item::item::MintReason;
 
     use super::*;
     use tuff_core::world::entity::EntityBase;
@@ -906,7 +909,7 @@ mod tests {
             "equipment",
             Compound::new().with(
                 "saddle",
-                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
             ),
         );
         let entity = super::super::load::<Llama>(base, &mut nbt).expect("loads");
@@ -927,19 +930,11 @@ mod tests {
                 player_uuid: 77,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(tuff_item::item::ItemSnapshot::describe(
-                    Item::Chest,
-                    1,
-                    Default::default(),
-                )),
+                stack: Some(tuff_item::item::ItemSnapshot::new(Item::Chest, 1)),
                 hand: tuff_core::world::entity::HandOffer::new(
-                    (Some(tuff_item::item::ItemSnapshot::describe(
-                        Item::Chest,
-                        1,
-                        Default::default(),
-                    )))
-                    .as_deref()
-                    .map(tuff_item::item::ItemStack::test_copy),
+                    (Some(tuff_item::item::ItemSnapshot::new(Item::Chest, 1)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
                 ),
                 off_hand: false,
                 creative: false,
@@ -951,19 +946,11 @@ mod tests {
             llama.interact(&chest, cx);
             assert_eq!(llama.container().unwrap().len(), 2 + 4 * 3);
             let carpet = EntityInteraction {
-                stack: Some(tuff_item::item::ItemSnapshot::describe(
-                    Item::RedCarpet,
-                    1,
-                    Default::default(),
-                )),
+                stack: Some(tuff_item::item::ItemSnapshot::new(Item::RedCarpet, 1)),
                 hand: tuff_core::world::entity::HandOffer::new(
-                    (Some(tuff_item::item::ItemSnapshot::describe(
-                        Item::RedCarpet,
-                        1,
-                        Default::default(),
-                    )))
-                    .as_deref()
-                    .map(tuff_item::item::ItemStack::test_copy),
+                    (Some(tuff_item::item::ItemSnapshot::new(Item::RedCarpet, 1)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
                 ),
                 player: chest.player,
                 player_uuid: chest.player_uuid,
@@ -978,19 +965,11 @@ mod tests {
             assert!(llama.mount_refused_by(carpet.stack.as_deref()));
             assert!(llama.interact(&carpet, cx).is_some());
             let saddle = EntityInteraction {
-                stack: Some(tuff_item::item::ItemSnapshot::describe(
-                    Item::Saddle,
-                    1,
-                    Default::default(),
-                )),
+                stack: Some(tuff_item::item::ItemSnapshot::new(Item::Saddle, 1)),
                 hand: tuff_core::world::entity::HandOffer::new(
-                    (Some(tuff_item::item::ItemSnapshot::describe(
-                        Item::Saddle,
-                        1,
-                        Default::default(),
-                    )))
-                    .as_deref()
-                    .map(tuff_item::item::ItemStack::test_copy),
+                    (Some(tuff_item::item::ItemSnapshot::new(Item::Saddle, 1)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
                 ),
                 ..chest
             };

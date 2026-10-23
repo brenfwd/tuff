@@ -15,9 +15,9 @@ use tuff_item::item::ItemStack;
 /// A crossbow's charge time in seconds before enchantments.
 const CROSSBOW_CHARGE_SECONDS: f32 = 1.25;
 
-fn on_stack<'a>(
+fn on_stack<'a, M: tuff_item::item::Mode>(
     registry: &'a enchantment::EnchantmentRegistry,
-    stack: &'a ItemStack,
+    stack: &'a ItemStack<M>,
 ) -> impl Iterator<Item = (&'a EnchantmentDef, u32)> + 'a {
     enchantment::leveled(registry, stack.components.enchantments.as_ref())
         .map(|(_, def, level)| (def, level))
@@ -25,8 +25,8 @@ fn on_stack<'a>(
 
 /// Runs a list-shaped value component whose entries need nothing of the
 /// world over `value`.
-fn item_value(
-    stack: &ItemStack,
+fn item_value<M: tuff_item::item::Mode>(
+    stack: &ItemStack<M>,
     component: impl Fn(&EnchantmentEffects) -> &[Conditional<ValueEffect>],
     value: f32,
 ) -> f32 {
@@ -44,8 +44,8 @@ fn item_value(
 }
 
 /// Runs a component that is a single value effect over `value`.
-fn item_value_direct(
-    stack: &ItemStack,
+fn item_value_direct<M: tuff_item::item::Mode>(
+    stack: &ItemStack<M>,
     component: impl Fn(&EnchantmentEffects) -> Option<&ValueEffect>,
     value: f32,
 ) -> f32 {
@@ -62,8 +62,8 @@ fn item_value_direct(
 
 /// The entry of a per-level list component on the stack's highest-level
 /// enchantment that has it, at that level (the last entry beyond it).
-fn highest_level_entry<T: Clone>(
-    stack: &ItemStack,
+fn highest_level_entry<T: Clone, M: tuff_item::item::Mode>(
+    stack: &ItemStack<M>,
     component: impl Fn(&EnchantmentEffects) -> &[T],
 ) -> Option<T> {
     let registry = enchantment::current();
@@ -80,7 +80,7 @@ fn sound(sound: &Option<SoundRef>) -> Option<SoundEvent> {
 }
 
 /// Ticks a crossbow takes to load (Quick Charge shortens it).
-pub fn crossbow_charge_ticks(crossbow: &ItemStack) -> u32 {
+pub fn crossbow_charge_ticks<M: tuff_item::item::Mode>(crossbow: &ItemStack<M>) -> u32 {
     let seconds = item_value_direct(
         crossbow,
         |e| e.crossbow_charge_time.as_ref(),
@@ -98,7 +98,7 @@ pub struct ChargingSounds {
     pub end: Option<SoundEvent>,
 }
 
-pub fn charging_sounds(crossbow: &ItemStack) -> ChargingSounds {
+pub fn charging_sounds<M: tuff_item::item::Mode>(crossbow: &ItemStack<M>) -> ChargingSounds {
     match highest_level_entry(crossbow, |e| &e.crossbow_charging_sounds) {
         Some(entry) => ChargingSounds {
             start: sound(&entry.start),
@@ -114,39 +114,39 @@ pub fn charging_sounds(crossbow: &ItemStack) -> ChargingSounds {
 }
 
 /// How many projectiles one load takes (Multishot fires three).
-pub fn projectile_count(weapon: &ItemStack) -> usize {
+pub fn projectile_count<M: tuff_item::item::Mode>(weapon: &ItemStack<M>) -> usize {
     item_value(weapon, |e| &e.projectile_count, 1.0).max(1.0) as usize
 }
 
 /// The widest angle, in degrees, a volley fans out to.
-pub fn projectile_spread(weapon: &ItemStack) -> f32 {
+pub fn projectile_spread<M: tuff_item::item::Mode>(weapon: &ItemStack<M>) -> f32 {
     item_value(weapon, |e| &e.projectile_spread, 0.0).max(0.0)
 }
 
 /// How many entities an arrow from `weapon` passes through (Piercing).
-pub fn piercing(weapon: &ItemStack) -> u8 {
+pub fn piercing<M: tuff_item::item::Mode>(weapon: &ItemStack<M>) -> u8 {
     item_value(weapon, |e| &e.projectile_piercing, 0.0).clamp(0.0, 127.0) as u8
 }
 
 /// How hard a thrown trident pulls back to its thrower (Loyalty).
-pub fn trident_loyalty(trident: &ItemStack) -> u8 {
+pub fn trident_loyalty<M: tuff_item::item::Mode>(trident: &ItemStack<M>) -> u8 {
     item_value(trident, |e| &e.trident_return_acceleration, 0.0).clamp(0.0, 127.0) as u8
 }
 
 /// The strength of a Riptide launch; 0 without Riptide.
-pub fn spin_attack_strength(trident: &ItemStack) -> f32 {
+pub fn spin_attack_strength<M: tuff_item::item::Mode>(trident: &ItemStack<M>) -> f32 {
     item_value_direct(trident, |e| e.trident_spin_attack_strength.as_ref(), 0.0)
 }
 
 /// The sound a Riptide launch makes.
-pub fn trident_sound(trident: &ItemStack) -> SoundEvent {
+pub fn trident_sound<M: tuff_item::item::Mode>(trident: &ItemStack<M>) -> SoundEvent {
     highest_level_entry(trident, |e| &e.trident_sound)
         .and_then(|sound| SoundEvent::from_name(&sound.id))
         .unwrap_or(SoundEvent::ItemTridentThrow)
 }
 
 /// Whether a trident calls down lightning on what it hits in a storm.
-pub fn channeling(trident: &ItemStack) -> bool {
+pub fn channeling<M: tuff_item::item::Mode>(trident: &ItemStack<M>) -> bool {
     let registry = enchantment::current();
     on_stack(&registry, trident).any(|(def, _)| {
         def.effects
@@ -253,7 +253,7 @@ pub const INTANGIBLE: &str = "minecraft:intangible_projectile";
 
 /// A free copy of `stack` for a crossbow to load.
 pub fn intangible(stack: ItemStack) -> ItemStack {
-    let mut stack = stack.keep(1, BurnReason::Template);
+    let mut stack = stack.keep(1, BurnReason::Consumed);
     stack
         .components
         .other

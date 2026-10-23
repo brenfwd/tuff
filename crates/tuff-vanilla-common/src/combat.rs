@@ -12,7 +12,7 @@ use tuff_vanilla_data::registry::{Attribute, EntityType, MobEffect};
 
 use tuff_core::world::damage_type_in_tag;
 use tuff_core::world::player::Difficulty;
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{AnyItem, ItemStack};
 
 use crate::enchant_effects::facts_of;
 use tuff_core::world::attributes::applies_in;
@@ -66,7 +66,7 @@ pub fn after_armor(
     damage: f32,
     armor: f32,
     toughness: f32,
-    weapon: Option<&ItemStack>,
+    weapon: Option<AnyItem<'_>>,
     context: &DamageContext,
     rng: &mut impl Rng,
 ) -> f32 {
@@ -189,7 +189,7 @@ pub struct Attacker<'a> {
 }
 
 impl Attacker<'_> {
-    fn weapon(&self) -> Option<&ItemStack> {
+    fn weapon(&self) -> Option<AnyItem<'_>> {
         self.modifiers
             .equipment
             .iter()
@@ -302,7 +302,7 @@ pub fn melee(attacker: &Attacker, victim: EntityType, rng: &mut impl Rng) -> Opt
 /// plus Density's `smash_damage_per_fallen_block` effect per block fallen.
 fn smash_damage(
     fall_distance: f64,
-    weapon: Option<&ItemStack>,
+    weapon: Option<AnyItem<'_>>,
     context: &DamageContext,
     rng: &mut impl Rng,
 ) -> f32 {
@@ -344,7 +344,7 @@ pub fn smash_knockback_power(distance: f64, fall_distance: f64, resistance: f64)
 
 /// The damage a sweep does to one entity it catches.
 pub fn sweep_damage(
-    weapon: Option<&ItemStack>,
+    weapon: Option<AnyItem<'_>>,
     sweep: Sweep,
     victim: EntityType,
     rng: &mut impl Rng,
@@ -461,21 +461,21 @@ impl<'a> DamageContext<'a> {
 /// Each enchantment on `stack` the registry in effect knows, with its level.
 fn on_stack<'a>(
     registry: &'a enchantment::EnchantmentRegistry,
-    stack: &'a ItemStack,
+    stack: AnyItem<'a>,
 ) -> impl Iterator<Item = (&'a EnchantmentDef, u32)> + 'a {
-    enchantment::leveled(registry, stack.components.enchantments.as_ref())
-        .map(|(_, def, level)| (def, level))
+    enchantment::leveled(registry, stack.enchantments()).map(|(_, def, level)| (def, level))
 }
 
 /// Runs a value effect component of every enchantment on `stack` over
 /// `value`.
-fn modify_value(
-    stack: &ItemStack,
+fn modify_value<'a>(
+    stack: impl Into<AnyItem<'a>>,
     component: impl Fn(&EnchantmentEffects) -> &[Conditional<ValueEffect>],
     context: &DamageContext,
     value: f32,
     rng: &mut impl Rng,
 ) -> f32 {
+    let stack = stack.into();
     let registry = enchantment::current();
     let mut value = value;
     for (def, level) in on_stack(&registry, stack) {
@@ -490,8 +490,8 @@ fn modify_value(
 
 /// A weapon's damage against `context.victim` with its enchantments'
 /// `damage` effects (Sharpness, Smite, ...).
-pub fn modify_damage(
-    weapon: &ItemStack,
+pub fn modify_damage<'a>(
+    weapon: impl Into<AnyItem<'a>>,
     context: &DamageContext,
     damage: f32,
     rng: &mut impl Rng,
@@ -502,15 +502,15 @@ pub fn modify_damage(
 /// A weapon's knockback with its enchantments' `knockback` effects.
 /// How much ammo a shot of `ammo` from `weapon` uses after its
 /// enchantments' `ammo_use` effects (Infinity makes arrows free).
-pub fn ammo_use(weapon: &ItemStack, ammo: Item, count: f32) -> f32 {
+pub fn ammo_use<M: tuff_item::item::Mode>(weapon: &ItemStack<M>, ammo: Item, count: f32) -> f32 {
     let registry = enchantment::current();
     let mut rng = rand::thread_rng();
     let mut value = count;
-    for (def, level) in on_stack(&registry, weapon) {
+    for (def, level) in on_stack(&registry, weapon.any()) {
         for entry in &def.effects.ammo_use {
             let applies = enchantment::item_requirement(
                 entry.requirements.as_ref(),
-                &ItemStack::mint(ammo, 1, MintReason::Template),
+                &tuff_item::item::ItemPicture::new(ammo, 1),
                 level,
                 &mut rng,
             );
@@ -524,15 +524,15 @@ pub fn ammo_use(weapon: &ItemStack, ammo: Item, count: f32) -> f32 {
 
 /// A victim's equipment drop chance raised by the killing weapon's
 /// `equipment_drops` effects aimed from attacker to victim (Looting).
-pub fn equipment_drop_chance(
-    weapon: &ItemStack,
+pub fn equipment_drop_chance<M: tuff_item::item::Mode>(
+    weapon: &ItemStack<M>,
     context: &DamageContext,
     chance: f32,
     rng: &mut impl Rng,
 ) -> f32 {
     let registry = enchantment::current();
     let mut chance = chance;
-    for (def, level) in on_stack(&registry, weapon) {
+    for (def, level) in on_stack(&registry, weapon.any()) {
         for entry in &def.effects.equipment_drops {
             if entry.enchanted == Target::Attacker
                 && entry.affected == Target::Victim
@@ -545,8 +545,8 @@ pub fn equipment_drop_chance(
     chance
 }
 
-pub fn modify_knockback(
-    weapon: &ItemStack,
+pub fn modify_knockback<'a>(
+    weapon: impl Into<AnyItem<'a>>,
     context: &DamageContext,
     knockback: f32,
     rng: &mut impl Rng,
@@ -564,7 +564,7 @@ pub fn enchantment_protection(
     let registry = enchantment::current();
     let mut protection = 0.0;
     for (slot, stack) in equipment {
-        for (def, level) in on_stack(&registry, stack) {
+        for (def, level) in on_stack(&registry, *stack) {
             if !applies_in(def, *slot) {
                 continue;
             }
@@ -588,7 +588,7 @@ pub fn immune_to_damage(
 ) -> bool {
     let registry = enchantment::current();
     equipment.iter().any(|(slot, stack)| {
-        on_stack(&registry, stack).any(|(def, level)| {
+        on_stack(&registry, *stack).any(|(def, level)| {
             applies_in(def, *slot)
                 && def
                     .effects
@@ -661,7 +661,7 @@ pub fn post_attack(
         Target::DamagingEntity => None,
     };
     for (slot, stack) in equipment {
-        for (def, level) in on_stack(&registry, stack) {
+        for (def, level) in on_stack(&registry, *stack) {
             if !applies_in(def, *slot) {
                 continue;
             }

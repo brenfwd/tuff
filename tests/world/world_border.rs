@@ -241,7 +241,7 @@ async fn items_inside_the_border_stop_at_its_edge_but_not_without_one() {
     let motion = Compound::new()
         .with(
             "Item",
-            ItemStack::mint(Item::Stone, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Stone, 1).to_nbt(),
         )
         .with(
             "Motion",

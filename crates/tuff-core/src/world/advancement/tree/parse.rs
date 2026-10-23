@@ -10,7 +10,7 @@ use tuff_vanilla_data::{Frozen, Item};
 use super::entry::{Criterion, Display, Entry, Frame, Rewards};
 use tuff_core::world::advancement::trigger::Registry;
 use tuff_datapack::loot::Predicates;
-use tuff_item::item::{Components, ItemStack, MintReason};
+use tuff_item::item::{Components, ItemPicture};
 use tuff_item::registries::codecs::json_to_nbt;
 use tuff_item::text::TextComponent;
 
@@ -175,9 +175,9 @@ fn item(value: &Value) -> Result<Item, String> {
     })
 }
 
-fn icon(value: &Value) -> Result<ItemStack, String> {
+fn icon(value: &Value) -> Result<ItemPicture, String> {
     if value.is_string() {
-        return Ok(ItemStack::mint(item(value)?, 1, MintReason::Template));
+        return Ok(ItemPicture::new(item(value)?, 1));
     }
     let object = object(value)?;
     let count = match object.get("count") {
@@ -193,12 +193,11 @@ fn icon(value: &Value) -> Result<ItemStack, String> {
             .and_then(|tag| tag.as_compound().map(Components::from_nbt))
             .ok_or_else(|| format!("Invalid components: {patch}"))?,
     };
-    Ok(ItemStack::mint(
+    Ok(ItemPicture::describe(
         item(field(object, "id")?)?,
         count as u8,
-        MintReason::Template,
-    )
-    .with_components(components))
+        components,
+    ))
 }
 
 fn criterion(
@@ -360,10 +359,7 @@ mod tests {
         assert_eq!(&*entry.name, "a:test");
         assert!(entry.parent_name.is_none());
         let display = entry.display.as_ref().unwrap();
-        assert_eq!(
-            display.icon,
-            ItemStack::mint(Item::Diamond, 3, MintReason::Test)
-        );
+        assert_eq!(display.icon, ItemPicture::new(Item::Diamond, 3));
         assert_eq!(display.frame, Frame::Task);
         assert!(display.show_toast && display.announce_to_chat && !display.hidden);
         assert_eq!(display.background.as_deref(), Some("minecraft:block/stone"));

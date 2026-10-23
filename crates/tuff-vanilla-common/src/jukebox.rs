@@ -15,12 +15,12 @@ pub fn is_playing(nbt: &Compound) -> bool {
     nbt.contains_key(TICKS)
 }
 
-pub fn record(nbt: &Compound) -> Option<ItemStack> {
+pub fn record(nbt: &Compound) -> Option<tuff_item::item::ItemPicture> {
     nbt.get_compound(RECORD)
-        .and_then(ItemStack::picture_from_nbt)
+        .and_then(tuff_item::item::ItemPicture::from_nbt)
 }
 
 /// Whether `stack` plays a song (a hopper or dropper may load it).
-pub fn plays(stack: &ItemStack) -> bool {
+pub fn plays<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     song_id(stack).is_some()
 }

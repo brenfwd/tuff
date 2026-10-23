@@ -6,7 +6,7 @@ use crate::protocol::codec::WriteExt;
 use crate::protocol::recipe::{DisplayEntry, RecipeDisplay, SlotDisplay};
 use crate::protocol::recipe::{write_ingredient, write_recipe_display, write_slot_display};
 use crate::protocol::{Encode, Packet};
-use tuff_item::item::{ItemStack, ItemView};
+use tuff_item::item::{AnyItem, ItemStack};
 use tuff_item::text::TextComponent;
 use tuff_wire::PacketWriter;
 
@@ -38,14 +38,14 @@ pub struct ContainerSetContent<'a> {
     pub window_id: i32,
     pub state_id: i32,
     pub slots: WindowSlots<'a>,
-    pub carried: Option<ItemView<'a>>,
+    pub carried: Option<AnyItem<'a>>,
 }
 
 /// A window's slots, borrowed as stored or assembled from views.
 #[derive(Clone, Copy)]
 pub enum WindowSlots<'a> {
     Stacks(&'a [Option<ItemStack>]),
-    Views(&'a [Option<ItemView<'a>>]),
+    Views(&'a [Option<AnyItem<'a>>]),
 }
 
 impl<'a> From<&'a [Option<ItemStack>]> for WindowSlots<'a> {
@@ -54,8 +54,8 @@ impl<'a> From<&'a [Option<ItemStack>]> for WindowSlots<'a> {
     }
 }
 
-impl<'a> From<&'a [Option<ItemView<'a>>]> for WindowSlots<'a> {
-    fn from(slots: &'a [Option<ItemView<'a>>]) -> Self {
+impl<'a> From<&'a [Option<AnyItem<'a>>]> for WindowSlots<'a> {
+    fn from(slots: &'a [Option<AnyItem<'a>>]) -> Self {
         Self::Views(slots)
     }
 }
@@ -76,11 +76,11 @@ impl Encode for ContainerSetContent<'_> {
             WindowSlots::Views(slots) => {
                 w.write_var_int(slots.len() as i32);
                 for slot in slots {
-                    w.write_slot(*slot);
+                    w.write_any_slot(*slot);
                 }
             }
         }
-        w.write_slot(self.carried);
+        w.write_any_slot(self.carried);
     }
 }
 
@@ -93,7 +93,7 @@ pub struct ContainerSetSlot<'a> {
     pub state_id: i32,
     pub slot: i16,
     #[packet(slot)]
-    pub item: Option<ItemView<'a>>,
+    pub item: Option<AnyItem<'a>>,
 }
 
 /// Open Screen: shows a container window of `menu_type` (a
@@ -305,9 +305,9 @@ pub struct SetPlayerInventory<'a> {
     #[packet(var_int)]
     pub slot: i32,
     #[packet(slot)]
-    pub item: Option<ItemView<'a>>,
+    pub item: Option<AnyItem<'a>>,
 }
 
 #[derive(Packet)]
 #[packet(id = Id::SetCursorItem, encode_only)]
-pub struct SetCursorItem<'a>(#[packet(slot)] pub Option<ItemView<'a>>);
+pub struct SetCursorItem<'a>(#[packet(slot)] pub Option<AnyItem<'a>>);

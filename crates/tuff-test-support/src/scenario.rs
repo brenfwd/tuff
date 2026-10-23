@@ -103,8 +103,7 @@ pub fn interaction(player: &PlayerHandle, item: Option<Item>) -> EntityInteracti
         player_uuid: 77,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: item
-            .map(|item| tuff_item::item::ItemSnapshot::describe(item, 16, Default::default())),
+        stack: item.map(|item| tuff_item::item::ItemSnapshot::new(item, 16)),
         hand: tuff_core::world::entity::HandOffer::new(item.map(|item| {
             tuff_item::item::ItemStack::mint(item, 16, tuff_item::item::MintReason::Test)
         })),

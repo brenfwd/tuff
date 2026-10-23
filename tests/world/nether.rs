@@ -216,7 +216,7 @@ async fn hoglins_and_piglins_zombify_outside_the_nether_only() {
             [4.5, SKY as f64 + 1.0, 4.5],
         )
         .await;
-        let sword = ItemStack::mint(Item::GoldenSword, 1, MintReason::Test).to_nbt();
+        let sword = tuff_item::item::ItemPicture::new(Item::GoldenSword, 1).to_nbt();
         summon(
             region,
             EntityType::Piglin,

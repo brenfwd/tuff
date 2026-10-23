@@ -475,8 +475,7 @@ async fn skeletons_shoot_players_they_see() {
     let (player, mut events) = PlayerHandle::new(1000);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, roofed_pen(2, 13)).await;
-    let bow =
-        tuff_item::item::ItemStack::mint(Item::Bow, 1, tuff_item::item::MintReason::Test).to_nbt();
+    let bow = tuff_item::item::ItemPicture::new(Item::Bow, 1).to_nbt();
     summon(
         &region,
         EntityType::Skeleton,
@@ -2088,7 +2087,7 @@ async fn piglins_pick_up_dropped_gold_one_ingot_at_a_time_and_barter() {
         EntityType::Item,
         Compound::new().with(
             "Item",
-            ItemStack::mint(Item::GoldIngot, 2, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::GoldIngot, 2).to_nbt(),
         ),
         [9.5, SKY as f64 + 1.0, 6.5],
     )

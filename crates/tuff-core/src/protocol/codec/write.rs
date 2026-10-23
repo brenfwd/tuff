@@ -1,7 +1,7 @@
 use super::*;
 use tuff_world_model::BlockPos;
 
-fn write_component_patch(w: &mut PacketWriter, stack: ItemView<'_>) {
+fn write_component_patch<M: Mode>(w: &mut PacketWriter, stack: ItemView<'_, M>) {
     let added = stack.components.network_added();
     let removed = stack.components.network_removed();
     w.write_var_int(added.len() as i32);
@@ -54,7 +54,7 @@ impl WriteExt for PacketWriter {
         }
     }
 
-    fn write_slot(&mut self, stack: Option<ItemView<'_>>) {
+    fn write_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>) {
         let Some(stack) = stack else {
             self.write_var_int(0);
             return;
@@ -64,13 +64,22 @@ impl WriteExt for PacketWriter {
         write_component_patch(self, stack);
     }
 
-    fn write_item_template(&mut self, stack: ItemView<'_>) {
+    fn write_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>) {
+        match stack {
+            None => self.write_slot::<tuff_item::item::Counted>(None),
+            Some(stack) => {
+                tuff_item::with_item!(stack, |stack| self.write_slot(Some(stack.view())))
+            }
+        }
+    }
+
+    fn write_item_template<M: Mode>(&mut self, stack: ItemView<'_, M>) {
         self.write_var_int(stack.item().id() as i32);
         self.write_var_int(stack.count() as i32);
         write_component_patch(self, stack);
     }
 
-    fn write_component(&mut self, component: &NetworkComponent<'_>) {
+    fn write_component<M: Mode>(&mut self, component: &NetworkComponent<'_, M>) {
         let nbt = |w: &mut Self, tag: &Tag| {
             w.write_nbt(tag)
                 .expect("stored NBT is decoded within the depth limit");

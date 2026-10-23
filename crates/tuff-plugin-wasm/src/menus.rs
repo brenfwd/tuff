@@ -20,7 +20,7 @@ use tuff_core::world::session::PlayerSession;
 use tuff_core::world::session::hooks::{
     HookFuture, PacketInterceptor, SessionHooks, SessionTick, Verdict,
 };
-use tuff_item::item::{BurnReason, ItemSnapshot, ItemStack, ItemView, MintReason};
+use tuff_item::item::{AnyItem, ItemPicture, ItemSnapshot, ItemStack};
 use tuff_nbt::{Compound, Tag};
 
 use crate::abi;
@@ -157,9 +157,8 @@ impl Menus {
         let catalog = Catalog { page };
         let mut cells: Vec<Option<ItemSnapshot>> =
             (0..usize::from(catalog::ROWS) * 9).map(|_| None).collect();
-        for (slot, stack) in catalog.slots(content) {
-            cells[usize::from(slot)] = Some(ItemSnapshot::of(&stack));
-            stack.burn(BurnReason::Template);
+        for (slot, picture) in catalog.slots(content) {
+            cells[usize::from(slot)] = Some(picture.into());
         }
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let entry = entries.entry(player).or_default();
@@ -334,10 +333,7 @@ pub fn build_stack(item: &MenuItem) -> Option<ItemSnapshot> {
     nbt.insert("id", Tag::String(kind.name().to_owned()));
     nbt.insert("count", Tag::Int(i32::from(item.count)));
     nbt.insert("components", Tag::Compound(components));
-    let stack = ItemStack::mint_from_nbt(&nbt, MintReason::Template)?;
-    let shown = ItemSnapshot::of(&stack);
-    stack.burn(BurnReason::Template);
-    Some(shown)
+    Some(ItemPicture::from_nbt(&nbt)?.into())
 }
 
 fn click_kind(mode: i32, button: i8) -> Option<MenuClickKind> {
@@ -357,13 +353,13 @@ fn click_kind(mode: i32, button: i8) -> Option<MenuClickKind> {
 }
 
 fn send_contents(session: &mut PlayerSession, state_id: i32, menu: Vec<Option<ItemSnapshot>>) {
-    let slots: Vec<Option<ItemView<'_>>> = menu
+    let slots: Vec<Option<AnyItem<'_>>> = menu
         .iter()
-        .map(|slot| slot.as_ref().map(ItemSnapshot::view))
+        .map(|slot| slot.as_ref().map(ItemSnapshot::any))
         .chain(
             session.inventory.slots()[PLAYER_SLOTS]
                 .iter()
-                .map(|slot| slot.as_ref().map(ItemStack::view)),
+                .map(|slot| slot.as_ref().map(ItemStack::any)),
         )
         .collect();
     let packet = play::ContainerSetContent {
@@ -419,7 +415,7 @@ impl SessionHooks for MenuSessions {
                             window_id: WINDOW,
                             state_id,
                             slot: i16::from(slot),
-                            item: item.as_ref().map(ItemSnapshot::view),
+                            item: item.as_ref().map(ItemSnapshot::any),
                         });
                     }
                 }

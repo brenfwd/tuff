@@ -121,7 +121,7 @@ fn damage_source_requirements_read_the_damage() {
 #[test]
 fn soul_speed_activates_on_soul_sand_and_deactivates_off_it() {
     let boots = enchanted(Item::DiamondBoots, &[("soul_speed", 2)]);
-    let worn = [(EquipmentSlot::Feet, &boots)];
+    let worn = [(EquipmentSlot::Feet, boots.any())];
     let facts = player(true, 20);
     let mut rng = StdRng::seed_from_u64(1);
     let sand = Floor(Block::SoulSand);
@@ -157,7 +157,7 @@ fn soul_speed_activates_on_soul_sand_and_deactivates_off_it() {
 #[test]
 fn frost_walker_freezes_a_disk_under_a_grounded_player() {
     let boots = enchanted(Item::DiamondBoots, &[("frost_walker", 2)]);
-    let worn = [(EquipmentSlot::Feet, &boots)];
+    let worn = [(EquipmentSlot::Feet, boots.any())];
     let mut rng = StdRng::seed_from_u64(1);
     let water = Floor(Block::Water);
     let facts = player(true, 20);
@@ -220,7 +220,7 @@ fn frost_walker_freezes_a_disk_under_a_grounded_player() {
 #[test]
 fn lunge_pushes_tires_and_wears_unless_too_hungry() {
     let spear = enchanted(Item::IronSpear, &[("lunge", 2)]);
-    let held = [(EquipmentSlot::Mainhand, &spear)];
+    let held = [(EquipmentSlot::Mainhand, spear.any())];
     let mut rng = StdRng::seed_from_u64(1);
     let world = EffectWorld::new(&mut rng);
     let fed = player(true, 7);
@@ -295,7 +295,7 @@ fn flame_sets_spawned_arrows_alight() {
 #[test]
 fn soul_speed_ticks_spawn_particles_while_moving_on_soul_blocks() {
     let boots = enchanted(Item::DiamondBoots, &[("soul_speed", 1)]);
-    let worn = [(EquipmentSlot::Feet, &boots)];
+    let worn = [(EquipmentSlot::Feet, boots.any())];
     let mut rng = StdRng::seed_from_u64(1);
     let sand = Floor(Block::SoulSand);
     let world = EffectWorld::new(&mut rng).with_world(&sand);

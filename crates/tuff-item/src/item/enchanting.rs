@@ -6,7 +6,7 @@ use serde_json::Value;
 use tuff_vanilla_data::Item;
 
 use crate::enchantment::{self, EnchantmentDef, EnchantmentRegistry};
-use crate::item::{Enchantments, ItemStack, MintReason};
+use crate::item::{Enchantments, ItemStack, MintReason, Mode};
 
 /// One enchantment of a registry: its id and definition.
 pub type Choice<'a> = (&'a str, &'a EnchantmentDef);
@@ -80,8 +80,8 @@ pub fn enchant<S: AsRef<str>>(mut stack: ItemStack, chosen: &[(S, i32)]) -> Item
 }
 
 /// The enchanting table's choice for `cost` levels among `options`.
-pub fn select_enchantments(
-    stack: &ItemStack,
+pub fn select_enchantments<M: Mode>(
+    stack: &ItemStack<M>,
     cost: i32,
     options: &[Choice<'_>],
     rng: &mut impl Rng,
@@ -179,10 +179,22 @@ pub fn enchant_from_provider(
     special_multiplier: f32,
     rng: &mut impl Rng,
 ) -> ItemStack {
+    let chosen = provider_enchantments(&stack, id, special_multiplier, rng);
+    enchant(stack, &chosen)
+}
+
+/// The enchantments the provider `id` picks for `stack`; none for an
+/// unknown provider.
+pub fn provider_enchantments<M: Mode>(
+    stack: &ItemStack<M>,
+    id: &str,
+    special_multiplier: f32,
+    rng: &mut impl Rng,
+) -> Vec<(String, i32)> {
     use crate::enchantment::{EnchantmentProvider, HolderSet};
     let data = enchantment::current();
     let Some(provider) = data.providers.get(id) else {
-        return stack;
+        return Vec::new();
     };
     let options = |set: &HolderSet| match set {
         HolderSet::Tag(tag) => enchantment_options(&data, &Value::String(format!("#{tag}"))),
@@ -202,20 +214,18 @@ pub fn enchant_from_provider(
         } => {
             let max = min_cost + (special_multiplier * *max_cost_span as f32) as i32;
             let cost = rng.gen_range(*min_cost..=max.max(*min_cost));
-            let chosen = select_enchantments(&stack, cost, &options(enchantments), rng);
-            enchant(stack, &chosen)
+            select_enchantments(stack, cost, &options(enchantments), rng)
         }
         EnchantmentProvider::ByCost { enchantments, cost } => {
             let cost = cost.sample(rng);
-            let chosen = select_enchantments(&stack, cost, &options(enchantments), rng);
-            enchant(stack, &chosen)
+            select_enchantments(stack, cost, &options(enchantments), rng)
         }
         EnchantmentProvider::Single { enchantment, level } => {
             let Some(def) = data.get(enchantment) else {
-                return stack;
+                return Vec::new();
             };
             let level = level.sample(rng).clamp(1, def.max_level as i32);
-            enchant(stack, &[(enchantment.as_str(), level)])
+            vec![(enchantment.to_string(), level)]
         }
     }
 }

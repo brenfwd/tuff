@@ -140,16 +140,17 @@ pub fn save(state: &RaiderState, out: &mut Compound) {
 
 /// The banner raid and patrol leaders wear.
 pub fn ominous_banner() -> ItemStack {
-    ominous_banner_as(MintReason::Spawn)
+    ItemStack::mint_like(&ominous_banner_picture(), 1, MintReason::Spawn)
 }
 
-fn ominous_banner_as(reason: MintReason) -> ItemStack {
+/// A picture of the Ominous Banner.
+pub fn ominous_banner_picture() -> tuff_item::item::ItemPicture {
     let layer = |pattern: &str, color: &str| BannerLayer {
         pattern: format!("minecraft:{pattern}"),
         inline: None,
         color: DyeColor::from_name(color).expect("a dye color"),
     };
-    let mut stack = ItemStack::mint(Item::WhiteBanner, 1, reason);
+    let mut stack = tuff_item::item::ItemPicture::new(Item::WhiteBanner, 1);
     stack.components.banner_patterns = Some(vec![
         layer("rhombus", "cyan"),
         layer("stripe_bottom", "light_gray"),
@@ -176,8 +177,8 @@ fn ominous_banner_as(reason: MintReason) -> ItemStack {
     stack
 }
 
-pub fn is_ominous_banner(stack: &ItemStack) -> bool {
-    let banner = ominous_banner_as(MintReason::Template);
+pub fn is_ominous_banner<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
+    let banner = ominous_banner_picture();
     stack.item() == banner.item() && stack.components == banner.components
 }
 
@@ -697,7 +698,7 @@ impl Goal for ObtainRaidLeaderBanner {
 }
 
 /// A banner it picked up: an ominous one makes it the wave's leader.
-pub fn took_banner(core: &mut MobCore, stack: &ItemStack) -> bool {
+pub fn took_banner<M: tuff_item::item::Mode>(core: &mut MobCore, stack: &ItemStack<M>) -> bool {
     if !is_ominous_banner(stack) {
         return false;
     }

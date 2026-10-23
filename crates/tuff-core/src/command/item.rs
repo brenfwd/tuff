@@ -78,7 +78,7 @@ impl ItemPredicate {
         Ok(self)
     }
 
-    pub fn test(&self, stack: &ItemStack) -> bool {
+    pub fn test<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         self.clauses.iter().all(|tests| {
             tests
                 .iter()
@@ -88,7 +88,7 @@ impl ItemPredicate {
 }
 
 impl ItemTest {
-    fn test(&self, stack: &ItemStack) -> bool {
+    fn test<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         match self {
             Self::Item(item) => stack.item() == *item,
             Self::Tag(_, items) => items.contains(&stack.item()),

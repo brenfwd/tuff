@@ -252,16 +252,22 @@ pub(super) fn float_in_range(bound: &Value, value: f64) -> bool {
 /// The enchantment level on `tool` for `enchantment`'s id or `0` if
 /// there is no tool (an empty hand still gives its formula/chances a
 /// level of 0, matching a tool context param that is always present).
-pub(super) fn tool_enchantment_level(condition: &Value, tool: Option<&ItemStack>) -> i32 {
+pub(super) fn tool_enchantment_level(condition: &Value, tool: Option<AnyItem<'_>>) -> i32 {
     let Some(id) = condition["enchantment"].as_str() else {
         return 0;
     };
-    tool.map_or(0, |stack| stack.enchantment_level(id))
+    tool.map_or(0, |tool| {
+        tuff_item::with_item!(tool, |stack| stack.enchantment_level(id))
+    })
 }
 
 /// `minecraft:table_bonus`: an enchantment-level-indexed chance, clamped
 /// to the last entry for a level past the array (as the game caps it).
-pub(super) fn table_bonus(condition: &Value, tool: Option<&ItemStack>, rng: &mut impl Rng) -> bool {
+pub(super) fn table_bonus(
+    condition: &Value,
+    tool: Option<AnyItem<'_>>,
+    rng: &mut impl Rng,
+) -> bool {
     let Some(chances) = condition["chances"].as_array() else {
         return false;
     };
@@ -463,7 +469,10 @@ pub(super) fn match_block(
     tuff_core::world::predicate::block_with(&Value::Object(predicate), state, block_entity)
 }
 
-pub(super) fn match_tool(predicate: &Value, tool: Option<&ItemStack>) -> bool {
+pub(super) fn match_tool<'a>(
+    predicate: &Value,
+    tool: Option<impl Into<tuff_item::item::AnyItem<'a>>>,
+) -> bool {
     tool.is_some_and(|tool| tuff_core::world::predicate::item(predicate, tool))
 }
 

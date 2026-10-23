@@ -489,7 +489,7 @@ impl PlayerRecord {
             .iter()
             .map(|(slot, stack)| {
                 let mut nbt = Compound::new().with("Slot", *slot as i8);
-                for (key, value) in stack.borrow().to_nbt() {
+                for (key, value) in stack.borrow().to_storage() {
                     nbt.insert(key, value);
                 }
                 nbt
@@ -663,12 +663,12 @@ fn slot_lists<S: Borrow<ItemStack>>(
     for (window, stack) in slots {
         if let Some(slot) = list_slot(*window) {
             let mut nbt = Compound::new().with("Slot", slot as u8 as i8);
-            for (key, value) in stack.borrow().to_nbt() {
+            for (key, value) in stack.borrow().to_storage() {
                 nbt.insert(key, value);
             }
             inventory.push(nbt);
         } else if let Some((key, _)) = EQUIPMENT.iter().find(|(_, w)| *w == *window) {
-            equipment.insert(*key, stack.borrow().to_nbt());
+            equipment.insert(*key, stack.borrow().to_storage());
         }
     }
     (inventory, equipment)
@@ -994,11 +994,11 @@ mod tests {
                 Compound::new()
                     .with(
                         "offhand",
-                        ItemStack::mint(Item::Torch, 3, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Torch, 3).to_nbt(),
                     )
                     .with(
                         "body",
-                        ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
                     ),
             )
             .with(

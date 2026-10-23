@@ -318,11 +318,7 @@ pub fn container_undo(row: &Row, restore: bool, strict: bool) -> Option<containe
     let (stack, any_components) = match container::stack_of(row.block_entity().as_ref()) {
         Some(stack) => (stack, false),
         None if !add => (
-            ItemSnapshot::describe(
-                Item::from_name(row.material.as_deref()?)?,
-                1,
-                Default::default(),
-            ),
+            ItemSnapshot::new(Item::from_name(row.material.as_deref()?)?, 1),
             true,
         ),
         None => return None,
@@ -409,7 +405,7 @@ fn undo_containers(
                 if let Some(nbt) = world.raw_block_entity_mut(pos) {
                     match &new {
                         Some(stack) => {
-                            nbt.insert("item", stack.to_nbt());
+                            nbt.insert("item", stack.to_storage());
                         }
                         None => {
                             nbt.remove("item");
@@ -419,7 +415,11 @@ fn undo_containers(
                 world.block_entity_changed(pos);
                 world.report_container_edit(
                     ContainerHolder::Block(pos),
-                    &[(0, before[0].as_deref(), new.as_ref())],
+                    &[(
+                        0,
+                        before[0].as_ref().map(ItemSnapshot::any),
+                        new.as_ref().map(ItemStack::any),
+                    )],
                 );
                 if let Some(new) = new {
                     new.burn(BurnReason::Command);
@@ -429,7 +429,7 @@ fn undo_containers(
             }
             let mut slots = Vec::new();
             for (slot, (old, new)) in before.iter().zip(after).enumerate() {
-                if old.as_deref() == new.as_ref() {
+                if tuff_item::item::same_slot(old.as_deref(), new.as_ref()) {
                     burn_all([new]);
                 } else {
                     slots.push((slot, new));

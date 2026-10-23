@@ -206,7 +206,7 @@ async fn an_oozing_sulfur_cube_leaves_slimes_when_its_explosion_removes_it() {
         "equipment",
         Compound::new().with(
             "body",
-            ItemStack::mint(tuff_vanilla_data::Item::Tnt, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(tuff_vanilla_data::Item::Tnt, 1).to_nbt(),
         ),
     );
     summon(&region, EntityType::SulfurCube, nbt, [5.5, y, 5.5]).await;

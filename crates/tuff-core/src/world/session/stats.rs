@@ -8,7 +8,6 @@ use tuff_vanilla_data::Item;
 use super::*;
 use crate::protocol::play;
 use crate::world::inventory::Inventory;
-use tuff_item::item::{ItemStack, MintReason};
 
 impl PlayerSession {
     /// How many of `item` an inventory holds outside its crafting grid,
@@ -33,12 +32,8 @@ impl PlayerSession {
         if made > 0 {
             self.item_action_hooks(
                 super::hooks::ItemAction::Crafted,
-                ItemStack::mint(
-                    item,
-                    made.clamp(1, i32::from(i8::MAX)) as _,
-                    MintReason::Template,
-                )
-                .view(),
+                tuff_item::item::ItemPicture::new(item, made.clamp(1, i32::from(i8::MAX)) as _)
+                    .any(),
             );
             self.progress
                 .stats

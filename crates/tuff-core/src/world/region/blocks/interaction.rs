@@ -198,7 +198,7 @@ impl RegionActor {
         &mut self,
         pos: BlockPos,
         state: BlockState,
-        stack: &ItemStack,
+        stack: &tuff_item::item::ItemPicture,
     ) -> bool {
         if !self.owns(pos) || !self.dimension().contains_block(pos) {
             return false;

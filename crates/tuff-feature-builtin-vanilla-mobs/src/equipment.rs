@@ -7,7 +7,7 @@ use tuff_vanilla_data::item::EquipmentSlot;
 
 use tuff_core::protocol::play::equipment_slot;
 use tuff_core::world::entity::take;
-use tuff_item::item::{ItemStack, ItemView};
+use tuff_item::item::{ItemPicture, ItemStack};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_common::combat::Equipped;
 
@@ -39,6 +39,9 @@ pub const PRESERVED_DROP_CHANCE: f32 = 2.0;
 pub struct Equipment {
     items: [Option<ItemStack>; 8],
     drop_chances: [f32; 8],
+    /// A picture shown in one slot in place of what it holds (a villager
+    /// showing what it trades); only the client sees it.
+    shown: Option<(EquipmentSlot, ItemPicture)>,
     changed: bool,
 }
 
@@ -47,6 +50,7 @@ impl Default for Equipment {
         Self {
             items: Default::default(),
             drop_chances: [DEFAULT_DROP_CHANCE; 8],
+            shown: None,
             changed: false,
         }
     }
@@ -60,7 +64,7 @@ fn index(slot: EquipmentSlot) -> Option<usize> {
     SLOTS.iter().position(|(s, ..)| *s == slot)
 }
 
-pub(crate) fn prevents_drop(stack: &ItemStack) -> bool {
+pub(crate) fn prevents_drop<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     stack.has_enchantment_effect(|effects| effects.prevent_equipment_drop)
 }
 
@@ -187,16 +191,33 @@ impl Equipment {
         SLOTS
             .iter()
             .zip(&self.items)
-            .filter_map(|((slot, ..), stack)| Some((*slot, stack.as_ref()?)))
+            .filter_map(|((slot, ..), stack)| Some((*slot, stack.as_ref()?.any())))
             .collect()
     }
 
     /// Every slot by protocol id, empty ones included.
-    pub fn visible(&self) -> Vec<(u8, Option<ItemView<'_>>)> {
+    /// Shows `picture` in `slot` in place of what it holds, or stops
+    /// showing one.
+    pub fn show(&mut self, slot: EquipmentSlot, picture: Option<ItemPicture>) {
+        let before = self.shown.as_ref().map(|(at, _)| *at);
+        self.shown = picture.map(|picture| (slot, picture));
+        if before.is_some() || self.shown.is_some() {
+            self.changed = true;
+        }
+    }
+
+    pub fn visible(&self) -> Vec<(u8, Option<tuff_item::item::AnyItem<'_>>)> {
         SLOTS
             .iter()
             .zip(&self.items)
-            .map(|((_, _, id), stack)| (*id, stack.as_ref().map(ItemStack::view)))
+            .map(|((slot, _, id), stack)| {
+                let shown = self
+                    .shown
+                    .as_ref()
+                    .filter(|(at, _)| at == slot)
+                    .map(|(_, picture)| picture.any());
+                (*id, shown.or_else(|| stack.as_ref().map(ItemStack::any)))
+            })
             .collect()
     }
 
@@ -292,7 +313,7 @@ impl Equipment {
         for (((_, name, _), stack), chance) in SLOTS.iter().zip(&self.items).zip(self.drop_chances)
         {
             if let Some(stack) = stack {
-                equipment.insert(*name, stack.to_nbt());
+                equipment.insert(*name, stack.to_storage());
             }
             if chance != DEFAULT_DROP_CHANCE {
                 chances.insert(*name, chance);
@@ -366,15 +387,15 @@ mod tests {
                 Compound::new()
                     .with(
                         "mainhand",
-                        ItemStack::mint(Item::Bow, 1, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Bow, 1).to_nbt(),
                     )
                     .with(
                         "saddle",
-                        ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
                     )
                     .with(
                         "reins",
-                        ItemStack::mint(Item::Stick, 1, MintReason::Test).to_nbt(),
+                        tuff_item::item::ItemPicture::new(Item::Stick, 1).to_nbt(),
                     ),
             )
             .with(

@@ -525,9 +525,9 @@ impl RegionActor {
         })
     }
 
-    fn adventure_allows(
+    fn adventure_allows<M: tuff_item::item::Mode>(
         &self,
-        components: &tuff_item::item::Components,
+        components: &tuff_item::item::Components<M>,
         component: &str,
         pos: BlockPos,
     ) -> bool {
@@ -624,9 +624,10 @@ impl RegionActor {
         let drops = block_drops
             && match mode {
                 BreakMode::Creative => false,
-                BreakMode::Start { .. } | BreakMode::Finish | BreakMode::Verified { .. } => {
-                    self.shared.block_loot().can_harvest(state, tool)
-                }
+                BreakMode::Start { .. } | BreakMode::Finish | BreakMode::Verified { .. } => self
+                    .shared
+                    .block_loot()
+                    .can_harvest(state, tool.map(ItemStack::any)),
             };
         let unstable_tnt = state.block() == Block::Tnt
             && !matches!(mode, BreakMode::Creative)
@@ -676,7 +677,12 @@ impl RegionActor {
                 },
             )));
         }
-        self.player_breaking_block(player.id, pos, state, tool_stack.as_deref());
+        self.player_breaking_block(
+            player.id,
+            pos,
+            state,
+            tool_stack.as_deref().map(ItemStack::any),
+        );
         let creative_drop = self
             .block_entity(pos)
             .filter(|entity| entity.kind == ContainerKind::ShulkerBox && !entity.is_empty())
@@ -715,7 +721,7 @@ impl RegionActor {
                 |world| {
                     self.shared.block_loot().drops_at(
                         state,
-                        tool,
+                        tool.map(ItemStack::any),
                         saved.as_ref(),
                         &at,
                         Some(world),
@@ -724,7 +730,7 @@ impl RegionActor {
                 },
             );
             self.drop_items(pos, stacks);
-            self.release_infestation(pos, state, tool_stack.as_deref());
+            self.release_infestation(pos, state, tool_stack.as_deref().map(ItemStack::any));
             if let Some(experience) = state.block().experience() {
                 let amount = experience.sample(|bound| self.rng.gen_range(0..bound.max(1)));
                 let amount = block_experience_effects(tool_stack.as_deref(), amount);
@@ -735,7 +741,7 @@ impl RegionActor {
         } else if let Some(components) = creative_drop
             && let Some(item) = state.block().item()
         {
-            let stack = ItemStack::mint(item, 1, MintReason::Creative).with_components(components);
+            let stack = ItemStack::mint_with(item, 1, &components, MintReason::Creative);
             self.drop_items(pos, vec![stack]);
         }
         if !matches!(mode, BreakMode::Creative) && state.is_ice() {
@@ -762,7 +768,11 @@ impl RegionActor {
     /// Ice a player broke leaves water behind over a liquid or a block that
     /// melts it, unless the tool keeps it frozen (Silk Touch) or water
     /// evaporates here.
-    fn melt_broken_ice(&mut self, pos: BlockPos, tool: Option<&ItemStack>) {
+    fn melt_broken_ice<M: tuff_item::item::Mode>(
+        &mut self,
+        pos: BlockPos,
+        tool: Option<&ItemStack<M>>,
+    ) {
         let kept = tool.is_some_and(|tool| {
             tuff_datapack::tags::with(|tags| {
                 tags.get(

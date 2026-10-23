@@ -26,7 +26,7 @@ fn region_box(pos: RegionPos) -> [f64; 6] {
     ]
 }
 
-fn room(stack: &ItemStack) -> u8 {
+fn room<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> u8 {
     stack.max_stack_size().min(64).saturating_sub(stack.count())
 }
 

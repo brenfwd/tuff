@@ -234,12 +234,12 @@ impl ContainerKind {
 
     /// Whether an automated transfer may put `stack` in `slot` of a
     /// container holding `items`, reached through `face`.
-    pub fn can_insert(
+    pub fn can_insert<M: tuff_item::item::Mode>(
         self,
         recipes: &RecipeSet,
         items: &[Option<ItemStack>],
         slot: usize,
-        stack: &ItemStack,
+        stack: &ItemStack<M>,
         _face: Option<Facing>,
         disabled: u16,
     ) -> bool {
@@ -524,7 +524,7 @@ impl BlockEntity {
         if self.kind != ContainerKind::Campfire {
             return None;
         }
-        Some(Compound::new().with(ITEMS, encode_items(&self.items)))
+        Some(Compound::new().with(ITEMS, encode_items_with(&self.items, ItemStack::to_nbt)))
     }
 
     /// Reads a stored block entity, or `None` for a kind this server does
@@ -719,12 +719,19 @@ pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemSt
 
 /// Saved `Items` entries: the non-empty stacks, each tagged with its slot.
 pub fn encode_items(items: &[Option<ItemStack>]) -> Vec<Compound> {
+    encode_items_with(items, ItemStack::to_storage)
+}
+
+fn encode_items_with(
+    items: &[Option<ItemStack>],
+    encode: fn(&ItemStack) -> Compound,
+) -> Vec<Compound> {
     items
         .iter()
         .enumerate()
         .filter_map(|(slot, stack)| {
             let mut entry = Compound::new().with("Slot", slot as i8);
-            for (key, value) in stack.as_ref()?.to_nbt() {
+            for (key, value) in encode(stack.as_ref()?) {
                 entry.insert(key, value);
             }
             Some(entry)
@@ -756,9 +763,9 @@ pub fn write_items(nbt: &mut Compound, items: &[Option<ItemStack>]) {
 /// all went in)
 /// and whether the walk reached an empty slot.
 /// How many of `stack` [`golem_place`] would put into `items`.
-pub fn golem_room<'a>(
+pub fn golem_room<'a, M: tuff_item::item::Mode>(
     items: impl IntoIterator<Item = &'a Option<ItemStack>>,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
 ) -> u8 {
     let mut room = 0u8;
     for item in items {
@@ -854,12 +861,12 @@ pub fn insert(
 /// How many of `count` of `stack` [`insert`] would put into `items`,
 /// reading them only. Exact for containers whose slots accept items
 /// regardless of the others (chests).
-pub fn insert_room(
+pub fn insert_room<M: tuff_item::item::Mode>(
     recipes: &RecipeSet,
     kind: ContainerKind,
     items: &[Option<ItemStack>],
     face: Option<Facing>,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
     count: u8,
     disabled: u16,
 ) -> u8 {
@@ -1013,7 +1020,7 @@ pub fn fill_missing(
         let Some(kind) = state.block().block_entity() else {
             continue;
         };
-        match create(kind, pos, &Components::default()) {
+        match create(kind, pos, &Components::new()) {
             Ok(entity) => {
                 typed.insert(pos, entity);
             }
@@ -1026,10 +1033,10 @@ pub fn fill_missing(
 
 /// A new block entity of `kind` at `pos` that took the components of the
 /// item placing it: modeled (`Ok`) or as saved NBT (`Err`).
-pub fn create(
+pub fn create<M: tuff_item::item::Mode>(
     kind: BlockEntityType,
     pos: BlockPos,
-    components: &Components,
+    components: &Components<M>,
 ) -> Result<BlockEntity, Compound> {
     let mut nbt = raw::new(kind, pos);
     raw::apply_components(kind, &mut nbt, components);

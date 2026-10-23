@@ -13,7 +13,7 @@ use tuff_vanilla_data::{Block, BlockState, Item};
 use std::cell::RefCell;
 
 use tuff_datapack::loot::LootTables;
-use tuff_item::item::{Components, Enchantments, ItemStack, MintReason};
+use tuff_item::item::{AnyItem, Enchantments, ItemPicture, ItemStack, MintReason, Mode};
 use tuff_vanilla_data::registry::Potion;
 
 use tuff_core::world::block_entity::raw;
@@ -29,9 +29,11 @@ pub use modify::modify_item;
 
 pub const SILK_TOUCH: &str = "minecraft:silk_touch";
 
-pub fn can_harvest(state: BlockState, tool: Option<&ItemStack>) -> bool {
+pub fn can_harvest(state: BlockState, tool: Option<AnyItem<'_>>) -> bool {
     !state.requires_correct_tool_for_drops()
-        || tool.is_some_and(|stack| stack.is_correct_tool_for_drops(state.block()))
+        || tool.is_some_and(|tool| {
+            tuff_item::with_item!(tool, |stack| stack.is_correct_tool_for_drops(state.block()))
+        })
 }
 
 pub use tuff_core::world::drops::EntityFacts;
@@ -44,7 +46,7 @@ struct Context<'a> {
     visiting: RefCell<Vec<usize>>,
     state: BlockState,
     entity: Option<&'a EntityFacts>,
-    tool: Option<&'a ItemStack>,
+    tool: Option<AnyItem<'a>>,
     /// The radius of the explosion that broke the block, when its drops
     /// decay.
     explosion_radius: Option<f32>,
@@ -81,7 +83,7 @@ fn applies_decay(functions: &[LootFunction]) -> bool {
 
 pub fn block_drops(
     state: BlockState,
-    tool: Option<&ItemStack>,
+    tool: Option<AnyItem<'_>>,
     block_entity: Option<&Compound>,
     rng: &mut impl Rng,
 ) -> Vec<ItemStack> {
@@ -91,7 +93,7 @@ pub fn block_drops(
 pub fn block_drops_in(
     tables: &LootTables,
     state: BlockState,
-    tool: Option<&ItemStack>,
+    tool: Option<AnyItem<'_>>,
     block_entity: Option<&Compound>,
     rng: &mut impl Rng,
 ) -> Vec<ItemStack> {
@@ -106,7 +108,7 @@ pub fn block_drops_in(
 pub fn block_drops_located(
     tables: &LootTables,
     state: BlockState,
-    tool: Option<&ItemStack>,
+    tool: Option<AnyItem<'_>>,
     block_entity: Option<&Compound>,
     at: &LocationFacts,
     world: Option<&dyn PredicateWorld>,
@@ -121,7 +123,7 @@ pub fn block_drops_located(
 fn rolled_block_drops(
     tables: &LootTables,
     state: BlockState,
-    tool: Option<&ItemStack>,
+    tool: Option<AnyItem<'_>>,
     block_entity: Option<&Compound>,
     location: Option<&LocationFacts>,
     world: Option<&dyn PredicateWorld>,
@@ -158,7 +160,7 @@ pub fn entity_drops(name: &str, facts: &EntityFacts, rng: &mut impl Rng) -> Vec<
         visiting: RefCell::default(),
         state: Block::Air.default_state(),
         entity: Some(facts),
-        tool: facts.attacker_weapon.as_deref(),
+        tool: facts.attacker_weapon.as_deref().map(ItemStack::any),
         explosion_radius: None,
         block_entity: None,
         location: facts.origin.as_ref(),
@@ -176,7 +178,7 @@ pub fn fishing_drops(
     tables: &LootTables,
     luck: f32,
     open_water: bool,
-    rod: &ItemStack,
+    rod: AnyItem<'_>,
     rng: &mut impl Rng,
 ) -> Vec<ItemStack> {
     let facts = EntityFacts {
@@ -264,13 +266,13 @@ pub fn table_drops_in(
     let Some(table) = tables.get(name) else {
         return Vec::new();
     };
-    let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Template));
+    let tool = tool.map(|item| ItemPicture::new(item, 1));
     let context = Context {
         tables,
         visiting: RefCell::default(),
         state,
         entity: None,
-        tool: tool.as_ref(),
+        tool: tool.as_ref().map(ItemStack::any),
         explosion_radius: None,
         block_entity: None,
         location: None,
@@ -423,7 +425,7 @@ fn fill_container_slots(
 /// Whether a container's `lock` predicate (`items`/`count`/`components`;
 /// `predicates` sub-matchers are not modeled) admits the item held to open
 /// it.
-pub fn lock_admits(lock: &Compound, stack: Option<&ItemStack>) -> bool {
+pub fn lock_admits<M: Mode>(lock: &Compound, stack: Option<&ItemStack<M>>) -> bool {
     if let Some(items) = lock.get("items") {
         let Some(stack) = stack else {
             return false;
@@ -591,7 +593,7 @@ fn modify_stack(
                 );
                 let mut patch = stack.components.to_nbt();
                 patch.insert(target, name);
-                stack.components = Components::from_nbt(&patch);
+                stack.set_components_nbt(&patch, MintReason::Loot, BurnReason::Loot);
             }
         }
         "minecraft:set_potion" => {
@@ -695,7 +697,7 @@ fn modify_stack(
                         }
                     }
                 }
-                stack.components = Components::from_nbt(&patch);
+                stack.set_components_nbt(&patch, MintReason::Loot, BurnReason::Loot);
             }
         }
         "minecraft:set_stew_effect" => {
@@ -869,7 +871,7 @@ fn copy_components(
                 patch.remove(&format!("!{id}"));
                 patch.insert(id, value.clone());
             }
-            stack.components = Components::from_nbt(&patch);
+            stack.set_components_nbt(&patch, MintReason::Loot, BurnReason::Loot);
         }
     }
 }
@@ -1127,7 +1129,9 @@ fn create_entry_leaf(
                     if let Some([back, left, right, front]) =
                         tuff_item::item::pot_decorations_from_nbt(sherds)
                     {
-                        drops.extend([left, back, front, right].into_iter().flatten());
+                        drops.extend([left, back, front, right].into_iter().flatten().map(
+                            |side| ItemStack::mint_like(&side, side.count(), MintReason::Loot),
+                        ));
                     }
                 }
                 None => {

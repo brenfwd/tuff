@@ -150,12 +150,12 @@ async fn fill_cartography(session: &mut PlayerSession) {
     );
     if menu.window_id != window || !current || menu.container[cartography::RESULT] == result {
         if let Some(result) = result {
-            result.burn(tuff_item::item::BurnReason::Template);
+            result.burn(tuff_item::item::BurnReason::Preview);
         }
         return;
     }
     if let Some(old) = std::mem::replace(&mut menu.container[cartography::RESULT], result) {
-        old.burn(tuff_item::item::BurnReason::Template);
+        old.burn(tuff_item::item::BurnReason::Preview);
     }
     session.send_menu_slot(cartography::RESULT);
 }
@@ -196,14 +196,16 @@ async fn check_extending(session: &mut PlayerSession) {
     let Some(menu) = session.menus.menu.as_mut() else {
         return;
     };
-    if menu.window_id != window || menu.container[0].as_ref() != Some(&*result) {
+    if menu.window_id != window
+        || !tuff_item::item::same_slot(menu.container[0].as_ref(), Some(&*result))
+    {
         return;
     }
     if extends(data.as_ref()) {
         session.ext.entry::<Extending>().checked = Some(result);
     } else {
         if let Some(old) = menu.container[0].take() {
-            old.burn(tuff_item::item::BurnReason::Template);
+            old.burn(tuff_item::item::BurnReason::Preview);
         }
         session.send_menu_slot(0);
     }

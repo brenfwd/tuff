@@ -247,11 +247,7 @@ mod launch_tests {
             },
             Shot::Bobber {
                 rotation: (0.0, 0.0),
-                rod: tuff_item::item::ItemSnapshot::describe(
-                    Item::FishingRod,
-                    1,
-                    Default::default(),
-                ),
+                rod: tuff_item::item::ItemSnapshot::new(Item::FishingRod, 1),
                 luck: 0.0,
             },
         ];

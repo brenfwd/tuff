@@ -258,7 +258,7 @@ async fn a_player_shift_clicks_items_out_of_a_chest_boat() {
     let (viewer, mut events) = PlayerHandle::new(999);
     subscribe(&region, &viewer, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let saved = ItemStack::mint(Item::Diamond, 3, MintReason::Test)
+    let saved = tuff_item::item::ItemPicture::new(Item::Diamond, 3)
         .to_nbt()
         .with("Slot", 4i8);
     summon(
@@ -467,7 +467,7 @@ async fn killing_a_chest_boat_scatters_its_stacks_in_pieces() {
     let (player, mut events) = PlayerHandle::new(100);
     subscribe(&region, &player, &mut events, &[chunk]).await;
     place_blocks(&world, &region, pen(2, 13)).await;
-    let saved = ItemStack::mint(Item::Stone, 64, MintReason::Test)
+    let saved = tuff_item::item::ItemPicture::new(Item::Stone, 64)
         .to_nbt()
         .with("Slot", 0i8);
     summon(

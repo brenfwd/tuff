@@ -398,7 +398,11 @@ impl RegionActor {
 
     /// How many of `stack` [`Self::insert_into_entity`] would put into the
     /// container of `entity`.
-    pub(super) fn entity_insert_room(&mut self, entity: i32, stack: &ItemStack) -> u8 {
+    pub(super) fn entity_insert_room<M: tuff_item::item::Mode>(
+        &mut self,
+        entity: i32,
+        stack: &ItemStack<M>,
+    ) -> u8 {
         let recipes = self.shared.recipes();
         let Some(mut items) = self
             .ents

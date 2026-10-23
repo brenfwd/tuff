@@ -348,12 +348,10 @@ impl ItemUseExt for PlayerSession {
             let stack = self.inventory.slots()[slot].as_ref()?;
             return Some((Some(slot), tuff_item::item::ItemSnapshot::of(stack)));
         }
-        self.mode.abilities.instabuild.then(|| {
-            (
-                None,
-                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default()),
-            )
-        })
+        self.mode
+            .abilities
+            .instabuild
+            .then(|| (None, tuff_item::item::ItemSnapshot::new(Item::Arrow, 1)))
     }
 
     /// The velocity of something this player shoots or throws along its
@@ -393,7 +391,7 @@ impl ItemUseExt for PlayerSession {
         if let Some(stack) = launched {
             self.item_action_hooks(
                 tuff_core::world::session::hooks::ItemAction::Shot,
-                stack.view(),
+                stack.any(),
             );
         }
         let id = self.shared.next_entity_id();
@@ -941,7 +939,7 @@ impl ItemUseExt for PlayerSession {
             .map(tuff_item::item::ItemSnapshot::of);
         if let Some(stack) = &consumed {
             self.fire(tuff_core::world::advancement::trigger::Event::ConsumeItem(
-                stack,
+                stack.any(),
             ));
         }
         let omen = (item == Item::OminousBottle).then(|| {

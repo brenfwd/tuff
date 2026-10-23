@@ -79,12 +79,12 @@ fn is_water(state: Option<BlockState>) -> bool {
 
 /// A dispenser puts a boat on the water in front of it (or on the water
 /// just below that), else drops the item.
-fn dispense_boat(
+fn dispense_boat<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     facing: Facing,
     kind: EntityType,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
 ) -> DispenseOutcome {
     let (sx, sy, sz) = facing.step();
     let front = BlockPos::new(pos.x + sx, pos.y + sy, pos.z + sz);
@@ -138,12 +138,12 @@ fn is_slope(state: BlockState) -> bool {
 
 /// A dispenser puts a minecart on the rail in front of it (or on the rail
 /// just below that), else drops the item.
-fn dispense_minecart(
+fn dispense_minecart<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     facing: Facing,
     kind: EntityType,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
 ) -> DispenseOutcome {
     let (sx, sy, sz) = facing.step();
     let front = BlockPos::new(pos.x + sx, pos.y + sy, pos.z + sz);

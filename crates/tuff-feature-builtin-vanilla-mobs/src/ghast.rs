@@ -382,7 +382,7 @@ impl<G: Goal> Goal for BabyOnly<G> {
     }
 }
 
-fn is_harness(stack: &tuff_item::item::ItemStack) -> bool {
+fn is_harness<M: tuff_item::item::Mode>(stack: &tuff_item::item::ItemStack<M>) -> bool {
     stack.item().name().ends_with("_harness")
 }
 
@@ -570,7 +570,7 @@ impl Species for HappyGhast {
         }
     }
 
-    fn is_food(&self, stack: &tuff_item::item::ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &tuff_item::item::ItemStack<M>) -> bool {
         happy_ghast_food(stack.item())
     }
 
@@ -686,7 +686,11 @@ impl Species for HappyGhast {
         !core.is_baby() && core.is_alive()
     }
 
-    fn mount_refused(&self, core: &MobCore, stack: Option<&tuff_item::item::ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        stack: Option<&tuff_item::item::ItemStack<M>>,
+    ) -> bool {
         stack.is_some_and(|stack| {
             happy_ghast_food(stack.item())
                 || stack.item() == tuff_vanilla_data::Item::Shears
@@ -817,19 +821,11 @@ mod tests {
             player_uuid: 7,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(tuff_item::item::ItemSnapshot::describe(
-                stack,
-                1,
-                Default::default(),
-            )),
+            stack: Some(tuff_item::item::ItemSnapshot::new(stack, 1)),
             hand: tuff_core::world::entity::HandOffer::new(
-                (Some(tuff_item::item::ItemSnapshot::describe(
-                    stack,
-                    1,
-                    Default::default(),
-                )))
-                .as_deref()
-                .map(tuff_item::item::ItemStack::test_copy),
+                (Some(tuff_item::item::ItemSnapshot::new(stack, 1)))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
             ),
             off_hand: false,
             creative: false,
@@ -867,10 +863,9 @@ mod tests {
             assert_eq!(ghast.seats(), 4);
             assert!(ghast.rideable_by_input() && ghast.flying_vehicle());
             assert!(
-                ghast.mount_refused_by(Some(&tuff_item::item::ItemStack::mint(
+                ghast.mount_refused_by(Some(&tuff_item::item::ItemPicture::new(
                     tuff_vanilla_data::Item::Snowball,
-                    1,
-                    tuff_item::item::MintReason::Test
+                    1
                 )))
             );
             assert_eq!(

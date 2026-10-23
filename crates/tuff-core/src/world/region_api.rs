@@ -35,7 +35,7 @@ use crate::world::messages::{
     ActionOutcome, BoatPlace, BucketUse, Igniter, Packets, Place, PlayerHandle, PlayerId,
     RegionHandle, RespawnSpot,
 };
-use tuff_item::item::ItemStack;
+use tuff_item::item::{AnyItem, ItemStack};
 use tuff_world_model::pos::{ChunkPos, RegionPos};
 
 type RegionJob = Box<dyn FnOnce(&mut dyn RegionWorld) + Send>;
@@ -253,7 +253,11 @@ pub struct SlotEdit {
 }
 
 impl SlotEdit {
-    pub fn of(slot: usize, old: Option<&ItemStack>, new: Option<&ItemStack>) -> Self {
+    pub fn of<M: tuff_item::item::Mode, N: tuff_item::item::Mode>(
+        slot: usize,
+        old: Option<&ItemStack<M>>,
+        new: Option<&ItemStack<N>>,
+    ) -> Self {
         Self {
             slot,
             old: old.map(tuff_item::item::ItemSnapshot::of),
@@ -655,7 +659,12 @@ pub trait RegionWorld: GrowthLevel {
     /// Places `state` for the block item `stack` at `pos` as a dispenser
     /// does: the item's components go to the block entity, the place sound
     /// plays. False when it is not this region's or a player is in the way.
-    fn place_item_block(&mut self, pos: BlockPos, state: BlockState, stack: &ItemStack) -> bool;
+    fn place_item_block(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        stack: &tuff_item::item::ItemPicture,
+    ) -> bool;
     /// Sets a block without neighbour updates or placement hooks,
     /// forwarding it to the owning neighbour when it is not here.
     fn set_block_anywhere(&mut self, pos: BlockPos, state: BlockState);
@@ -728,7 +737,7 @@ pub trait RegionWorld: GrowthLevel {
     /// A block entity's saved data, modeled or raw.
     fn saved_block_entity(&self, pos: BlockPos) -> Option<Compound>;
     /// An infested block broken without silk touch lets its silverfish out.
-    fn release_infestation(&mut self, pos: BlockPos, state: BlockState, tool: Option<&ItemStack>);
+    fn release_infestation(&mut self, pos: BlockPos, state: BlockState, tool: Option<AnyItem<'_>>);
 
     /// Sets off an explosion centred here.
     fn explode(&mut self, explosion: Explosion);
@@ -800,7 +809,7 @@ pub trait RegionWorld: GrowthLevel {
     fn report_container_edit(
         &mut self,
         _holder: ContainerHolder,
-        _slots: &[(usize, Option<&ItemStack>, Option<&ItemStack>)],
+        _slots: &[(usize, Option<AnyItem<'_>>, Option<AnyItem<'_>>)],
     ) {
     }
 
@@ -1145,7 +1154,7 @@ pub trait RegionHooks: Send + Sync {
         &self,
         _world: &mut dyn RegionWorld,
         _action: &PlayerBlockAction,
-        _tool: Option<&tuff_item::item::ItemStack>,
+        _tool: Option<AnyItem<'_>>,
     ) {
     }
 

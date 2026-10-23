@@ -7,7 +7,7 @@ use tuff_vanilla_data::registry::{EntityType, StatType};
 
 use super::{EntityFacts, bounds, bounds_sqr, flag, in_set, in_tag, item, nbt_matches, qualified};
 use crate::world::stats::Stat;
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemPicture, ItemSnapshot, ItemStack, Mode};
 use tuff_nbt::{Compound, Tag};
 
 fn equipment_slot_id(slot: EquipmentSlot) -> i32 {
@@ -66,9 +66,7 @@ fn slot_items(entity: &EntityFacts) -> Vec<(i32, tuff_item::item::ItemSnapshot)>
         .iter()
         .map(|(slot, stack)| (equipment_slot_id(*slot), stack.clone()))
         .collect();
-    let template = |nbt: &Compound| {
-        ItemStack::mint_from_nbt(nbt, MintReason::Template).map(ItemStack::into_template)
-    };
+    let template = |nbt: &Compound| ItemPicture::from_nbt(nbt).map(ItemSnapshot::from);
     let Some(saved) = &entity.nbt else {
         return items;
     };
@@ -221,7 +219,7 @@ pub(super) fn type_specific(kind: &str, predicate: &Value, entity: &EntityFacts)
     }
 }
 
-fn is_ominous_banner(stack: &ItemStack) -> bool {
+fn is_ominous_banner<M: Mode>(stack: &ItemStack<M>) -> bool {
     stack.item() == tuff_vanilla_data::Item::WhiteBanner
         && stack
             .components
@@ -345,8 +343,8 @@ fn collection_of<T>(predicate: &Value, elements: &[T], test: impl Fn(&Value, &T)
 }
 
 /// A collection predicate over stacks.
-fn collection(predicate: &Value, stacks: &[&ItemStack]) -> bool {
-    collection_of(predicate, stacks, |test, stack| item(test, stack))
+fn collection<M: Mode>(predicate: &Value, stacks: &[&ItemStack<M>]) -> bool {
+    collection_of(predicate, stacks, |test, stack| item(test, *stack))
 }
 
 fn list_of(tag: Option<&Tag>) -> Vec<&Tag> {
@@ -437,7 +435,7 @@ fn attribute_entry(predicate: &Value, tag: &Tag) -> bool {
 
 /// The value of component `id` on `stack`, its own or else the item's
 /// fixed default.
-fn component_tag(stack: &ItemStack, id: &str) -> Option<Tag> {
+fn component_tag<M: Mode>(stack: &ItemStack<M>, id: &str) -> Option<Tag> {
     stack.components.to_nbt().get(id).cloned().or_else(|| {
         (!stack.components.is_removed(id))
             .then(|| super::default_component(stack, id))
@@ -469,7 +467,7 @@ fn mob_effect_instance(
     })
 }
 
-fn potion_contents(predicate: &Value, stack: &ItemStack) -> bool {
+fn potion_contents<M: Mode>(predicate: &Value, stack: &ItemStack<M>) -> bool {
     let Some(fields) = predicate.as_object() else {
         return false;
     };
@@ -513,7 +511,11 @@ fn potion_contents(predicate: &Value, stack: &ItemStack) -> bool {
 
 /// Item component predicates beyond enchantments, damage and potions;
 /// `None` for one handled elsewhere or not at all.
-pub(super) fn item_component(id: &str, predicate: &Value, stack: &ItemStack) -> Option<bool> {
+pub(super) fn item_component<M: Mode>(
+    id: &str,
+    predicate: &Value,
+    stack: &ItemStack<M>,
+) -> Option<bool> {
     let components = &stack.components;
     Some(match id {
         "minecraft:custom_data" => {
@@ -530,7 +532,7 @@ pub(super) fn item_component(id: &str, predicate: &Value, stack: &ItemStack) -> 
             }
         }
         "minecraft:container" => {
-            let stacks: Vec<&ItemStack> = components
+            let stacks: Vec<&ItemStack<M>> = components
                 .container
                 .iter()
                 .flatten()
@@ -542,7 +544,7 @@ pub(super) fn item_component(id: &str, predicate: &Value, stack: &ItemStack) -> 
                 .is_none_or(|items| collection(items, &stacks))
         }
         "minecraft:bundle_contents" => {
-            let stacks: Vec<&ItemStack> = components
+            let stacks: Vec<&ItemStack<M>> = components
                 .bundle_contents
                 .iter()
                 .flat_map(|bundle| bundle.items())
@@ -673,6 +675,7 @@ mod tests {
     use super::super::{EntityFacts, LiveFacts, PlayerFacts, entity};
     use super::*;
     use crate::protocol::play::GameMode;
+    use tuff_item::item::MintReason;
 
     fn test(predicate: Value, facts: &EntityFacts) -> bool {
         entity(&predicate, facts, facts.position)
@@ -716,9 +719,9 @@ mod tests {
     #[test]
     fn slots_cover_equipment_inventory_and_ender_chest() {
         let mut saved = Compound::new();
-        let mut stone = ItemStack::mint(Item::Stone, 3, MintReason::Test).to_nbt();
+        let mut stone = tuff_item::item::ItemPicture::new(Item::Stone, 3).to_nbt();
         stone.insert("Slot", 4i8);
-        let mut pearl = ItemStack::mint(Item::EnderPearl, 1, MintReason::Test).to_nbt();
+        let mut pearl = tuff_item::item::ItemPicture::new(Item::EnderPearl, 1).to_nbt();
         pearl.insert("Slot", 2i8);
         saved.insert("Inventory", Tag::List(vec![Tag::Compound(stone)]));
         saved.insert("EnderItems", Tag::List(vec![Tag::Compound(pearl)]));
@@ -726,7 +729,7 @@ mod tests {
             kind: Some(EntityType::Player),
             equipment: vec![(
                 EquipmentSlot::Head,
-                tuff_item::item::ItemSnapshot::describe(Item::IronHelmet, 1, Default::default()),
+                tuff_item::item::ItemSnapshot::new(Item::IronHelmet, 1),
             )],
             nbt: Some(saved),
             ..EntityFacts::default()

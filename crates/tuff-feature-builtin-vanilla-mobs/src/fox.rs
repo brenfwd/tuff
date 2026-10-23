@@ -369,7 +369,7 @@ impl Species for Fox {
         Some(SoundEvent::EntityFoxEat)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         fox_food(stack.item())
     }
 

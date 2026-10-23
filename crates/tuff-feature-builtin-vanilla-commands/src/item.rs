@@ -4,7 +4,7 @@
 //! files or inline JSON-like functions.
 
 use std::sync::Arc;
-use tuff_item::item::{BurnReason, ItemSnapshot};
+use tuff_item::item::ItemSnapshot;
 
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -15,9 +15,10 @@ use tuff_core::world::messages::PlayerSnapshot;
 use tuff_core::world::messages::{Directive, SlotFill};
 use tuff_core::world::predicate::slot_range;
 use tuff_datapack::slot_source::{SlotSource, SlotSourceRef, SlotSources};
-use tuff_item::item::{ItemStack, MintReason};
+use tuff_item::item::{ItemPicture, ItemStack, MintReason};
 use tuff_item::text::TextComponent;
 use tuff_nbt::{Compound, Tag};
+use tuff_vanilla_data::Item;
 use tuff_vanilla_data::loot_table::LootFunction;
 use tuff_vanilla_data::registry::BlockEntityType;
 
@@ -78,19 +79,16 @@ fn list_key(id: i32, holder: Holder, nbt: &Compound) -> Option<(&'static str, i8
     }
 }
 
-/// `None` when the holder has no such slot.
-pub(super) fn read_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Option<ItemStack>> {
+/// The stored form of slot `id`: `None` when the holder has no such
+/// slot, `Some(None)` when it is empty.
+fn slot_nbt(nbt: &Compound, id: i32, holder: Holder) -> Option<Option<&Compound>> {
     if let Holder::Container(_, Some(key)) = holder {
-        return (id == 0).then(|| {
-            nbt.get_compound(key)
-                .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
-        });
+        return (id == 0).then(|| nbt.get_compound(key));
     }
     if let Some(key) = equipment_key(id, holder) {
         return Some(
             nbt.get_compound("equipment")
-                .and_then(|equipment| equipment.get_compound(key))
-                .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template)),
+                .and_then(|equipment| equipment.get_compound(key)),
         );
     }
     let (list, slot) = list_key(id, holder, nbt)?;
@@ -99,9 +97,20 @@ pub(super) fn read_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Optio
             .unwrap_or(&[])
             .iter()
             .filter_map(Tag::as_compound)
-            .find(|entry| entry.get_byte("Slot") == Some(slot))
-            .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template)),
+            .find(|entry| entry.get_byte("Slot") == Some(slot)),
     )
+}
+
+/// The stack in slot `id`, loaded to be changed and written back with
+/// [`write_slot`] (or released). `None` when the holder has no such slot.
+pub(super) fn read_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Option<ItemStack>> {
+    Some(slot_nbt(nbt, id, holder)?.and_then(ItemStack::from_storage))
+}
+
+/// A picture of the stack in slot `id`, which stays stored. `None` when
+/// the holder has no such slot.
+pub(super) fn peek_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Option<ItemPicture>> {
+    Some(slot_nbt(nbt, id, holder)?.and_then(ItemPicture::from_nbt))
 }
 
 pub(super) fn write_slot(nbt: &mut Compound, id: i32, holder: Holder, value: Option<ItemStack>) {
@@ -113,7 +122,7 @@ fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<Ite
     if let Holder::Container(_, Some(key)) = holder {
         if id == 0 {
             match value {
-                Some(stack) => nbt.insert(key, stack.to_nbt()),
+                Some(stack) => nbt.insert(key, stack.to_storage()),
                 None => nbt.remove(key),
             };
         }
@@ -122,7 +131,7 @@ fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<Ite
     if let Some(key) = equipment_key(id, holder) {
         let mut equipment = nbt.get_compound("equipment").cloned().unwrap_or_default();
         match value {
-            Some(stack) => equipment.insert(key, stack.to_nbt()),
+            Some(stack) => equipment.insert(key, stack.to_storage()),
             None => equipment.remove(key),
         };
         nbt.insert("equipment", equipment);
@@ -134,7 +143,9 @@ fn write_slot_nbt(nbt: &mut Compound, id: i32, holder: Holder, value: Option<Ite
     let mut entries = nbt.get_list(list).map(<[Tag]>::to_vec).unwrap_or_default();
     entries.retain(|entry| entry.as_compound().and_then(|e| e.get_byte("Slot")) != Some(slot));
     if let Some(stack) = value {
-        entries.push(Tag::Compound(stack.to_nbt().with("Slot", Tag::Byte(slot))));
+        entries.push(Tag::Compound(
+            stack.to_storage().with("Slot", Tag::Byte(slot)),
+        ));
     }
     nbt.insert(list, Tag::List(entries));
 }
@@ -400,18 +411,18 @@ fn pos_args(pos: [i32; 3]) -> [TextComponent; 3] {
     [text(pos[0]), text(pos[1]), text(pos[2])]
 }
 
-async fn source_stack(ctx: &mut Context<'_>, slot: &SlotArg) -> Result<ItemStack, CommandError> {
+async fn source_stack(ctx: &mut Context<'_>, slot: &SlotArg) -> Result<ItemPicture, CommandError> {
     let accessor = Accessor::resolve(ctx, "source").await?;
     let (data, holder) = source_data(ctx, &accessor).await?;
     let mut found = None;
     for id in slot.ids(&data, holder) {
-        if let Some(stack) = read_slot(&data, id, holder) {
+        if let Some(stack) = peek_slot(&data, id, holder) {
             found = Some(stack);
             break;
         }
     }
     found
-        .map(|stack| stack.unwrap_or_else(ItemStack::empty))
+        .map(|stack| stack.unwrap_or_else(|| ItemPicture::new(Item::Air, 0)))
         .ok_or_else(|| slot.missing_error("source"))
 }
 
@@ -421,12 +432,12 @@ pub(super) async fn existing_slots(
     ctx: &mut Context<'_>,
     accessor: &Accessor,
     slot: &SlotArg,
-) -> Result<Vec<Option<ItemStack>>, CommandError> {
+) -> Result<Vec<Option<ItemPicture>>, CommandError> {
     let (data, holder) = source_data(ctx, accessor).await?;
     Ok(slot
         .ids(&data, holder)
         .into_iter()
-        .filter_map(|id| read_slot(&data, id, holder))
+        .filter_map(|id| peek_slot(&data, id, holder))
         .collect())
 }
 
@@ -448,7 +459,11 @@ async fn source_data(
     })
 }
 
-fn spread(mode: SlotFill, ids: &[i32], stack: &ItemStack) -> Vec<(i32, Option<ItemStack>)> {
+fn spread<M: tuff_item::item::Mode>(
+    mode: SlotFill,
+    ids: &[i32],
+    stack: &ItemStack<M>,
+) -> Vec<(i32, Option<ItemStack>)> {
     let value = || {
         (stack.count() > 0).then(|| ItemStack::mint_like(stack, stack.count(), MintReason::Command))
     };
@@ -480,14 +495,18 @@ impl Executor for ItemCommand {
             };
             let slot = SlotArg::from_value(ctx, ctx.arg("slots"))?;
             let is_block = literals.contains(&"block");
-            let stack = if literals.contains(&"from") {
+            let stack: ItemSnapshot = if literals.contains(&"from") {
                 let source_slot = SlotArg::from_value(ctx, ctx.arg("sourceSlots"))?;
                 let source = source_stack(ctx, &source_slot).await?;
                 if ctx.arg("modifier").is_some() {
                     let functions = modifier(ctx)?;
-                    apply(ctx, &functions, source, &mut StdRng::from_entropy())
+                    let working =
+                        ItemStack::mint_like(&source, source.count(), MintReason::Command);
+                    apply(ctx, &functions, working, &mut StdRng::from_entropy())
+                        .into_picture()
+                        .into()
                 } else {
-                    source
+                    source.into()
                 }
             } else {
                 let Some(Value::ItemStack(input)) = ctx.arg("item").cloned() else {
@@ -497,11 +516,8 @@ impl Executor for ItemCommand {
                     Some(Value::Int(count)) => *count as u8,
                     _ => 1,
                 };
-                input.stack(count)
+                input.template(count)
             };
-            let template = ItemSnapshot::of(&stack);
-            stack.burn(BurnReason::Template);
-            let stack = template;
             let item = item_name(stack.item(), &stack.components);
             if is_block {
                 return set_block(ctx, mode, &slot, &stack, item).await;
@@ -610,11 +626,11 @@ impl Executor for ItemCommand {
     }
 }
 
-async fn set_block(
+async fn set_block<M: tuff_item::item::Mode>(
     ctx: &mut Context<'_>,
     mode: SlotFill,
     slot: &SlotArg,
-    stack: &ItemStack,
+    stack: &ItemStack<M>,
     item: TextComponent,
 ) -> Result<i32, CommandError> {
     let Some(Value::Coordinates(coordinates)) = ctx.arg("target").cloned() else {
@@ -795,9 +811,9 @@ fn resolve(
         } => child(source)
             .into_iter()
             .filter(|id| {
-                let stack = read_slot(data, *id, holder)
+                let stack = peek_slot(data, *id, holder)
                     .flatten()
-                    .unwrap_or_else(empty_stack);
+                    .unwrap_or_else(|| ItemPicture::new(Item::Air, 0));
                 tuff_core::world::predicate::item(item_filter, &stack)
             })
             .collect(),

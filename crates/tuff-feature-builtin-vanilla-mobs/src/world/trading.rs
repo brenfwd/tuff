@@ -107,7 +107,7 @@ pub fn offer_from_trade(
     if buy_b.as_ref().is_some_and(|c| c.count < 1) {
         return None;
     }
-    let mut offer = MerchantOffer::new(buy, buy_b, result);
+    let mut offer = MerchantOffer::new(buy, buy_b, result.into_picture());
     offer.max_uses = (trade.max_uses as i32).max(1);
     offer.xp = (trade.xp as i32).max(0);
     offer.price_multiplier = trade.reputation_discount.max(0.0);
@@ -266,7 +266,7 @@ fn apply_function(
                 .map(|_| DyeColor::ALL[rng.gen_range(0..DyeColor::ALL.len())])
                 .collect();
             let color = tuff_item::item::decor::apply_dyes(stack.components.dyed_color, &dyes);
-            stack.resize(1, MintReason::Trade, BurnReason::Template);
+            stack.resize(1, MintReason::Trade, BurnReason::Loot);
             stack.components.dyed_color = Some(color);
             Some((stack, None))
         }
@@ -301,7 +301,7 @@ fn potion_options(value: &Value) -> Vec<Potion> {
 /// Whether a filter's item and component predicates accept `stack`. Only
 /// "has the component" predicates are understood; anything more specific
 /// fails.
-fn filter_passes(stack: &ItemStack, filter: &Value) -> bool {
+fn filter_passes<M: tuff_item::item::Mode>(stack: &ItemStack<M>, filter: &Value) -> bool {
     if let Some(items) = filter.get("items") {
         let name = stack.item().name();
         let listed = match items {
@@ -424,7 +424,7 @@ mod tests {
         let mut offer = MerchantOffer::new(
             ItemCost::new(Item::Wheat, 20),
             None,
-            ItemStack::mint(Item::Emerald, 1, MintReason::Test),
+            tuff_item::item::ItemPicture::new(Item::Emerald, 1),
         );
         offer.max_uses = 16;
         offer.price_multiplier = 0.05;
@@ -448,7 +448,7 @@ mod tests {
         let offer = MerchantOffer::new(
             ItemCost::new(Item::Emerald, 5),
             Some(ItemCost::new(Item::Book, 1)),
-            ItemStack::mint(Item::EnchantedBook, 1, MintReason::Test),
+            tuff_item::item::ItemPicture::new(Item::EnchantedBook, 1),
         );
         let emeralds = ItemStack::mint(Item::Emerald, 7, MintReason::Test);
         let book = ItemStack::mint(Item::Book, 1, MintReason::Test);
@@ -475,7 +475,7 @@ mod tests {
         let mut offer = MerchantOffer::new(
             ItemCost::new(Item::Emerald, 1),
             None,
-            ItemStack::mint(Item::Bread, 6, MintReason::Test),
+            tuff_item::item::ItemPicture::new(Item::Bread, 6),
         );
         offer.max_uses = 16;
         offer.price_multiplier = 0.05;

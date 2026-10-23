@@ -26,19 +26,11 @@ fn click(item: Item) -> EntityInteraction {
         player_uuid: 77,
         position: [0.0; 3],
         location: [0.0; 3],
-        stack: Some(tuff_item::item::ItemSnapshot::describe(
-            item,
-            1,
-            Default::default(),
-        )),
+        stack: Some(tuff_item::item::ItemSnapshot::new(item, 1)),
         hand: tuff_core::world::entity::HandOffer::new(
-            (Some(tuff_item::item::ItemSnapshot::describe(
-                item,
-                1,
-                Default::default(),
-            )))
-            .as_deref()
-            .map(tuff_item::item::ItemStack::test_copy),
+            (Some(tuff_item::item::ItemSnapshot::new(item, 1)))
+                .as_deref()
+                .map(tuff_item::item::ItemStack::test_copy),
         ),
         off_hand: false,
         creative: false,
@@ -77,7 +69,7 @@ fn a_tamed_saddled_horse_loads_as_drivable() {
             "equipment",
             Compound::new().with(
                 "saddle",
-                ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+                tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
             ),
         ),
     );

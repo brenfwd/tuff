@@ -24,7 +24,6 @@ use crate::world::predicate::{
     self, Context as PredicateContext, EntityFacts, LocationFacts, PlayerFacts, PredicateWorld,
 };
 use crate::world::region_api::{RegionTask, RegionWorld};
-use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::Compound;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_world_model::BlockPos;
@@ -822,9 +821,9 @@ fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, tuff_item::item::ItemSn
     let mut equipment = Vec::new();
     if let Some(held) = saved
         .get_compound("SelectedItem")
-        .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
+        .and_then(tuff_item::item::ItemPicture::from_nbt)
     {
-        equipment.push((EquipmentSlot::Mainhand, snapshot_template(held)));
+        equipment.push((EquipmentSlot::Mainhand, held.into()));
     }
     let slots = [
         ("offhand", EquipmentSlot::Offhand),
@@ -838,19 +837,13 @@ fn equipment_of(saved: &Compound) -> Vec<(EquipmentSlot, tuff_item::item::ItemSn
         for (name, slot) in slots {
             if let Some(stack) = worn
                 .get_compound(name)
-                .and_then(|nbt| ItemStack::mint_from_nbt(nbt, MintReason::Template))
+                .and_then(tuff_item::item::ItemPicture::from_nbt)
             {
-                equipment.push((slot, snapshot_template(stack)));
+                equipment.push((slot, stack.into()));
             }
         }
     }
     equipment
-}
-
-fn snapshot_template(stack: ItemStack) -> tuff_item::item::ItemSnapshot {
-    let snapshot = tuff_item::item::ItemSnapshot::of(&stack);
-    stack.burn(tuff_item::item::BurnReason::Template);
-    snapshot
 }
 
 /// A candidate's facts before its region adds what it knows.

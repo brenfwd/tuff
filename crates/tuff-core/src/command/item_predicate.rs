@@ -158,7 +158,7 @@ impl ComponentPredicate {
         })
     }
 
-    pub fn test(&self, stack: &ItemStack) -> bool {
+    pub fn test<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         let stored = stack.components.to_nbt();
         match self {
             Self::Damage { durability, damage } => {

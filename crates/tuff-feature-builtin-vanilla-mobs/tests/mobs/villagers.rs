@@ -1078,7 +1078,7 @@ mod behaviour {
         let fed = || {
             jobless().with(
                 "Inventory",
-                vec![ItemStack::mint(Item::Bread, 3, MintReason::Test).to_nbt()],
+                vec![tuff_item::item::ItemPicture::new(Item::Bread, 3).to_nbt()],
             )
         };
         for x in [6.5, 8.5] {
@@ -1134,7 +1134,7 @@ mod behaviour {
             Compound::new()
                 .with(
                     "Item",
-                    ItemStack::mint(Item::Bread, 3, MintReason::Test).to_nbt(),
+                    tuff_item::item::ItemPicture::new(Item::Bread, 3).to_nbt(),
                 )
                 .with("PickupDelay", 0i16),
             [8.5, SKY as f64 + 1.0, 7.5],
@@ -1236,31 +1236,70 @@ async fn a_villager_holds_up_what_it_sells_to_a_player_holding_what_it_buys() {
     .await;
     world.ticks(2).await;
     let id = mobs(&region, EntityType::Villager).await[0].id;
-    let holds = |region: RegionHandle| async move {
+    let shown = |region: RegionHandle| async move {
         let (reply, answer) = oneshot::channel();
+        let at = BlockPos::new(6, SKY, 7);
         region
-            .request(RegionRequest::EntityData { id, reply })
+            .request(RegionRequest::WhenLoaded {
+                min: at,
+                max: at,
+                run: crate::world::region_api::RegionTask::new(move |world| {
+                    let held = world.entity(id).and_then(|tracked| {
+                        tracked
+                            .entity
+                            .equipment()
+                            .into_iter()
+                            .find(|(slot, _)| {
+                                *slot == tuff_core::protocol::play::equipment_slot::MAIN_HAND
+                            })?
+                            .1
+                            .map(|stack| stack.item())
+                    });
+                    let _ = reply.send(held);
+                }),
+            })
             .await;
-        let nbt = answer.await.unwrap().expect("villager");
-        nbt.get_compound("equipment")
-            .and_then(|e| e.get_compound("mainhand"))
-            .is_some_and(|hand| hand.get_str("id") == Some("minecraft:emerald"))
+        answer.await.unwrap()
     };
     region
         .request(player_update(&viewer, [8.5, y, 7.5], Some(Item::Stick)))
         .await;
     world.ticks(5).await;
-    assert!(!holds(region.clone()).await, "a stick buys nothing");
+    assert_ne!(
+        shown(region.clone()).await,
+        Some(Item::Emerald),
+        "a stick buys nothing"
+    );
     region
         .request(player_update(&viewer, [8.5, y, 7.5], Some(Item::Wheat)))
         .await;
     world.ticks(5).await;
-    assert!(holds(region.clone()).await, "an emerald is held up");
+    assert_eq!(
+        shown(region.clone()).await,
+        Some(Item::Emerald),
+        "an emerald is held up"
+    );
+    let (reply, answer) = oneshot::channel();
+    region
+        .request(RegionRequest::EntityData { id, reply })
+        .await;
+    let saved = answer.await.unwrap().expect("villager");
+    assert!(
+        saved
+            .get_compound("equipment")
+            .and_then(|e| e.get_compound("mainhand"))
+            .is_none(),
+        "what it shows is a picture, never its equipment"
+    );
     region
         .request(player_update(&viewer, [8.5, y, 7.5], Some(Item::Stick)))
         .await;
     world.ticks(5).await;
-    assert!(!holds(region.clone()).await, "put away again");
+    assert_ne!(
+        shown(region.clone()).await,
+        Some(Item::Emerald),
+        "put away again"
+    );
     world.shutdown().await;
 }
 
@@ -1368,7 +1407,7 @@ mod zombies {
             "without weakness the apple is refused"
         );
 
-        let potion = ItemStack::mint(Item::SplashPotion, 1, MintReason::Test)
+        let potion = tuff_item::item::ItemPicture::new(Item::SplashPotion, 1)
             .to_nbt()
             .with(
                 "components",

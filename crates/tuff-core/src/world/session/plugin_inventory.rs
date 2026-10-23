@@ -129,7 +129,7 @@ impl PlayerSession {
             }
             match op {
                 InventoryOp::Give { stack, count } => {
-                    self.give_items(stack.view(), count, tuff_item::item::MintReason::Plugin)
+                    self.give_items(&stack, count, tuff_item::item::MintReason::Plugin)
                         .await;
                 }
                 InventoryOp::GiveStacks(stacks) => self.receive_stacks(stacks).await,

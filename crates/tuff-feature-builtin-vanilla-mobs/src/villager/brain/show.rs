@@ -3,7 +3,6 @@
 //! what that offer sells, cycling when several match.
 
 use tuff_core::world::entity::TickContext;
-use tuff_item::item::ItemStack;
 use tuff_vanilla_data::Item;
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::Activity;
@@ -16,7 +15,6 @@ const KEEP_RANGE_SQ: f64 = 17.0;
 const START_LOOK_TICKS: i32 = 40;
 const MAX_LOOK_TICKS: i32 = 900;
 const CYCLE_TICKS: i32 = 40;
-const HELD_DROP_CHANCE: f32 = 0.085;
 
 #[derive(Debug)]
 pub struct State {
@@ -30,19 +28,12 @@ pub struct State {
 }
 
 fn clear_held(core: &mut MobCore) {
-    if let Some(shown) = core.equipment.take(EquipmentSlot::Mainhand) {
-        shown.burn(tuff_item::item::BurnReason::Template);
-    }
-    core.equipment
-        .set_drop_chance(EquipmentSlot::Mainhand, HELD_DROP_CHANCE);
+    core.equipment.show(EquipmentSlot::Mainhand, None);
 }
 
-fn hold(core: &mut MobCore, stack: &ItemStack) {
-    let shown = ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Template);
-    if let Some(old) = core.equipment.replace(EquipmentSlot::Mainhand, Some(shown)) {
-        old.burn(tuff_item::item::BurnReason::Template);
-    }
-    core.equipment.set_drop_chance(EquipmentSlot::Mainhand, 0.0);
+fn hold(core: &mut MobCore, shown: &tuff_item::item::ItemSnapshot) {
+    core.equipment
+        .show(EquipmentSlot::Mainhand, Some((**shown).clone()));
 }
 
 impl Villager {

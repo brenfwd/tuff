@@ -162,7 +162,7 @@ async fn a_pig_rider_without_a_lure_does_not_drive_it_and_follows_it() {
         "equipment",
         Compound::new().with(
             "saddle",
-            ItemStack::mint(Item::Saddle, 1, MintReason::Test).to_nbt(),
+            tuff_item::item::ItemPicture::new(Item::Saddle, 1).to_nbt(),
         ),
     );
     summon(

@@ -48,10 +48,10 @@ fn yaw_of(facing: Facing) -> f32 {
 
 /// What the item's own data sets on the entity it places: its custom name
 /// and the `entity_data` component merged over the new entity's saved form.
-fn apply_stack(
+fn apply_stack<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     entity: Box<dyn RegionEntity>,
-    components: &Components,
+    components: &Components<M>,
 ) -> Box<dyn RegionEntity> {
     let mut entity = entity;
     if let Some(name) = &components.custom_name {
@@ -119,11 +119,11 @@ fn stand_box(pos: BlockPos) -> [f64; 6] {
     ]
 }
 
-fn spawn_stand(
+fn spawn_stand<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     pos: BlockPos,
     yaw: f32,
-    components: &Components,
+    components: &Components<M>,
     placed_by_hand: bool,
 ) -> bool {
     let position = [

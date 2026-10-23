@@ -28,11 +28,11 @@ const UNCERTAINTY: f32 = 1.0;
 const START_SOUND_PERCENT: f32 = 0.2;
 const MID_SOUND_PERCENT: f32 = 0.5;
 
-fn is_arrow(stack: &ItemStack) -> bool {
+fn is_arrow<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     tuff_datapack::tags::is(tuff_vanilla_data::tag::item::key::ARROWS, stack.item())
 }
 
-fn is_intangible(stack: &ItemStack) -> bool {
+fn is_intangible<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     stack.components.other.get(INTANGIBLE).is_some()
 }
 
@@ -77,12 +77,10 @@ impl RangedExt for PlayerSession {
             let stack = self.inventory.slots()[slot].as_ref()?;
             return Some((Some(slot), tuff_item::item::ItemSnapshot::of(stack)));
         }
-        self.mode.abilities.instabuild.then(|| {
-            (
-                None,
-                tuff_item::item::ItemSnapshot::describe(Item::Arrow, 1, Default::default()),
-            )
-        })
+        self.mode
+            .abilities
+            .instabuild
+            .then(|| (None, tuff_item::item::ItemSnapshot::new(Item::Arrow, 1)))
     }
 
     async fn use_crossbow(&mut self, off_hand: bool) {
@@ -191,7 +189,7 @@ impl RangedExt for PlayerSession {
                 let mut item = projectile;
                 let free = is_intangible(&item);
                 item.components.remove_other(INTANGIBLE);
-                let mut arrow = ArrowShot::new(item.keep(1, BurnReason::Template), velocity);
+                let mut arrow = ArrowShot::new(item.keep(1, BurnReason::Consumed), velocity);
                 arrow.crit = true;
                 arrow.sound = Some(SoundEvent::ItemCrossbowHit);
                 arrow.weapon = Some(tuff_item::item::ItemSnapshot::of(&crossbow));
@@ -229,7 +227,7 @@ impl RangedExt for PlayerSession {
             }
         }
         self.fire(tuff_core::world::advancement::trigger::Event::ShotCrossbow(
-            &crossbow,
+            crossbow.any(),
         ));
         self.progress
             .stats
@@ -294,7 +292,7 @@ impl RangedExt for PlayerSession {
         let velocity = self.shot_velocity(TRIDENT_POWER);
         let eye = self.eye();
         let position = [eye[0], eye[1] - 0.100_000_001_490_116_12, eye[2]];
-        let mut trident = ArrowShot::new(thrown.keep(1, BurnReason::Template), velocity);
+        let mut trident = ArrowShot::new(thrown.keep(1, BurnReason::Consumed), velocity);
         if self.mode.abilities.instabuild {
             trident.pickup = Some(Pickup::CreativeOnly);
         }
@@ -320,7 +318,7 @@ impl RangedExt for PlayerSession {
 }
 
 /// Whether one more point of wear would break the stack.
-fn next_damage_breaks(stack: &ItemStack) -> bool {
+fn next_damage_breaks<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     !stack.components.unbreakable
         && stack
             .max_damage()

@@ -423,8 +423,6 @@ pub(super) fn item_template(
     nbt.insert("id", tuff_nbt::Tag::String(item.name().to_owned()));
     nbt.insert("count", tuff_nbt::Tag::Int(1));
     nbt.insert("components", tuff_nbt::Tag::Compound(components));
-    let stack =
-        tuff_item::item::ItemStack::mint_from_nbt(&nbt, tuff_item::item::MintReason::Template)
-            .ok_or(WorldError::InvalidState)?;
-    Ok(stack.into_template())
+    let picture = tuff_item::item::ItemPicture::from_nbt(&nbt).ok_or(WorldError::InvalidState)?;
+    Ok(picture.into())
 }

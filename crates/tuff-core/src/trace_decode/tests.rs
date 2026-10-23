@@ -510,7 +510,7 @@ fn metadata_attributes_and_equipment_round_trip() {
         &play(&SetEquipment {
             entity_id: 1,
             items: &[
-                (equipment_slot::MAIN_HAND, Some(damaged.view())),
+                (equipment_slot::MAIN_HAND, Some(damaged.any())),
                 (equipment_slot::HEAD, None),
             ],
         }),
@@ -548,7 +548,7 @@ fn container_packets_round_trip() {
         &play(&ContainerSetContent {
             window_id: 1,
             state_id: 2,
-            slots: [Some(stack.view()), None].as_slice().into(),
+            slots: [Some(stack.any()), None].as_slice().into(),
             carried: None,
         }),
         &["slots: [minecraft:stone x3, empty], carried: empty"],
@@ -558,7 +558,7 @@ fn container_packets_round_trip() {
             window_id: 0,
             state_id: 1,
             slot: 36,
-            item: Some(stack.view()),
+            item: Some(stack.any()),
         }),
         &["slot: 36, item: minecraft:stone x3"],
     );
@@ -566,7 +566,7 @@ fn container_packets_round_trip() {
     has(
         &play(&SetPlayerInventory {
             slot: 5,
-            item: Some(stack.view()),
+            item: Some(stack.any()),
         }),
         &["slot: 5, item: minecraft:stone x3"],
     );
@@ -608,7 +608,7 @@ fn container_packets_round_trip() {
             components: Default::default(),
         },
         buy_b: None,
-        sell: tuff_item::item::ItemSnapshot::describe(Item::Bread, 4, Default::default()),
+        sell: tuff_item::item::ItemSnapshot::new(Item::Bread, 4),
         uses: 0,
         max_uses: 12,
         reward_exp: true,
@@ -1071,7 +1071,7 @@ fn chat_and_scoreboard_packets_round_trip() {
         &play(&SelectAdvancementsTab(Some("minecraft:story/root"))),
         &["story/root"],
     );
-    let icon = ItemStack::mint(Item::GrassBlock, 1, MintReason::Test);
+    let icon = tuff_item::item::ItemPicture::new(Item::GrassBlock, 1);
     has(
         &play(&UpdateAdvancements {
             reset: true,

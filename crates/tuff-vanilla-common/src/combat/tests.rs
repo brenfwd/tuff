@@ -3,7 +3,7 @@ use rand::rngs::StdRng;
 use tuff_vanilla_data::Item;
 
 use super::*;
-use tuff_item::item::Enchantments;
+use tuff_item::item::{Enchantments, MintReason};
 use tuff_vanilla_data::item::ModifierOperation;
 
 #[tuff_core::watchdog]
@@ -51,12 +51,12 @@ fn armor_and_toughness_add_up_from_worn_pieces() {
     let chest = ItemStack::mint(Item::DiamondChestplate, 1, MintReason::Test);
     let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     let equipment = [
-        (EquipmentSlot::Head, &helmet),
-        (EquipmentSlot::Chest, &chest),
-        (EquipmentSlot::Mainhand, &sword),
+        (EquipmentSlot::Head, helmet.any()),
+        (EquipmentSlot::Chest, chest.any()),
+        (EquipmentSlot::Mainhand, sword.any()),
     ];
     assert_eq!(armor(&equipment), (11.0, 4.0));
-    let misplaced = [(EquipmentSlot::Mainhand, &chest)];
+    let misplaced = [(EquipmentSlot::Mainhand, chest.any())];
     assert_eq!(armor(&misplaced), (0.0, 0.0));
 }
 
@@ -64,7 +64,7 @@ fn armor_and_toughness_add_up_from_worn_pieces() {
 #[test]
 fn attributes_combine_weapons_effects_and_enchantments() {
     let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
-    let equipment = [(EquipmentSlot::Mainhand, &sword)];
+    let equipment = [(EquipmentSlot::Mainhand, sword.any())];
     let plain = Modifiers::equipment(&equipment);
     assert_eq!(plain.value(Attribute::AttackDamage), 7.0);
     assert!((plain.value(Attribute::AttackSpeed) - 1.6).abs() < 1e-6);
@@ -79,29 +79,29 @@ fn attributes_combine_weapons_effects_and_enchantments() {
     };
     assert_eq!(weak.value(Attribute::AttackDamage), 0.0, "clamped at zero");
     let sweeping = enchanted(Item::IronSword, &[("sweeping_edge", 3)]);
-    let equipment = [(EquipmentSlot::Mainhand, &sweeping)];
+    let equipment = [(EquipmentSlot::Mainhand, sweeping.any())];
     let ratio = Modifiers::equipment(&equipment).value(Attribute::SweepingDamageRatio);
     assert!((ratio - 0.75).abs() < 1e-6);
-    let held = [(EquipmentSlot::Offhand, &sweeping)];
+    let held = [(EquipmentSlot::Offhand, sweeping.any())];
     assert_eq!(
         Modifiers::equipment(&held).value(Attribute::SweepingDamageRatio),
         0.0
     );
     let blast = enchanted(Item::IronChestplate, &[("blast_protection", 4)]);
-    let equipment = [(EquipmentSlot::Chest, &blast)];
+    let equipment = [(EquipmentSlot::Chest, blast.any())];
     let resistance =
         Modifiers::equipment(&equipment).value(Attribute::ExplosionKnockbackResistance);
     assert!((resistance - 0.6).abs() < 1e-6);
     let fast = enchanted(Item::DiamondPickaxe, &[("efficiency", 5)]);
-    let equipment = [(EquipmentSlot::Mainhand, &fast)];
+    let equipment = [(EquipmentSlot::Mainhand, fast.any())];
     let efficiency = Modifiers::equipment(&equipment).value(Attribute::MiningEfficiency);
     assert_eq!(efficiency, 26.0);
     let aqua = enchanted(Item::IronHelmet, &[("aqua_affinity", 1)]);
-    let equipment = [(EquipmentSlot::Head, &aqua)];
+    let equipment = [(EquipmentSlot::Head, aqua.any())];
     let submerged = Modifiers::equipment(&equipment).value(Attribute::SubmergedMiningSpeed);
     assert!((submerged - 1.0).abs() < 1e-6, "{submerged}");
     let netherite = ItemStack::mint(Item::NetheriteBoots, 1, MintReason::Test);
-    let equipment = [(EquipmentSlot::Feet, &netherite)];
+    let equipment = [(EquipmentSlot::Feet, netherite.any())];
     let resistance = Modifiers::equipment(&equipment).value(Attribute::KnockbackResistance);
     assert!((resistance - 0.1).abs() < 1e-6);
 }
@@ -120,19 +120,19 @@ fn a_stacks_own_attribute_modifiers_replace_the_items() {
         slot: EquipmentSlotGroup::Hand,
         display: ModifierDisplay::Default,
     }]);
-    let held = [(EquipmentSlot::Mainhand, &stick)];
+    let held = [(EquipmentSlot::Mainhand, stick.any())];
     assert_eq!(
         Modifiers::equipment(&held).value(Attribute::AttackDamage),
         11.0
     );
-    let worn = [(EquipmentSlot::Head, &stick)];
+    let worn = [(EquipmentSlot::Head, stick.any())];
     assert_eq!(
         Modifiers::equipment(&worn).value(Attribute::AttackDamage),
         1.0
     );
     let mut blunt = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     blunt.components.removed = vec!["minecraft:attribute_modifiers".into()];
-    let held = [(EquipmentSlot::Mainhand, &blunt)];
+    let held = [(EquipmentSlot::Mainhand, blunt.any())];
     let modifiers = Modifiers::equipment(&held);
     assert_eq!(modifiers.value(Attribute::AttackDamage), 1.0);
     assert_eq!(modifiers.value(Attribute::AttackSpeed), 4.0);
@@ -145,7 +145,7 @@ fn a_stacks_own_attribute_modifiers_replace_the_items() {
         slot: EquipmentSlotGroup::Armor,
         display: ModifierDisplay::Hidden,
     }]);
-    assert_eq!(armor(&[(EquipmentSlot::Head, &plated)]), (8.0, 0.0));
+    assert_eq!(armor(&[(EquipmentSlot::Head, plated.any())]), (8.0, 0.0));
 }
 
 #[tuff_core::watchdog]
@@ -160,7 +160,7 @@ fn melee_follows_weapon_cooldown_and_crits() {
     assert!(spam.damage < 1.0 && !spam.full_strength);
 
     let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
-    let equipment = [(EquipmentSlot::Mainhand, &sword)];
+    let equipment = [(EquipmentSlot::Mainhand, sword.any())];
     let ready = attacker(&equipment, 13);
     let hit = melee(&ready, EntityType::Player, &mut rng).unwrap();
     assert_eq!(hit.damage, 7.0);
@@ -210,7 +210,7 @@ fn melee_follows_weapon_cooldown_and_crits() {
     let hit = melee(&fast, EntityType::Player, &mut rng).unwrap();
     assert!(hit.sweep.is_none(), "too fast to sweep");
     let axe = ItemStack::mint(Item::DiamondAxe, 1, MintReason::Test);
-    let equipment = [(EquipmentSlot::Mainhand, &axe)];
+    let equipment = [(EquipmentSlot::Mainhand, axe.any())];
     let chop = melee(&attacker(&equipment, 40), EntityType::Player, &mut rng).unwrap();
     assert!(chop.sweep.is_none(), "only swords sweep");
     assert_eq!(chop.damage, 9.0);
@@ -221,7 +221,7 @@ fn melee_follows_weapon_cooldown_and_crits() {
 fn damage_enchantments_follow_their_targets() {
     let mut rng = rng();
     let sharp = enchanted(Item::IronSword, &[("sharpness", 5), ("knockback", 2)]);
-    let equipment = [(EquipmentSlot::Mainhand, &sharp)];
+    let equipment = [(EquipmentSlot::Mainhand, sharp.any())];
     let hit = melee(&attacker(&equipment, 40), EntityType::Player, &mut rng).unwrap();
     assert_eq!(hit.damage, 6.0 + 3.0);
     assert!(hit.magic);
@@ -237,12 +237,12 @@ fn damage_enchantments_follow_their_targets() {
     assert_eq!(modify_damage(&bane, &spider, 6.0, &mut rng), 8.5);
 
     let sweeping = enchanted(Item::IronSword, &[("sweeping_edge", 1), ("sharpness", 1)]);
-    let equipment = [(EquipmentSlot::Mainhand, &sweeping)];
+    let equipment = [(EquipmentSlot::Mainhand, sweeping.any())];
     let hit = melee(&attacker(&equipment, 40), EntityType::Player, &mut rng).unwrap();
     let sweep = hit.sweep.unwrap();
     assert_eq!(sweep.damage, 1.0 + 0.5 * 6.0);
     assert_eq!(
-        sweep_damage(Some(&sweeping), sweep, EntityType::Player, &mut rng),
+        sweep_damage(Some(sweeping.any()), sweep, EntityType::Player, &mut rng),
         5.0
     );
 }
@@ -252,7 +252,7 @@ fn damage_enchantments_follow_their_targets() {
 fn post_attack_effects_come_from_the_right_side() {
     let mut rng = rng();
     let fiery = enchanted(Item::IronSword, &[("fire_aspect", 2)]);
-    let held = [(EquipmentSlot::Mainhand, &fiery)];
+    let held = [(EquipmentSlot::Mainhand, fiery.any())];
     let context = DamageContext::melee(EntityType::Player);
     let effects = post_attack(&held, Side::Attacker, &context, &mut rng);
     assert_eq!(
@@ -276,7 +276,7 @@ fn post_attack_effects_come_from_the_right_side() {
     assert!(post_attack(&held, Side::Attacker, &explosion, &mut rng).is_empty());
 
     let spiky = enchanted(Item::IronChestplate, &[("thorns", 3)]);
-    let worn = [(EquipmentSlot::Chest, &spiky)];
+    let worn = [(EquipmentSlot::Chest, spiky.any())];
     let mut thorns = 0;
     for _ in 0..1000 {
         let effects = post_attack(&worn, Side::Victim, &context, &mut rng);
@@ -304,7 +304,7 @@ fn post_attack_effects_come_from_the_right_side() {
 fn bane_of_arthropods_slows_arthropods_but_not_players() {
     let mut rng = rng();
     let bane = enchanted(Item::IronSword, &[("bane_of_arthropods", 5)]);
-    let held = [(EquipmentSlot::Mainhand, &bane)];
+    let held = [(EquipmentSlot::Mainhand, bane.any())];
     let spider = DamageContext::melee(EntityType::Spider);
     let effects = post_attack(&held, Side::Attacker, &spider, &mut rng);
     let slow = effects
@@ -362,7 +362,7 @@ fn protection_enchantments_follow_their_effect_data() {
         Item::IronBoots,
         &[("protection", 4), ("feather_falling", 4)],
     );
-    let equipment = [(EquipmentSlot::Feet, &boots)];
+    let equipment = [(EquipmentSlot::Feet, boots.any())];
     let protection = |equipment: &[Equipped], kind, rng: &mut StdRng| {
         enchantment_protection(equipment, &DamageContext::environment(kind), rng)
     };
@@ -375,10 +375,10 @@ fn protection_enchantments_follow_their_effect_data() {
         protection(&equipment, &damage_type::OUT_OF_WORLD, &mut rng),
         0.0
     );
-    let held = [(EquipmentSlot::Mainhand, &boots)];
+    let held = [(EquipmentSlot::Mainhand, boots.any())];
     assert_eq!(protection(&held, &damage_type::FALL, &mut rng), 0.0);
     let chest = enchanted(Item::IronChestplate, &[("blast_protection", 2)]);
-    let equipment = [(EquipmentSlot::Chest, &chest)];
+    let equipment = [(EquipmentSlot::Chest, chest.any())];
     assert_eq!(
         protection(&equipment, &damage_type::EXPLOSION, &mut rng),
         4.0
@@ -441,7 +441,7 @@ fn shields_block_in_front_unless_bypassed() {
 fn mace_smash_needs_a_real_fall_and_adds_fall_based_damage() {
     let mut rng = rng();
     let mace = ItemStack::mint(Item::Mace, 1, MintReason::Test);
-    let equipment = [(EquipmentSlot::Mainhand, &mace)];
+    let equipment = [(EquipmentSlot::Mainhand, mace.any())];
     let falling = Attacker {
         fall_distance: 2.0,
         on_ground: false,
@@ -479,7 +479,7 @@ fn mace_smash_needs_a_real_fall_and_adds_fall_based_damage() {
         "below the 1.5 block threshold"
     );
     let sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
-    let equipment = [(EquipmentSlot::Mainhand, &sword)];
+    let equipment = [(EquipmentSlot::Mainhand, sword.any())];
     let falling_sword = Attacker {
         fall_distance: 2.0,
         on_ground: false,
@@ -499,7 +499,7 @@ fn mace_smash_needs_a_real_fall_and_adds_fall_based_damage() {
 fn density_adds_smash_damage_per_block_fallen() {
     let mut rng = rng();
     let dense = enchanted(Item::Mace, &[("density", 3)]);
-    let equipment = [(EquipmentSlot::Mainhand, &dense)];
+    let equipment = [(EquipmentSlot::Mainhand, dense.any())];
     let falling = Attacker {
         fall_distance: 2.0,
         on_ground: false,
@@ -517,7 +517,7 @@ fn breach_reduces_how_much_armor_stops() {
     let context = DamageContext::melee(EntityType::Player);
     let plain = after_armor(10.0, 20.0, 0.0, None, &context, &mut rng);
     let breach = enchanted(Item::Mace, &[("breach", 2)]);
-    let pierced = after_armor(10.0, 20.0, 0.0, Some(&breach), &context, &mut rng);
+    let pierced = after_armor(10.0, 20.0, 0.0, Some(breach.any()), &context, &mut rng);
     assert!(pierced > plain, "{pierced} should beat {plain}");
     // fraction 0.6 - (0.15 + 0.15*(2-1)) = 0.3 -> damage * 0.7.
     assert!((pierced - 7.0).abs() < 1e-5);
@@ -548,7 +548,7 @@ fn scale_exponentially_and_remove_binomial_value_effects() {
 fn wind_burst_explodes_only_while_smashing() {
     let mut rng = rng();
     let gusty = enchanted(Item::Mace, &[("wind_burst", 1)]);
-    let held = [(EquipmentSlot::Mainhand, &gusty)];
+    let held = [(EquipmentSlot::Mainhand, gusty.any())];
     let smashing = DamageContext::melee(EntityType::Player).with_attacker_state(2.0, false);
     let effects = post_attack(&held, Side::Attacker, &smashing, &mut rng);
     assert_eq!(

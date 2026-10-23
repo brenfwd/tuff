@@ -8,7 +8,7 @@ fn fished(luck: f32, open_water: bool, runs: u64) -> Vec<Item> {
     let rod = ItemStack::mint(Item::FishingRod, 1, MintReason::Test);
     let mut rng = StdRng::seed_from_u64(7);
     (0..runs)
-        .flat_map(|_| fishing_drops(LootTables::builtin(), luck, open_water, &rod, &mut rng))
+        .flat_map(|_| fishing_drops(LootTables::builtin(), luck, open_water, rod.any(), &mut rng))
         .map(|s| s.item())
         .collect()
 }
@@ -251,7 +251,12 @@ fn tool_and_block_conditions_read_the_tags_in_effect() {
 
 fn block_drops(block: Block, tool: Option<Item>, rng: &mut impl Rng) -> Vec<ItemStack> {
     let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Test));
-    super::block_drops(block.default_state(), tool.as_ref(), None, rng)
+    super::block_drops(
+        block.default_state(),
+        tool.as_ref().map(ItemStack::any),
+        None,
+        rng,
+    )
 }
 
 fn enchanted(item: Item, id: &str, level: i32) -> ItemStack {
@@ -314,7 +319,7 @@ fn silk_touch_keeps_the_ore_block_itself() {
     assert_eq!(
         super::block_drops(
             Block::DiamondOre.default_state(),
-            Some(&pick),
+            Some(pick.any()),
             None,
             &mut rng
         ),
@@ -324,7 +329,7 @@ fn silk_touch_keeps_the_ore_block_itself() {
     assert_eq!(
         super::block_drops(
             Block::DiamondOre.default_state(),
-            Some(&plain),
+            Some(plain.any()),
             None,
             &mut rng
         ),
@@ -341,7 +346,7 @@ fn fortune_multiplies_ore_drops_up_to_level_plus_one() {
     for _ in 0..500 {
         let drops = super::block_drops(
             Block::DiamondOre.default_state(),
-            Some(&pick),
+            Some(pick.any()),
             None,
             &mut rng,
         );
@@ -358,7 +363,7 @@ fn fortune_multiplies_ore_drops_up_to_level_plus_one() {
     for _ in 0..20 {
         let drops = super::block_drops(
             Block::DiamondOre.default_state(),
-            Some(&plain),
+            Some(plain.any()),
             None,
             &mut rng,
         );
@@ -378,7 +383,7 @@ fn fortune_on_glowstone_stays_within_its_limit() {
     for _ in 0..500 {
         let drops = super::block_drops(
             Block::Glowstone.default_state(),
-            Some(&pick),
+            Some(pick.any()),
             None,
             &mut rng,
         );
@@ -449,19 +454,19 @@ fn table_bonus_picks_the_chance_for_the_tool_level() {
         serde_json::from_str(r#"{"chances":[0.0,1.0],"enchantment":"minecraft:fortune"}"#).unwrap();
     let plain = ItemStack::mint(Item::WoodenAxe, 1, MintReason::Test);
     for _ in 0..20 {
-        assert!(!super::table_bonus(&condition, Some(&plain), &mut rng));
+        assert!(!super::table_bonus(&condition, Some(plain.any()), &mut rng));
     }
     let enchanted_axe = enchanted(Item::WoodenAxe, "fortune", 1);
     for _ in 0..20 {
         assert!(super::table_bonus(
             &condition,
-            Some(&enchanted_axe),
+            Some(enchanted_axe.any()),
             &mut rng
         ));
     }
     // A level past the array clamps to the last entry instead of panicking.
     let high = enchanted(Item::WoodenAxe, "fortune", 99);
-    assert!(super::table_bonus(&condition, Some(&high), &mut rng));
+    assert!(super::table_bonus(&condition, Some(high.any()), &mut rng));
 }
 
 #[tuff_core::watchdog]
@@ -586,14 +591,14 @@ fn harvesting_honors_a_stacks_own_tool() {
         can_destroy_blocks_in_creative: true,
     }));
     let obsidian = Block::Obsidian.default_state();
-    assert!(can_harvest(obsidian, Some(&stick)));
+    assert!(can_harvest(obsidian, Some(stick.any())));
     assert_eq!(
-        super::block_drops(obsidian, Some(&stick), None, &mut rng),
+        super::block_drops(obsidian, Some(stick.any()), None, &mut rng),
         vec![ItemStack::mint(Item::Obsidian, 1, MintReason::Test)]
     );
     let mut blunt = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
     blunt.components.removed = vec!["minecraft:tool".into()];
-    assert!(!can_harvest(obsidian, Some(&blunt)));
+    assert!(!can_harvest(obsidian, Some(blunt.any())));
     let mut sword = ItemStack::mint(Item::DiamondSword, 1, MintReason::Test);
     assert!(!sword.can_destroy_blocks_in_creative());
     sword.components.removed = vec!["minecraft:tool".into()];
@@ -616,7 +621,12 @@ fn drops_follow_block_state_and_tool_conditions() {
     let mut rng = StdRng::seed_from_u64(9);
     let drops = |state: &str, tool: Option<Item>, rng: &mut _| {
         let tool = tool.map(|item| ItemStack::mint(item, 1, MintReason::Test));
-        super::block_drops(state.parse().unwrap(), tool.as_ref(), None, rng)
+        super::block_drops(
+            state.parse().unwrap(),
+            tool.as_ref().map(ItemStack::any),
+            None,
+            rng,
+        )
     };
     assert_eq!(
         drops("minecraft:oak_door[half=lower]", None, &mut rng),
@@ -941,16 +951,13 @@ fn a_pack_table_that_reaches_itself_stops_and_overrides_apply() {
         roll_in(&tables, "a:loop", &mut rng),
         [ItemStack::mint(Item::Diamond, 1, MintReason::Test)]
     );
-    assert_eq!(
-        block_drops_in(&tables, Block::Stone.default_state(), None, None, &mut rng),
-        []
-    );
+    assert!(block_drops_in(&tables, Block::Stone.default_state(), None, None, &mut rng).is_empty());
     let pickaxe = ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test);
     assert_eq!(
         block_drops_in(
             &tables,
             Block::Stone.default_state(),
-            Some(&pickaxe),
+            Some(pickaxe.any()),
             None,
             &mut rng
         ),
@@ -1009,7 +1016,7 @@ fn location_and_value_checks_gate_entries() {
         block_drops_located(
             tables,
             Block::Stone.default_state(),
-            Some(&ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test)),
+            Some(ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test).any()),
             None,
             at,
             None,
@@ -1237,7 +1244,7 @@ fn slot_entries_provide_container_slots_filtered_limited_and_stored() {
             stacks
                 .iter()
                 .map(|(slot, item, count)| {
-                    let mut nbt = ItemStack::mint(*item, *count, MintReason::Test).to_nbt();
+                    let mut nbt = tuff_item::item::ItemPicture::new(*item, *count).to_nbt();
                     nbt.insert("Slot", Tag::Byte(*slot));
                     Tag::Compound(nbt)
                 })
@@ -1556,7 +1563,7 @@ fn stone_drops_of(entry: &str, block_entity: Option<&Compound>) -> Vec<ItemStack
     block_drops_in(
         &tables,
         Block::Stone.default_state(),
-        Some(&ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test)),
+        Some(ItemStack::mint(Item::WoodenPickaxe, 1, MintReason::Test).any()),
         block_entity,
         &mut StdRng::seed_from_u64(1),
     )
@@ -1704,7 +1711,7 @@ fn match_tool_uses_the_full_item_predicate() {
     let with = |count| {
         let tool = ItemStack::mint(Item::Stick, count, MintReason::Test);
         let context = Context {
-            tool: Some(&tool),
+            tool: Some(tool.any()),
             ..bare_context()
         };
         json_condition(&condition, &context, &mut StdRng::seed_from_u64(1))

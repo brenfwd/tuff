@@ -106,7 +106,12 @@ impl RegionActor {
     /// Reports and shows the item `taken` out of `slot` with
     /// [`take_one_out`](Self::take_one_out) as gone for good.
     /// `taken` is needed only while containers are observed.
-    pub(super) fn took_one(&mut self, pos: BlockPos, slot: usize, taken: Option<&ItemStack>) {
+    pub(super) fn took_one<M: tuff_item::item::Mode>(
+        &mut self,
+        pos: BlockPos,
+        slot: usize,
+        taken: Option<&ItemStack<M>>,
+    ) {
         if let Some(taken) = taken.filter(|_| self.observes_containers()) {
             let Some(now) = self
                 .block_entity(pos)
@@ -114,8 +119,12 @@ impl RegionActor {
             else {
                 return;
             };
-            let old = ItemSnapshot::of(now.as_ref().unwrap_or(taken))
-                .with_count(now.as_ref().map_or(0, ItemStack::count) + taken.count());
+            let count = now.as_ref().map_or(0, ItemStack::count) + taken.count();
+            let old = match now {
+                Some(now) => ItemSnapshot::of(now),
+                None => ItemSnapshot::of(taken),
+            }
+            .with_count(count);
             self.report_slot(pos, slot, Some(old));
         }
         self.broadcast_slots(pos, &[slot]);
@@ -178,7 +187,7 @@ impl RegionActor {
             .iter()
             .zip(&before)
             .enumerate()
-            .filter(|(_, (now, was))| now.as_ref() != was.as_deref())
+            .filter(|(_, (now, was))| !tuff_item::item::same_slot(now.as_ref(), was.as_deref()))
             .map(|(slot, _)| slot)
             .collect();
         if changed.is_empty() {
@@ -308,7 +317,9 @@ impl RegionActor {
             .into_iter()
             .zip(after)
             .enumerate()
-            .filter(|(_, (old, new))| old.as_deref() != new.map(|new| new.get()))
+            .filter(|(_, (old, new))| {
+                !tuff_item::item::same_slot(old.as_deref(), new.map(|new| new.get()))
+            })
             .map(|(slot, (old, new))| SlotEdit {
                 slot,
                 old,

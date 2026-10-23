@@ -62,12 +62,12 @@ async fn entity_post_attack(session: &mut PlayerSession, hit: &EntityHit) {
     let equipment = session.equipment();
     let worn: Vec<combat::Equipped> = equipment
         .iter()
-        .map(|(slot, stack)| (*slot, &**stack))
+        .map(|(slot, stack)| (*slot, stack.any()))
         .collect();
     let own = combat::post_attack(&worn, combat::Side::Victim, &context, &mut session.rng);
     let weapon = match (&hit.weapon, hit.projectile) {
         (Some(weapon), None) => combat::post_attack(
-            &[(EquipmentSlot::Mainhand, weapon)],
+            &[(EquipmentSlot::Mainhand, weapon.any())],
             combat::Side::Attacker,
             &context,
             &mut session.rng,

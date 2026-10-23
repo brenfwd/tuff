@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use tuff_vanilla_data::registry::{BlockEntityType, DataComponentType};
 
-use tuff_item::item::{Components, ItemStack};
+use tuff_item::item::{Components, ItemPicture, ItemStack};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
@@ -262,7 +262,7 @@ fn get(kind: BlockEntityType, nbt: &Compound, field: Field) -> Option<Tag> {
                     let slot = entry.get_byte("Slot")?;
                     let mut item = entry.clone();
                     item.remove("Slot");
-                    ItemStack::picture_from_nbt(&item).map(drop)?;
+                    ItemPicture::from_nbt(&item).map(drop)?;
                     Some(Tag::Compound(
                         Compound::new().with("slot", slot as i32).with("item", item),
                     ))
@@ -272,7 +272,7 @@ fn get(kind: BlockEntityType, nbt: &Compound, field: Field) -> Option<Tag> {
         }
         Field::SingleItem(key) => {
             let item = nbt.get_compound(key)?;
-            ItemStack::picture_from_nbt(item).map(drop)?;
+            ItemPicture::from_nbt(item).map(drop)?;
             Some(Tag::List(vec![Tag::Compound(
                 Compound::new().with("slot", 0).with("item", item.clone()),
             )]))
@@ -296,7 +296,11 @@ fn get(kind: BlockEntityType, nbt: &Compound, field: Field) -> Option<Tag> {
 /// those it models go into its fields (fields the item leaves unset go
 /// back to their defaults, except a loot table), the rest into its
 /// `components`.
-pub fn apply_components(kind: BlockEntityType, nbt: &mut Compound, components: &Components) {
+pub fn apply_components<M: tuff_item::item::Mode>(
+    kind: BlockEntityType,
+    nbt: &mut Compound,
+    components: &Components<M>,
+) {
     let patch = components.to_nbt();
     let implicit = kind.implicit_components();
     for component in implicit {
@@ -596,7 +600,7 @@ mod tests {
     #[test]
     fn banner_patterns_and_names_move_between_item_and_block_entity() {
         let kind = BlockEntityType::Banner;
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             banner_patterns: Some(vec![BannerLayer {
                 inline: None,
                 pattern: "minecraft:stripe_top".into(),
@@ -626,7 +630,7 @@ mod tests {
     #[test]
     fn containers_skulls_signs_and_loot_map_to_their_fields() {
         let mut shelf = new(BlockEntityType::ChiseledBookshelf, BlockPos::default());
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             container: Some(vec![
                 Some(ItemStack::mint(Item::Book, 1, MintReason::Test)),
                 None,
@@ -651,7 +655,7 @@ mod tests {
 
         let mut skull = new(BlockEntityType::Skull, BlockPos::default());
         let profile = Compound::new().with("name", "Steve");
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             custom_name: Some(Box::new(TextComponent::new("Head"))),
             other: Compound::new()
                 .with("minecraft:profile", profile.clone())
@@ -669,7 +673,7 @@ mod tests {
 
         let mut sign = new(BlockEntityType::Sign, BlockPos::default());
         assert!(collect_components(BlockEntityType::Sign, &sign).is_empty());
-        let waxed = Components::from(ComponentPatch {
+        let waxed: Components = Components::from(ComponentPatch {
             other: Compound::new().with("minecraft:waxed", Compound::new()),
             ..Default::default()
         });
@@ -684,7 +688,7 @@ mod tests {
         let loot = Compound::new()
             .with("loot_table", "minecraft:chests/simple_dungeon")
             .with("seed", 5i64);
-        let components = Components::from(ComponentPatch {
+        let components: Components = Components::from(ComponentPatch {
             other: Compound::new().with("minecraft:container_loot", loot.clone()),
             ..Default::default()
         });

@@ -26,7 +26,7 @@ const EJECT_PICKUP_DELAY: u32 = 10;
 #[derive(Default)]
 pub struct Playing(HashSet<BlockPos>);
 
-fn song_ticks(record: &ItemStack) -> Option<i64> {
+fn song_ticks<M: tuff_item::item::Mode>(record: &ItemStack<M>) -> Option<i64> {
     let name = tuff_vanilla_data::item::jukebox_song_name(song_id(record)?)?;
     tuff_vanilla_data::item::jukebox_song(name).map(|(_, ticks)| i64::from(ticks))
 }
@@ -44,7 +44,11 @@ fn jukebox_at<W: RegionWorld + ?Sized>(world: &W, pos: BlockPos) -> Option<Block
 }
 
 /// Whether the jukebox at `pos` is empty and takes `stack`.
-pub fn accepts<W: RegionWorld + ?Sized>(world: &W, pos: BlockPos, stack: &ItemStack) -> bool {
+pub fn accepts<W: RegionWorld + ?Sized, M: tuff_item::item::Mode>(
+    world: &W,
+    pos: BlockPos,
+    stack: &ItemStack<M>,
+) -> bool {
     jukebox_at(world, pos).is_some()
         && plays(stack)
         && world
@@ -87,7 +91,7 @@ pub fn insert<W: RegionWorld + ?Sized>(
     if nbt.contains_key(RECORD) {
         return Err(record);
     }
-    nbt.insert(RECORD, record.to_nbt());
+    nbt.insert(RECORD, record.to_storage());
     let song = song_id(&record);
     tuff_item::item::conservation::release(record);
     if song.is_some() {
@@ -113,7 +117,7 @@ pub fn replace<W: RegionWorld + ?Sized>(
 ) -> bool {
     let refuse = |record: Option<ItemStack>| {
         if let Some(record) = record {
-            record.burn(tuff_item::item::BurnReason::Template);
+            record.burn(tuff_item::item::BurnReason::Command);
         }
         false
     };
@@ -132,7 +136,7 @@ pub fn replace<W: RegionWorld + ?Sized>(
     let was_playing = nbt.remove(TICKS).is_some();
     let song = record.as_ref().and_then(song_id);
     if let Some(record) = &record {
-        nbt.insert(RECORD, record.to_nbt());
+        nbt.insert(RECORD, record.to_storage());
     }
     if song.is_some() {
         nbt.insert(TICKS, Tag::Long(0));
@@ -293,8 +297,8 @@ impl tuff_core::world::item_port::ItemPort for JukeboxPort {
         world
             .raw_block_entity(at.pos)?
             .get_compound(RECORD)
-            .and_then(ItemStack::picture_from_nbt)
-            .map(|record| tuff_item::item::ItemSnapshot::of(&record))
+            .and_then(tuff_item::item::ItemPicture::from_nbt)
+            .map(tuff_item::item::ItemSnapshot::from)
     }
 
     fn take(

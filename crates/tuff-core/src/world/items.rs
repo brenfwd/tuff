@@ -398,7 +398,7 @@ impl RegionEntity for ItemEntity {
             self.age.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
         );
         out.insert("PickupDelay", self.pickup_delay.min(i16::MAX as u32) as i16);
-        out.insert("Item", self.stack.to_nbt());
+        out.insert("Item", self.stack.to_storage());
     }
 
     fn metadata(&self) -> Vec<(u8, MetadataValue)> {

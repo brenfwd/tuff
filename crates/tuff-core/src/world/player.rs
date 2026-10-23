@@ -997,9 +997,9 @@ impl Miner {
 
 /// The fraction of `state` one tick of mining removes; the block breaks
 /// once the total reaches 1, on the first tick if one is enough.
-pub fn destroy_progress(
+pub fn destroy_progress<M: tuff_item::item::Mode>(
     state: BlockState,
-    tool: Option<&ItemStack>,
+    tool: Option<&ItemStack<M>>,
     miner: &Miner,
     eye_in_water: bool,
 ) -> f32 {
@@ -1008,10 +1008,10 @@ pub fn destroy_progress(
 
 /// [`destroy_progress`] with `hardness` in place of the state's own, tool
 /// rules still those of `state`.
-pub fn destroy_progress_at(
+pub fn destroy_progress_at<M: tuff_item::item::Mode>(
     state: BlockState,
     hardness: Option<f32>,
-    tool: Option<&ItemStack>,
+    tool: Option<&ItemStack<M>>,
     miner: &Miner,
     eye_in_water: bool,
 ) -> f32 {

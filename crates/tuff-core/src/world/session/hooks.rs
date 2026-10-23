@@ -143,7 +143,7 @@ pub trait SessionHooks: Send + Sync {
         &self,
         _session: &PlayerSession,
         _action: ItemAction,
-        _stack: tuff_item::item::ItemView<'_>,
+        _stack: tuff_item::item::AnyItem<'_>,
     ) {
     }
 
@@ -206,7 +206,7 @@ pub trait SessionHooks: Send + Sync {
     fn allows_item_pickup(
         &self,
         _session: &PlayerSession,
-        _stack: tuff_item::item::ItemView<'_>,
+        _stack: tuff_item::item::AnyItem<'_>,
     ) -> bool {
         true
     }
@@ -407,7 +407,7 @@ impl PlayerSession {
         }
     }
 
-    pub fn item_action_hooks(&self, action: ItemAction, stack: tuff_item::item::ItemView<'_>) {
+    pub fn item_action_hooks(&self, action: ItemAction, stack: tuff_item::item::AnyItem<'_>) {
         for hook in self.shared.session_hooks.iter() {
             hook.item_action(self, action, stack);
         }

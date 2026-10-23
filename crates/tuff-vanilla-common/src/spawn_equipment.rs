@@ -54,7 +54,7 @@ pub fn equip(world: &mut dyn RegionWorld, table: &Compound, saved: &mut Compound
         if !matches!(slot, EquipmentSlot::Mainhand | EquipmentSlot::Offhand) {
             stack.resize(1, MintReason::Loot, BurnReason::Loot);
         }
-        equipment.insert(*key, stack.to_nbt());
+        equipment.insert(*key, stack.to_storage());
         tuff_item::item::conservation::release(stack);
         let chance = match chances {
             Some(Tag::Compound(per_slot)) => per_slot.get(key).and_then(float_of),

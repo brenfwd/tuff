@@ -53,7 +53,7 @@ pub trait Species: Sized + Send + Debug + 'static {
     }
 
     /// Whether it breeds with and is tempted by this stack.
-    fn is_food(&self, _stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, _stack: &ItemStack<M>) -> bool {
         false
     }
 
@@ -192,7 +192,11 @@ pub trait Species: Sized + Send + Debug + 'static {
 
     /// Whether a click with `stack` is not a ride but something else
     /// (feeding a pig).
-    fn mount_refused(&self, _core: &MobCore, _stack: Option<&ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        _core: &MobCore,
+        _stack: Option<&ItemStack<M>>,
+    ) -> bool {
         false
     }
 

@@ -289,7 +289,7 @@ pub fn merchant_sell_item(
                 Some(ItemStack::mint_like(
                     sell,
                     sell.count(),
-                    MintReason::Template,
+                    MintReason::Preview,
                 )),
             )
         }

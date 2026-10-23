@@ -11,7 +11,7 @@ use tuff_core::world::predicate::{EntityFacts, LocationFacts, PredicateWorld};
 use tuff_core::world::session::PlayerSession;
 use tuff_core::world::{framed, packets};
 use tuff_item::enchantment::{Conditional, EnchantmentEffects, EntityEffect};
-use tuff_item::item::{Enchantments, ItemStack};
+use tuff_item::item::Enchantments;
 use tuff_vanilla_common::enchant_effects::{self as fx, Action, ActiveKey, Body, EffectWorld};
 use tuff_vanilla_data::item::EquipmentSlot;
 use tuff_vanilla_data::registry::{EntityType, Item};
@@ -101,9 +101,9 @@ fn fire(
     equipment: &[(EquipmentSlot, tuff_item::item::ItemSnapshot)],
     facts: &EntityFacts,
 ) -> Vec<fx::Fired> {
-    let worn: Vec<(EquipmentSlot, &ItemStack)> = equipment
+    let worn: Vec<tuff_core::world::attributes::Equipped<'_>> = equipment
         .iter()
-        .map(|(slot, stack)| (*slot, &**stack))
+        .map(|(slot, stack)| (*slot, stack.any()))
         .collect();
     let body = body(session);
     let mut rng = std::mem::replace(&mut session.rng, rand::SeedableRng::seed_from_u64(0));
@@ -156,9 +156,9 @@ async fn location(
     tracked.block = Some(block);
     tracked.equipment = signature;
     let was_active = std::mem::take(&mut tracked.active);
-    let worn: Vec<(EquipmentSlot, &ItemStack)> = equipment
+    let worn: Vec<tuff_core::world::attributes::Equipped<'_>> = equipment
         .iter()
-        .map(|(slot, stack)| (*slot, &**stack))
+        .map(|(slot, stack)| (*slot, stack.any()))
         .collect();
     let body = body(session);
     let mut rng = std::mem::replace(&mut session.rng, rand::SeedableRng::seed_from_u64(0));
@@ -179,19 +179,32 @@ async fn location(
 }
 
 /// The weapon's `post_piercing_attack` effects after a stab.
-pub async fn post_piercing_attack(session: &mut PlayerSession, weapon: &ItemStack) {
+pub async fn post_piercing_attack(
+    session: &mut PlayerSession,
+    weapon: &tuff_item::item::ItemPicture,
+) {
     let equipment = [(
         EquipmentSlot::Mainhand,
         tuff_item::item::ItemSnapshot::of(weapon),
     )];
     let facts = session.player_facts();
     for fired in fire(session, |e| &e.post_piercing_attack, &equipment, &facts) {
-        Box::pin(apply(session, fired.slot, fired.actions)).await;
+        apply(session, fired.slot, fired.actions).await;
     }
 }
 
 /// Applies `actions` of an enchantment on the item in `slot` to the player.
-pub async fn apply(session: &mut PlayerSession, slot: EquipmentSlot, actions: Vec<Action>) {
+/// Boxed so callers' futures are proven `Send` without the solver walking
+/// every session method this reaches.
+pub fn apply<'a>(
+    session: &'a mut PlayerSession,
+    slot: EquipmentSlot,
+    actions: Vec<Action>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+    Box::pin(apply_actions(session, slot, actions))
+}
+
+async fn apply_actions(session: &mut PlayerSession, slot: EquipmentSlot, actions: Vec<Action>) {
     let mut world = Vec::new();
     for action in actions {
         match action {

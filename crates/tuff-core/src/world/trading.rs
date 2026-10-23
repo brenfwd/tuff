@@ -2,7 +2,7 @@
 //! how payment slots pick an offer. What merchants offer comes from the
 //! feature that owns them.
 
-use tuff_item::item::{AsItemView, BurnReason, ItemSnapshot, ItemStack, ItemView, MintReason};
+use tuff_item::item::{AsItemView, BurnReason, ItemPicture, ItemSnapshot, ItemStack, ItemView};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_data::Item;
 
@@ -54,10 +54,9 @@ impl ItemCost {
         if !self.components.is_empty() {
             nbt.insert("components", self.components.clone());
         }
-        // Mint and immediately burn into template
-        let minted = ItemStack::mint_from_nbt(&nbt, MintReason::Trade)
-            .unwrap_or_else(|| ItemStack::mint(self.item, 1, MintReason::Trade));
-        minted.into_template()
+        ItemPicture::from_nbt(&nbt)
+            .unwrap_or_else(|| ItemPicture::new(self.item, 1))
+            .into()
     }
 
     /// Whether `stack` is this item with every required component equal.
@@ -122,11 +121,11 @@ const DEFAULT_MAX_USES: i32 = 4;
 const DEFAULT_XP: i32 = 1;
 
 impl MerchantOffer {
-    pub fn new(buy: ItemCost, buy_b: Option<ItemCost>, sell: ItemStack) -> Self {
+    pub fn new(buy: ItemCost, buy_b: Option<ItemCost>, sell: impl Into<ItemSnapshot>) -> Self {
         Self {
             buy,
             buy_b,
-            sell: sell.into_template(),
+            sell: sell.into(),
             uses: 0,
             max_uses: DEFAULT_MAX_USES,
             reward_exp: true,
@@ -219,7 +218,7 @@ impl MerchantOffer {
         Some(Self {
             buy: ItemCost::from_nbt(nbt.get_compound("buy")?)?,
             buy_b: nbt.get_compound("buyB").and_then(ItemCost::from_nbt),
-            sell: ItemStack::from_storage(nbt.get_compound("sell")?)?.into_template(),
+            sell: ItemPicture::from_nbt(nbt.get_compound("sell")?)?.into(),
             uses: int("uses", 0),
             max_uses: int("maxUses", DEFAULT_MAX_USES),
             reward_exp: nbt

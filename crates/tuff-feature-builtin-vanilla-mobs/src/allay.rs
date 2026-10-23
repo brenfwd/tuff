@@ -129,7 +129,7 @@ fn block_is(cx: &TickContext, pos: BlockPos, block: Block) -> bool {
     (cx.block)(pos).is_some_and(|s| s.block() == block)
 }
 
-fn has_potion_mismatch(a: &ItemStack, b: &ItemStack) -> bool {
+fn has_potion_mismatch<M: tuff_item::item::Mode>(a: &ItemStack<M>, b: &ItemStack<M>) -> bool {
     a.components.potion_contents != b.components.potion_contents
 }
 
@@ -620,7 +620,7 @@ impl Species for Allay {
             Tag::List(
                 self.inventory
                     .iter()
-                    .map(|stack| Tag::Compound(stack.to_nbt()))
+                    .map(|stack| Tag::Compound(stack.to_storage()))
                     .collect(),
             ),
         );
@@ -854,14 +854,11 @@ mod tests {
             player_uuid: player,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: item
-                .map(|item| tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())),
+            stack: item.map(|item| tuff_item::item::ItemSnapshot::new(item, 5)),
             hand: tuff_core::world::entity::HandOffer::new(
-                (item.map(|item| {
-                    tuff_item::item::ItemSnapshot::describe(item, 5, Default::default())
-                }))
-                .as_deref()
-                .map(tuff_item::item::ItemStack::test_copy),
+                (item.map(|item| tuff_item::item::ItemSnapshot::new(item, 5)))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
             ),
             off_hand,
             creative: false,

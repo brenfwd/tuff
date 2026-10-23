@@ -90,7 +90,7 @@ fn nautilus_taming_item(item: Item) -> bool {
 
 const NAUTILUS_FEED_HEAL: f32 = 2.0;
 
-fn food_effect(stack: &ItemStack) -> HandEffect {
+fn food_effect<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> HandEffect {
     if tuff_datapack::tags::is(tag::item::key::NAUTILUS_BUCKET_FOOD, stack.item()) {
         HandEffect::ExchangeStack(Box::new(ItemStack::mint(
             Item::WaterBucket,
@@ -514,7 +514,7 @@ impl Species for Nautilus {
         Some(dry_out_rules())
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         nautilus_food(stack.item())
     }
 
@@ -522,7 +522,11 @@ impl Species for Nautilus {
         usize::from(tamed(core) && !core.is_baby())
     }
 
-    fn mount_refused(&self, core: &MobCore, stack: Option<&ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        stack: Option<&ItemStack<M>>,
+    ) -> bool {
         let Some(stack) = stack else {
             return false;
         };
@@ -798,7 +802,7 @@ impl Species for ZombieNautilus {
         Some(SoundEvent::EntityZombieNautilusEat)
     }
 
-    fn is_food(&self, stack: &ItemStack) -> bool {
+    fn is_food<M: tuff_item::item::Mode>(&self, stack: &ItemStack<M>) -> bool {
         nautilus_food(stack.item())
     }
 
@@ -806,7 +810,11 @@ impl Species for ZombieNautilus {
         self.inner.seats(core)
     }
 
-    fn mount_refused(&self, core: &MobCore, stack: Option<&ItemStack>) -> bool {
+    fn mount_refused<M: tuff_item::item::Mode>(
+        &self,
+        core: &MobCore,
+        stack: Option<&ItemStack<M>>,
+    ) -> bool {
         self.inner.mount_refused(core, stack)
     }
 
@@ -947,19 +955,11 @@ mod tests {
                 player_uuid: 9,
                 position: [0.0; 3],
                 location: [0.0; 3],
-                stack: Some(tuff_item::item::ItemSnapshot::describe(
-                    Item::Pufferfish,
-                    1,
-                    Default::default(),
-                )),
+                stack: Some(tuff_item::item::ItemSnapshot::new(Item::Pufferfish, 1)),
                 hand: tuff_core::world::entity::HandOffer::new(
-                    (Some(tuff_item::item::ItemSnapshot::describe(
-                        Item::Pufferfish,
-                        1,
-                        Default::default(),
-                    )))
-                    .as_deref()
-                    .map(tuff_item::item::ItemStack::test_copy),
+                    (Some(tuff_item::item::ItemSnapshot::new(Item::Pufferfish, 1)))
+                        .as_deref()
+                        .map(tuff_item::item::ItemStack::test_copy),
                 ),
                 off_hand: false,
                 creative: false,
@@ -985,19 +985,11 @@ mod tests {
             player_uuid: 9,
             position: [0.0; 3],
             location: [0.0; 3],
-            stack: Some(tuff_item::item::ItemSnapshot::describe(
-                item,
-                1,
-                Default::default(),
-            )),
+            stack: Some(tuff_item::item::ItemSnapshot::new(item, 1)),
             hand: tuff_core::world::entity::HandOffer::new(
-                (Some(tuff_item::item::ItemSnapshot::describe(
-                    item,
-                    1,
-                    Default::default(),
-                )))
-                .as_deref()
-                .map(tuff_item::item::ItemStack::test_copy),
+                (Some(tuff_item::item::ItemSnapshot::new(item, 1)))
+                    .as_deref()
+                    .map(tuff_item::item::ItemStack::test_copy),
             ),
             off_hand: false,
             creative: false,
@@ -1068,7 +1060,7 @@ mod tests {
             }
             let saddle = ItemStack::mint(Item::Saddle, 1, MintReason::Test);
             assert!(nautilus.mount_refused(core, Some(&saddle)));
-            assert!(!nautilus.mount_refused(core, None));
+            assert!(!nautilus.mount_refused::<tuff_item::item::Counted>(core, None));
             let outcome = nautilus.interact(core, &click(Item::Saddle, false), cx);
             assert_eq!(outcome, Some(HandEffect::None));
             assert!(saddled(core));
