@@ -131,6 +131,26 @@ impl<'a> AnyItem<'a> {
 }
 
 impl<M: Mode> ItemStack<M> {
+    /// The item, count and components of a stack's `{id, count,
+    /// components}` form, nested stacks built by `nested`; `None` for
+    /// unknown items and air. Only the picture decoder and the doors call
+    /// it.
+    pub(crate) fn decode_parts(
+        nbt: &Compound,
+        nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+    ) -> Option<(Item, u8, Components<M>)> {
+        let item = Item::from_name(nbt.get_str("id")?)?;
+        if item == Item::Air {
+            return None;
+        }
+        let count = nbt.get_int("count").unwrap_or(1).clamp(1, MAX_COUNT);
+        let components = nbt
+            .get_compound("components")
+            .map(|nbt| Components::decode(nbt, nested))
+            .unwrap_or_default();
+        Some((item, count as u8, components))
+    }
+
     pub fn any(&self) -> AnyItem<'_> {
         M::any(self)
     }
@@ -200,22 +220,24 @@ impl ItemPicture {
     /// accounting: the stack stays where it is.
     pub fn of<'a, M: Mode>(stack: impl Into<super::ItemView<'a, M>>) -> Self {
         let stack = stack.into().get();
-        Self::describe(stack.item, stack.count, stack.components.picture())
+        Self::assemble(
+            stack.item,
+            stack.count,
+            stack.components.picture(),
+            format_args!("picture"),
+        )
     }
 
     /// A stack in its `{id, count, components}` form, as a picture.
     /// `None` for unknown items and air.
     pub fn from_nbt(nbt: &Compound) -> Option<Self> {
-        let item = Item::from_name(nbt.get_str("id")?)?;
-        if item == Item::Air {
-            return None;
-        }
-        let count = nbt.get_int("count").unwrap_or(1).clamp(1, MAX_COUNT);
-        let components = nbt
-            .get_compound("components")
-            .map(Components::from_nbt)
-            .unwrap_or_default();
-        Some(Self::describe(item, count as u8, components))
+        let (item, count, components) = Self::decode_parts(nbt, &mut Self::from_nbt)?;
+        Some(Self::assemble(
+            item,
+            count,
+            components,
+            format_args!("decode"),
+        ))
     }
 
     /// The same picture showing `count` items.

@@ -360,78 +360,6 @@ impl<M: Mode> ComponentPatch<M> {
         }
     }
 
-    /// This patch with each nested stack moved through `nested`.
-    fn map_nested<N: Mode>(
-        self,
-        mut nested: impl FnMut(ItemStack<M>) -> ItemStack<N>,
-    ) -> ComponentPatch<N> {
-        let Self {
-            damage,
-            max_damage,
-            unbreakable,
-            custom_name,
-            enchantments,
-            stored_enchantments,
-            potion_contents,
-            repair_cost,
-            ominous_bottle_amplifier,
-            map_id,
-            container,
-            charged_projectiles,
-            bundle_contents,
-            dyed_color,
-            base_color,
-            banner_patterns,
-            trim,
-            fireworks,
-            firework_explosion,
-            writable_book,
-            written_book,
-            attribute_modifiers,
-            tool,
-            weapon,
-            suspicious_stew_effects,
-            other,
-            removed,
-        } = self;
-        ComponentPatch {
-            damage,
-            max_damage,
-            unbreakable,
-            custom_name,
-            enchantments,
-            stored_enchantments,
-            potion_contents,
-            repair_cost,
-            ominous_bottle_amplifier,
-            map_id,
-            container: container.map(|slots| {
-                slots
-                    .into_iter()
-                    .map(|slot| slot.map(&mut nested))
-                    .collect()
-            }),
-            charged_projectiles: charged_projectiles
-                .map(|stacks| stacks.into_iter().map(&mut nested).collect()),
-            bundle_contents: bundle_contents
-                .map(|contents| Box::new(contents.map_nested(&mut nested))),
-            dyed_color,
-            base_color,
-            banner_patterns,
-            trim,
-            fireworks,
-            firework_explosion,
-            writable_book,
-            written_book,
-            attribute_modifiers,
-            tool,
-            weapon,
-            suspicious_stew_effects,
-            other,
-            removed,
-        }
-    }
-
     /// A picture of this patch, nested stacks included.
     pub fn picture(&self) -> ComponentPatch<Picture> {
         self.copy_nested(Some(|stack: &ItemStack<M>| ItemPicture::of(stack)))
@@ -504,13 +432,6 @@ impl<M: Mode> Components<M> {
         let mut copy = self.copy_nested(None::<fn(&ItemStack<M>) -> ItemStack<M>>);
         copy.compact();
         copy
-    }
-
-    fn map_nested<N: Mode>(
-        self,
-        nested: impl FnMut(ItemStack<M>) -> ItemStack<N>,
-    ) -> Components<N> {
-        Components(self.0.map(|patch| Box::new(patch.map_nested(nested))))
     }
 }
 
@@ -1293,19 +1214,22 @@ impl ItemStack {
 }
 
 /// Reads the stored `container` component: `[{slot, item}]`, sparse.
-fn container_from_nbt(tag: &Tag) -> Option<Vec<Option<ItemPicture>>> {
+fn container_from_nbt<M: Mode>(
+    tag: &Tag,
+    nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+) -> Option<Vec<Option<ItemStack<M>>>> {
     let entries = tag.as_list()?;
     if entries.len() > MAX_CONTAINER_SLOTS {
         return None;
     }
-    let mut contents: Vec<Option<ItemPicture>> = Vec::new();
+    let mut contents: Vec<Option<ItemStack<M>>> = Vec::new();
     for entry in entries {
         let entry = entry.as_compound()?;
         let slot = entry.get_int("slot")?;
         if !(0..MAX_CONTAINER_SLOTS as i32).contains(&slot) {
             return None;
         }
-        let stack = ItemPicture::from_nbt(entry.get_compound("item")?)?;
+        let stack = nested(entry.get_compound("item")?)?;
         let slot = slot as usize;
         if contents.len() <= slot {
             contents.resize_with(slot + 1, || None);
@@ -1333,14 +1257,17 @@ fn container_to_nbt<M: Mode>(contents: &[Option<ItemStack<M>>]) -> Tag {
 }
 
 /// Reads the stored `charged_projectiles` component: a list of stacks.
-fn charged_from_nbt(tag: &Tag) -> Option<Vec<ItemPicture>> {
+fn charged_from_nbt<M: Mode>(
+    tag: &Tag,
+    nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+) -> Option<Vec<ItemStack<M>>> {
     let entries = tag.as_list()?;
     if entries.len() > MAX_CHARGED_PROJECTILES {
         return None;
     }
     entries
         .iter()
-        .map(|entry| ItemPicture::from_nbt(entry.as_compound()?))
+        .map(|entry| nested(entry.as_compound()?))
         .collect()
 }
 

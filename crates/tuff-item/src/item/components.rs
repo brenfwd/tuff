@@ -157,11 +157,22 @@ impl Components<Picture> {
     /// read theirs through `ItemStack::from_storage` or a mint door. Typed
     /// components that fail to parse stay in `other` as they were.
     pub fn from_nbt(nbt: &Compound) -> Self {
+        Self::decode(nbt, &mut ItemPicture::from_nbt)
+    }
+}
+
+impl<M: Mode> Components<M> {
+    /// Reads a stored `components` compound, building nested stacks with
+    /// `nested`: only the picture decoder and the doors pass one.
+    pub(super) fn decode(
+        nbt: &Compound,
+        nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+    ) -> Self {
         let mut components = Self::default();
         for (key, value) in nbt.iter() {
             if let Some(id) = key.strip_prefix(REMOVED_PREFIX) {
                 components.removed.push(id.to_owned());
-            } else if !components.parse_typed(key, value) {
+            } else if !components.parse_typed(key, value, nested) {
                 components.other.insert(key, value.clone());
             }
         }
@@ -171,7 +182,12 @@ impl Components<Picture> {
         components
     }
 
-    pub(super) fn parse_typed(&mut self, key: &str, value: &Tag) -> bool {
+    fn parse_typed(
+        &mut self,
+        key: &str,
+        value: &Tag,
+        nested: &mut impl FnMut(&Compound) -> Option<ItemStack<M>>,
+    ) -> bool {
         match known_component(key) {
             Some(DataComponentType::Damage) => match as_u32(value) {
                 Some(damage) => self.damage = Some(damage),
@@ -215,18 +231,20 @@ impl Components<Picture> {
                 Some(id) => self.map_id = Some(id),
                 None => return false,
             },
-            Some(DataComponentType::Container) => match container_from_nbt(value) {
+            Some(DataComponentType::Container) => match container_from_nbt(value, nested) {
                 Some(contents) => self.container = Some(contents),
                 None => return false,
             },
-            Some(DataComponentType::ChargedProjectiles) => match charged_from_nbt(value) {
+            Some(DataComponentType::ChargedProjectiles) => match charged_from_nbt(value, nested) {
                 Some(projectiles) => self.charged_projectiles = Some(projectiles),
                 None => return false,
             },
-            Some(DataComponentType::BundleContents) => match BundleContents::from_nbt(value) {
-                Some(contents) => self.bundle_contents = Some(Box::new(contents)),
-                None => return false,
-            },
+            Some(DataComponentType::BundleContents) => {
+                match BundleContents::decode(value, nested) {
+                    Some(contents) => self.bundle_contents = Some(Box::new(contents)),
+                    None => return false,
+                }
+            }
             Some(DataComponentType::DyedColor) => match decor::dyed_color_from_nbt(value) {
                 Some(rgb) => self.dyed_color = Some(rgb),
                 None => return false,

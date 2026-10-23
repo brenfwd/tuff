@@ -136,16 +136,6 @@ impl<M: Mode> BundleContents<M> {
         }
     }
 
-    pub(crate) fn map_nested<N: Mode>(
-        self,
-        nested: impl FnMut(ItemStack<M>) -> ItemStack<N>,
-    ) -> BundleContents<N> {
-        BundleContents {
-            items: self.items.into_iter().map(nested).collect(),
-            selected: self.selected,
-        }
-    }
-
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
@@ -255,13 +245,22 @@ impl<M: Mode> BundleContents<M> {
 
 impl BundleContents<Picture> {
     pub fn from_nbt(tag: &Tag) -> Option<Self> {
+        Self::decode(tag, &mut ItemPicture::from_nbt)
+    }
+}
+
+impl<M: Mode> BundleContents<M> {
+    pub(crate) fn decode(
+        tag: &Tag,
+        nested: &mut impl FnMut(&tuff_nbt::Compound) -> Option<ItemStack<M>>,
+    ) -> Option<Self> {
         let entries = tag.as_list()?;
         if entries.len() > MAX_CONTAINER_SLOTS {
             return None;
         }
         let mut items = Vec::with_capacity(entries.len());
         for entry in entries {
-            items.push(ItemPicture::from_nbt(entry.as_compound()?)?);
+            items.push(nested(entry.as_compound()?)?);
         }
         Some(Self::from_items(items))
     }

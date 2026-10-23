@@ -90,27 +90,6 @@ pub enum BurnReason {
     Test,
 }
 
-/// How a picture becomes counted items.
-#[derive(Clone, Copy)]
-pub(crate) enum Door {
-    Mint(MintReason),
-    /// Items that existed before a save.
-    Load,
-    /// The contents a part split off a stack carries, like every item of
-    /// the stack.
-    SplitContents,
-}
-
-impl fmt::Display for Door {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Mint(reason) => write!(f, "mint {reason:?}"),
-            Self::Load => f.write_str("load from storage"),
-            Self::SplitContents => f.write_str("contents of a split"),
-        }
-    }
-}
-
 /// Process-wide item accounting: what came in through the doors, what left
 /// through them, and what was lost without a door. Counted stacks only.
 pub mod conservation {
@@ -375,33 +354,14 @@ impl<M: Mode> ComponentPatch<M> {
     }
 }
 
-impl ItemPicture {
-    /// The door from a picture to counted items, nested stacks included.
-    #[track_caller]
-    pub(crate) fn realize(mut self, door: Door) -> ItemStack {
-        let components = std::mem::take(&mut self.components).realize(door);
-        if !self.is_empty() {
-            let count = u64::from(self.count);
-            match door {
-                Door::Mint(_) | Door::SplitContents => conservation::minted(count),
-                Door::Load => conservation::loaded(count),
-            }
-        }
-        ItemStack::assemble(self.item, self.count, components, format_args!("{door}"))
-    }
-}
-
 impl Components<Picture> {
-    #[track_caller]
-    pub(crate) fn realize(self, door: Door) -> Components {
-        self.map_nested(|stack| stack.realize(door))
-    }
-
     /// Counted components stamped from this picture: nested stacks are
     /// minted for `reason`.
     #[track_caller]
     pub fn mint(&self, reason: MintReason) -> Components {
-        self.clone().realize(Door::Mint(reason))
+        self.copy_nested(Some(|stack: &ItemPicture| {
+            ItemStack::mint_like(stack, stack.count, reason)
+        }))
     }
 }
 
@@ -434,9 +394,8 @@ impl ItemStack {
         count: u8,
         reason: MintReason,
     ) -> Self {
-        ItemPicture::of(template)
-            .with_count(count)
-            .realize(Door::Mint(reason))
+        let template = template.into().get();
+        Self::mint_with(template.item, count, &template.components, reason)
     }
 
     /// New items of `item` carrying a copy of `components`, nested stacks
@@ -448,21 +407,42 @@ impl ItemStack {
         components: &Components<M>,
         reason: MintReason,
     ) -> Self {
-        ItemPicture::describe(item, count, components.picture()).realize(Door::Mint(reason))
+        if item != Item::Air && count > 0 {
+            conservation::minted(u64::from(count));
+        }
+        let components = components.copy_nested(Some(|stack: &ItemStack<M>| {
+            ItemStack::mint_like(stack, stack.count, reason)
+        }));
+        Self::assemble(item, count, components, format_args!("mint {reason:?}"))
     }
 
     /// New items read from their `{id, count, components}` form.
     /// `None` for unknown items and air.
     #[track_caller]
     pub fn mint_from_nbt(nbt: &Compound, reason: MintReason) -> Option<Self> {
-        Some(ItemPicture::from_nbt(nbt)?.realize(Door::Mint(reason)))
+        let (item, count, components) =
+            Self::decode_parts(nbt, &mut |nbt| Self::mint_from_nbt(nbt, reason))?;
+        conservation::minted(u64::from(count));
+        Some(Self::assemble(
+            item,
+            count,
+            components,
+            format_args!("mint {reason:?}"),
+        ))
     }
 
     /// Stacks loaded from storage, nested ones included: they existed
     /// before the save. Only loaders call this.
     #[track_caller]
     pub fn from_storage(nbt: &Compound) -> Option<Self> {
-        Some(ItemPicture::from_nbt(nbt)?.realize(Door::Load))
+        let (item, count, components) = Self::decode_parts(nbt, &mut Self::from_storage)?;
+        conservation::loaded(u64::from(count));
+        Some(Self::assemble(
+            item,
+            count,
+            components,
+            format_args!("load from storage"),
+        ))
     }
 
     /// The door for stacks going to storage, the counterpart of
@@ -501,7 +481,7 @@ impl ItemStack {
     /// the ones `nbt` describes minted for `mint`.
     #[track_caller]
     pub fn set_components_nbt(&mut self, nbt: &Compound, mint: MintReason, burn: BurnReason) {
-        let new = Components::from_nbt(nbt).realize(Door::Mint(mint));
+        let new = Components::decode(nbt, &mut |nbt| Self::mint_from_nbt(nbt, mint));
         let old = std::mem::replace(&mut self.components, new);
         conservation::burned(old.nested_count());
         conservation::release(old);
@@ -543,9 +523,22 @@ impl ItemStack {
     /// its own minted copy of any nested stacks.
     #[track_caller]
     fn split_components(&self) -> Components {
-        self.components.copy_nested(Some(|stack: &ItemStack| {
-            ItemPicture::of(stack).realize(Door::SplitContents)
-        }))
+        self.components.copy_nested(Some(ItemStack::split_copy))
+    }
+
+    /// A minted copy of a stack nested in one being split: every item of
+    /// the stack carries the same contents.
+    #[track_caller]
+    fn split_copy(&self) -> Self {
+        if !self.is_empty() {
+            conservation::minted(u64::from(self.count));
+        }
+        Self::assemble(
+            self.item,
+            self.count,
+            self.split_components(),
+            format_args!("contents copied for a split of {}", self.history().id()),
+        )
     }
 
     /// Splits off `n` items (at least one, at most all): the taken part and
