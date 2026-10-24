@@ -489,7 +489,7 @@ impl RegionActor {
         let pos = match action {
             Action::Neighbor { pos, .. } | Action::Shape { pos, .. } => pos,
         };
-        if self.vacated(pos) {
+        if self.vacated(pos) && self.ghost_dupe(pos).is_none() {
             return;
         }
         match action {

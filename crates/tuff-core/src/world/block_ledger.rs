@@ -99,6 +99,62 @@ pub enum EntityReason {
     Carried,
 }
 
+/// A vanilla duplication glitch Mojang ships and a switch keeps on. Each is
+/// reproduced only through [`duplicate`], by name, so the ownership
+/// invariant holds everywhere else.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VanillaDupe {
+    /// A piston-moved TNT block that also lights where it stood.
+    Tnt,
+    /// A piston-moved carpet or rail that also pops where it stood.
+    CarpetRail,
+    /// A falling block through an End portal (see the falling block code).
+    GravityPortal,
+}
+
+impl VanillaDupe {
+    /// The setting that turns it on.
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Tnt => crate::config::BLOCKS_TNT_DUPLICATION,
+            Self::CarpetRail => crate::config::BLOCKS_CARPET_RAIL_DUPLICATION,
+            Self::GravityPortal => crate::config::BLOCKS_GRAVITY_PORTAL_DUPLICATION,
+        }
+    }
+}
+
+/// The one door for vanilla's duplication glitches: a token for a block
+/// that exists only because the glitch makes it, when its setting is on.
+/// Counted in [`BlockLedgerTotals::duplicated`].
+#[track_caller]
+pub(crate) fn duplicate(
+    kind: VanillaDupe,
+    config: &crate::config::ConfigStore,
+    state: BlockState,
+) -> Option<BrokenBlock> {
+    if !config.get_bool(kind.key()).unwrap_or(true) {
+        return None;
+    }
+    count(&DUPLICATED);
+    Some(BrokenBlock {
+        state,
+        block_entity: None,
+        trail: Trail::begin(format_args!("duplicated {state:?}: {kind:?}")),
+    })
+}
+
+/// Primed TNT the TNT duplication glitch makes, when its setting is on.
+#[track_caller]
+pub(crate) fn duplicate_tnt(config: &crate::config::ConfigStore) -> Option<TntOrigin> {
+    let broken = duplicate(
+        VanillaDupe::Tnt,
+        config,
+        tuff_vanilla_data::Block::Tnt.default_state(),
+    )?;
+    let _ = broken.into_entity(EntityReason::PrimedTnt);
+    Some(TntOrigin::Duplicated)
+}
+
 /// What primed TNT came from. Spawning it consumes the origin; the entity
 /// holds no block.
 #[must_use = "an origin primes TNT"]
@@ -133,6 +189,7 @@ pub struct BlockLedgerTotals {
     pub loaded: u64,
     pub stored: u64,
     pub lost: u64,
+    pub duplicated: u64,
 }
 
 impl BlockLedgerTotals {
@@ -145,6 +202,7 @@ impl BlockLedgerTotals {
             loaded: self.loaded - before.loaded,
             stored: self.stored - before.stored,
             lost: self.lost - before.lost,
+            duplicated: self.duplicated - before.duplicated,
         }
     }
 }
@@ -156,6 +214,7 @@ static BURNED: AtomicU64 = AtomicU64::new(0);
 static LOADED: AtomicU64 = AtomicU64::new(0);
 static STORED: AtomicU64 = AtomicU64::new(0);
 static LOST: AtomicU64 = AtomicU64::new(0);
+static DUPLICATED: AtomicU64 = AtomicU64::new(0);
 
 pub fn totals() -> BlockLedgerTotals {
     BlockLedgerTotals {
@@ -166,6 +225,7 @@ pub fn totals() -> BlockLedgerTotals {
         loaded: LOADED.load(Ordering::Relaxed),
         stored: STORED.load(Ordering::Relaxed),
         lost: LOST.load(Ordering::Relaxed),
+        duplicated: DUPLICATED.load(Ordering::Relaxed),
     }
 }
 
@@ -493,6 +553,27 @@ mod tests {
         HeldBlock::taken(rail(), ClaimReason::Entity).burn(BlockBurn::Discarded);
         let after = totals().since(before);
         assert!(after.lifted >= 3 && after.landed >= 1 && after.burned >= 2);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn the_duplication_door_follows_its_setting() {
+        let config = crate::config::ConfigStore::new();
+        let before = totals();
+        let dupe = duplicate(VanillaDupe::CarpetRail, &config, rail());
+        assert_eq!(dupe.map(|d| d.state()), Some(rail()));
+        assert!(matches!(
+            duplicate_tnt(&config),
+            Some(TntOrigin::Duplicated)
+        ));
+        assert!(totals().since(before).duplicated >= 2);
+        for kind in [VanillaDupe::CarpetRail, VanillaDupe::Tnt] {
+            config
+                .set(kind.key(), crate::config::Value::Bool(false))
+                .unwrap();
+        }
+        assert!(duplicate(VanillaDupe::CarpetRail, &config, rail()).is_none());
+        assert!(duplicate_tnt(&config).is_none());
     }
 
     #[tuff_core::watchdog]

@@ -3,7 +3,9 @@
 
 use super::pistons::carried::CARRY_WAIT;
 use super::*;
-use crate::world::block_ledger::{BlockBurn, BrokenBlock, ClaimReason, HeldBlock, Remains};
+use crate::world::block_ledger::{
+    self, BlockBurn, BrokenBlock, ClaimReason, HeldBlock, Remains, VanillaDupe,
+};
 use crate::world::messages::BlockUpdate;
 use crate::world::placement::step;
 use crate::world::redstone::MovingBlock;
@@ -24,6 +26,7 @@ enum Taken {
     Standing(BlockState, Option<Compound>),
     Held(HeldBlock),
     Moving(BlockState),
+    Ghost(BlockState),
 }
 
 impl RegionActor {
@@ -53,10 +56,13 @@ impl RegionActor {
         why: ClaimReason,
         limit: u32,
     ) -> Option<BrokenBlock> {
-        Some(match self.take_out(pos, remains, limit)? {
+        Some(match self.take_out(pos, remains, limit, why)? {
             Taken::Standing(state, block_entity) => BrokenBlock::claimed(state, block_entity, why),
             Taken::Held(held) => held.into_broken(None),
             Taken::Moving(base) => BrokenBlock::claimed(base, None, why),
+            Taken::Ghost(state) => {
+                block_ledger::duplicate(VanillaDupe::CarpetRail, &self.shared.config, state)?
+            }
         })
     }
 
@@ -70,19 +76,32 @@ impl RegionActor {
         remains: Remains,
         why: ClaimReason,
     ) -> Option<HeldBlock> {
-        match self.take_out(pos, remains, crate::world::redstone::UPDATE_LIMIT)? {
+        match self.take_out(pos, remains, crate::world::redstone::UPDATE_LIMIT, why)? {
+            Taken::Ghost(_) => None,
             Taken::Standing(state, _) => Some(HeldBlock::taken(state, why)),
             Taken::Held(held) => Some(held),
             Taken::Moving(base) => (!is_air(base)).then(|| HeldBlock::taken(base, why)),
         }
     }
 
-    fn take_out(&mut self, pos: BlockPos, remains: Remains, limit: u32) -> Option<Taken> {
-        if !self.owns(pos) || self.sim.redstone.vacated.contains(&pos) {
+    fn take_out(
+        &mut self,
+        pos: BlockPos,
+        remains: Remains,
+        limit: u32,
+        why: ClaimReason,
+    ) -> Option<Taken> {
+        if !self.owns(pos) {
             return None;
         }
         let state = RegionActor::block(self, pos)?;
         if is_air(state) {
+            return None;
+        }
+        let ghost = self.sim.redstone.vacated.contains(&pos);
+        if ghost
+            && (why != ClaimReason::Popped || self.ghost_dupe(pos) != Some(VanillaDupe::CarpetRail))
+        {
             return None;
         }
         let left = match remains {
@@ -94,7 +113,9 @@ impl RegionActor {
             return None;
         }
         let block_entity = self.saved_block_entity(pos);
-        let taken = if state.block() == Block::MovingPiston {
+        let taken = if ghost {
+            Taken::Ghost(state)
+        } else if state.block() == Block::MovingPiston {
             self.sim.redstone.awaiting_lift.remove(&pos);
             match self.sim.redstone.lifted.remove(&pos) {
                 Some(held) => Taken::Held(held),
@@ -125,6 +146,30 @@ impl RegionActor {
         }
         self.sim.redstone.vacated.insert(from);
         Some(HeldBlock::lifted(state))
+    }
+
+    /// The glitch a ghost at `pos` still takes part in: a block a piston
+    /// lifted away that vanilla's update order would let react once more,
+    /// when its setting is on.
+    pub(super) fn ghost_dupe(&self, pos: BlockPos) -> Option<VanillaDupe> {
+        if !self.sim.redstone.vacated.contains(&pos) {
+            return None;
+        }
+        let block = RegionActor::block(self, pos)?.block();
+        let kind = if block == Block::Tnt {
+            VanillaDupe::Tnt
+        } else if tuff_datapack::tags::is(tuff_vanilla_data::tag::block::key::RAILS, block)
+            || tuff_datapack::tags::is(tuff_vanilla_data::tag::block::key::WOOL_CARPETS, block)
+        {
+            VanillaDupe::CarpetRail
+        } else {
+            return None;
+        };
+        self.shared
+            .config
+            .get_bool(kind.key())
+            .unwrap_or(true)
+            .then_some(kind)
     }
 
     /// Whether the block at `pos` already left its place: it is a ghost

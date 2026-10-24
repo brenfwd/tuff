@@ -78,7 +78,17 @@ impl RegionActor {
         {
             return;
         }
-        if let Some(broken) = self.claim(
+        if self.ghost_dupe(pos) == Some(crate::world::block_ledger::VanillaDupe::Tnt) {
+            self.set_block_flags(
+                pos,
+                AIR,
+                crate::world::redstone::UPDATE_ALL,
+                crate::world::redstone::UPDATE_LIMIT,
+            );
+            if let Some(origin) = crate::world::block_ledger::duplicate_tnt(&self.shared.config) {
+                self.spawn_primed_tnt(origin, pos, None, None);
+            }
+        } else if let Some(broken) = self.claim(
             pos,
             crate::world::block_ledger::Remains::Air,
             crate::world::block_ledger::ClaimReason::Entity,
