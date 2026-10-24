@@ -315,11 +315,9 @@ impl PlayerSession {
             .filter_map(|owner| Some((owner.document(uuid), owner.save(self)?)))
             .collect();
         let name = self.profile.name.clone();
-        let Some(access) = self.lease.as_ref().map(|lease| lease.access()) else {
-            if let Some(ticket) = ticket {
-                ticket.landed();
-            }
-            return tokio::spawn(async {});
+        let access = match &self.lease {
+            Some(lease) => lease.access(),
+            None => crate::world::player_lease::PlayerLease::detached(uuid).access(),
         };
         tokio::task::spawn_blocking(move || {
             let failed = || {
