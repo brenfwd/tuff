@@ -455,10 +455,8 @@ impl Coordinator {
         let (packets, packets_rx) = mpsc::channel(PACKET_QUEUE);
         let (done, done_rx) = watch::channel(false);
         let finished = done_rx.clone();
-        let previous = self
-            .sessions
-            .insert(profile.id, done_rx)
-            .filter(|done| !*done.borrow());
+        self.sessions.insert(profile.id, done_rx);
+        let lease = self.leases.request(profile.id);
         let mut session = PlayerSession::new(
             self.shared.clone(),
             id,
@@ -485,7 +483,7 @@ impl Coordinator {
             // normal leave path itself) would otherwise never report
             // leaving, keeping it online and blocking shutdown.
             if let Err(err) = tokio::spawn(tuff_item::item::conservation::actor(
-                tuff_timings::scope(session.run(previous, done)),
+                tuff_timings::scope(session.run(lease, done)),
             ))
             .await
             {

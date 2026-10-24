@@ -209,6 +209,7 @@ pub struct Coordinator {
     players: BTreeMap<PlayerId, Online>,
     /// Each player's most recent session, so a rejoin waits for its save.
     sessions: HashMap<u128, watch::Receiver<bool>>,
+    leases: super::player_lease::LeaseTable,
     /// Each real connection's phase channel, by player uuid.
     phases: HashMap<u128, mpsc::UnboundedSender<PhaseRequest>>,
     /// Players who have logged in or been looked up, for commands and the
@@ -275,6 +276,7 @@ impl Coordinator {
             level_name: config.level_name,
             players: BTreeMap::new(),
             sessions: HashMap::new(),
+            leases: Default::default(),
             phases: HashMap::new(),
             profiles: tuff_storage::admin::UserCache::load(
                 config.user_cache,

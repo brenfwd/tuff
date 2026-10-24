@@ -255,8 +255,13 @@ async fn a_session_dying_before_its_final_save_hands_the_next_login_the_last_sav
     assert_eq!(held(&shared, uuid).await, 4);
     say(&server, "give pam minecraft:diamond 6").await;
     assert_eq!(held(&shared, uuid).await, 10);
+    let dirty = tuff_core::world::player_lease::dirty_returns();
     drop(first);
     wait_offline(&shared, uuid).await;
+    assert!(
+        tuff_core::world::player_lease::dirty_returns() > dirty,
+        "the lease came back dirty"
+    );
     assert_eq!(
         stored(&shared, uuid).await,
         4,

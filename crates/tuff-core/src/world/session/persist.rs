@@ -57,29 +57,33 @@ impl PlayerSession {
         let uuid = self.profile.id;
         let saved = self.shared.player_saved.clone();
         let fake = self.fake.clone();
+        let access = self.lease.as_ref().map(|lease| lease.access());
         let (raw, stats, extra) = if fake.is_some() {
             (None, None, Vec::new())
         } else {
+            let access = access.expect("a session loads under its lease");
             tokio::task::spawn_blocking(move || {
-                let docs = backend.documents();
-                let stats = docs
-                    .read(tuff_storage::document::Document::Stats(uuid))
-                    .unwrap_or_else(|err| {
-                        log::error!("failed to load statistics: {err}");
-                        None
-                    });
-                let extra: Vec<_> = saved
-                    .iter()
-                    .map(|owner| {
-                        let document = owner.document(uuid);
-                        let root = docs.read(document).unwrap_or_else(|err| {
-                            log::error!("failed to load {document:?}: {err}");
+                access.read(|| {
+                    let docs = backend.documents();
+                    let stats = docs
+                        .read(tuff_storage::document::Document::Stats(uuid))
+                        .unwrap_or_else(|err| {
+                            log::error!("failed to load statistics: {err}");
                             None
                         });
-                        (owner.clone(), root)
-                    })
-                    .collect();
-                player_data::load(docs, uuid).map(|raw| (raw, stats, extra))
+                    let extra: Vec<_> = saved
+                        .iter()
+                        .map(|owner| {
+                            let document = owner.document(uuid);
+                            let root = docs.read(document).unwrap_or_else(|err| {
+                                log::error!("failed to load {document:?}: {err}");
+                                None
+                            });
+                            (owner.clone(), root)
+                        })
+                        .collect();
+                    player_data::load(docs, uuid).map(|raw| (raw, stats, extra))
+                })
             })
             .await
             .map_err(std::io::Error::other)??
@@ -311,6 +315,12 @@ impl PlayerSession {
             .filter_map(|owner| Some((owner.document(uuid), owner.save(self)?)))
             .collect();
         let name = self.profile.name.clone();
+        let Some(access) = self.lease.as_ref().map(|lease| lease.access()) else {
+            if let Some(ticket) = ticket {
+                ticket.landed();
+            }
+            return tokio::spawn(async {});
+        };
         tokio::task::spawn_blocking(move || {
             let failed = || {
                 if let Some(ticket) = &ticket {
@@ -333,6 +343,9 @@ impl PlayerSession {
                     log::error!("failed to save statistics for {name}: {err}");
                     failed();
                 }
+            };
+            let write = || {
+                access.write(write);
             };
             match &ticket {
                 Some(ticket) => ticket.scope(write),

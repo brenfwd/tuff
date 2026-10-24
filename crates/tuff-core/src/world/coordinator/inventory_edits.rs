@@ -5,9 +5,9 @@ use crate::world::messages::SessionTask;
 
 impl Coordinator {
     /// Applies `edit` to the newest session of `uuid`, or to its stored
-    /// data when it has none. An offline edit takes the place of a session
-    /// in the uuid's save chain: it waits for the last session's save, and
-    /// a login waits for the edit's save.
+    /// data when it has none. An offline edit holds the uuid's player lease:
+    /// it waits for the last session's save, and a login waits for the
+    /// edit's save.
     pub(super) fn edit_inventory(
         &mut self,
         uuid: u128,
@@ -54,25 +54,22 @@ impl Coordinator {
             });
             return;
         }
-        let (done, done_rx) = watch::channel(false);
-        let previous = self
-            .sessions
-            .insert(uuid, done_rx)
-            .filter(|done| !*done.borrow());
+        let lease = self.leases.request(uuid);
         let backend = self.shared.backend.clone();
         tokio::spawn(async move {
-            if let Some(mut previous) = previous {
-                let _ = previous.wait_for(|saved| *saved).await;
-            }
+            let lease = lease.granted().await;
+            let access = lease.access();
             let applied = tokio::task::spawn_blocking(move || {
                 let docs = backend.documents();
-                let Ok(Some(mut raw)) = player_data::load(docs, uuid) else {
+                let Ok(Some(mut raw)) = access.read(|| player_data::load(docs, uuid)) else {
                     return false;
                 };
                 if !player_data::edit_inventory(&mut raw, |inventory| edit.apply(inventory)) {
                     return false;
                 }
-                match player_data::save(docs, uuid, raw) {
+                let mut saved = Ok(());
+                access.write(|| saved = player_data::save(docs, uuid, raw));
+                match saved {
                     Ok(()) => true,
                     Err(err) => {
                         log::error!("failed to save an offline inventory edit: {err}");
@@ -82,7 +79,7 @@ impl Coordinator {
             })
             .await
             .unwrap_or(false);
-            let _ = done.send(true);
+            lease.release();
             let _ = reply.send(applied);
         });
     }
