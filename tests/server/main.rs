@@ -31,6 +31,7 @@ mod admin_world_map;
 mod bench_vanilla;
 mod bench_watchers;
 mod block_click_items;
+mod block_doors;
 mod bossbar;
 mod bot;
 mod console_commands;
