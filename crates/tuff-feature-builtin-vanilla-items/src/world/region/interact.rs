@@ -689,7 +689,7 @@ pub trait Interact: RegionWorld + Rest {
             (Some(content), None) => {
                 if let Some(item) = content.item() {
                     place.player.send(PlayerEvent::ItemGranted {
-                        stack: ItemStack::mint(item, 1, MintReason::BlockDrop),
+                        stack: ItemStack::mint(item, 1, MintReason::Growth),
                         picked_up: false,
                     });
                 }

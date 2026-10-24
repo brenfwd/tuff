@@ -20,7 +20,6 @@ use tuff_core::world::entity::{
     Effect, EntityBase, EntityHit, RegionEntity, Tick, TickContext, take, take_bool, take_number,
 };
 use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
-use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_common::placement;
 use tuff_world_model::BlockPos;
@@ -473,11 +472,15 @@ impl RegionEntity for FallingBlock {
                 }
                 if self.drop_item
                     && context.shared.rule_bool("entity_drops")
-                    && let Some(item) = self.state.block().item()
+                    && let Some(stack) = tuff_core::world::block_ledger::BrokenBlock::released(
+                        self.state,
+                        tuff_core::world::block_ledger::EntityReason::Falling,
+                    )
+                    .into_item()
                 {
                     let jitter = |rng: &mut rand::rngs::StdRng| rng.gen_range(-0.1..0.1);
                     context.effects.push(Effect::DropItem {
-                        stack: ItemStack::mint(item, 1, MintReason::BlockDrop),
+                        stack,
                         position: self.base.position,
                         velocity: [jitter(context.rng), 0.2, jitter(context.rng)],
                         pickup_delay: BLOCK_DROP_PICKUP_DELAY,

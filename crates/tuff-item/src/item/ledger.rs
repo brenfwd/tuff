@@ -21,8 +21,10 @@ use super::{
 pub enum MintReason {
     /// Loot tables: containers, block drops, mob drops, fishing, archaeology.
     Loot,
-    /// A block broken or changed into its drops outside loot tables.
-    BlockDrop,
+    /// What a block that stays standing yields, outside loot tables: bone
+    /// meal from a composter, a flower popping off a bonemealed one, the
+    /// plant taken out of a flower pot.
+    Growth,
     /// Equipment and inventory a mob spawns with.
     Spawn,
     /// A mob or other entity dropping or producing items outside loot tables.

@@ -286,6 +286,19 @@ impl BrokenBlock {
         self.state
     }
 
+    /// The block drops itself as its own item, if it has one: what a block
+    /// does that falls with nowhere to land.
+    #[track_caller]
+    pub fn into_item(mut self) -> Option<tuff_item::item::ItemStack> {
+        self.trail.note(format_args!("dropped as its item"));
+        let item = self.state.block().item()?;
+        Some(tuff_item::item::ItemStack::mint(
+            item,
+            1,
+            tuff_item::item::MintReason::Loot,
+        ))
+    }
+
     pub fn report(&self) -> String {
         self.trail.report()
     }

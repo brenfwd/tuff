@@ -91,7 +91,7 @@ fn eject(world: &mut dyn RegionWorld, pos: BlockPos) {
         f64::from(pos.z) + 0.5 + dz,
     ];
     world.spawn_item_at(
-        ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop),
+        ItemStack::mint(Item::BoneMeal, 1, MintReason::Growth),
         position,
         [vx, 0.2, vz],
         BLOCK_DROP_PICKUP_DELAY,
@@ -131,7 +131,7 @@ impl ItemPort for ComposterPort {
         let empty = with_level(state, 0);
         world.set_block_flags(at.pos, empty, UPDATE_ALL);
         changed(world, at.pos, empty, at.by);
-        (!by_hand).then(|| ItemStack::mint(Item::BoneMeal, 1, MintReason::BlockDrop))
+        (!by_hand).then(|| ItemStack::mint(Item::BoneMeal, 1, MintReason::Growth))
     }
 }
 
