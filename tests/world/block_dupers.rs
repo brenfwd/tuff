@@ -593,3 +593,81 @@ async fn an_enderman_holding_a_block_saved_reloaded_and_killed_drops_it_once() {
     assert_eq!(count_of(&tally, "minecraft:dirt"), 1, "{tally:?}");
     b.world.shutdown().await;
 }
+
+const PORTAL_Z: i32 = Z + 20;
+
+async fn sand_into_an_end_portal(dupes: bool) -> (u64, u32) {
+    let dir = TestDir::new();
+    let b = bench(dir.path(), dupes).await;
+    let portal = BlockPos::new(HELD_AT, Y - 2, PORTAL_Z);
+    b.paste(BlockPos::new(HELD_AT, Y - 3, PORTAL_Z), "minecraft:stone")
+        .await;
+    b.paste(portal, "minecraft:end_portal").await;
+    let before = tuff_core::world::block_ledger::totals();
+    b.drop_falling("minecraft:sand", portal).await;
+    let platform = BlockPos::new(100, 49, 0);
+    let end = b
+        .world
+        .region_in(
+            crate::storage::level::THE_END,
+            ChunkPos::of_block(platform).region(),
+        )
+        .await;
+    let mut sand = 0;
+    for _ in 0..120 {
+        b.world.ticks(2).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        sand = 0;
+        if block_at(&end, platform).await.map(|s| s.block()) == Some(Block::Sand) {
+            sand += 1;
+        }
+        let (reply, answer) = oneshot::channel();
+        end.request(RegionRequest::Entities { reply }).await;
+        for entity in answer.await.unwrap() {
+            if entity.kind != EntityType::Item {
+                continue;
+            }
+            let (reply, data) = oneshot::channel();
+            end.request(RegionRequest::EntityData {
+                id: entity.id,
+                reply,
+            })
+            .await;
+            let item = data
+                .await
+                .unwrap()
+                .and_then(|d| d.get_compound("Item").cloned());
+            if item
+                .and_then(|i| i.get_str("id").map(str::to_owned))
+                .as_deref()
+                == Some("minecraft:sand")
+            {
+                sand += 1;
+            }
+        }
+        if sand >= 1 && !dupes || sand >= 2 {
+            break;
+        }
+    }
+    b.world.ticks(10).await;
+    let duplicated = tuff_core::world::block_ledger::totals()
+        .since(before)
+        .duplicated;
+    b.world.shutdown().await;
+    (duplicated, sand)
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sand_landing_in_an_end_portal_comes_through_twice_when_vanilla_does() {
+    let (duplicated, sand) = sand_into_an_end_portal(true).await;
+    assert!(duplicated >= 1, "no copy was made");
+    assert_eq!(sand, 2, "the original and the copy reached the end");
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sand_landing_in_an_end_portal_comes_through_once_with_the_setting_off() {
+    let (_, sand) = sand_into_an_end_portal(false).await;
+    assert_eq!(sand, 1);
+}
