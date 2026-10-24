@@ -2,6 +2,7 @@
 //! the region that holds the blocks once they are loaded.
 
 use tokio::sync::oneshot;
+use tuff_core::world::block_ledger::ClaimReason;
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::{Block, BlockState};
 
@@ -170,10 +171,9 @@ fn answer(world: &mut dyn RegionWorld, query: PortalQuery) {
                 if old == state || !world.owns(pos) {
                     continue;
                 }
-                if !is_air(old) {
-                    let saved = world.saved_block_entity(pos);
+                if let Some(broken) = world.claim_block(pos, ClaimReason::Converted) {
                     let loot = world.shared().block_loot();
-                    let drops = loot.drops(old, None, saved.as_ref(), world.rng());
+                    let drops = loot.drops(broken, None, world.rng());
                     world.drop_items(pos, drops);
                 }
                 world.put_block(pos, state);
@@ -367,13 +367,10 @@ impl RegionHooks for PortalBlockHooks {
                 let level = |p: BlockPos| world.block(p).unwrap_or(air);
                 if let Some(center) = portal::end_portal_center(&level, pos) {
                     for at in portal::end_portal_blocks(center) {
-                        if let Some(old) = world.block(at)
-                            && !is_air(old)
-                        {
-                            let saved = world.saved_block_entity(at);
+                        if let Some(broken) = world.claim_block(at, ClaimReason::Converted) {
                             let drops = {
                                 let loot = world.shared().block_loot();
-                                loot.drops(old, None, saved.as_ref(), world.rng())
+                                loot.drops(broken, None, world.rng())
                             };
                             world.drop_items(at, drops);
                         }

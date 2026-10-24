@@ -338,15 +338,14 @@ impl FluidWorld for RegionActor {
         Some(sky.max(block))
     }
 
-    fn wash_away(&mut self, pos: BlockPos, state: BlockState) {
+    fn wash_away(&mut self, pos: BlockPos, _state: BlockState) {
+        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Washed) else {
+            return;
+        };
         if !self.shared.rule_bool("block_drops") {
             return;
         }
-        let saved = self.saved_block_entity(pos);
-        let stacks = self
-            .shared
-            .block_loot()
-            .destroyed(state, saved.as_ref(), &mut self.rng);
+        let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
         self.drop_items(pos, stacks);
     }
 

@@ -297,9 +297,11 @@ impl RedstoneLevel for RegionActor {
         carry: Option<BlockPos>,
     ) {
         self.show_carried(pos, moving);
+        let lifted = moving.and_then(|moving| self.lift_for(pos, &moving));
         if self.pos.contains(ChunkPos::of_block(pos)) {
             self.carry_out(pos, carry, Reader::block(self, pos), true);
             self.apply_piston_set(pos, state, flags, drops, moving);
+            self.hold_lifted(pos, moving, lifted);
         } else {
             let expected = Reader::block(self, pos);
             self.sim.redstone.sent_changes.insert(pos, state);
@@ -322,6 +324,7 @@ impl RedstoneLevel for RegionActor {
                     flags,
                     drops,
                     moving,
+                    lifted,
                     tick: self.now(),
                     expected,
                     carry,
@@ -431,12 +434,17 @@ impl RedstoneLevel for RegionActor {
                 crate::world::game_event::Context::default(),
             ),
             Effect::DropResources(pos, state) => {
+                let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Popped)
+                else {
+                    return;
+                };
+                debug_assert_eq!(
+                    broken.state().block(),
+                    state.block(),
+                    "dropping {state:?} at {pos:?}"
+                );
                 if self.shared.rule_bool("block_drops") {
-                    let saved = self.saved_block_entity(pos);
-                    let stacks =
-                        self.shared
-                            .block_loot()
-                            .destroyed(state, saved.as_ref(), &mut self.rng);
+                    let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
                     self.drop_items(pos, stacks);
                 }
             }

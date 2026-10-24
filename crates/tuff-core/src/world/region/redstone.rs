@@ -198,6 +198,19 @@ pub(super) struct RedstoneState {
     pub(super) block_events: std::collections::VecDeque<super::pistons::BlockEventData>,
     /// Blocks pistons are moving, by moving piston position.
     pub(super) moving: HashMap<BlockPos, MovingBlock>,
+    /// The blocks of `moving`, owned until they land.
+    pub(super) lifted: HashMap<BlockPos, crate::world::block_ledger::LiftedBlock>,
+    /// Places blocks were broken or lifted from, until written over.
+    pub(super) vacated: std::collections::HashSet<BlockPos>,
+    /// Moving blocks whose lifted block another region still hands over,
+    /// with the tick each started.
+    pub(super) awaiting_lift: HashMap<BlockPos, u64>,
+    /// Lifted blocks handed over before their moving block started, with
+    /// the tick each came.
+    pub(super) early_lifted:
+        HashMap<BlockPos, (Option<crate::world::block_ledger::LiftedBlock>, u64)>,
+    /// Places lifted ahead of a batch of a neighbour's piston changes.
+    pub(super) prelifted: HashMap<BlockPos, super::ownership::Prelift>,
     /// The moving blocks in the order they tick.
     pub(super) moving_order: Vec<BlockPos>,
     /// Whether scheduled block ticks are running.
@@ -460,6 +473,12 @@ impl RegionActor {
     }
 
     fn run_action(&mut self, action: Action) {
+        let pos = match action {
+            Action::Neighbor { pos, .. } | Action::Shape { pos, .. } => pos,
+        };
+        if self.vacated(pos) {
+            return;
+        }
         match action {
             Action::Neighbor {
                 pos,
@@ -572,13 +591,12 @@ impl RegionActor {
         drops: bool,
         limit: u32,
     ) {
-        let saved = self.saved_block_entity(pos);
+        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Popped) else {
+            return;
+        };
         self.break_event(pos, old, None);
         if drops {
-            let stacks = self
-                .shared
-                .block_loot()
-                .destroyed(old, saved.as_ref(), &mut self.rng);
+            let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
             self.drop_items(pos, stacks);
         }
         self.set_block_flags(pos, placement::remains(old), redstone::UPDATE_ALL, limit);

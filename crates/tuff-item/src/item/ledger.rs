@@ -195,7 +195,7 @@ pub mod conservation {
         }
     }
 
-    pub(super) fn is_releasing() -> bool {
+    pub fn is_releasing() -> bool {
         RELEASING.with(|depth| depth.get() > 0)
     }
 

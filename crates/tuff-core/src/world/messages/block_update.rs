@@ -11,7 +11,7 @@ use super::*;
 /// yet run the tick it was made on, else at the start of its next tick as
 /// of the sender's tick; it reads the rest of the sender's blocks from its
 /// halo, which is sent before these.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum BlockUpdate {
     /// The neighbour of `pos` in `direction` became `neighbour`: a shape
     /// update with the game's update flags and remaining depth.
@@ -51,21 +51,27 @@ pub enum BlockUpdate {
     /// update `flags`), which starts moving `moving` when given. `tick` is
     /// when the piston moved, so a moving block that arrives late catches
     /// up. The piston saw `expected` there; when the block really there
-    /// differs and was being carried on to `carry`, the region owning
-    /// `carry` is told with [`BlockUpdate::Carried`].
+    /// differs, what is really there moves on. `lifted` is the moving
+    /// block itself when the sender owned its old place; otherwise the
+    /// owner of that place hands it over with [`BlockUpdate::Lifted`] as
+    /// the block at `pos` moves on to `carry`.
     Piston {
         pos: BlockPos,
         state: BlockState,
         flags: u32,
         drops: bool,
         moving: Option<crate::world::redstone::MovingBlock>,
+        lifted: Option<crate::world::block_ledger::LiftedBlock>,
         tick: u64,
         expected: BlockState,
         carry: Option<BlockPos>,
     },
-    /// The block moving into `pos` is really `moved`: the piston that
-    /// moved it read a stale copy of its old position.
-    Carried { pos: BlockPos, moved: BlockState },
+    /// The block moving into `pos`, lifted from its old place in the
+    /// sender (`None`: it was gone, so the move carries nothing).
+    Lifted {
+        pos: BlockPos,
+        block: Option<crate::world::block_ledger::LiftedBlock>,
+    },
     /// The block entity of the block moving into `pos` from the sender
     /// (`None`: it turned out to have none), which its landing waits for.
     CarriedEntity {
@@ -110,4 +116,20 @@ pub struct Blast {
     pub culprit: Option<crate::world::entity::Culprit>,
     /// Set for a wind burst, which pushes but never hurts.
     pub wind: Option<crate::world::explosion::WindBurst>,
+}
+
+impl BlockUpdate {
+    /// The update could not be delivered: a block it carried is gone.
+    pub(crate) fn orphaned(self) {
+        if let Self::Piston {
+            lifted: Some(block),
+            ..
+        }
+        | Self::Lifted {
+            block: Some(block), ..
+        } = self
+        {
+            block.burn(crate::world::block_ledger::BlockBurn::Orphaned);
+        }
+    }
 }

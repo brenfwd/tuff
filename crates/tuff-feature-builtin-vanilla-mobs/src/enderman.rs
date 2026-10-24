@@ -655,7 +655,11 @@ fn carried_drops(
     rng: &mut rand::rngs::StdRng,
 ) -> Vec<tuff_item::item::ItemStack> {
     let tool = carried_block_tool(rng);
-    loot.drops(state, Some(tool.any()), None, rng)
+    let held = tuff_core::world::block_ledger::BrokenBlock::released(
+        state,
+        tuff_core::world::block_ledger::EntityReason::Carried,
+    );
+    loot.drops(held, Some(tool.any()), rng)
 }
 
 /// The stand-in tool the carried block is mined with: a picture, never a

@@ -509,7 +509,10 @@ impl RegionActor {
             hook.block_exploded(self, pos, state, cause);
         }
         let igniter = cause.igniter.clone();
-        let saved = self.saved_block_entity(pos);
+        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Exploded)
+        else {
+            return Vec::new();
+        };
         self.with_cause(BlockCause::explosion(cause), |region| {
             region.put_block(pos, AIR)
         });
@@ -517,6 +520,7 @@ impl RegionActor {
             && self.shared.rule_bool("tnt_explodes")
             && let Some(primer) = self.shared.tnt.clone()
         {
+            let _ = broken.into_entity(crate::world::block_ledger::EntityReason::PrimedTnt);
             let fuse = primer.chain_fuse(&mut self.rng);
             self.spawn_primed_tnt(pos, Some(fuse), igniter);
             return Vec::new();
@@ -526,7 +530,7 @@ impl RegionActor {
         }
         self.release_infestation(pos, state, None);
         let loot = self.shared.block_loot();
-        loot.exploded(state, decay, saved.as_ref(), &mut self.rng)
+        loot.exploded(broken, decay, &mut self.rng)
     }
 }
 

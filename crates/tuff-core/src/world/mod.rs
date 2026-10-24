@@ -20,6 +20,7 @@ pub mod area;
 pub mod attributes;
 pub mod beacon;
 pub mod block_entity;
+pub mod block_ledger;
 pub mod block_rules;
 pub mod border;
 pub mod chunk_io;

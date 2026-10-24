@@ -20,6 +20,7 @@ use std::sync::Arc;
 use tuff_vanilla_data::Block;
 
 use crate::world::Shared;
+use crate::world::block_ledger::{BrokenBlock, ClaimReason};
 use crate::world::dimension::{Dimension, DimensionId};
 use crate::world::entity::{RegionEntity, TrackedEntity};
 use crate::world::growth::GrowthLevel;
@@ -682,9 +683,10 @@ pub trait RegionWorld: GrowthLevel {
     fn pois(&self) -> &crate::world::poi::PoiStore;
     /// Sets a block here with the game's update flags.
     fn set_block_flags(&mut self, pos: BlockPos, state: BlockState, flags: u32);
-    /// Breaks `state` at `pos` as a block update does (it lost its
-    /// support), dropping its loot when `drops` is set.
+    /// Breaks `state` at `pos` as losing its support does; loot when `drops`.
     fn break_by_update(&mut self, pos: BlockPos, state: BlockState, drops: bool);
+    /// Takes the block at `pos` out to break it; `None` once it has left.
+    fn claim_block(&mut self, pos: BlockPos, why: ClaimReason) -> Option<BrokenBlock>;
     /// A block sound at `pos` for the chunk's viewers (but `except`).
     fn play_sound(
         &self,

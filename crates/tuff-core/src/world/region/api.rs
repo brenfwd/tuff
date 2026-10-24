@@ -538,6 +538,14 @@ impl RegionWorld for RegionActor {
         self.destroy_by_update(pos, state, drops, crate::world::redstone::UPDATE_LIMIT);
     }
 
+    fn claim_block(
+        &mut self,
+        pos: BlockPos,
+        why: crate::world::block_ledger::ClaimReason,
+    ) -> Option<crate::world::block_ledger::BrokenBlock> {
+        self.claim(pos, why)
+    }
+
     fn play_sound(
         &self,
         sound: SoundEvent,

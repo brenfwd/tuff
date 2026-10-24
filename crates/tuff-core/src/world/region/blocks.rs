@@ -62,6 +62,7 @@ impl RegionActor {
         }
         let column = self.columns.get_mut(&chunk_pos)?;
         let old = column.chunk.set(pos.x, pos.y, pos.z, state)?;
+        self.written_over(pos, old, state);
         if old == state {
             return Some(old);
         }
@@ -276,6 +277,7 @@ impl RegionActor {
         }
         self.batched_changes = Some(HashMap::new());
         let result = f(self);
+        self.settle_vacated();
         for (chunk, sections) in self.batched_changes.take().unwrap_or_default() {
             self.send_section_changes(chunk, sections);
         }
@@ -632,14 +634,6 @@ impl RegionActor {
         let unstable_tnt = state.block() == Block::Tnt
             && !matches!(mode, BreakMode::Creative)
             && state.get("unstable") == Some("true");
-        if unstable_tnt && self.shared.rule_bool("tnt_explodes") {
-            let igniter = self.ents.presence.get(&player.id).map(|p| Igniter {
-                id: player.id,
-                uuid: p.uuid,
-                name: p.name.clone(),
-            });
-            self.spawn_primed_tnt(pos, None, igniter);
-        }
         let drops = drops && !unstable_tnt;
         let partner_drops = drops || state.block().kind() != BlockKind::Door;
         if let Some(partner) = self.shared.block_rules.partner(state, pos)
@@ -663,7 +657,18 @@ impl RegionActor {
         {
             self.raw_set_block(pos, disarmed);
         }
-        let saved = self.saved_block_entity(pos);
+        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Mined) else {
+            return reject(self);
+        };
+        if unstable_tnt && self.shared.rule_bool("tnt_explodes") {
+            let igniter = self.ents.presence.get(&player.id).map(|p| Igniter {
+                id: player.id,
+                uuid: p.uuid,
+                name: p.name.clone(),
+            });
+            self.spawn_primed_tnt(pos, None, igniter);
+        }
+        let saved = broken.block_entity().cloned();
         if !matches!(mode, BreakMode::Creative)
             && matches!(state.block(), Block::BeeNest | Block::Beehive)
             && let Some(nbt) = &saved
@@ -720,9 +725,8 @@ impl RegionActor {
                 seed,
                 |world| {
                     self.shared.block_loot().drops_at(
-                        state,
+                        broken,
                         tool.map(ItemStack::any),
-                        saved.as_ref(),
                         &at,
                         Some(world),
                         &mut roll,
@@ -898,11 +902,16 @@ impl RegionActor {
         }
         self.flush_halo();
         for (region, updates) in updates {
-            if let Some(neighbor) = self.border.neighbors.get(&region) {
-                neighbor.internal(RegionInternal::BlockUpdates {
-                    tick: Some(self.sched.tick),
-                    updates,
-                });
+            let message = RegionInternal::BlockUpdates {
+                tick: Some(self.sched.tick),
+                updates,
+            };
+            let sent = match self.border.neighbors.get(&region) {
+                Some(neighbor) => neighbor.try_internal(message).map_err(|back| *back),
+                None => Err(message),
+            };
+            if let Err(RegionInternal::BlockUpdates { updates, .. }) = sent {
+                updates.into_iter().for_each(BlockUpdate::orphaned);
             }
         }
     }
@@ -947,6 +956,7 @@ impl RegionActor {
     }
 
     fn apply_updates(&mut self, updates: Vec<BlockUpdate>) {
+        self.prelift(&updates);
         for update in updates {
             match update {
                 BlockUpdate::Shape {
@@ -984,13 +994,14 @@ impl RegionActor {
                     flags,
                     drops,
                     moving,
+                    lifted,
                     tick,
                     expected,
                     carry,
-                } => {
-                    self.receive_piston_set(pos, state, flags, drops, moving, tick, expected, carry)
-                }
-                BlockUpdate::Carried { pos, moved } => self.receive_carried(pos, moved),
+                } => self.receive_piston_set(
+                    pos, state, flags, drops, moving, lifted, tick, expected, carry,
+                ),
+                BlockUpdate::Lifted { pos, block } => self.receive_lifted(pos, block),
                 BlockUpdate::CarriedEntity { pos, nbt } => self.receive_carried_entity(pos, nbt),
                 BlockUpdate::FinishMove { pos } => {
                     let cause = BlockCause::Block(Block::MovingPiston);
@@ -1013,6 +1024,7 @@ impl RegionActor {
                 }
             }
         }
+        self.settle_prelifted();
     }
 
     /// Sets a block and updates its neighbours, handing it to the owning

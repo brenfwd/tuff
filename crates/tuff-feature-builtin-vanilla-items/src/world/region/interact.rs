@@ -1305,12 +1305,16 @@ pub trait Interact: RegionWorld + Rest {
         if is_air(old) {
             return;
         }
-        let saved = self.saved_block_entity(pos);
+        let Some(broken) =
+            self.claim_block(pos, tuff_core::world::block_ledger::ClaimReason::Popped)
+        else {
+            return;
+        };
         self.put_block(pos, placement::remains(old));
         self.break_event(pos, old, None);
         if self.shared().rule_bool("block_drops") {
             let loot = self.shared().block_loot();
-            let stacks = loot.drops(old, None, saved.as_ref(), self.rng());
+            let stacks = loot.drops(broken, None, self.rng());
             self.drop_items(pos, stacks);
         }
         self.release_infestation(pos, old, None);

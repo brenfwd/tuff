@@ -5,6 +5,8 @@
 use rand::rngs::StdRng;
 use tuff_vanilla_data::BlockState;
 
+use crate::world::block_ledger::BrokenBlock;
+
 use tuff_item::item::{AnyItem, ItemStack};
 use tuff_nbt::Compound;
 
@@ -126,13 +128,12 @@ pub trait BlockLoot: Send + Sync {
     /// Whether breaking `state` with `tool` (or bare hands) yields drops.
     fn can_harvest(&self, state: BlockState, tool: Option<AnyItem<'_>>) -> bool;
 
-    /// The drops of `state` broken with `tool`, or destroyed by the world
-    /// (no tool). `block_entity` is its saved block entity, if any.
+    /// The drops of `block` broken with `tool`, or destroyed by the world
+    /// (no tool). Taking the broken block rolls its drops at most once.
     fn drops(
         &self,
-        state: BlockState,
+        block: BrokenBlock,
         tool: Option<AnyItem<'_>>,
-        block_entity: Option<&Compound>,
         rng: &mut StdRng,
     ) -> Vec<ItemStack>;
 
@@ -140,25 +141,19 @@ pub trait BlockLoot: Send + Sync {
     /// `location_check` conditions.
     fn drops_at(
         &self,
-        state: BlockState,
+        block: BrokenBlock,
         tool: Option<AnyItem<'_>>,
-        block_entity: Option<&Compound>,
         _at: &crate::world::predicate::LocationFacts,
         _world: Option<&dyn crate::world::predicate::PredicateWorld>,
         rng: &mut StdRng,
     ) -> Vec<ItemStack> {
-        self.drops(state, tool, block_entity, rng)
+        self.drops(block, tool, rng)
     }
 
-    /// The drops of `state` destroyed by the world or a command, which
+    /// The drops of `block` destroyed by the world or a command, which
     /// ignores whether a tool would have been needed.
-    fn destroyed(
-        &self,
-        state: BlockState,
-        block_entity: Option<&Compound>,
-        rng: &mut StdRng,
-    ) -> Vec<ItemStack> {
-        self.drops(state, None, block_entity, rng)
+    fn destroyed(&self, block: BrokenBlock, rng: &mut StdRng) -> Vec<ItemStack> {
+        self.drops(block, None, rng)
     }
 
     /// A named loot table rolled for `state` (a harvest, a tool's
@@ -171,15 +166,9 @@ pub trait BlockLoot: Send + Sync {
         rng: &mut StdRng,
     ) -> Vec<ItemStack>;
 
-    /// The drops of `state` blown up by an explosion; `decay` is its
+    /// The drops of `block` blown up by an explosion; `decay` is its
     /// radius when drops thin out with it.
-    fn exploded(
-        &self,
-        state: BlockState,
-        decay: Option<f32>,
-        block_entity: Option<&Compound>,
-        rng: &mut StdRng,
-    ) -> Vec<ItemStack>;
+    fn exploded(&self, block: BrokenBlock, decay: Option<f32>, rng: &mut StdRng) -> Vec<ItemStack>;
 }
 
 /// Nothing drops.
@@ -190,13 +179,7 @@ impl BlockLoot for NoBlockLoot {
         true
     }
 
-    fn drops(
-        &self,
-        _: BlockState,
-        _: Option<AnyItem<'_>>,
-        _: Option<&Compound>,
-        _: &mut StdRng,
-    ) -> Vec<ItemStack> {
+    fn drops(&self, _: BrokenBlock, _: Option<AnyItem<'_>>, _: &mut StdRng) -> Vec<ItemStack> {
         Vec::new()
     }
 
@@ -210,13 +193,7 @@ impl BlockLoot for NoBlockLoot {
         Vec::new()
     }
 
-    fn exploded(
-        &self,
-        _: BlockState,
-        _: Option<f32>,
-        _: Option<&Compound>,
-        _: &mut StdRng,
-    ) -> Vec<ItemStack> {
+    fn exploded(&self, _: BrokenBlock, _: Option<f32>, _: &mut StdRng) -> Vec<ItemStack> {
         Vec::new()
     }
 }

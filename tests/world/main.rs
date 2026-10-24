@@ -139,6 +139,7 @@ mod portals;
 mod pregen;
 mod projectile_hit_hook;
 mod raid_ticks;
+mod rail_dupers;
 mod region_blocking;
 mod ride_command;
 mod rider_follow;
