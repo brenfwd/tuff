@@ -28,9 +28,10 @@ struct Bench {
     _events: mpsc::UnboundedReceiver<PlayerEvent>,
 }
 
-const DUPE_KEYS: [&str; 2] = [
+const DUPE_KEYS: [&str; 3] = [
     tuff_core::config::BLOCKS_TNT_DUPLICATION,
     tuff_core::config::BLOCKS_CARPET_RAIL_DUPLICATION,
+    tuff_core::config::BLOCKS_GRAVITY_PORTAL_DUPLICATION,
 ];
 
 async fn bench(dir: &Path, dupes: bool) -> Bench {
@@ -386,20 +387,27 @@ async fn powered_tnt_riding_a_slime_block_primes_once() {
     no_dupe(POWERED_TNT_RIDING_A_SLIME_BLOCK).await;
 }
 
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_rail_riding_a_slime_block_duplicates_once_when_vanilla_does() {
-    vanilla_dupe(RIDING_A_SLIME_BLOCK, &[("minecraft:rail", 1)]).await;
-}
+const EVERY_LAYOUT: &[Layout] = &[
+    RIDING_A_SLIME_BLOCK,
+    CARPET_RIDING_A_SLIME_BLOCK,
+    PUSHED_OFF_ITS_SUPPORT,
+    DRAGGED_SIDEWAYS_BY_A_SLIME_BLOCK,
+    TWO_LINKED_RAILS_ON_SLIME_AND_STONE,
+    POWERED_TNT_RIDING_A_SLIME_BLOCK,
+    POWERED_RAIL_ONTO_AIR_BESIDE_A_POWERED_ONE,
+    SAND_RIDING_A_SLIME_BLOCK,
+    SAND_LOSING_ITS_SUPPORT,
+];
 
+/// Vanilla's piston movement clears every moved block's old place before
+/// any update runs, so no layout of these duplicates a block even with the
+/// duplication settings on.
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn two_linked_rails_duplicate_one_when_vanilla_does() {
-    vanilla_dupe(
-        TWO_LINKED_RAILS_ON_SLIME_AND_STONE,
-        &[("minecraft:rail", 1)],
-    )
-    .await;
+async fn no_layout_duplicates_with_the_vanilla_settings_on() {
+    for layout in EVERY_LAYOUT {
+        vanilla_dupe(layout, &[]).await;
+    }
 }
 
 #[tuff_core::watchdog]
