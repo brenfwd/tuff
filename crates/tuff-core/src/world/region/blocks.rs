@@ -668,6 +668,13 @@ impl RegionActor {
                     &nbt,
                 ))
             });
+        let saved = self.saved_block_entity(pos);
+        self.player_breaking_block(
+            player.id,
+            pos,
+            state,
+            tool_stack.as_deref().map(ItemStack::any),
+        );
         let Some(broken) = self.claim(pos, Remains::Vanilla, ClaimReason::Mined) else {
             return reject(self);
         };
@@ -682,7 +689,6 @@ impl RegionActor {
         } else {
             Some(broken)
         };
-        let saved = broken.as_ref().and_then(|b| b.block_entity()).cloned();
         if !matches!(mode, BreakMode::Creative)
             && matches!(state.block(), Block::BeeNest | Block::Beehive)
             && let Some(nbt) = &saved
@@ -696,12 +702,6 @@ impl RegionActor {
                 },
             )));
         }
-        self.player_breaking_block(
-            player.id,
-            pos,
-            state,
-            tool_stack.as_deref().map(ItemStack::any),
-        );
         self.break_event(pos, state, Some(player.id));
         if !matches!(mode, BreakMode::Creative)
             && state.block() == Block::TurtleEgg

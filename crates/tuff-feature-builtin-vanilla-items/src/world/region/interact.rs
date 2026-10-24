@@ -16,6 +16,7 @@ use crate::world::items;
 use crate::world::region::shelves::Shelves as _;
 use tuff_core::protocol::play;
 use tuff_core::world::block_entity::{self, sign};
+use tuff_core::world::block_ledger::{ClaimReason, Remains, TntOrigin};
 use tuff_core::world::explosion::{BlockInteraction, Explosion};
 use tuff_core::world::messages::{
     ActionOutcome, AnchorUse, BedUse, BucketUse, HandEffect, Igniter, Place, PlayerEvent,
@@ -777,22 +778,13 @@ pub trait Interact: RegionWorld + Rest {
                 ));
                 return None;
             }
-            let broken = self.claim_block(
-                pos,
-                tuff_core::world::block_ledger::Remains::Air,
-                tuff_core::world::block_ledger::ClaimReason::Entity,
-            )?;
+            let broken = self.claim_block(pos, Remains::Air, ClaimReason::Entity)?;
             let igniter = Igniter {
                 id: place.player.id,
                 uuid: place.uuid,
                 name: place.name.clone(),
             };
-            self.spawn_primed_tnt(
-                tuff_core::world::block_ledger::TntOrigin::Block(broken),
-                pos,
-                None,
-                Some(igniter),
-            );
+            self.spawn_primed_tnt(TntOrigin::Block(broken), pos, None, Some(igniter));
             return Some(used(ignite_cost));
         }
         if igniter && interaction::can_light(state) {
@@ -1314,11 +1306,7 @@ pub trait Interact: RegionWorld + Rest {
         if is_air(old) {
             return;
         }
-        let Some(broken) = self.claim_block(
-            pos,
-            tuff_core::world::block_ledger::Remains::Vanilla,
-            tuff_core::world::block_ledger::ClaimReason::Popped,
-        ) else {
+        let Some(broken) = self.claim_block(pos, Remains::Vanilla, ClaimReason::Popped) else {
             return;
         };
         self.break_event(pos, old, None);
