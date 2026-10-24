@@ -74,7 +74,26 @@ impl PlayerSession {
             }
             _ => Vec::new(),
         };
+        if stacks.is_empty()
+            && !creative
+            && self.places_a_block_from_the_hand(held)
+            && !self.shared.block_rules.places_on_water(held)
+            && let Some(one) = ItemStack::take_from(self.inventory.slot_mut(slot), 1)
+        {
+            return PlaceOffer::paying(creative, slot, one);
+        }
         PlaceOffer::new(creative, stacks)
+    }
+
+    /// Whether a click with `held` places a block that costs one item: the
+    /// item rides along with the click and the region spends it as the
+    /// block is written.
+    pub(super) fn places_a_block_from_the_hand(&self, held: Item) -> bool {
+        held.block().is_some()
+            && !matches!(
+                held.bucket(),
+                Some(tuff_vanilla_data::item::Bucket::Fluid { .. })
+            )
     }
 
     /// Whether a click with `held` on a block the client sees as `state`

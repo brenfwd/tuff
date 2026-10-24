@@ -1260,7 +1260,14 @@ impl RegionActor {
         if blocked || !self.allows_block_action(place.player.id, at, state, BlockAction::Placed) {
             return reject(self, &place, &corrected);
         }
-        self.put_block(at, state);
+        let solid_bucket_item = matches!(
+            context.item.bucket(),
+            Some(tuff_vanilla_data::item::Bucket::Solid { .. })
+        );
+        let paid = (!solid_bucket_item)
+            .then(|| place.offer.take_placing())
+            .flatten();
+        self.place_from_item(at, state, paid);
         self.apply_placed_item(at, &place);
         self.edit_placed_sign(at, &place.player);
         if let Some((pos, companion)) = self.shared.block_rules.companions(state, at) {
@@ -1309,11 +1316,50 @@ impl RegionActor {
     /// Answers a block click, handing the stacks it offered and did not
     /// keep back to the player first.
     pub(crate) fn answer_place(&mut self, place: &Place, outcome: ActionOutcome) {
+        match &outcome {
+            ActionOutcome::Placed { .. } => {
+                if let Some(paid) = place.offer.take_placing() {
+                    paid.burn(tuff_item::item::BurnReason::Consumed);
+                }
+            }
+            ActionOutcome::Used {
+                effect: crate::world::messages::HandEffect::Emptied(result),
+                ..
+            } => {
+                if let Some(paid) = place.offer.take_placing() {
+                    paid.burn(tuff_item::item::BurnReason::Transform);
+                    place.offer.give(
+                        place.hand_slot,
+                        tuff_item::item::ItemStack::mint(
+                            *result,
+                            1,
+                            tuff_item::item::MintReason::Transform,
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
         self.return_offer(place);
         place.player.send(PlayerEvent::ActionResult {
             sequence: place.sequence,
             outcome,
         });
+    }
+
+    /// Writes the block a placing item pays for and spends that item: the
+    /// one door that writes a block from an item. A creative player pays
+    /// nothing.
+    pub(crate) fn place_from_item(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        paid: Option<tuff_item::item::ItemStack>,
+    ) {
+        self.put_block(pos, state);
+        if let Some(paid) = paid {
+            paid.burn(tuff_item::item::BurnReason::Consumed);
+        }
     }
 
     /// Hands what is left of a block click's offer back to the player, or

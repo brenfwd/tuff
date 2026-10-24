@@ -193,6 +193,9 @@ pub enum BreakMode {
 #[derive(Debug, Default)]
 pub struct PlaceOffer {
     stacks: std::cell::RefCell<Vec<(usize, ItemStack)>>,
+    /// The one item a block placement pays with, moved out of the hand
+    /// with the click: spent when the click places, else handed back.
+    placing: std::cell::RefCell<Option<(usize, ItemStack)>>,
     /// The player has infinite materials: a block keeping one item of the
     /// hand keeps a creative copy and the hand keeps its stack.
     pub creative: bool,
@@ -203,11 +206,12 @@ pub struct PlaceOffer {
 impl Clone for PlaceOffer {
     fn clone(&self) -> Self {
         debug_assert!(
-            self.stacks.borrow().is_empty(),
+            self.stacks.borrow().is_empty() && self.placing.borrow().is_none(),
             "copied a block click that offers stacks"
         );
         Self {
             stacks: std::cell::RefCell::default(),
+            placing: std::cell::RefCell::default(),
             creative: self.creative,
         }
     }
@@ -217,8 +221,21 @@ impl PlaceOffer {
     pub fn new(creative: bool, stacks: Vec<(usize, ItemStack)>) -> Self {
         Self {
             stacks: std::cell::RefCell::new(stacks),
+            placing: std::cell::RefCell::default(),
             creative,
         }
+    }
+
+    /// An offer whose click is paid for with `stack`, taken from `slot`.
+    pub fn paying(creative: bool, slot: usize, stack: ItemStack) -> Self {
+        let offer = Self::new(creative, Vec::new());
+        *offer.placing.borrow_mut() = Some((slot, stack));
+        offer
+    }
+
+    /// Takes the item that pays for the placement, to spend it.
+    pub fn take_placing(&self) -> Option<ItemStack> {
+        self.placing.borrow_mut().take().map(|(_, stack)| stack)
     }
 
     /// Takes one item offered from `slot` for a block to keep: a creative
@@ -285,12 +302,16 @@ impl PlaceOffer {
 
     /// Everything going back to the player, by inventory slot.
     pub fn into_stacks(self) -> Vec<(usize, ItemStack)> {
-        self.stacks.into_inner()
+        let mut stacks = self.stacks.into_inner();
+        stacks.extend(self.placing.into_inner());
+        stacks
     }
 
     /// Takes everything going back to the player, by inventory slot.
     pub fn drain(&self) -> Vec<(usize, ItemStack)> {
-        std::mem::take(&mut *self.stacks.borrow_mut())
+        let mut stacks = std::mem::take(&mut *self.stacks.borrow_mut());
+        stacks.extend(self.placing.borrow_mut().take());
+        stacks
     }
 }
 

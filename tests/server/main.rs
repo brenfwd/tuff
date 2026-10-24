@@ -32,6 +32,7 @@ mod bench_vanilla;
 mod bench_watchers;
 mod block_click_items;
 mod block_doors;
+mod block_from_items;
 mod bossbar;
 mod bot;
 mod console_commands;

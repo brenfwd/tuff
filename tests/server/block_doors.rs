@@ -133,3 +133,13 @@ fn block_minting_doors_stay_at_their_sites() {
         offenders.join("\n")
     );
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn a_block_placed_from_an_item_is_written_through_the_item_door() {
+    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    let text =
+        fs::read_to_string(root.join("crates/tuff-core/src/world/region/blocks.rs")).unwrap();
+    assert!(text.contains("self.place_from_item(at, state, paid);"));
+    assert!(!text.contains("self.put_block(at, state);\n        self.apply_placed_item"));
+}

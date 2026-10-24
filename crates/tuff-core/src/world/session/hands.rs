@@ -333,7 +333,7 @@ impl PlayerSession {
         let Some(region) = self.region_of(target) else {
             return false;
         };
-        let place = self.place_request(
+        let mut place = self.place_request(
             off_hand,
             target,
             Face::Up,
@@ -343,6 +343,12 @@ impl PlayerSession {
             Some(item),
             false,
         );
+        let slot = self.inventory.hand_slot(off_hand);
+        if !self.mode.abilities.instabuild
+            && let Some(one) = ItemStack::take_from(self.inventory.slot_mut(slot), 1)
+        {
+            place.offer = crate::world::messages::PlaceOffer::paying(false, slot, one);
+        }
         self.send_place(&region, RegionRequest::PlaceOnWater(place))
             .await;
         true
@@ -900,6 +906,9 @@ impl PlayerSession {
                     } else {
                         Inventory::hotbar_slot(self.inventory.selected())
                     };
+                    if let Some(old) = self.inventory.slot_mut(slot).take() {
+                        old.burn(BurnReason::Transform);
+                    }
                     self.inventory.set_slot(
                         slot,
                         Some(ItemStack::mint(result, 1, MintReason::Transform)),
