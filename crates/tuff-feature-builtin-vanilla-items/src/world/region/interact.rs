@@ -1305,12 +1305,13 @@ pub trait Interact: RegionWorld + Rest {
         if is_air(old) {
             return;
         }
-        let Some(broken) =
-            self.claim_block(pos, tuff_core::world::block_ledger::ClaimReason::Popped)
-        else {
+        let Some(broken) = self.claim_block(
+            pos,
+            tuff_core::world::block_ledger::Remains::Vanilla,
+            tuff_core::world::block_ledger::ClaimReason::Popped,
+        ) else {
             return;
         };
-        self.put_block(pos, placement::remains(old));
         self.break_event(pos, old, None);
         if self.shared().rule_bool("block_drops") {
             let loot = self.shared().block_loot();

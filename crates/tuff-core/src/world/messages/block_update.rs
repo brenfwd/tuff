@@ -61,7 +61,7 @@ pub enum BlockUpdate {
         flags: u32,
         drops: bool,
         moving: Option<crate::world::redstone::MovingBlock>,
-        lifted: Option<crate::world::block_ledger::LiftedBlock>,
+        lifted: Option<crate::world::block_ledger::HeldBlock>,
         tick: u64,
         expected: BlockState,
         carry: Option<BlockPos>,
@@ -70,7 +70,7 @@ pub enum BlockUpdate {
     /// sender (`None`: it was gone, so the move carries nothing).
     Lifted {
         pos: BlockPos,
-        block: Option<crate::world::block_ledger::LiftedBlock>,
+        block: Option<crate::world::block_ledger::HeldBlock>,
     },
     /// The block entity of the block moving into `pos` from the sender
     /// (`None`: it turned out to have none), which its landing waits for.

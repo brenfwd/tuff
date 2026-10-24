@@ -2,7 +2,7 @@
 //! the region that holds the blocks once they are loaded.
 
 use tokio::sync::oneshot;
-use tuff_core::world::block_ledger::ClaimReason;
+use tuff_core::world::block_ledger::{ClaimReason, Remains};
 use tuff_vanilla_data::block::Facing;
 use tuff_vanilla_data::{Block, BlockState};
 
@@ -171,12 +171,15 @@ fn answer(world: &mut dyn RegionWorld, query: PortalQuery) {
                 if old == state || !world.owns(pos) {
                     continue;
                 }
-                if let Some(broken) = world.claim_block(pos, ClaimReason::Converted) {
+                if let Some(broken) =
+                    world.claim_block(pos, Remains::State(state), ClaimReason::Converted)
+                {
                     let loot = world.shared().block_loot();
                     let drops = loot.drops(broken, None, world.rng());
                     world.drop_items(pos, drops);
+                } else {
+                    world.put_block(pos, state);
                 }
-                world.put_block(pos, state);
             }
             let _ = reply.send(());
         }
@@ -367,14 +370,18 @@ impl RegionHooks for PortalBlockHooks {
                 let level = |p: BlockPos| world.block(p).unwrap_or(air);
                 if let Some(center) = portal::end_portal_center(&level, pos) {
                     for at in portal::end_portal_blocks(center) {
-                        if let Some(broken) = world.claim_block(at, ClaimReason::Converted) {
+                        let portal = Block::EndPortal.default_state();
+                        if let Some(broken) =
+                            world.claim_block(at, Remains::State(portal), ClaimReason::Converted)
+                        {
                             let drops = {
                                 let loot = world.shared().block_loot();
                                 loot.drops(broken, None, world.rng())
                             };
                             world.drop_items(at, drops);
+                        } else {
+                            world.set_block_anywhere(at, portal);
                         }
-                        world.set_block_anywhere(at, Block::EndPortal.default_state());
                     }
                     world.broadcast_global_level_event(
                         play::level_event::SOUND_END_PORTAL_SPAWN,

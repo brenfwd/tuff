@@ -199,7 +199,7 @@ pub(super) struct RedstoneState {
     /// Blocks pistons are moving, by moving piston position.
     pub(super) moving: HashMap<BlockPos, MovingBlock>,
     /// The blocks of `moving`, owned until they land.
-    pub(super) lifted: HashMap<BlockPos, crate::world::block_ledger::LiftedBlock>,
+    pub(super) lifted: HashMap<BlockPos, crate::world::block_ledger::HeldBlock>,
     /// Places blocks were broken or lifted from, until written over.
     pub(super) vacated: std::collections::HashSet<BlockPos>,
     /// Moving blocks whose lifted block another region still hands over,
@@ -208,7 +208,7 @@ pub(super) struct RedstoneState {
     /// Lifted blocks handed over before their moving block started, with
     /// the tick each came.
     pub(super) early_lifted:
-        HashMap<BlockPos, (Option<crate::world::block_ledger::LiftedBlock>, u64)>,
+        HashMap<BlockPos, (Option<crate::world::block_ledger::HeldBlock>, u64)>,
     /// Places lifted ahead of a batch of a neighbour's piston changes.
     pub(super) prelifted: HashMap<BlockPos, super::ownership::Prelift>,
     /// The moving blocks in the order they tick.
@@ -325,16 +325,12 @@ impl RegionActor {
         self.shared.redstone_behaviors.get(block)
     }
 
-    /// Sets a block the way the game does with `flags`: the old block's
-    /// removal and the new one's placement reactions, then (per the flags)
-    /// neighbour-changed updates, comparator updates and shape updates.
-    /// Returns the old state, or `None` if the position is not loaded here.
-    pub(super) fn set_block_flags(
+    /// The block standing at `pos` when a hook forbids the environment
+    /// from changing it to `state`.
+    pub(super) fn environment_vetoes(
         &mut self,
         pos: BlockPos,
         state: BlockState,
-        flags: u32,
-        limit: u32,
     ) -> Option<BlockState> {
         if matches!(
             self.sim.cause,
@@ -350,6 +346,23 @@ impl RegionActor {
             {
                 return Some(old);
             }
+        }
+        None
+    }
+
+    /// Sets a block the way the game does with `flags`: the old block's
+    /// removal and the new one's placement reactions, then (per the flags)
+    /// neighbour-changed updates, comparator updates and shape updates.
+    /// Returns the old state, or `None` if the position is not loaded here.
+    pub(super) fn set_block_flags(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        flags: u32,
+        limit: u32,
+    ) -> Option<BlockState> {
+        if let Some(old) = self.environment_vetoes(pos, state) {
+            return Some(old);
         }
         let old = self.raw_set_block(pos, state)?;
         if old == state {
@@ -591,7 +604,12 @@ impl RegionActor {
         drops: bool,
         limit: u32,
     ) {
-        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Popped) else {
+        let Some(broken) = self.claim_limited(
+            pos,
+            crate::world::block_ledger::Remains::Vanilla,
+            crate::world::block_ledger::ClaimReason::Popped,
+            limit,
+        ) else {
             return;
         };
         self.break_event(pos, old, None);
@@ -599,7 +617,6 @@ impl RegionActor {
             let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
             self.drop_items(pos, stacks);
         }
-        self.set_block_flags(pos, placement::remains(old), redstone::UPDATE_ALL, limit);
     }
 
     /// Runs a redstone block tick.

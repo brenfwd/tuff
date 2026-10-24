@@ -16,7 +16,7 @@ use super::{AIR, ChunkPos, RegionActor, block_at};
 use crate::protocol::play;
 use crate::storage::chunk_nbt::{decode_block_state, encode_block_state};
 use crate::world::block_entity;
-use crate::world::block_ledger::LiftedBlock;
+use crate::world::block_ledger::HeldBlock;
 use crate::world::messages::{BlockUpdate, PlayerEvent};
 use crate::world::physics::{self, Aabb};
 use crate::world::placement::step;
@@ -232,7 +232,7 @@ impl RegionActor {
                     .redstone
                     .lifted
                     .entry(pos)
-                    .or_insert_with(|| LiftedBlock::from_storage(moving.moved));
+                    .or_insert_with(|| HeldBlock::from_storage(moving.moved));
             }
         }
     }
@@ -358,7 +358,7 @@ impl RegionActor {
         flags: u32,
         drops: bool,
         moving: Option<MovingBlock>,
-        lifted: Option<crate::world::block_ledger::LiftedBlock>,
+        lifted: Option<crate::world::block_ledger::HeldBlock>,
         tick: u64,
         expected: BlockState,
         carry: Option<BlockPos>,

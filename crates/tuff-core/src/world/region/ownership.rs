@@ -3,7 +3,7 @@
 
 use super::pistons::carried::CARRY_WAIT;
 use super::*;
-use crate::world::block_ledger::{BlockBurn, BrokenBlock, ClaimReason, LiftedBlock};
+use crate::world::block_ledger::{BlockBurn, BrokenBlock, ClaimReason, HeldBlock, Remains};
 use crate::world::messages::BlockUpdate;
 use crate::world::placement::step;
 use crate::world::redstone::MovingBlock;
@@ -13,21 +13,71 @@ use tuff_world_model::chunk::is_air;
 /// neighbour's piston changes.
 pub(super) enum Prelift {
     /// Lifted, to hand over as the change there runs.
-    Lifted(LiftedBlock),
+    Lifted(HeldBlock),
     /// Nothing could be lifted there.
     Gone,
     /// Already given to the moving block it went into here.
     Delivered,
 }
 
+enum Taken {
+    Standing(BlockState, Option<Compound>),
+    Held(HeldBlock),
+    Moving(BlockState),
+}
+
 impl RegionActor {
     /// Takes the block at `pos` out of the world to break it, with its
-    /// block entity data. `None` when this region does not own a block
-    /// there, or it already left (broken or lifted, and nothing written
-    /// there since): then nothing may break or drop. Breaking a moving
-    /// piston breaks the block it carries. The caller writes what remains.
+    /// block entity data, and writes `remains` in its place with all
+    /// updates: holding the token means the block is gone. `None` when
+    /// this region does not own a block there, it already left (broken or
+    /// lifted, and nothing written there since), or a hook forbids the
+    /// change: then nothing may break or drop. Breaking a moving piston
+    /// breaks the block it carries.
     #[track_caller]
-    pub(super) fn claim(&mut self, pos: BlockPos, why: ClaimReason) -> Option<BrokenBlock> {
+    pub(super) fn claim(
+        &mut self,
+        pos: BlockPos,
+        remains: Remains,
+        why: ClaimReason,
+    ) -> Option<BrokenBlock> {
+        self.claim_limited(pos, remains, why, crate::world::redstone::UPDATE_LIMIT)
+    }
+
+    /// [`Self::claim`] with the write's shape-update limit.
+    #[track_caller]
+    pub(super) fn claim_limited(
+        &mut self,
+        pos: BlockPos,
+        remains: Remains,
+        why: ClaimReason,
+        limit: u32,
+    ) -> Option<BrokenBlock> {
+        Some(match self.take_out(pos, remains, limit)? {
+            Taken::Standing(state, block_entity) => BrokenBlock::claimed(state, block_entity, why),
+            Taken::Held(held) => held.into_broken(None),
+            Taken::Moving(base) => BrokenBlock::claimed(base, None, why),
+        })
+    }
+
+    /// Takes the block at `pos` out of the world for an entity to hold,
+    /// writing `remains` in its place. `None` as for [`Self::claim`], or
+    /// when only air was there.
+    #[track_caller]
+    pub(super) fn take_up(
+        &mut self,
+        pos: BlockPos,
+        remains: Remains,
+        why: ClaimReason,
+    ) -> Option<HeldBlock> {
+        match self.take_out(pos, remains, crate::world::redstone::UPDATE_LIMIT)? {
+            Taken::Standing(state, _) => Some(HeldBlock::taken(state, why)),
+            Taken::Held(held) => Some(held),
+            Taken::Moving(base) => (!is_air(base)).then(|| HeldBlock::taken(base, why)),
+        }
+    }
+
+    fn take_out(&mut self, pos: BlockPos, remains: Remains, limit: u32) -> Option<Taken> {
         if !self.owns(pos) || self.sim.redstone.vacated.contains(&pos) {
             return None;
         }
@@ -35,29 +85,37 @@ impl RegionActor {
         if is_air(state) {
             return None;
         }
-        let block_entity = self.saved_block_entity(pos);
-        self.sim.redstone.vacated.insert(pos);
-        if state.block() == Block::MovingPiston {
-            self.sim.redstone.awaiting_lift.remove(&pos);
-            return Some(match self.sim.redstone.lifted.remove(&pos) {
-                Some(lifted) => lifted.into_broken(None),
-                None => {
-                    let base = self
-                        .moving_at(pos)
-                        .filter(|moving| moving.source && moving.moved.block() != Block::PistonHead)
-                        .map_or(AIR, |moving| moving.moved);
-                    BrokenBlock::claimed(base, None, why)
-                }
-            });
+        let left = match remains {
+            Remains::Air => AIR,
+            Remains::Vanilla => crate::world::placement::remains(state),
+            Remains::State(left) | Remains::Fluid(left) => left,
+        };
+        if self.environment_vetoes(pos, left).is_some() {
+            return None;
         }
-        Some(BrokenBlock::claimed(state, block_entity, why))
+        let block_entity = self.saved_block_entity(pos);
+        let taken = if state.block() == Block::MovingPiston {
+            self.sim.redstone.awaiting_lift.remove(&pos);
+            match self.sim.redstone.lifted.remove(&pos) {
+                Some(held) => Taken::Held(held),
+                None => Taken::Moving(
+                    self.moving_at(pos)
+                        .filter(|moving| moving.source && moving.moved.block() != Block::PistonHead)
+                        .map_or(AIR, |moving| moving.moved),
+                ),
+            }
+        } else {
+            Taken::Standing(state, block_entity)
+        };
+        self.set_block_flags(pos, left, crate::world::redstone::UPDATE_ALL, limit);
+        Some(taken)
     }
 
     /// Takes the block at `from` out of the world for a piston to move.
     /// `None` when this region does not own a movable block there or it
     /// already left.
     #[track_caller]
-    pub(super) fn lift(&mut self, from: BlockPos) -> Option<LiftedBlock> {
+    pub(super) fn lift(&mut self, from: BlockPos) -> Option<HeldBlock> {
         if !self.owns(from) || self.sim.redstone.vacated.contains(&from) {
             return None;
         }
@@ -66,7 +124,7 @@ impl RegionActor {
             return None;
         }
         self.sim.redstone.vacated.insert(from);
-        Some(LiftedBlock::lifted(state))
+        Some(HeldBlock::lifted(state))
     }
 
     /// Whether the block at `pos` already left its place: it is a ghost
@@ -91,13 +149,16 @@ impl RegionActor {
     }
 
     /// Every vacated place is written over by the end of the change that
-    /// vacated it; one still vacated is a block taken out of the world and
-    /// left standing.
+    /// vacated it; one still vacated is a ghost whose block is already
+    /// elsewhere, so it is overwritten with air.
     pub(super) fn settle_vacated(&mut self) {
         if self.sim.redstone.vacated.is_empty() {
             return;
         }
         let left: Vec<_> = self.sim.redstone.vacated.drain().collect();
+        for &pos in &left {
+            self.raw_set_block(pos, AIR);
+        }
         if cfg!(debug_assertions) && !std::thread::panicking() {
             panic!("blocks taken out of the world were left standing at {left:?}");
         }
@@ -145,7 +206,7 @@ impl RegionActor {
     /// The block a piston moves into `to` leaves the place it stood, when
     /// this region owns that place.
     #[track_caller]
-    pub(super) fn lift_for(&mut self, to: BlockPos, moving: &MovingBlock) -> Option<LiftedBlock> {
+    pub(super) fn lift_for(&mut self, to: BlockPos, moving: &MovingBlock) -> Option<HeldBlock> {
         if moving.source {
             return None;
         }
@@ -201,7 +262,7 @@ impl RegionActor {
         &mut self,
         to: BlockPos,
         moving: Option<MovingBlock>,
-        lifted: Option<LiftedBlock>,
+        lifted: Option<HeldBlock>,
     ) {
         let started = moving.filter(|moving| !moving.source && self.moving_at(to).is_some());
         let Some(moving) = started else {
@@ -230,7 +291,7 @@ impl RegionActor {
 
     /// The block moving into `pos`, handed over by the region owning the
     /// place it left.
-    pub(super) fn receive_lifted(&mut self, pos: BlockPos, block: Option<LiftedBlock>) {
+    pub(super) fn receive_lifted(&mut self, pos: BlockPos, block: Option<HeldBlock>) {
         let waiting = self.moving_at(pos).is_some_and(|moving| !moving.source)
             && !self.sim.redstone.lifted.contains_key(&pos);
         if waiting {
@@ -247,7 +308,7 @@ impl RegionActor {
         }
     }
 
-    fn place_lifted(&mut self, pos: BlockPos, lifted: LiftedBlock) {
+    fn place_lifted(&mut self, pos: BlockPos, lifted: HeldBlock) {
         if self
             .moving_at(pos)
             .is_some_and(|moving| moving.moved != lifted.state())
@@ -280,7 +341,7 @@ impl RegionActor {
             .redstone
             .lifted
             .remove(&pos)
-            .map_or(AIR, LiftedBlock::land)
+            .map_or(AIR, HeldBlock::land)
     }
 
     /// A moving block left this region's bookkeeping without landing: its
@@ -321,7 +382,7 @@ impl RegionActor {
     }
 
     /// A lifted block with nowhere to land breaks into its drops at `pos`.
-    pub(super) fn break_lifted(&mut self, pos: BlockPos, lifted: LiftedBlock) {
+    pub(super) fn break_lifted(&mut self, pos: BlockPos, lifted: HeldBlock) {
         let broken = lifted.into_broken(None);
         if self.shared.rule_bool("block_drops") {
             let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);

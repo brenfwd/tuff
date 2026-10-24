@@ -434,8 +434,11 @@ impl RedstoneLevel for RegionActor {
                 crate::world::game_event::Context::default(),
             ),
             Effect::DropResources(pos, state) => {
-                let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Popped)
-                else {
+                let Some(broken) = self.claim(
+                    pos,
+                    crate::world::block_ledger::Remains::Vanilla,
+                    crate::world::block_ledger::ClaimReason::Popped,
+                ) else {
                     return;
                 };
                 debug_assert_eq!(

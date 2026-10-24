@@ -27,8 +27,9 @@ pub trait FluidWorld {
     /// Sets a block and lets its neighbours react.
     fn set(&mut self, pos: BlockPos, state: BlockState);
     fn schedule(&mut self, pos: BlockPos, fluid: Fluid, delay: u32);
-    /// A water flow breaks `state` (which then drops its loot).
-    fn wash_away(&mut self, pos: BlockPos, state: BlockState);
+    /// A water flow breaks `state` (which then drops its loot), leaving
+    /// the fluid block `left`.
+    fn wash_away(&mut self, pos: BlockPos, state: BlockState, left: BlockState);
     /// A liquid container at `pos` takes `fluid`'s source: `result` and the
     /// placement's tick and sounds.
     fn place_liquid(&mut self, pos: BlockPos, placement: &'static LiquidPlacement);

@@ -14,8 +14,7 @@ use tuff_vanilla_data::{Block, BlockState};
 use super::{ChunkPos, RegionActor};
 use crate::world::growth::{self, GrowthLevel};
 use crate::world::messages::BlockUpdate;
-use crate::world::placement;
-use crate::world::redstone::{RedstoneLevel, TickPriority, UPDATE_ALL, UPDATE_LIMIT};
+use crate::world::redstone::{RedstoneLevel, TickPriority, UPDATE_LIMIT};
 use crate::world::region_api::BlockCause;
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::{Chunk, is_air, ticks_randomly};
@@ -206,7 +205,11 @@ impl RegionActor {
         if is_air(old) {
             return;
         }
-        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Popped) else {
+        let Some(broken) = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Vanilla,
+            crate::world::block_ledger::ClaimReason::Popped,
+        ) else {
             return;
         };
         if old.block().random_tick_kind() != Some("leaves") {
@@ -216,7 +219,6 @@ impl RegionActor {
             let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
             self.drop_items(pos, stacks);
         }
-        self.set_block_flags(pos, placement::remains(old), UPDATE_ALL, UPDATE_LIMIT);
     }
 
     /// Lets the block at `pos` react to its neighbour in `direction`
@@ -305,7 +307,11 @@ impl GrowthLevel for RegionActor {
     }
 
     fn drop_resources(&mut self, pos: BlockPos) {
-        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Popped) else {
+        let Some(broken) = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Vanilla,
+            crate::world::block_ledger::ClaimReason::Popped,
+        ) else {
             return;
         };
         if !self.shared.rule_bool("block_drops") {

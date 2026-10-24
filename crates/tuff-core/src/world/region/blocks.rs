@@ -13,6 +13,7 @@ use tuff_vanilla_data::{Block, BlockKind, BlockState, Item};
 use super::{AIR, RegionActor, UNBREAKABLE, menu_stat};
 use crate::protocol::play;
 use crate::world::block_entity::{self, ContainerKind};
+use crate::world::block_ledger::{ClaimReason, Remains};
 use crate::world::items::{self};
 use crate::world::lighting::LightOp;
 use crate::world::menu::MenuKind;
@@ -657,7 +658,17 @@ impl RegionActor {
         {
             self.raw_set_block(pos, disarmed);
         }
-        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Mined) else {
+        let creative_drop = self
+            .block_entity(pos)
+            .filter(|entity| entity.kind == ContainerKind::ShulkerBox && !entity.is_empty())
+            .and(self.saved_block_entity(pos))
+            .map(|nbt| {
+                Components::from_nbt(&block_entity::raw::collect_components(
+                    BlockEntityType::ShulkerBox,
+                    &nbt,
+                ))
+            });
+        let Some(broken) = self.claim(pos, Remains::Vanilla, ClaimReason::Mined) else {
             return reject(self);
         };
         if unstable_tnt && self.shared.rule_bool("tnt_explodes") {
@@ -688,17 +699,6 @@ impl RegionActor {
             state,
             tool_stack.as_deref().map(ItemStack::any),
         );
-        let creative_drop = self
-            .block_entity(pos)
-            .filter(|entity| entity.kind == ContainerKind::ShulkerBox && !entity.is_empty())
-            .and(saved.as_ref())
-            .map(|nbt| {
-                Components::from_nbt(&block_entity::raw::collect_components(
-                    BlockEntityType::ShulkerBox,
-                    nbt,
-                ))
-            });
-        self.put_block(pos, placement::remains(state));
         self.break_event(pos, state, Some(player.id));
         if !matches!(mode, BreakMode::Creative)
             && state.block() == Block::TurtleEgg

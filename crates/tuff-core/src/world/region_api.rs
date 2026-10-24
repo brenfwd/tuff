@@ -20,7 +20,7 @@ use std::sync::Arc;
 use tuff_vanilla_data::Block;
 
 use crate::world::Shared;
-use crate::world::block_ledger::{BrokenBlock, ClaimReason};
+use crate::world::block_ledger::{BrokenBlock, ClaimReason, HeldBlock, Remains};
 use crate::world::dimension::{Dimension, DimensionId};
 use crate::world::entity::{RegionEntity, TrackedEntity};
 use crate::world::growth::GrowthLevel;
@@ -686,7 +686,20 @@ pub trait RegionWorld: GrowthLevel {
     /// Breaks `state` at `pos` as losing its support does; loot when `drops`.
     fn break_by_update(&mut self, pos: BlockPos, state: BlockState, drops: bool);
     /// Takes the block at `pos` out to break it; `None` once it has left.
-    fn claim_block(&mut self, pos: BlockPos, why: ClaimReason) -> Option<BrokenBlock>;
+    fn claim_block(
+        &mut self,
+        pos: BlockPos,
+        remains: Remains,
+        why: ClaimReason,
+    ) -> Option<BrokenBlock>;
+
+    /// Takes the block at `pos` up for an entity to hold, writing `remains`.
+    fn take_up_block(
+        &mut self,
+        pos: BlockPos,
+        remains: Remains,
+        why: ClaimReason,
+    ) -> Option<HeldBlock>;
     /// A block sound at `pos` for the chunk's viewers (but `except`).
     fn play_sound(
         &self,

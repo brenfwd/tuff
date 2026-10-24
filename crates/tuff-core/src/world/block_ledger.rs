@@ -1,13 +1,14 @@
 //! The doors through which a block leaves its place in the world.
 //!
 //! A block standing in a chunk belongs to its position. Breaking it
-//! ([`BrokenBlock`]) and a piston lifting it ([`LiftedBlock`]) are the only
-//! ways to take it out, each at most once per block: the position is
-//! vacated until something is written there, and a vacated position yields
-//! nothing. Block loot is rolled from a [`BrokenBlock`] taken by value, so
-//! a block's drops come at most once, and a lifted block lands, breaks or
-//! is burned exactly once. Neither token can be copied or built outside
-//! this crate.
+//! ([`BrokenBlock`]) and holding it out of the world ([`HeldBlock`], for a
+//! moving piston or an entity) are the only ways to take it out, each at
+//! most once per block. A claim writes what remains in its place itself, so
+//! holding a token always means the block is gone; only a piston's lift
+//! leaves an inert ghost behind, until something is written there. Block
+//! loot is rolled from a [`BrokenBlock`] taken by value, so a block's drops
+//! come at most once, and a held block lands, breaks or is burned exactly
+//! once. Neither token can be copied or built outside this crate.
 //!
 //! ```compile_fail
 //! use tuff_core::world::block_ledger::BrokenBlock;
@@ -17,8 +18,8 @@
 //! ```
 //!
 //! ```compile_fail
-//! use tuff_core::world::block_ledger::LiftedBlock;
-//! fn copy(block: &LiftedBlock) -> LiftedBlock {
+//! use tuff_core::world::block_ledger::HeldBlock;
+//! fn copy(block: &HeldBlock) -> HeldBlock {
 //!     block.clone()
 //! }
 //! ```
@@ -32,7 +33,7 @@
 //! ```
 //!
 //! In debug builds each token carries an id and the operations applied to
-//! it, and a lifted block dropped without landing, breaking or being burned
+//! it, and a held block dropped without landing, breaking or being burned
 //! panics with that history. Release builds log it and count it as lost.
 
 use std::fmt;
@@ -64,13 +65,30 @@ pub enum ClaimReason {
     Entity,
 }
 
-/// Why a lifted block leaves existence without landing or breaking.
+/// What a claim leaves in the place of the block it takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Remains {
+    /// Air.
+    Air,
+    /// The fluid the block held, if any, else air.
+    Vanilla,
+    /// A block the claimer puts there instead.
+    State(BlockState),
+    /// A fluid block.
+    Fluid(BlockState),
+}
+
+/// Why a held block leaves existence without landing or breaking.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlockBurn {
     /// Something else was written over its moving piston.
     Overwritten,
     /// The region it was sent to was gone.
     Orphaned,
+    /// The entity holding it was killed or removed.
+    Killed,
+    /// It was thrown away on purpose.
+    Discarded,
 }
 
 /// What a broken block became instead of drops.
@@ -273,40 +291,50 @@ impl BrokenBlock {
     }
 }
 
-/// A block a piston lifted out of its place: it lands, breaks or is burned
+/// A block held out of its place by a piston or an entity: it lands, breaks or is burned
 /// exactly once.
-#[must_use = "a lifted block must land, break or be burned"]
-pub struct LiftedBlock(Option<Lifted>);
+#[must_use = "a held block must land, break or be burned"]
+pub struct HeldBlock(Option<Held>);
 
-struct Lifted {
+struct Held {
     state: BlockState,
     trail: Trail,
 }
 
-impl fmt::Debug for LiftedBlock {
+impl fmt::Debug for HeldBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 {
-            Some(lifted) => write!(f, "LiftedBlock({:?} {:?})", lifted.state, lifted.trail),
-            None => f.write_str("LiftedBlock(spent)"),
+            Some(lifted) => write!(f, "HeldBlock({:?} {:?})", lifted.state, lifted.trail),
+            None => f.write_str("HeldBlock(spent)"),
         }
     }
 }
 
-impl LiftedBlock {
+impl HeldBlock {
     #[track_caller]
     pub(crate) fn lifted(state: BlockState) -> Self {
         count(&LIFTED);
-        Self(Some(Lifted {
+        Self(Some(Held {
             state,
             trail: Trail::begin(format_args!("lifted {state:?}")),
         }))
     }
 
-    /// A lifted block a saved moving piston held, loaded with its chunk.
+    /// A block taken up by an entity (see `RegionActor::take_up`).
+    #[track_caller]
+    pub(crate) fn taken(state: BlockState, why: ClaimReason) -> Self {
+        count(&LIFTED);
+        Self(Some(Held {
+            state,
+            trail: Trail::begin(format_args!("taken up {state:?}: {why:?}")),
+        }))
+    }
+
+    /// A held block a saved moving piston held, loaded with its chunk.
     #[track_caller]
     pub(crate) fn from_storage(state: BlockState) -> Self {
         count(&LOADED);
-        Self(Some(Lifted {
+        Self(Some(Held {
             state,
             trail: Trail::begin(format_args!("loaded {state:?}")),
         }))
@@ -316,13 +344,13 @@ impl LiftedBlock {
     #[doc(hidden)]
     #[track_caller]
     pub fn test(state: BlockState) -> Self {
-        Self(Some(Lifted {
+        Self(Some(Held {
             state,
             trail: Trail::begin(format_args!("test {state:?}")),
         }))
     }
 
-    fn take(&mut self) -> Lifted {
+    fn take(&mut self) -> Held {
         self.0
             .take()
             .expect("a lifted block used after it was spent")
@@ -352,7 +380,7 @@ impl LiftedBlock {
     #[track_caller]
     pub fn into_broken(mut self, block_entity: Option<Compound>) -> BrokenBlock {
         count(&BROKEN);
-        let Lifted { state, mut trail } = self.take();
+        let Held { state, mut trail } = self.take();
         trail.note(format_args!("broke"));
         BrokenBlock {
             state,
@@ -376,7 +404,7 @@ impl LiftedBlock {
     }
 }
 
-impl Drop for LiftedBlock {
+impl Drop for HeldBlock {
     fn drop(&mut self) {
         let Some(lifted) = self.0.take() else {
             return;
@@ -412,39 +440,50 @@ mod tests {
 
     #[tuff_core::watchdog]
     #[test]
-    fn a_lifted_block_lands_once() {
+    fn a_held_block_lands_once() {
         let before = totals();
-        assert_eq!(LiftedBlock::lifted(rail()).land(), rail());
+        assert_eq!(HeldBlock::lifted(rail()).land(), rail());
         let after = totals().since(before);
         assert!(after.lifted >= 1 && after.landed >= 1);
     }
 
     #[tuff_core::watchdog]
     #[test]
-    fn a_lifted_block_breaks_with_its_state() {
-        let broken = LiftedBlock::lifted(rail()).into_broken(None);
+    fn a_block_taken_up_lands_once_or_is_burned_as_killed() {
+        let before = totals();
+        assert_eq!(HeldBlock::taken(rail(), ClaimReason::Entity).land(), rail());
+        HeldBlock::taken(rail(), ClaimReason::Entity).burn(BlockBurn::Killed);
+        HeldBlock::taken(rail(), ClaimReason::Entity).burn(BlockBurn::Discarded);
+        let after = totals().since(before);
+        assert!(after.lifted >= 3 && after.landed >= 1 && after.burned >= 2);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_held_block_breaks_with_its_state() {
+        let broken = HeldBlock::lifted(rail()).into_broken(None);
         assert_eq!(broken.state(), rail());
     }
 
     #[tuff_core::watchdog]
     #[test]
-    fn burning_and_storing_spend_a_lifted_block() {
-        LiftedBlock::lifted(rail()).burn(BlockBurn::Overwritten);
-        LiftedBlock::from_storage(rail()).to_storage();
+    fn burning_and_storing_spend_a_held_block() {
+        HeldBlock::lifted(rail()).burn(BlockBurn::Overwritten);
+        HeldBlock::from_storage(rail()).to_storage();
     }
 
     #[tuff_core::watchdog]
     #[test]
-    fn dropping_a_lifted_block_loses_it() {
+    fn dropping_a_held_block_loses_it() {
         let before = totals();
-        let dropped = std::thread::spawn(|| drop(LiftedBlock::lifted(rail()))).join();
+        let dropped = std::thread::spawn(|| drop(HeldBlock::lifted(rail()))).join();
         assert_eq!(dropped.is_err(), cfg!(debug_assertions));
         assert!(totals().since(before).lost >= 1);
     }
 
     #[tuff_core::watchdog]
     #[test]
-    fn a_lifted_block_dropped_while_releasing_is_stored() {
-        tuff_item::item::conservation::releasing(|| drop(LiftedBlock::lifted(rail())));
+    fn a_held_block_dropped_while_releasing_is_stored() {
+        tuff_item::item::conservation::releasing(|| drop(HeldBlock::lifted(rail())));
     }
 }

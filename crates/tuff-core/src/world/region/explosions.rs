@@ -509,13 +509,15 @@ impl RegionActor {
             hook.block_exploded(self, pos, state, cause);
         }
         let igniter = cause.igniter.clone();
-        let Some(broken) = self.claim(pos, crate::world::block_ledger::ClaimReason::Exploded)
-        else {
+        let Some(broken) = self.with_cause(BlockCause::explosion(cause), |region| {
+            region.claim(
+                pos,
+                crate::world::block_ledger::Remains::Air,
+                crate::world::block_ledger::ClaimReason::Exploded,
+            )
+        }) else {
             return Vec::new();
         };
-        self.with_cause(BlockCause::explosion(cause), |region| {
-            region.put_block(pos, AIR)
-        });
         if state.block() == Block::Tnt
             && self.shared.rule_bool("tnt_explodes")
             && let Some(primer) = self.shared.tnt.clone()

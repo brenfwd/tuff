@@ -117,9 +117,11 @@ impl RegionActor {
                     }
                 } else {
                     let cake = Block::Cake.default_state().with("bites", "1")?;
-                    let broken =
-                        self.claim(pos, crate::world::block_ledger::ClaimReason::Converted)?;
-                    self.put_block(pos, cake);
+                    let broken = self.claim(
+                        pos,
+                        crate::world::block_ledger::Remains::State(cake),
+                        crate::world::block_ledger::ClaimReason::Converted,
+                    )?;
                     let candle = self.shared.block_loot().drops(broken, None, &mut self.rng);
                     self.drop_items(pos, candle);
                 }

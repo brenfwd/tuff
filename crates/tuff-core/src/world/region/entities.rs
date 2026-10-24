@@ -664,13 +664,16 @@ impl RegionActor {
         let Some(state) = self.block(pos).filter(|_| self.owns(pos)) else {
             return;
         };
-        let broken = self.claim(pos, crate::world::block_ledger::ClaimReason::Popped);
+        let broken = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Air,
+            crate::world::block_ledger::ClaimReason::Popped,
+        );
         self.break_event(pos, state, None);
         if drop && let Some(broken) = broken {
             let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
             self.drop_items(pos, stacks);
         }
-        self.put_block(pos, tuff_vanilla_data::Block::Air.default_state());
         if drop {
             self.release_infestation(pos, state, None);
         }

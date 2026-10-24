@@ -541,9 +541,19 @@ impl RegionWorld for RegionActor {
     fn claim_block(
         &mut self,
         pos: BlockPos,
+        remains: crate::world::block_ledger::Remains,
         why: crate::world::block_ledger::ClaimReason,
     ) -> Option<crate::world::block_ledger::BrokenBlock> {
-        self.claim(pos, why)
+        self.claim(pos, remains, why)
+    }
+
+    fn take_up_block(
+        &mut self,
+        pos: BlockPos,
+        remains: crate::world::block_ledger::Remains,
+        why: crate::world::block_ledger::ClaimReason,
+    ) -> Option<crate::world::block_ledger::HeldBlock> {
+        self.take_up(pos, remains, why)
     }
 
     fn play_sound(
