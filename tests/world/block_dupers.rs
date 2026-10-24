@@ -1,8 +1,10 @@
-//! Simple rail and carpet dupers: a piston moving a rail or carpet
-//! together with, or away from, the block it stands on. No block may exist as a block and as a
-//! drop at once: on every tick no kind of block in reach, counted where it
-//! stands, inside moving pistons and as dropped items, outnumbers what was
-//! built, and once the piston settles each adds up to it again. Across a
+//! Block conservation: a piston moving a rail, carpet, sand or TNT together
+//! with, or away from, the block it stands on, and falling blocks and
+//! endermen holding blocks. No block may exist twice: on every tick no kind
+//! of block in reach, counted where it stands, inside moving pistons, held
+//! by a falling block or an enderman, as primed TNT and as dropped items,
+//! outnumbers what was built, and once the piston settles each adds up to
+//! it again. Across a
 //! region border only the settled count is checked: the two regions are
 //! read one after the other, a tick apart from the block's point of view.
 
@@ -121,6 +123,28 @@ impl Bench {
                     *tally.entry("minecraft:tnt".to_owned()).or_default() += 1;
                     continue;
                 }
+                let held = match entity.kind {
+                    EntityType::FallingBlock => Some("BlockState"),
+                    EntityType::Enderman => Some("carriedBlockState"),
+                    _ => None,
+                };
+                if let Some(key) = held {
+                    let (reply, data) = oneshot::channel();
+                    region
+                        .request(RegionRequest::EntityData {
+                            id: entity.id,
+                            reply,
+                        })
+                        .await;
+                    let state = data.await.unwrap().and_then(|d| {
+                        d.get(key)
+                            .map(tuff_core::storage::chunk_nbt::decode_block_state)
+                    });
+                    if let Some(state) = state.filter(|s| s.block() != Block::Air) {
+                        *tally.entry(state.block().name().to_owned()).or_default() += 1;
+                    }
+                    continue;
+                }
                 if entity.kind != EntityType::Item {
                     continue;
                 }
@@ -202,6 +226,17 @@ const TWO_LINKED_RAILS_ON_SLIME_AND_STONE: Layout = &[
     (1, 1, 0, "minecraft:rail[shape=east_west]"),
     (2, 0, 0, "minecraft:stone"),
     (2, 1, 0, "minecraft:rail[shape=east_west]"),
+];
+
+const SAND_RIDING_A_SLIME_BLOCK: Layout = &[
+    (1, 0, 0, "minecraft:slime_block"),
+    (1, 1, 0, "minecraft:sand"),
+];
+
+const SAND_LOSING_ITS_SUPPORT: Layout = &[
+    (1, -2, 0, "minecraft:stone"),
+    (1, 0, 0, "minecraft:stone"),
+    (1, 1, 0, "minecraft:sand"),
 ];
 
 const POWERED_TNT_RIDING_A_SLIME_BLOCK: Layout = &[
@@ -365,4 +400,188 @@ async fn two_linked_rails_duplicate_one_when_vanilla_does() {
         &[("minecraft:rail", 1)],
     )
     .await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sand_riding_a_slime_block_is_not_duplicated() {
+    no_dupe(SAND_RIDING_A_SLIME_BLOCK).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sand_whose_support_a_piston_moves_away_falls_once() {
+    no_dupe(SAND_LOSING_ITS_SUPPORT).await;
+}
+
+const HELD_AT: i32 = INSIDE + 3;
+
+impl Bench {
+    async fn entities_of(&self, kind: EntityType) -> Vec<i32> {
+        let (reply, answer) = oneshot::channel();
+        self.west.request(RegionRequest::Entities { reply }).await;
+        answer
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.kind == kind)
+            .map(|e| e.id)
+            .collect()
+    }
+
+    async fn drop_falling(&self, state: &str, at: BlockPos) {
+        let (reply, summoned) = oneshot::channel();
+        self.region(at)
+            .request(RegionRequest::Summon {
+                nbt: Compound::new()
+                    .with("id", "minecraft:falling_block")
+                    .with("BlockState", Compound::new().with("Name", state))
+                    .with("Time", 1),
+                position: [
+                    f64::from(at.x) + 0.5,
+                    f64::from(at.y),
+                    f64::from(at.z) + 0.5,
+                ],
+                fresh: false,
+                reply,
+            })
+            .await;
+        assert!(summoned.await.unwrap());
+    }
+
+    async fn kill(&self, id: i32) {
+        self.west
+            .request(RegionRequest::Run(
+                tuff_core::world::region_api::RegionTask::new(move |world| {
+                    world.kill_entity(id);
+                }),
+            ))
+            .await;
+    }
+
+    async fn held_tally(&self, blocks: Vec<BlockPos>) -> Tally {
+        let mut tally = Tally::new();
+        self.count_blocks(blocks, &mut tally).await;
+        self.count_drops(HELD_AT, &mut tally).await;
+        tally
+    }
+}
+
+fn count_of(tally: &Tally, id: &str) -> u32 {
+    tally.get(id).copied().unwrap_or(0)
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_falling_block_killed_mid_fall_is_gone_without_a_drop() {
+    let dir = TestDir::new();
+    let b = bench(dir.path(), false).await;
+    let at = BlockPos::new(HELD_AT, Y, Z + 10);
+    b.drop_falling("minecraft:sand", at).await;
+    b.world.ticks(4).await;
+    let falling = b.entities_of(EntityType::FallingBlock).await;
+    assert_eq!(
+        falling.len(),
+        1,
+        "the sand fell: {:?} {:?}",
+        block_at(&b.west, at).await,
+        block_at(&b.west, BlockPos::new(at.x, at.y - 1, at.z)).await
+    );
+    assert_eq!(count_of(&b.held_tally(vec![at]).await, "minecraft:sand"), 1);
+    let before = tuff_core::world::block_ledger::totals();
+    b.kill(falling[0]).await;
+    b.world.ticks(2).await;
+    let after = b.held_tally(vec![at]).await;
+    assert_eq!(count_of(&after, "minecraft:sand"), 0, "{after:?}");
+    assert!(
+        tuff_core::world::block_ledger::totals()
+            .since(before)
+            .burned
+            >= 1
+    );
+    b.world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_falling_block_saved_and_reloaded_mid_fall_lands_once() {
+    let dir = TestDir::new();
+    let b = bench(dir.path(), false).await;
+    let top = BlockPos::new(HELD_AT, Y, Z + 10);
+    let landing = BlockPos::new(HELD_AT, Y - 9, Z + 10);
+    b.paste(BlockPos::new(HELD_AT, Y - 10, Z + 10), "minecraft:stone")
+        .await;
+    b.drop_falling("minecraft:sand", top).await;
+    b.world.ticks(4).await;
+    assert_eq!(b.entities_of(EntityType::FallingBlock).await.len(), 1);
+    b.world.shutdown().await;
+    let b = bench(dir.path(), false).await;
+    let column: Vec<BlockPos> = (Y - 9..=Y)
+        .map(|y| BlockPos::new(HELD_AT, y, top.z))
+        .collect();
+    b.world.ticks(60).await;
+    let tally = b.held_tally(column).await;
+    assert_eq!(count_of(&tally, "minecraft:sand"), 1, "{tally:?}");
+    assert!(b.entities_of(EntityType::FallingBlock).await.is_empty());
+    let landed = block_at(&b.west, landing).await.unwrap();
+    assert_eq!(landed.block(), Block::Sand);
+    b.world.shutdown().await;
+}
+
+async fn enderman_holding_dirt(dir: &Path) -> Bench {
+    let b = bench(dir, false).await;
+    b.world.game_rules.send_modify(|rules| {
+        rules
+            .set(
+                "mob_griefing",
+                crate::world::game_rules::RuleValue::Bool(false),
+            )
+            .expect("a boolean rule");
+    });
+    b
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_enderman_holding_a_block_saved_reloaded_and_killed_drops_it_once() {
+    let dir = TestDir::new();
+    let b = enderman_holding_dirt(dir.path()).await;
+    let floor = BlockPos::new(HELD_AT, Y - 1, Z + 20);
+    b.paste(floor, "minecraft:stone").await;
+    let (reply, summoned) = oneshot::channel();
+    b.west
+        .request(RegionRequest::Summon {
+            nbt: Compound::new()
+                .with("id", "minecraft:enderman")
+                .with(
+                    "carriedBlockState",
+                    Compound::new().with("Name", "minecraft:dirt"),
+                )
+                .with("PersistenceRequired", true),
+            position: [
+                f64::from(HELD_AT) + 0.5,
+                f64::from(Y),
+                f64::from(Z + 20) + 0.5,
+            ],
+            fresh: false,
+            reply,
+        })
+        .await;
+    assert!(summoned.await.unwrap());
+    b.world.ticks(3).await;
+    assert_eq!(count_of(&b.held_tally(vec![]).await, "minecraft:dirt"), 1);
+    b.world.shutdown().await;
+
+    let b = enderman_holding_dirt(dir.path()).await;
+    b.world.ticks(3).await;
+    let tally = b.held_tally(vec![]).await;
+    assert_eq!(count_of(&tally, "minecraft:dirt"), 1, "{tally:?}");
+    let enderman = b.entities_of(EntityType::Enderman).await;
+    assert_eq!(enderman.len(), 1);
+    b.kill(enderman[0]).await;
+    b.world.ticks(40).await;
+    let tally = b.held_tally(vec![]).await;
+    assert!(b.entities_of(EntityType::Enderman).await.is_empty());
+    assert_eq!(count_of(&tally, "minecraft:dirt"), 1, "{tally:?}");
+    b.world.shutdown().await;
 }
