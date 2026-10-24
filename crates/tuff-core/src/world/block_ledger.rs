@@ -95,8 +95,6 @@ pub enum BlockBurn {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntityReason {
     PrimedTnt,
-    Falling,
-    Carried,
 }
 
 /// A vanilla duplication glitch Mojang ships and a switch keeps on. Each is
@@ -141,6 +139,18 @@ pub(crate) fn duplicate(
         block_entity: None,
         trail: Trail::begin(format_args!("duplicated {state:?}: {kind:?}")),
     })
+}
+
+/// A block the gravity block duplication glitch makes for the copy of a
+/// falling block that finishes its tick where it entered an End portal,
+/// when its setting is on.
+#[track_caller]
+pub fn duplicate_held(config: &crate::config::ConfigStore, state: BlockState) -> Option<HeldBlock> {
+    let broken = duplicate(VanillaDupe::GravityPortal, config, state)?;
+    let mut trail = broken.trail;
+    trail.note(format_args!("held by the duplicate falling block"));
+    count(&LIFTED);
+    Some(HeldBlock(Some(Held { state, trail })))
 }
 
 /// Primed TNT the TNT duplication glitch makes, when its setting is on.
@@ -320,18 +330,6 @@ impl BrokenBlock {
         }
     }
 
-    /// A block an entity held since it claimed it (see
-    /// [`BrokenBlock::into_entity`]), broken as the entity lets go of it.
-    #[track_caller]
-    pub fn released(state: BlockState, why: EntityReason) -> Self {
-        count(&BROKEN);
-        Self {
-            state,
-            block_entity: None,
-            trail: Trail::begin(format_args!("released {state:?}: {why:?}")),
-        }
-    }
-
     /// A block that is not in any world, for loot simulations (`/loot ...
     /// mine`).
     #[track_caller]
@@ -427,9 +425,10 @@ impl HeldBlock {
         }))
     }
 
-    /// A held block a saved moving piston held, loaded with its chunk.
+    /// A held block a saved moving piston or entity held, loaded with its
+    /// chunk.
     #[track_caller]
-    pub(crate) fn from_storage(state: BlockState) -> Self {
+    pub fn from_storage(state: BlockState) -> Self {
         count(&LOADED);
         Self(Some(Held {
             state,
@@ -457,6 +456,19 @@ impl HeldBlock {
         self.0
             .as_ref()
             .map_or(tuff_vanilla_data::Block::Air.default_state(), |l| l.state)
+    }
+
+    /// The held block turns into another state while held (an anvil
+    /// degrading as it lands).
+    #[track_caller]
+    pub fn become_state(&mut self, state: BlockState) {
+        if let Some(held) = &mut self.0
+            && held.state != state
+        {
+            held.trail
+                .note(format_args!("became {state:?} from {:?}", held.state));
+            held.state = state;
+        }
     }
 
     #[track_caller]

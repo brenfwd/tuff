@@ -776,6 +776,14 @@ impl<S: Species> RegionEntity for Mob<S> {
         ))
     }
 
+    fn take_held(&mut self) -> Option<tuff_core::world::block_ledger::HeldBlock> {
+        self.core.carried_block.take()
+    }
+
+    fn receive_held(&mut self, block: tuff_core::world::block_ledger::HeldBlock) {
+        self.species.received_block(&mut self.core, block);
+    }
+
     fn take_items(&mut self) -> Vec<ItemStack> {
         let mut items = self.species.take_items();
         items.append(&mut self.core.piglin.inventory);

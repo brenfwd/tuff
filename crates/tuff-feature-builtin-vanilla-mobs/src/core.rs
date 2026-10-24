@@ -254,7 +254,7 @@ pub struct MobCore {
     pub landed_hits: u32,
     pub(super) piglin: super::piglin::PiglinBrain,
     /// A block it carries, which its goals pick up and put down (endermen).
-    pub signal_block: Option<tuff_vanilla_data::BlockState>,
+    pub carried_block: Option<tuff_core::world::block_ledger::HeldBlock>,
     /// Who summoned it, for goals that copy an owner's target (an
     /// evoker's vexes); not saved once the owning entity is gone.
     pub owner: Option<u128>,
@@ -494,7 +494,7 @@ impl MobCore {
             world_tick: 0,
             landed_hits: 0,
             piglin: Default::default(),
-            signal_block: None,
+            carried_block: None,
             owner: None,
             bound_origin: None,
             leash: None,

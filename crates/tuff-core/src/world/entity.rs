@@ -1038,6 +1038,19 @@ pub trait RegionEntity: Any + Send + Debug {
         Vec::new()
     }
 
+    /// Takes the block the entity holds out of the world (a falling block,
+    /// an enderman's), before it is removed for good: the region burns it.
+    fn take_held(&mut self) -> Option<crate::world::block_ledger::HeldBlock> {
+        None
+    }
+
+    /// Takes the block an `Effect::TakeUpBlock` it asked for took up, or one
+    /// an `Effect::PlaceHeldBlock` could not place. An entity that asked for
+    /// neither burns it.
+    fn receive_held(&mut self, block: crate::world::block_ledger::HeldBlock) {
+        block.burn(crate::world::block_ledger::BlockBurn::Discarded);
+    }
+
     /// What the entity holds on display or wears, indexed by the slot
     /// numbers its held-item edits report (an item frame, an armor stand).
     fn held_items(&self) -> Option<Vec<Option<tuff_item::item::ItemView<'_>>>> {

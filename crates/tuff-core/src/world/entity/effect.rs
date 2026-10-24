@@ -46,13 +46,33 @@ pub enum Effect {
     PassedThrough(Vec<[f64; 6]>),
     /// The entity landed on a block after a fall.
     Landed(crate::world::region_api::Landing),
-    /// A falling block landed: places it with the full neighbour and shape
+    /// A held block lands: places it with the full neighbour and shape
     /// cascade a normal placement gets, so a block resting on it reacts and
     /// the block that used to hold it up (now air) keeps a stack falling.
+    /// `Effect::PlaceHeldBlock` is the same for a block that may not fit.
     PlaceFallenBlock {
         pos: BlockPos,
-        state: BlockState,
+        block: crate::world::block_ledger::HeldBlock,
         data: Option<Compound>,
+    },
+    /// Replaces the block at `pos` with `state`, with the full cascade of a
+    /// placement (a lightning bolt scraping copper).
+    ReplaceBlock {
+        pos: BlockPos,
+        state: BlockState,
+    },
+    /// An entity takes up the block at `pos` (leaving what the block leaves,
+    /// as a break does) and is handed it through `RegionEntity::receive_held`.
+    TakeUpBlock {
+        pos: BlockPos,
+    },
+    /// An entity puts the block it held at `pos` if the place is free to
+    /// take it (air or replaceable); else it is handed back through
+    /// `RegionEntity::receive_held`.
+    PlaceHeldBlock {
+        pos: BlockPos,
+        block: crate::world::block_ledger::HeldBlock,
+        state: BlockState,
     },
     /// A game event at `position`, caused by the entity `source`.
     GameEvent {

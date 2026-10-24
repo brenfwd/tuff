@@ -160,10 +160,12 @@ impl RegionActor {
                 .is_ok();
             let Some(handle) = (if asked { handle.await.ok() } else { None }) else {
                 log::warn!("dropping {} outside of any region", entity.saved_id());
+                burn_held(entity);
                 return;
             };
             if let Err(entity) = handle.try_entity(entity, seq) {
                 log::warn!("dropping {} outside of any region", entity.saved_id());
+                burn_held(entity);
             }
             let _ = manager
                 .send(crate::world::messages::ManagerMessage::Release { dimension, region })
@@ -286,6 +288,9 @@ impl RegionActor {
         let mut tracked = self.remove_entity_intact(id, chunks)?;
         for stack in tracked.entity.take_items() {
             stack.burn(tuff_item::item::BurnReason::Discarded);
+        }
+        if let Some(block) = tracked.entity.take_held() {
+            block.burn(crate::world::block_ledger::BlockBurn::Killed);
         }
         Some(tracked)
     }
@@ -854,6 +859,13 @@ impl RegionActor {
                     tracked.entity.took_item(stack);
                 }
             }
+            for (holder, block) in std::mem::take(&mut self.ents.taken_blocks) {
+                if holder == id {
+                    tracked.entity.receive_held(block);
+                } else {
+                    block.burn(crate::world::block_ledger::BlockBurn::Orphaned);
+                }
+            }
             for (gap, top) in self.ents.lifts.take().unwrap_or_default() {
                 super::redstone::lift(tracked.entity.base_mut(), gap, top);
             }
@@ -1275,5 +1287,12 @@ mod rider_lookup_tests {
             .push(rider);
         vehicles = rider_vehicles(&entities);
         assert_eq!(player_vehicle(&vehicles, &entities, 9), Some(2));
+    }
+}
+
+/// Burns the block an entity that is dropped outside of any region held.
+fn burn_held(mut entity: Box<dyn RegionEntity>) {
+    if let Some(block) = entity.take_held() {
+        block.burn(crate::world::block_ledger::BlockBurn::Orphaned);
     }
 }

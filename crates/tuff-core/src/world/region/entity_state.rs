@@ -32,6 +32,8 @@ pub(super) struct EntityState {
     pub(super) broken_links: HashSet<(i32, bool)>,
     /// Stacks taken by the entity ticking now, handed over once it is back.
     pub(super) taken_stacks: Vec<(i32, tuff_item::item::ItemStack)>,
+    /// Blocks taken up for, or handed back to, the entity ticking now.
+    pub(super) taken_blocks: Vec<(i32, crate::world::block_ledger::HeldBlock)>,
     /// Boss bars currently shown, by the entity id publishing one: who has
     /// been sent it and the progress they were last sent (see
     /// `entities::update_boss_bar`).

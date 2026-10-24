@@ -299,10 +299,9 @@ fn clear_copper(struck: BlockPos, cx: &mut TickContext) {
             scraped = scraped.with("powered", "true").unwrap_or(scraped);
         }
         changed.insert(struck, scraped);
-        cx.effects.push(Effect::PlaceFallenBlock {
+        cx.effects.push(Effect::ReplaceBlock {
             pos: struck,
             state: scraped,
-            data: None,
         });
     }
     let walks = cx.rng.gen_range(0..3) + 3;
