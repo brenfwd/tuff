@@ -417,9 +417,7 @@ impl RedstoneLevel for RegionActor {
             Effect::RingBell(pos) => self.ring_bell(pos, None),
             Effect::PrimeTnt(pos) => {
                 if self.shared.rule_bool("tnt_explodes") {
-                    self.spawn_primed_tnt(pos, None, None);
-                    let left = placement::remains(Reader::block(self, pos));
-                    RedstoneLevel::set_block(self, pos, left, redstone::UPDATE_ALL);
+                    self.prime_tnt_block(pos);
                 }
             }
             Effect::Dispense(pos) => {

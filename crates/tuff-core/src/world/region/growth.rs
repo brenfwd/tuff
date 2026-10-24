@@ -444,9 +444,7 @@ impl GrowthLevel for RegionActor {
 
     fn prime_tnt(&mut self, pos: BlockPos) {
         if self.owns(pos) {
-            if self.shared.rule_bool("tnt_explodes") {
-                self.spawn_primed_tnt(pos, None, None);
-            }
+            self.prime_tnt_block(pos);
         } else {
             let update = BlockUpdate::PrimeTnt { pos };
             let region = ChunkPos::of_block(pos).region();

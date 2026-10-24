@@ -30,10 +30,12 @@ impl RegionActor {
     /// or the TNT feature's usual fuse. Nothing lights with no such feature.
     pub(super) fn spawn_primed_tnt(
         &mut self,
+        origin: crate::world::block_ledger::TntOrigin,
         pos: BlockPos,
         fuse: Option<i32>,
         igniter: Option<Igniter>,
     ) {
+        origin.spend();
         let Some(primer) = self.shared.tnt.clone() else {
             return;
         };
@@ -65,6 +67,29 @@ impl RegionActor {
             seed: self.rng.r#gen(),
         })]);
         self.send_sound_near(position, 1.0, None, packet);
+    }
+
+    /// Takes the TNT block at `pos` out of the world and lights it, when
+    /// this region owns it and TNT is allowed to explode.
+    pub(super) fn prime_tnt_block(&mut self, pos: BlockPos) {
+        if !self.owns(pos)
+            || !self.shared.rule_bool("tnt_explodes")
+            || RegionActor::block(self, pos).map(|state| state.block()) != Some(Block::Tnt)
+        {
+            return;
+        }
+        if let Some(broken) = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Air,
+            crate::world::block_ledger::ClaimReason::Entity,
+        ) {
+            self.spawn_primed_tnt(
+                crate::world::block_ledger::TntOrigin::Block(broken),
+                pos,
+                None,
+                None,
+            );
+        }
     }
 
     /// Sets off an explosion centred in this region.
@@ -522,9 +547,13 @@ impl RegionActor {
             && self.shared.rule_bool("tnt_explodes")
             && let Some(primer) = self.shared.tnt.clone()
         {
-            let _ = broken.into_entity(crate::world::block_ledger::EntityReason::PrimedTnt);
             let fuse = primer.chain_fuse(&mut self.rng);
-            self.spawn_primed_tnt(pos, Some(fuse), igniter);
+            self.spawn_primed_tnt(
+                crate::world::block_ledger::TntOrigin::Block(broken),
+                pos,
+                Some(fuse),
+                igniter,
+            );
             return Vec::new();
         }
         if !self.shared.rule_bool("block_drops") {

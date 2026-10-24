@@ -20,7 +20,7 @@ use std::sync::Arc;
 use tuff_vanilla_data::Block;
 
 use crate::world::Shared;
-use crate::world::block_ledger::{BrokenBlock, ClaimReason, HeldBlock, Remains};
+use crate::world::block_ledger::{BrokenBlock, ClaimReason, HeldBlock, Remains, TntOrigin};
 use crate::world::dimension::{Dimension, DimensionId};
 use crate::world::entity::{RegionEntity, TrackedEntity};
 use crate::world::growth::GrowthLevel;
@@ -759,7 +759,13 @@ pub trait RegionWorld: GrowthLevel {
     /// The same, with water's resistance at `shield`.
     fn explode_shielded(&mut self, explosion: Explosion, shield: BlockPos);
     /// Lights TNT at `pos` (the block already gone).
-    fn spawn_primed_tnt(&mut self, pos: BlockPos, fuse: Option<i32>, igniter: Option<Igniter>);
+    fn spawn_primed_tnt(
+        &mut self,
+        origin: TntOrigin,
+        pos: BlockPos,
+        fuse: Option<i32>,
+        igniter: Option<Igniter>,
+    );
     /// The sound and pitch of lighting something with `item`.
     fn fire_sound(&mut self, item: Item) -> (SoundEvent, f32);
     /// A level event every player in the dimension hears.

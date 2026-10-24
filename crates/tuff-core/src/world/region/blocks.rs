@@ -13,7 +13,7 @@ use tuff_vanilla_data::{Block, BlockKind, BlockState, Item};
 use super::{AIR, RegionActor, UNBREAKABLE, menu_stat};
 use crate::protocol::play;
 use crate::world::block_entity::{self, ContainerKind};
-use crate::world::block_ledger::{ClaimReason, Remains};
+use crate::world::block_ledger::{ClaimReason, Remains, TntOrigin};
 use crate::world::items::{self};
 use crate::world::lighting::LightOp;
 use crate::world::menu::MenuKind;
@@ -671,15 +671,18 @@ impl RegionActor {
         let Some(broken) = self.claim(pos, Remains::Vanilla, ClaimReason::Mined) else {
             return reject(self);
         };
-        if unstable_tnt && self.shared.rule_bool("tnt_explodes") {
+        let broken = if unstable_tnt && self.shared.rule_bool("tnt_explodes") {
             let igniter = self.ents.presence.get(&player.id).map(|p| Igniter {
                 id: player.id,
                 uuid: p.uuid,
                 name: p.name.clone(),
             });
-            self.spawn_primed_tnt(pos, None, igniter);
-        }
-        let saved = broken.block_entity().cloned();
+            self.spawn_primed_tnt(TntOrigin::Block(broken), pos, None, igniter);
+            None
+        } else {
+            Some(broken)
+        };
+        let saved = broken.as_ref().and_then(|b| b.block_entity()).cloned();
         if !matches!(mode, BreakMode::Creative)
             && matches!(state.block(), Block::BeeNest | Block::Beehive)
             && let Some(nbt) = &saved
@@ -713,7 +716,7 @@ impl RegionActor {
         if tuff_datapack::tags::is(tuff_vanilla_data::tag::block::key::FIRE, state.block()) {
             self.level_event(play::level_event::SOUND_EXTINGUISH_FIRE, pos, 0, false);
         }
-        if drops {
+        if drops && let Some(broken) = broken {
             let at = self.location_facts(pos);
             let seed = self.rng.r#gen();
             let mut roll =
@@ -984,9 +987,7 @@ impl RegionActor {
                     self.with_cause(cause, |region| region.put_block(pos, state))
                 }
                 BlockUpdate::PrimeTnt { pos } => {
-                    if self.owns(pos) && self.shared.rule_bool("tnt_explodes") {
-                        self.spawn_primed_tnt(pos, None, None);
-                    }
+                    self.prime_tnt_block(pos);
                 }
                 BlockUpdate::Piston {
                     pos,

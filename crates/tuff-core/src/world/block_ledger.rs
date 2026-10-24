@@ -99,6 +99,30 @@ pub enum EntityReason {
     Carried,
 }
 
+/// What primed TNT came from. Spawning it consumes the origin; the entity
+/// holds no block.
+#[must_use = "an origin primes TNT"]
+#[derive(Debug)]
+pub enum TntOrigin {
+    /// A TNT block that was taken out of the world.
+    Block(BrokenBlock),
+    /// A TNT item a dispenser or a hit used up.
+    Item,
+    /// A command or plugin summoned it.
+    Command,
+    /// The TNT duplication door ([`duplicate`]).
+    Duplicated,
+}
+
+impl TntOrigin {
+    #[track_caller]
+    pub(crate) fn spend(self) {
+        if let Self::Block(broken) = self {
+            let _ = broken.into_entity(EntityReason::PrimedTnt);
+        }
+    }
+}
+
 /// Totals of the block doors since the process started.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BlockLedgerTotals {

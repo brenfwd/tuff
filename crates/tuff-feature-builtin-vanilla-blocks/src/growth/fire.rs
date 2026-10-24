@@ -123,13 +123,13 @@ impl Blaze {
             return;
         }
         let relight = level.random_int(self.age as i32 + 10) < 5 && !level.is_raining_at(cell);
+        if victim.block() == Block::Tnt {
+            level.prime_tnt(cell);
+        }
         if relight {
             kindle(level, cell, self.age);
         } else {
             douse(level, cell);
-        }
-        if victim.block() == Block::Tnt {
-            level.prime_tnt(cell);
         }
     }
 

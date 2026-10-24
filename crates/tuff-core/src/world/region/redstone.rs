@@ -21,7 +21,7 @@ use crate::protocol::play;
 use crate::world::block_entity::analog;
 use crate::world::messages::BlockUpdate;
 use crate::world::messages::RegionInternal;
-use crate::world::placement::{self, step};
+use crate::world::placement::step;
 use crate::world::redstone::{
     self, BlockBehavior, Effect, MovingBlock, Orientation, Reader, RedstoneLevel,
     SHAPE_UPDATE_ORDER, TickPriority, UPDATE_KNOWN_SHAPE, UPDATE_LIMIT, UPDATE_MOVED_BY_PISTON,

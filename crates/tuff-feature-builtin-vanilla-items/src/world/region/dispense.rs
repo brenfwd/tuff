@@ -11,6 +11,7 @@ use tuff_vanilla_data::{Block, BlockState, Item, tag};
 use super::interact::{Interact, Rest};
 use crate::world::interaction;
 use tuff_core::protocol::play;
+use tuff_core::world::block_ledger::{ClaimReason, Remains, TntOrigin};
 use tuff_core::world::game_event::{Context as GameContext, GameEvent};
 use tuff_core::world::growth::{BONEMEAL_EVENT, GrowthLevel};
 use tuff_core::world::region_api::{DispenseOutcome, Fired, RegionWorld};
@@ -359,8 +360,10 @@ fn ignite(
         if !world.shared().rule_bool("tnt_explodes") {
             return DispenseOutcome::Failed;
         }
-        world.put_block(target, AIR);
-        world.spawn_primed_tnt(target, None, None);
+        let Some(broken) = world.claim_block(target, Remains::Air, ClaimReason::Entity) else {
+            return DispenseOutcome::Failed;
+        };
+        world.spawn_primed_tnt(TntOrigin::Block(broken), target, None, None);
     }
     DispenseOutcome::Worn(1)
 }

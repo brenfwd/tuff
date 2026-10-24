@@ -656,8 +656,14 @@ impl RegionWorld for RegionActor {
         RegionActor::explode_shielded(self, explosion, shield);
     }
 
-    fn spawn_primed_tnt(&mut self, pos: BlockPos, fuse: Option<i32>, igniter: Option<Igniter>) {
-        RegionActor::spawn_primed_tnt(self, pos, fuse, igniter);
+    fn spawn_primed_tnt(
+        &mut self,
+        origin: crate::world::block_ledger::TntOrigin,
+        pos: BlockPos,
+        fuse: Option<i32>,
+        igniter: Option<Igniter>,
+    ) {
+        RegionActor::spawn_primed_tnt(self, origin, pos, fuse, igniter);
     }
 
     fn fire_sound(&mut self, item: Item) -> (SoundEvent, f32) {
