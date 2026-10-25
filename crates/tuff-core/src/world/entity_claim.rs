@@ -22,7 +22,7 @@ impl EntityUuids {
     }
 
     /// The claim on `uuid`, or `None` if some entity already holds it.
-    pub fn claim(self: &Arc<Self>, uuid: u128) -> Option<EntityClaim> {
+    pub(crate) fn claim(self: &Arc<Self>, uuid: u128) -> Option<EntityClaim> {
         self.shard(uuid).insert(uuid).then(|| EntityClaim {
             set: self.clone(),
             uuid,

@@ -138,6 +138,13 @@ impl CustomItemDef {
         self
     }
 
+    /// Marks the item as one whose `use_on_block` places a block through
+    /// `RegionWorld::place_from_click`, spending one item.
+    pub fn placing_blocks(mut self) -> Self {
+        self.places_blocks = true;
+        self
+    }
+
     pub fn with_behavior(mut self, behavior: Arc<dyn CustomItemBehavior>) -> Self {
         self.behavior = Some(ItemBehavior(behavior));
         self
@@ -254,6 +261,12 @@ impl CustomContent {
     /// Every custom item, in no particular order.
     pub fn items(&self) -> impl Iterator<Item = &Arc<CustomItemDef>> {
         self.items.values()
+    }
+
+    /// Whether `stack` is a custom item that places blocks from its
+    /// behaviour, paid for by one item of the click.
+    pub fn places_blocks(&self, stack: &ItemStack) -> bool {
+        self.item_of(stack).is_some_and(|def| def.places_blocks)
     }
 
     /// Whether `stack` is a custom item whose base item's own behaviour

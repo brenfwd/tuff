@@ -76,13 +76,21 @@ impl PlayerSession {
         };
         if stacks.is_empty()
             && !creative
-            && self.places_a_block_from_the_hand(held)
+            && (self.places_a_block_from_the_hand(held) || self.custom_item_places_blocks(off_hand))
             && !self.shared.block_rules.places_on_water(held)
             && let Some(one) = ItemStack::take_from(self.inventory.slot_mut(slot), 1)
         {
             return PlaceOffer::paying(creative, slot, one);
         }
         PlaceOffer::new(creative, stacks)
+    }
+
+    /// Whether the hand holds a custom item that places blocks from its
+    /// own behaviour.
+    fn custom_item_places_blocks(&self, off_hand: bool) -> bool {
+        self.inventory
+            .hand(off_hand)
+            .is_some_and(|stack| self.shared.custom.places_blocks(stack))
     }
 
     /// Whether a click with `held` places a block that costs one item: the
