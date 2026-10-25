@@ -415,14 +415,13 @@ impl Goal for LeaveBlock {
             && under.is_collision_full_block()
             && tuff_vanilla_common::placement::can_survive(placed, pos, &level)
             && !crowded
+            && let Some(block) = mob.carried_block.take()
         {
-            if let Some(block) = mob.carried_block.take() {
-                cx.effects.push(Effect::PlaceHeldBlock {
-                    pos,
-                    block,
-                    state: placed,
-                });
-            }
+            cx.effects.push(Effect::PlaceHeldBlock {
+                pos,
+                block,
+                state: placed,
+            });
         }
     }
 }

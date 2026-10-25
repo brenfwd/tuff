@@ -18,7 +18,7 @@ impl Coordinator {
                 since.lost,
                 since.violations
             );
-        } else {
+        } else if cfg!(debug_assertions) {
             log::debug!(
                 "item ledger since the last save: {} minted, {} burned, {} loaded",
                 since.minted,

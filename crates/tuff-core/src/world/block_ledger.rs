@@ -41,6 +41,7 @@ use std::fmt;
 use std::panic::Location;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use tuff_item::item::conservation::OpCounter;
 use tuff_nbt::Compound;
 use tuff_vanilla_data::BlockState;
 
@@ -133,7 +134,7 @@ pub(crate) fn duplicate(
     if !config.get_bool(kind.key()).unwrap_or(true) {
         return None;
     }
-    count(&DUPLICATED);
+    DUPLICATED.fetch_add(1, Ordering::Relaxed);
     Some(BrokenBlock {
         state,
         block_entity: None,
@@ -217,30 +218,30 @@ impl BlockLedgerTotals {
     }
 }
 
-static LIFTED: AtomicU64 = AtomicU64::new(0);
-static LANDED: AtomicU64 = AtomicU64::new(0);
-static BROKEN: AtomicU64 = AtomicU64::new(0);
-static BURNED: AtomicU64 = AtomicU64::new(0);
-static LOADED: AtomicU64 = AtomicU64::new(0);
-static STORED: AtomicU64 = AtomicU64::new(0);
+static LIFTED: OpCounter = OpCounter::new();
+static LANDED: OpCounter = OpCounter::new();
+static BROKEN: OpCounter = OpCounter::new();
+static BURNED: OpCounter = OpCounter::new();
+static LOADED: OpCounter = OpCounter::new();
+static STORED: OpCounter = OpCounter::new();
 static LOST: AtomicU64 = AtomicU64::new(0);
 static DUPLICATED: AtomicU64 = AtomicU64::new(0);
 
 pub fn totals() -> BlockLedgerTotals {
     BlockLedgerTotals {
-        lifted: LIFTED.load(Ordering::Relaxed),
-        landed: LANDED.load(Ordering::Relaxed),
-        broken: BROKEN.load(Ordering::Relaxed),
-        burned: BURNED.load(Ordering::Relaxed),
-        loaded: LOADED.load(Ordering::Relaxed),
-        stored: STORED.load(Ordering::Relaxed),
+        lifted: LIFTED.get(),
+        landed: LANDED.get(),
+        broken: BROKEN.get(),
+        burned: BURNED.get(),
+        loaded: LOADED.get(),
+        stored: STORED.get(),
         lost: LOST.load(Ordering::Relaxed),
         duplicated: DUPLICATED.load(Ordering::Relaxed),
     }
 }
 
-fn count(counter: &AtomicU64) {
-    counter.fetch_add(1, Ordering::Relaxed);
+fn count(counter: &OpCounter) {
+    counter.add(1);
 }
 
 /// A token's id and the operations applied to it, in debug builds; empty
@@ -522,7 +523,7 @@ impl Drop for HeldBlock {
             count(&STORED);
             return;
         }
-        count(&LOST);
+        LOST.fetch_add(1, Ordering::Relaxed);
         if cfg!(debug_assertions) && !std::thread::panicking() {
             panic!(
                 "lifted {:?} dropped without landing, breaking or being burned\n{}",
@@ -547,13 +548,24 @@ mod tests {
         Block::Rail.default_state()
     }
 
+    #[cfg(not(debug_assertions))]
+    #[tuff_core::watchdog]
+    #[test]
+    fn tokens_cost_no_more_than_their_payload_in_release_builds() {
+        use std::mem::size_of;
+        assert_eq!(size_of::<Trail>(), 0);
+        assert_eq!(size_of::<OpCounter>(), 0);
+        assert!(size_of::<HeldBlock>() <= 2 * size_of::<BlockState>());
+        assert!(size_of::<BrokenBlock>() <= size_of::<(BlockState, Option<Compound>)>());
+    }
+
     #[tuff_core::watchdog]
     #[test]
     fn a_held_block_lands_once() {
         let before = totals();
         assert_eq!(HeldBlock::lifted(rail()).land(), rail());
         let after = totals().since(before);
-        assert!(after.lifted >= 1 && after.landed >= 1);
+        assert!(!cfg!(debug_assertions) || after.lifted >= 1 && after.landed >= 1);
     }
 
     #[tuff_core::watchdog]
@@ -564,7 +576,9 @@ mod tests {
         HeldBlock::taken(rail(), ClaimReason::Entity).burn(BlockBurn::Killed);
         HeldBlock::taken(rail(), ClaimReason::Entity).burn(BlockBurn::Discarded);
         let after = totals().since(before);
-        assert!(after.lifted >= 3 && after.landed >= 1 && after.burned >= 2);
+        assert!(
+            !cfg!(debug_assertions) || after.lifted >= 3 && after.landed >= 1 && after.burned >= 2
+        );
     }
 
     #[tuff_core::watchdog]

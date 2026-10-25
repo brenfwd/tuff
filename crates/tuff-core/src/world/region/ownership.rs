@@ -117,7 +117,7 @@ impl RegionActor {
             Taken::Ghost(state)
         } else if state.block() == Block::MovingPiston {
             self.sim.redstone.awaiting_lift.remove(&pos);
-            match self.sim.redstone.lifted.remove(&pos) {
+            match self.sim.redstone.take_held(pos) {
                 Some(held) => Taken::Held(held),
                 None => Taken::Moving(
                     self.moving_at(pos)
@@ -182,12 +182,14 @@ impl RegionActor {
     /// its own right again, and a lifted block whose moving piston was
     /// written over is gone.
     pub(super) fn written_over(&mut self, pos: BlockPos, old: BlockState, new: BlockState) {
-        if !self.sim.redstone.vacated.is_empty() {
-            self.sim.redstone.vacated.remove(&pos);
+        let redstone = &mut self.sim.redstone;
+        if redstone.vacated.is_empty() && redstone.moving.is_empty() {
+            return;
         }
+        redstone.vacated.remove(&pos);
         if old.block() == Block::MovingPiston
             && new.block() != Block::MovingPiston
-            && let Some(lifted) = self.sim.redstone.lifted.remove(&pos)
+            && let Some(lifted) = self.sim.redstone.take_held(pos)
         {
             lifted.burn(BlockBurn::Overwritten);
         }
@@ -338,7 +340,7 @@ impl RegionActor {
     /// place it left.
     pub(super) fn receive_lifted(&mut self, pos: BlockPos, block: Option<HeldBlock>) {
         let waiting = self.moving_at(pos).is_some_and(|moving| !moving.source)
-            && !self.sim.redstone.lifted.contains_key(&pos);
+            && !self.sim.redstone.has_held(pos);
         if waiting {
             self.sim.redstone.awaiting_lift.remove(&pos);
             if let Some(lifted) = block {
@@ -360,7 +362,7 @@ impl RegionActor {
         {
             self.receive_carried(pos, lifted.state());
         }
-        if let Some(earlier) = self.sim.redstone.lifted.insert(pos, lifted) {
+        if let Some(earlier) = self.sim.redstone.give_held(pos, lifted) {
             self.break_lifted(pos, earlier);
         }
     }
@@ -377,23 +379,24 @@ impl RegionActor {
 
     /// What the moving block at `pos` lands as: its lifted block, or
     /// nothing when none came (it broke where it stood).
-    pub(super) fn landing(&mut self, pos: BlockPos, moving: &MovingBlock) -> BlockState {
+    pub(super) fn landing(
+        &mut self,
+        pos: BlockPos,
+        moving: &MovingBlock,
+        held: Option<HeldBlock>,
+    ) -> BlockState {
         if moving.source {
             return moving.moved;
         }
         self.sim.redstone.awaiting_lift.remove(&pos);
-        self.sim
-            .redstone
-            .lifted
-            .remove(&pos)
-            .map_or(AIR, HeldBlock::land)
+        held.map_or(AIR, HeldBlock::land)
     }
 
     /// A moving block left this region's bookkeeping without landing: its
     /// chunk unloaded (the block stays saved in its moving piston).
-    pub(super) fn forget_moving(&mut self, pos: BlockPos) {
+    pub(super) fn forget_moving(&mut self, pos: BlockPos, held: Option<HeldBlock>) {
         self.sim.redstone.awaiting_lift.remove(&pos);
-        if let Some(lifted) = self.sim.redstone.lifted.remove(&pos) {
+        if let Some(lifted) = held {
             if self.columns.contains_key(&ChunkPos::of_block(pos)) {
                 lifted.burn(BlockBurn::Overwritten);
             } else {

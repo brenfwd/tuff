@@ -196,10 +196,9 @@ pub(super) struct RedstoneState {
     pub(super) frame_changes: std::collections::HashSet<BlockPos>,
     /// Block events waiting for the block event phase, in queue order.
     pub(super) block_events: std::collections::VecDeque<super::pistons::BlockEventData>,
-    /// Blocks pistons are moving, by moving piston position.
-    pub(super) moving: HashMap<BlockPos, MovingBlock>,
-    /// The blocks of `moving`, owned until they land.
-    pub(super) lifted: HashMap<BlockPos, crate::world::block_ledger::HeldBlock>,
+    /// Blocks pistons are moving, by moving piston position, each with the
+    /// block it owns until it lands.
+    pub(super) moving: HashMap<BlockPos, Moving>,
     /// Places blocks were broken or lifted from, until written over.
     pub(super) vacated: std::collections::HashSet<BlockPos>,
     /// Moving blocks whose lifted block another region still hands over,
@@ -1093,5 +1092,55 @@ impl RegionActor {
     /// Runs after a player placed a block.
     pub(super) fn redstone_placed(&mut self, pos: BlockPos, state: BlockState) {
         self.block_behavior(state.block()).placed(self, pos, state);
+    }
+}
+
+/// A block a piston is moving and the block it owns until it lands.
+#[derive(Debug)]
+pub(super) struct Moving {
+    pub(super) block: MovingBlock,
+    pub(super) held: Option<crate::world::block_ledger::HeldBlock>,
+}
+
+impl RedstoneState {
+    /// Sets the moving block at `pos`, keeping the block it holds; true if
+    /// it is new.
+    pub(super) fn set_moving(&mut self, pos: BlockPos, block: MovingBlock) -> bool {
+        match self.moving.get_mut(&pos) {
+            Some(entry) => {
+                entry.block = block;
+                false
+            }
+            None => {
+                self.moving.insert(pos, Moving { block, held: None });
+                true
+            }
+        }
+    }
+
+    pub(super) fn take_held(
+        &mut self,
+        pos: BlockPos,
+    ) -> Option<crate::world::block_ledger::HeldBlock> {
+        self.moving.get_mut(&pos)?.held.take()
+    }
+
+    pub(super) fn has_held(&self, pos: BlockPos) -> bool {
+        self.moving
+            .get(&pos)
+            .is_some_and(|entry| entry.held.is_some())
+    }
+
+    /// Gives the moving block at `pos` its block; the block it held
+    /// before, or `block` itself if nothing moves there.
+    pub(super) fn give_held(
+        &mut self,
+        pos: BlockPos,
+        block: crate::world::block_ledger::HeldBlock,
+    ) -> Option<crate::world::block_ledger::HeldBlock> {
+        match self.moving.get_mut(&pos) {
+            Some(entry) => entry.held.replace(block),
+            None => Some(block),
+        }
     }
 }
