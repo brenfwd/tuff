@@ -5,7 +5,7 @@ date: 2026-10-24
 author: Brenden Forward
 ai: "Written with Claude Fable 5.1 from the project's code and design notes, and reviewed by the author."
 tags: [blocks, rust, design]
-draft: true
+draft: false
 ---
 
 The [first post](/blog/move-only-item-stacks) in this pair made an item stack a value that can be moved but not copied, created and destroyed only through doors that name their reason. That rule is about one resource. A Minecraft server has several more that can be duplicated: the blocks in the world, the data of each player, and the entities that live in regions or sit stored inside a hive or on a player's shoulder. This post applies the same idea to each of them, starting with the test that found the first block dupe.
