@@ -1496,12 +1496,3 @@ pub use summaries::*;
 
 #[cfg(test)]
 mod tests;
-
-/// The entity tick's parallel batch size: `TUFF_ENTITY_COMPUTE_MIN_BATCH`,
-/// else 64.
-pub fn compute_min_batch() -> usize {
-    std::env::var("TUFF_ENTITY_COMPUTE_MIN_BATCH")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(64)
-}

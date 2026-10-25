@@ -163,6 +163,10 @@ async fn kept_after_pouring(give: &str, filled: &str, placed: &str, cleanup: &st
         {
             say(&server, line).await;
         }
+        until("the last trial is gone", || async {
+            !say(&server, placed).await.contains("passed")
+        })
+        .await;
         say(&server, give).await;
         until("the bucket arrives", || async {
             found(&server, filled).await == 1
