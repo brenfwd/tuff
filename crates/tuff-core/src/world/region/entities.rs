@@ -918,6 +918,7 @@ impl RegionActor {
                 column.entities_dirty = true;
             }
             let position = tracked.entity.base().position;
+            self.forward_impulse(&tracked);
             let movement = tracked.tick_movement();
             if movement.is_some() || to != from {
                 let track = tracked.moved(self.dimension, to, movement.unwrap_or_default());
