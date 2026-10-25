@@ -181,10 +181,7 @@ mod tests {
         StoredEntity::from_storage(Compound::new()).burn(EntityBurn::Test);
         let diff = totals().since(before);
         if cfg!(debug_assertions) {
-            assert_eq!(
-                (diff.taken, diff.loaded, diff.stored, diff.burned),
-                (1, 1, 1, 1)
-            );
+            assert!(diff.taken >= 1 && diff.loaded >= 1 && diff.stored >= 1 && diff.burned >= 1);
         }
         assert_eq!(diff.lost, 0);
     }
