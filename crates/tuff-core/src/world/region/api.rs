@@ -515,6 +515,15 @@ impl RegionWorld for RegionActor {
         RegionActor::put_block(self, pos, state);
     }
 
+    fn place_from_click(&mut self, place: &Place, pos: BlockPos, state: BlockState) -> bool {
+        let paid = place.offer.take_placing();
+        if paid.is_none() && !place.offer.creative {
+            return false;
+        }
+        RegionActor::place_from_item(self, pos, state, paid);
+        true
+    }
+
     fn place_item_block(
         &mut self,
         pos: BlockPos,

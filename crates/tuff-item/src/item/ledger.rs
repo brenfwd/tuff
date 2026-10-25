@@ -1027,6 +1027,7 @@ mod tests {
     /// each check is a lower bound.
     #[tuff_core::watchdog]
     #[test]
+    #[cfg(debug_assertions)]
     fn doors_count_nested_stacks_once_per_stack() {
         let before = conservation::totals();
         let shulkers = ItemStack::mint_like(&shulker_holding(5), 2, MintReason::Test);

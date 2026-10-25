@@ -85,6 +85,42 @@ const DOORS: &[Door] = &[
         in_tests: false,
     },
     Door {
+        needle: "PlayerLease::detached(",
+        allowed: &[
+            "crates/tuff-core/src/world/session/accessors.rs",
+            "crates/tuff-core/src/world/session/persist.rs",
+        ],
+        in_tests: true,
+    },
+    Door {
+        needle: "place_from_item(",
+        allowed: &[
+            "crates/tuff-core/src/world/region/blocks.rs",
+            "crates/tuff-core/src/world/region/api.rs",
+        ],
+        in_tests: false,
+    },
+    Door {
+        needle: "take_placing(",
+        allowed: &[
+            "crates/tuff-core/src/world/region/blocks.rs",
+            "crates/tuff-core/src/world/region/api.rs",
+            "crates/tuff-core/src/world/messages/action.rs",
+        ],
+        in_tests: false,
+    },
+    Door {
+        needle: "place_item_block(",
+        allowed: &[
+            "crates/tuff-core/src/world/region/api.rs",
+            "crates/tuff-core/src/world/region/blocks.rs",
+            "crates/tuff-core/src/world/region/blocks/interaction.rs",
+            "crates/tuff-core/src/world/region_api.rs",
+            "crates/tuff-feature-builtin-vanilla-items/src/world/region/dispense.rs",
+        ],
+        in_tests: false,
+    },
+    Door {
         needle: "MintReason::BlockDrop",
         allowed: &[],
         in_tests: false,
@@ -131,9 +167,21 @@ fn block_minting_doors_stay_at_their_sites() {
             .lines()
             .position(|line| line.trim() == "#[cfg(test)]")
             .unwrap_or(usize::MAX);
+        let item_click = text.contains("fn use_on_block(");
         for (index, line) in text.lines().enumerate() {
             if line.trim_start().starts_with("//") {
                 continue;
+            }
+            if item_click
+                && index <= tests_from
+                && !relative.ends_with("region_api.rs")
+                && !relative.ends_with("custom/items.rs")
+                && (line.contains(".put_block(") || line.contains(".set_block"))
+            {
+                offenders.push(format!(
+                    "{relative}:{}: a use_on_block writes a block without place_from_click",
+                    index + 1
+                ));
             }
             for door in DOORS {
                 if !line.contains(door.needle) || door.allowed.contains(&relative.as_str()) {

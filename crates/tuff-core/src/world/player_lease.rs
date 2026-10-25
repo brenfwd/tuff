@@ -62,7 +62,7 @@ impl PlayerLease {
 
     /// A lease outside any table, for harness sessions that load and save
     /// without a coordinator; dropping it is silent.
-    pub fn detached(uuid: u128) -> Self {
+    pub(crate) fn detached(uuid: u128) -> Self {
         let mut lease = Self::new(uuid);
         lease.generation = 1;
         lease.gate.lock().generation = 1;
