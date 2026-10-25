@@ -578,7 +578,8 @@ async fn unloading_a_saved_chunk_releases_its_container_items() {
     let chest = Block::Chest.default_state();
     let data = Compound::new().with("Items", items);
     super::jukebox::set(&region, BlockPos::new(37, 200, 38), chest, Some(data)).await;
-    let before = tuff_item::item::conservation::totals();
+    let losses = tuff_item::item::conservation::LossScope::current().expect("scoped");
+    let before = losses.lost();
     region
         .request(RegionRequest::Unsubscribe {
             player: viewer.id,
@@ -586,7 +587,117 @@ async fn unloading_a_saved_chunk_releases_its_container_items() {
         })
         .await;
     world.ticks(300).await;
-    let lost = tuff_item::item::conservation::totals().since(before).lost;
-    assert_eq!(lost, 0, "unloaded items were lost");
+    assert_eq!(losses.lost() - before, 0, "unloaded items were lost");
+    world.shutdown().await;
+}
+
+fn stalled_wants() -> &'static std::sync::Mutex<Option<mpsc::UnboundedSender<ChunkPos>>> {
+    static WANTS: std::sync::OnceLock<std::sync::Mutex<Option<mpsc::UnboundedSender<ChunkPos>>>> =
+        std::sync::OnceLock::new();
+    WANTS.get_or_init(Default::default)
+}
+
+/// A pipeline that never finishes a chunk, reporting each one asked of it.
+struct Stalled;
+
+impl ChunkPipeline for Stalled {
+    fn want(&self, pos: ChunkPos, _reply: RegionHandle, _priority: u32) -> bool {
+        if let Some(tx) = stalled_wants().lock().unwrap().as_ref() {
+            let _ = tx.send(pos);
+        }
+        true
+    }
+}
+
+struct NeverGenerated;
+
+impl ChunkGenerator for NeverGenerated {
+    fn generate(&self, _: ChunkPos, shape: ChunkShape) -> tuff_world_model::chunk::Chunk {
+        tuff_world_model::chunk::Chunk::empty(shape)
+    }
+
+    fn sea_level(&self) -> i32 {
+        63
+    }
+
+    fn spawn(&self) -> BlockPos {
+        BlockPos::new(0, 61, 0)
+    }
+
+    fn pipeline(self: Arc<Self>, _: PipelineContext) -> Option<Arc<dyn ChunkPipeline>> {
+        Some(Arc::new(Stalled))
+    }
+}
+
+fn never_generated(settings: &DimensionSettings, seed: i64) -> Arc<dyn ChunkGenerator> {
+    if settings.key == OVERWORLD {
+        Arc::new(NeverGenerated)
+    } else {
+        tuff_test_support::placeholder::for_settings(settings, seed)
+    }
+}
+
+/// A world stopping while a chunk is still generating keeps the entities
+/// that arrived for it: they are stored and back after a restart, and a
+/// pickup animation's stand-in for an unloaded chunk is never made.
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_item_arriving_for_a_generating_chunk_is_back_after_a_restart() {
+    let (tx, mut wants) = mpsc::unbounded_channel();
+    *stalled_wants().lock().unwrap() = Some(tx);
+    let dir = TestDir::new();
+    let chunk = ChunkPos::new(2, 2);
+    let fake_chunk = ChunkPos::new(3, 2);
+    let world = TestWorld::start_generated(
+        Storage::default().open(dir.path()).unwrap(),
+        never_generated,
+    );
+    let region = world.region(chunk.region()).await;
+    region
+        .request(RegionRequest::SpawnItem {
+            stack: ItemStack::mint(Item::Diamond, 7, MintReason::Test),
+            position: [40.5, 100.0, 40.5],
+            velocity: [0.0; 3],
+            pickup_delay: 10,
+        })
+        .await;
+    let template = ItemStack::mint(Item::Emerald, 1, MintReason::Test);
+    region
+        .request(RegionRequest::SpawnFakeItem {
+            stack: tuff_item::item::ItemSnapshot::of(&template),
+            position: [56.5, 100.0, 40.5],
+        })
+        .await;
+    loop {
+        let wanted = tokio::time::timeout(TIMEOUT, wants.recv())
+            .await
+            .expect("the chunk waits for generation")
+            .expect("open");
+        if wanted == chunk {
+            break;
+        }
+    }
+    world.shutdown().await;
+    *stalled_wants().lock().unwrap() = None;
+    let stored = tuff_test_support::scenario::stored_entities(dir.path(), chunk);
+    assert_eq!(stored.len(), 1, "{stored:?}");
+    let item = stored[0].get_compound("Item").expect("an item entity");
+    assert_eq!(item.get_str("id"), Some("minecraft:diamond"));
+    assert_eq!(item.get_int("count"), Some(7));
+    assert!(
+        tuff_test_support::scenario::stored_entities(dir.path(), fake_chunk).is_empty(),
+        "the stand-in is never stored as a real item"
+    );
+
+    let world = TestWorld::start(dir.path());
+    let region = world.region(chunk.region()).await;
+    let (viewer, mut events) = PlayerHandle::new(1000);
+    subscribe(&region, &viewer, &mut events, &[chunk, fake_chunk]).await;
+    let items: Vec<_> = tuff_test_support::scenario::snapshots(&region)
+        .await
+        .into_iter()
+        .filter(|s| s.kind == tuff_vanilla_data::registry::EntityType::Item)
+        .collect();
+    assert_eq!(items.len(), 1, "{items:?}");
     world.shutdown().await;
 }
