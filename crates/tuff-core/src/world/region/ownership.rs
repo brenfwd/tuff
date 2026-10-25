@@ -56,7 +56,20 @@ impl RegionActor {
         why: ClaimReason,
         limit: u32,
     ) -> Option<BrokenBlock> {
-        Some(match self.take_out(pos, remains, limit, why)? {
+        self.claim_flagged(pos, remains, why, crate::world::redstone::UPDATE_ALL, limit)
+    }
+
+    /// [`Self::claim_limited`] writing the remains with `flags`.
+    #[track_caller]
+    pub(super) fn claim_flagged(
+        &mut self,
+        pos: BlockPos,
+        remains: Remains,
+        why: ClaimReason,
+        flags: u32,
+        limit: u32,
+    ) -> Option<BrokenBlock> {
+        Some(match self.take_out(pos, remains, limit, why, flags)? {
             Taken::Standing(state, block_entity) => BrokenBlock::claimed(state, block_entity, why),
             Taken::Held(held) => held.into_broken(None),
             Taken::Moving(base) => BrokenBlock::claimed(base, None, why),
@@ -76,7 +89,13 @@ impl RegionActor {
         remains: Remains,
         why: ClaimReason,
     ) -> Option<HeldBlock> {
-        match self.take_out(pos, remains, crate::world::redstone::UPDATE_LIMIT, why)? {
+        match self.take_out(
+            pos,
+            remains,
+            crate::world::redstone::UPDATE_LIMIT,
+            why,
+            crate::world::redstone::UPDATE_ALL,
+        )? {
             Taken::Ghost(_) => None,
             Taken::Standing(state, _) => Some(HeldBlock::taken(state, why)),
             Taken::Held(held) => Some(held),
@@ -90,6 +109,7 @@ impl RegionActor {
         remains: Remains,
         limit: u32,
         why: ClaimReason,
+        flags: u32,
     ) -> Option<Taken> {
         if !self.owns(pos) {
             return None;
@@ -128,7 +148,7 @@ impl RegionActor {
         } else {
             Taken::Standing(state, block_entity)
         };
-        self.set_block_flags(pos, left, crate::world::redstone::UPDATE_ALL, limit);
+        self.set_block_flags(pos, left, flags, limit);
         Some(taken)
     }
 
@@ -267,7 +287,29 @@ impl RegionActor {
                 self.sim.redstone.prelifted.insert(from, other);
                 None
             }
-            None => self.lift(from),
+            None => self
+                .sim
+                .redstone
+                .lifted_ahead
+                .remove(&from)
+                .or_else(|| self.lift(from)),
+        }
+    }
+
+    /// Lifts the places of `from` this region owns ahead of the moves that
+    /// write their destinations.
+    pub(super) fn lift_ahead(&mut self, from: &[BlockPos]) {
+        for &pos in from {
+            if let Some(lifted) = self.lift(pos) {
+                self.sim.redstone.lifted_ahead.insert(pos, lifted);
+            }
+        }
+    }
+
+    /// Blocks lifted ahead whose moves never started break where they were.
+    pub(super) fn settle_lifted_ahead(&mut self) {
+        for (pos, lifted) in std::mem::take(&mut self.sim.redstone.lifted_ahead) {
+            self.break_lifted(pos, lifted);
         }
     }
 

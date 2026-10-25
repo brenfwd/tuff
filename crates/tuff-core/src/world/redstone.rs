@@ -349,6 +349,13 @@ pub trait RedstoneLevel: Reader {
             self.start_moving(pos, moving);
         }
     }
+    /// The blocks at `from` are about to be moved by a piston: they stand on
+    /// as ghosts until their moves start (vanilla leaves them in place while
+    /// the destinations are written).
+    fn lift_pushed(&mut self, _from: &[BlockPos]) {}
+    /// The piston's moves all started: a block lifted but never moved goes
+    /// back to its drops.
+    fn settle_pushed(&mut self) {}
     /// Whether a piston may move the block entity block `state` at `pos`
     /// toward `direction`, taking its block entity along.
     fn carries_block_entity(&self, _state: BlockState, _pos: BlockPos, _direction: Facing) -> bool {
