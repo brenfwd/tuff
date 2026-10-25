@@ -752,6 +752,7 @@ impl PlayerSession {
         done: watch::Sender<bool>,
     ) {
         let lease = lease.granted().await;
+        let mut abandoned = false;
         if lease.was_dirty() {
             log::warn!(
                 "{} loads the last completed save: the previous session ended without its final save",
@@ -778,7 +779,10 @@ impl PlayerSession {
                     .resource_packs
                     .player_left(self.profile.id)
                     .await;
-                self.leave().await;
+                if let Err(panic) = CatchUnwind::new(self.leave_boxed()).await {
+                    self.panicked_leaving(panic_message(&*panic));
+                    abandoned = true;
+                }
             }
             Err(err) => {
                 log::error!(
@@ -796,7 +800,7 @@ impl PlayerSession {
             .coordinator
             .send(CoordinatorMessage::Left { player: self.id })
             .await;
-        if let Some(lease) = self.lease.take() {
+        if !abandoned && let Some(lease) = self.lease.take() {
             lease.release();
         }
         tuff_item::item::conservation::release(self);
@@ -812,6 +816,24 @@ impl PlayerSession {
 
     fn play_boxed(&mut self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
         Box::pin(self.play())
+    }
+
+    fn leave_boxed(&mut self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(self.leave())
+    }
+
+    /// Leaving crashed before the final save: what the session held since
+    /// its last completed save is abandoned, and its lease goes to the next
+    /// holder dirty with the session, so that login loads that save.
+    fn panicked_leaving(&mut self, message: &str) {
+        self.shared.metrics.core().session_panics.inc();
+        log::error!(
+            "session of {} panicked while leaving: {message}; its state since the last completed save is abandoned",
+            self.profile.name
+        );
+        self.shared
+            .conservation
+            .release(crate::world::conservation::Subject::Player(self.id));
     }
 
     pub fn send<P: Encode>(&mut self, packet: &P) {

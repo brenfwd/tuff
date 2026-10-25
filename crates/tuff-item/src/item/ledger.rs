@@ -93,7 +93,7 @@ pub enum BurnReason {
 /// Process-wide item accounting: what came in through the doors, what left
 /// through them, and what was lost without a door. Counted stacks only.
 pub mod conservation {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
     use super::LedgerTotals;
@@ -107,6 +107,69 @@ pub mod conservation {
 
     thread_local! {
         static RELEASING: Cell<u32> = const { Cell::new(0) };
+        static SCOPE: RefCell<Option<LossScope>> = const { RefCell::new(None) };
+    }
+
+    /// Items lost on the threads that entered it, on top of the process
+    /// totals, with a report per loss: a test owning its runtime's threads
+    /// reads only its own losses, including those whose panic a task
+    /// swallowed.
+    #[derive(Clone, Default)]
+    pub struct LossScope(std::sync::Arc<ScopeLosses>);
+
+    #[derive(Default)]
+    struct ScopeLosses {
+        items: AtomicU64,
+        reports: std::sync::Mutex<Vec<String>>,
+    }
+
+    const SCOPE_REPORTS: usize = 8;
+
+    impl LossScope {
+        /// Counts this thread's losses here until another scope is entered
+        /// or [`Self::leave`] runs.
+        pub fn enter(&self) {
+            let _ = SCOPE.try_with(|scope| *scope.borrow_mut() = Some(self.clone()));
+        }
+
+        /// Stops counting this thread's losses in any scope.
+        pub fn leave() {
+            let _ = SCOPE.try_with(|scope| scope.borrow_mut().take());
+        }
+
+        /// The scope this thread counts its losses in.
+        pub fn current() -> Option<LossScope> {
+            SCOPE
+                .try_with(|scope| scope.borrow().clone())
+                .ok()
+                .flatten()
+        }
+
+        pub fn lost(&self) -> u64 {
+            self.0.items.load(Ordering::Relaxed)
+        }
+
+        /// The first losses' stacks, where and on which thread they were
+        /// dropped, and their histories.
+        pub fn reports(&self) -> Vec<String> {
+            self.0
+                .reports
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        }
+
+        fn record(&self, items: u64, report: impl FnOnce() -> String) {
+            self.0.items.fetch_add(items, Ordering::Relaxed);
+            let mut reports = self
+                .0
+                .reports
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if reports.len() < SCOPE_REPORTS {
+                reports.push(report());
+            }
+        }
     }
 
     /// Turns the release-build checks on or off (`tuff.items.conservationChecks`).
@@ -212,10 +275,19 @@ pub mod conservation {
     }
 
     pub(super) fn lost(stack: &super::ItemStack) {
-        LOST.fetch_add(
-            u64::from(stack.count) + stack.nested_count(),
-            Ordering::Relaxed,
-        );
+        let items = u64::from(stack.count) + stack.nested_count();
+        LOST.fetch_add(items, Ordering::Relaxed);
+        if let Some(scope) = LossScope::current() {
+            scope.record(items, || {
+                let thread = std::thread::current();
+                format!(
+                    "{stack:?} on thread {} at {}\n{}",
+                    thread.name().unwrap_or("unnamed"),
+                    dropped_at(),
+                    stack.history().report()
+                )
+            });
+        }
         VIOLATIONS.fetch_add(1, Ordering::Relaxed);
         if cfg!(debug_assertions) && !std::thread::panicking() {
             panic!(
