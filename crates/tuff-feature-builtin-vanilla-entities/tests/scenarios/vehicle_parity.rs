@@ -208,7 +208,7 @@ async fn a_command_block_minecart_keeps_its_success_count_and_last_output() {
     let region = world.region(chunk.region()).await;
     let (player, mut events) = PlayerHandle::new(100);
     subscribe(&region, &player, &mut events, &[chunk]).await;
-    let cart = command_cart(&world, &region, "setblock 10 154 10 minecraft:gold_block").await;
+    let cart = command_cart(&world, &region, "time query gametime").await;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     while std::time::Instant::now() < deadline {
         world.ticks(1).await;

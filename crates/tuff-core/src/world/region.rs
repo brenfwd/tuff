@@ -594,8 +594,9 @@ impl RegionActor {
     }
 
     fn begin_close(&mut self, done: watch::Sender<bool>) {
-        for pos in std::mem::take(&mut self.chunk_io.generating).into_keys() {
-            self.chunk_io.loading.remove(&pos);
+        for (pos, prepared) in std::mem::take(&mut self.chunk_io.generating) {
+            let arrived = self.chunk_io.loading.remove(&pos);
+            self.shelve_ungenerated(prepared, arrived);
         }
         self.sched.closing = Some(done);
         self.sched.tick_member = None;
@@ -806,6 +807,9 @@ impl RegionActor {
                 pickup_delay,
             } => self.spawn_item_at(stack, position, velocity, pickup_delay),
             RegionRequest::SpawnFakeItem { stack, position } => {
+                if !self.columns.contains_key(&ChunkPos::of_position(position)) {
+                    return;
+                }
                 let id = self.shared.next_entity_id();
                 let uuid = self.rng.r#gen();
                 let mut item = crate::world::items::ItemEntity::new(

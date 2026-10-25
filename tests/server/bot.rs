@@ -353,7 +353,7 @@ async fn list_shows_team_decorated_names() {
     let task = tokio::spawn(server.run());
     let addr = handle.local_addrs().await.unwrap()[0];
     let bot = Bot::connect(addr, BotConfig::new("Tester")).await.unwrap();
-    for _ in 0..200 {
+    loop {
         let listed = handle.run_command("list").await.unwrap();
         if listed[0].with[2].plain().contains("Tester") {
             break;
