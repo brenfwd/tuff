@@ -22,7 +22,7 @@ use crate::world::dimension::DimensionId;
 use crate::world::lighting::{LightChange, LightOp, Lighting};
 use crate::world::messages::{PlayerEvent, PlayerId, RegionInternal};
 use crate::world::ticks::{self};
-use crate::world::{Shared, framed, packets};
+use crate::world::{Shared, entity, framed, packets};
 use tuff_timings::Tag;
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::{self as chunk_data, Chunk};
@@ -406,7 +406,8 @@ impl RegionActor {
     pub(super) fn await_generation(&mut self, prepared: Prepared) {
         let pos = prepared.pos;
         if self.sched.closing.is_some() {
-            self.chunk_io.loading.remove(&pos);
+            let arrived = self.chunk_io.loading.remove(&pos);
+            self.shelve_ungenerated(prepared, arrived);
             return;
         }
         if !self.chunk_io.loading.contains_key(&pos) {
@@ -433,6 +434,64 @@ impl RegionActor {
                 ..prepared
             }))
         });
+    }
+
+    /// A chunk still waiting for generation is given up as the region
+    /// closes: the entities that arrived for it are written to its entity
+    /// record next to the ones storage already held, so the next load
+    /// brings them back. What cannot be written leaves memory as released
+    /// state, with an error.
+    pub(super) fn shelve_ungenerated(&mut self, prepared: Prepared, arrived: Option<Loading>) {
+        let pos = prepared.pos;
+        let (arrived, fleeting): (Vec<_>, Vec<_>) = arrived
+            .map(|loading| loading.entities)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(entity, _)| entity)
+            .partition(|entity| entity.persists());
+        if !arrived.is_empty() {
+            let refused = if self.quarantined() {
+                Some("its region is quarantined after a refused item operation".to_owned())
+            } else if !prepared.entities_persist {
+                Some("its saved entity record is unreadable".to_owned())
+            } else {
+                let mut saved = prepared.raw_entities.clone();
+                saved.extend(prepared.entities.iter().map(|e| entity::save(&**e)));
+                saved.extend(arrived.iter().map(|e| entity::save(&**e)));
+                match self
+                    .shared
+                    .backend
+                    .chunk_codec()
+                    .encode_entities(pos, &saved)
+                {
+                    Ok(blob) => {
+                        let ticket = self
+                            .shared
+                            .backend
+                            .save_journal()
+                            .map(|journal| journal.ticket_now());
+                        self.chunk_io.io_queue.push(IoOp::Write {
+                            pos,
+                            blocks: None,
+                            entities: blob.map_or(EntityWrite::Clear, EntityWrite::Write),
+                            pois: EntityWrite::Keep,
+                            ticket,
+                        });
+                        None
+                    }
+                    Err(err) => Some(err),
+                }
+            };
+            if let Some(why) = refused {
+                log::error!(
+                    "{} entities that arrived for chunk {pos:?} of {} while it was generating \
+                     are lost at shutdown: {why}",
+                    arrived.len(),
+                    self.dimension().key
+                );
+            }
+        }
+        tuff_item::item::conservation::release((prepared, arrived, fleeting));
     }
 
     /// Withdraws the generation requests of chunks nothing waits for any

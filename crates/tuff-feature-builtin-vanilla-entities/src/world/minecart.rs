@@ -854,11 +854,12 @@ impl Minecart {
                     self.last_activated = cx.tick;
                     let command = self.command();
                     let track_output = self.base.extra.get_bool("TrackOutput").unwrap_or(true);
-                    self.base.extra.insert("SuccessCount", 0i32);
-                    if track_output {
-                        self.base.extra.remove("LastOutput");
-                    }
-                    if !command.is_empty() {
+                    if command.is_empty() {
+                        self.base.extra.insert("SuccessCount", 0i32);
+                        if track_output {
+                            self.base.extra.remove("LastOutput");
+                        }
+                    } else {
                         let name = self
                             .base
                             .custom_name

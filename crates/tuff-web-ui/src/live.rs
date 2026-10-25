@@ -30,7 +30,10 @@ enum Command {
         entries: Entries,
         reply: oneshot::Sender<Result<(), String>>,
     },
-    Remove(String),
+    Remove {
+        owner: String,
+        done: oneshot::Sender<()>,
+    },
 }
 
 /// A cheap reader of the current merged snapshot.
@@ -88,8 +91,17 @@ impl LivePanel {
             .map_err(|_| "the panel is not running".to_owned())?
     }
 
+    /// Takes `owner`'s entries out; the view no longer has them once
+    /// this returns.
     pub async fn remove(&self, owner: &str) {
-        let _ = self.commands.send(Command::Remove(owner.to_owned())).await;
+        let (done, removed) = oneshot::channel();
+        let command = Command::Remove {
+            owner: owner.to_owned(),
+            done,
+        };
+        if self.commands.send(command).await.is_ok() {
+            let _ = removed.await;
+        }
     }
 }
 
@@ -157,6 +169,7 @@ async fn run(mut rx: mpsc::Receiver<Command>, publish: watch::Sender<Arc<Install
     let mut state = State::default();
     while let Some(command) = rx.recv().await {
         let mut answer = None;
+        let mut removed = None;
         match command {
             Command::SetBase(base) => state.base = base,
             Command::Install {
@@ -170,13 +183,17 @@ async fn run(mut rx: mpsc::Receiver<Command>, publish: watch::Sender<Arc<Install
                 }
                 answer = Some((reply, outcome));
             }
-            Command::Remove(owner) => {
+            Command::Remove { owner, done } => {
                 state.live.remove(&owner);
+                removed = Some(done);
             }
         }
         publish.send_replace(Arc::new(state.merged()));
         if let Some((reply, outcome)) = answer {
             let _ = reply.send(outcome);
+        }
+        if let Some(done) = removed {
+            let _ = done.send(());
         }
     }
 }
@@ -212,6 +229,7 @@ mod tests {
         live.install("b", entries("two")).await.unwrap();
         assert_eq!(view.get().pages.len(), 2);
         live.remove("a").await;
+        assert_eq!(view.get().pages.len(), 1);
         live.install("b", Entries::default()).await.unwrap();
         assert!(view.get().pages.is_empty());
     }

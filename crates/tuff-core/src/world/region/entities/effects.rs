@@ -164,14 +164,23 @@ impl RegionActor {
                                 };
                                 let extra = &mut tracked.entity.base_mut().extra;
                                 extra.insert("SuccessCount", outcome.success as i32);
-                                if track_output && let Some(output) = outcome.output {
-                                    extra.insert("LastOutput", output.to_nbt());
+                                if track_output {
+                                    match outcome.output {
+                                        Some(output) => extra.insert("LastOutput", output.to_nbt()),
+                                        None => extra.remove("LastOutput"),
+                                    };
                                 }
                             }),
                         ));
                     });
                 }
-                Effect::RunCommand { .. } => {}
+                Effect::RunCommand { .. } => {
+                    if let Some(tracked) =
+                        crate::world::region_api::RegionWorld::entity_mut(self, entity)
+                    {
+                        tracked.entity.base_mut().extra.insert("SuccessCount", 0i32);
+                    }
+                }
                 Effect::DisturbGuarded { player } => self.disturb_guarded_container(player),
                 Effect::DestroyBlock { pos, drop } => self.destroy_block(pos, drop),
                 Effect::DropItem {

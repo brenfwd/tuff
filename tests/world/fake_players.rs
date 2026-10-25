@@ -815,8 +815,15 @@ async fn an_owner_removes_only_its_own_fakes() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_fake_boosted_by_a_firework_glides_further_without_flags() {
     let server = start().await;
-    let plain = fake(&server, "Plain", [0.5, 165.0, 0.5]).await;
-    let rocket = fake(&server, "Rocket", [20.5, 165.0, 0.5]).await;
+    say(&server, "forceload add -3 -3 24 60").await;
+    until(|| async {
+        say(&server, "fill -3 145 -3 24 149 60 stone")
+            .await
+            .contains("Successfully")
+    })
+    .await;
+    let plain = fake(&server, "Plain", [0.5, 150.0, 0.5]).await;
+    let rocket = fake(&server, "Rocket", [20.5, 150.0, 0.5]).await;
     for made in [&plain, &rocket] {
         let mut observed = made.observed.clone();
         observed
@@ -824,12 +831,6 @@ async fn a_fake_boosted_by_a_firework_glides_further_without_flags() {
             .await
             .unwrap();
     }
-    until(|| async {
-        say(&server, "fill -3 145 -3 24 149 60 stone")
-            .await
-            .contains("Successfully")
-    })
-    .await;
     say(&server, "gamerule natural_health_regeneration false").await;
     for name in ["Plain", "Rocket"] {
         let given = say(
@@ -850,17 +851,30 @@ async fn a_fake_boosted_by_a_firework_glides_further_without_flags() {
         pitch: 20.0,
         ..Held::default()
     };
-    for made in [&plain, &rocket] {
+    let before = [&plain, &rocket].map(|made| {
         made.hold(Held::default());
+        made.observed.borrow().teleports
+    });
+    say(&server, "tp Plain 0.5 165 0.5").await;
+    say(&server, "tp Rocket 20.5 165 0.5").await;
+    for (made, before) in [&plain, &rocket].into_iter().zip(before) {
+        let mut observed = made.observed.clone();
+        observed
+            .wait_for(|o| o.teleports > before && o.body.position[1] > 160.0)
+            .await
+            .unwrap();
     }
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     for made in [&plain, &rocket] {
         made.hold(Held {
             jump: true,
             ..level
         });
     }
-    until(|| async { position(&server, "Rocket").await[2] > 1.5 }).await;
+    let mut observed = rocket.observed.clone();
+    observed
+        .wait_for(|o| o.body.position[2] > 1.5)
+        .await
+        .unwrap();
     for made in [&plain, &rocket] {
         made.hold(level);
     }

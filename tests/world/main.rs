@@ -133,6 +133,7 @@ mod permission_nodes;
 mod persistence;
 mod picking;
 mod pipeline;
+mod player_lease;
 mod player_moves;
 mod plugin_dimensions;
 mod plugin_player_state;
