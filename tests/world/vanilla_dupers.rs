@@ -134,6 +134,18 @@ impl Vanilla {
 
     fn place(&mut self, (dx, dy, dz, state): (i32, i32, i32, &str)) {
         let (x, y, z) = (ORIGIN.0 + dx, ORIGIN.1 + dy, ORIGIN.2 + dz);
+        let fall = state.strip_prefix("@fall:").map(|block| {
+            format!("@cmd:summon falling_block {{x}}.5 {{y}}.0 {{z}}.5 {{BlockState:{{Name:\"{block}\"}},Time:1}}")
+        });
+        let state = fall.as_deref().unwrap_or(state);
+        if let Some(command) = state.strip_prefix("@cmd:") {
+            let command = command
+                .replace("{x}", &x.to_string())
+                .replace("{y}", &y.to_string())
+                .replace("{z}", &z.to_string());
+            self.run(&command);
+            return;
+        }
         self.run(&format!("setblock {x} {y} {z} {state}"));
     }
 
@@ -300,8 +312,17 @@ impl Drop for Vanilla {
 /// changed a later rail count).
 pub fn built_counts(design: &Design) -> Counts {
     let mut counts = Counts::new();
-    for &(_, _, _, state) in design.build {
-        let id = state.split(['[', ' ']).next().unwrap();
+    for &(_, _, _, state) in design.build.iter().chain(
+        design
+            .trigger
+            .iter()
+            .filter(|part| part.3.starts_with("@fall:")),
+    ) {
+        let id = state
+            .trim_start_matches("@fall:")
+            .split(['[', ' '])
+            .next()
+            .unwrap();
         if design.kinds.contains(&id) {
             *counts.entry(id.to_owned()).or_default() += 1;
         }

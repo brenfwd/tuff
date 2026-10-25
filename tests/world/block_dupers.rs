@@ -699,6 +699,63 @@ mod designs {
             tally
         }
 
+        async fn end_tally(&self, design: &Design) -> Tally {
+            let platform = BlockPos::new(100, 49, 0);
+            let end = self
+                .world
+                .region_in(
+                    crate::storage::level::THE_END,
+                    ChunkPos::of_block(platform).region(),
+                )
+                .await;
+            let positions: Vec<BlockPos> = (94..=106)
+                .flat_map(|x| (44..=56).map(move |y| (x, y)))
+                .flat_map(|(x, y)| (-8..=8).map(move |z| BlockPos::new(x, y, z)))
+                .collect();
+            let (reply, answer) = oneshot::channel();
+            end.request(RegionRequest::Blocks {
+                op: BlockOp::Copy { positions },
+                reply,
+            })
+            .await;
+            let BlockOpResult::Copied(found) = answer.await.unwrap() else {
+                panic!("copy failed");
+            };
+            let mut tally = Tally::new();
+            for (state, _) in found.into_iter().flatten() {
+                if state.block() != Block::Air {
+                    *tally
+                        .entry(format!("end:{}", state.block().name()))
+                        .or_default() += 1;
+                }
+            }
+            let (reply, answer) = oneshot::channel();
+            end.request(RegionRequest::Entities { reply }).await;
+            for entity in answer.await.unwrap() {
+                if entity.kind != EntityType::Item {
+                    continue;
+                }
+                let (reply, data) = oneshot::channel();
+                end.request(RegionRequest::EntityData {
+                    id: entity.id,
+                    reply,
+                })
+                .await;
+                let item = data
+                    .await
+                    .unwrap()
+                    .and_then(|d| d.get_compound("Item").cloned());
+                if let Some(id) = item.as_ref().and_then(|i| i.get_str("id")) {
+                    *tally.entry(id.to_owned()).or_default() +=
+                        item.as_ref().and_then(|i| i.get_int("count")).unwrap_or(1) as u32;
+                }
+            }
+            tally
+                .into_iter()
+                .filter(|(id, _)| design.kinds.contains(&id.trim_start_matches("end:")))
+                .collect()
+        }
+
         async fn primed_tnt(&self) -> u32 {
             let (reply, answer) = oneshot::channel();
             self.west.request(RegionRequest::Entities { reply }).await;
@@ -723,14 +780,42 @@ mod designs {
         }
         b.world.ticks(4).await;
         let before = tuff_core::world::block_ledger::totals();
+        let mut end_seen = Tally::new();
         for &part in design.trigger {
             match part.3.strip_prefix("@step:") {
+                Some(n) if design.end => {
+                    for _ in 0..n.parse::<u64>().unwrap() {
+                        b.world.ticks(1).await;
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                        for (id, n) in b.end_tally(design).await {
+                            let seen = end_seen.entry(id).or_default();
+                            *seen = (*seen).max(n);
+                        }
+                    }
+                }
                 Some(n) => b.world.ticks(n.parse::<u64>().unwrap()).await,
+                None if part.3.starts_with("@fall:") => {
+                    b.drop_falling(&part.3["@fall:".len()..], at(part)).await;
+                }
                 None => b.paste(at(part), part.3).await,
             }
         }
         b.world.ticks(u64::from(design.steps.max(1))).await;
-        let after = b.design_tally(design).await;
+        let mut after = b.design_tally(design).await;
+        if design.end {
+            for _ in 0..60 {
+                b.world.ticks(2).await;
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                for (id, n) in b.end_tally(design).await {
+                    let seen = end_seen.entry(id).or_default();
+                    *seen = (*seen).max(n);
+                }
+            }
+            after = b.design_tally(design).await;
+            for (id, n) in end_seen {
+                *after.entry(id).or_default() += n;
+            }
+        }
         let doored = tuff_core::world::block_ledger::totals()
             .since(before)
             .duplicated;
@@ -765,7 +850,13 @@ mod designs {
                 report.push(format!("{} on: {on:?} vs vanilla {wanted:?}", design.name));
             }
             let built = crate::vanilla_dupers::built_counts(design);
+            let mut summed = Tally::new();
             for (id, n) in &off {
+                *summed
+                    .entry(id.trim_start_matches("end:").to_owned())
+                    .or_default() += n;
+            }
+            for (id, n) in &summed {
                 if id != "primed_tnt" && *n > built.get(id).copied().unwrap_or(0) {
                     report.push(format!(
                         "{} off: {off:?} exceeds the build {built:?}",

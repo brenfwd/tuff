@@ -10,7 +10,8 @@ pub struct Design {
     pub name: &'static str,
     /// Placed in order, one block at a time with its updates.
     pub build: &'static [Part],
-    /// Placed after the contraption settled; a part `(0, 0, 0, "@step:N")`
+    /// Placed after the contraption settled; a part `@fall:<block>` drops a
+    /// falling block entity there; a part `(0, 0, 0, "@step:N")`
     /// runs N ticks.
     pub trigger: &'static [Part],
     /// Ticks run after the trigger.
@@ -163,6 +164,55 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:rail", 2),
             ("minecraft:slime_block", 2),
             ("minecraft:stone", 4),
+        ],
+    },
+    Design {
+        name: "gravity_inside_portal",
+        build: &[
+            (0, -1, 0, "minecraft:stone"),
+            (0, 0, 0, "minecraft:end_portal"),
+        ],
+        trigger: &[(0, 0, 0, "@fall:minecraft:sand"), (0, 0, 0, "@step:40")],
+        steps: 0,
+        end: true,
+        kinds: &["minecraft:sand"],
+        vanilla: &[("minecraft:sand", 1), ("end:minecraft:sand", 1)],
+    },
+    Design {
+        name: "gravity_fall_into_portal",
+        build: &[
+            (0, -1, 0, "minecraft:stone"),
+            (0, 0, 0, "minecraft:end_portal"),
+        ],
+        trigger: &[(0, 3, 0, "@fall:minecraft:sand"), (0, 0, 0, "@step:40")],
+        steps: 0,
+        end: true,
+        kinds: &["minecraft:sand"],
+        vanilla: &[("end:minecraft:sand", 1)],
+    },
+    Design {
+        name: "fan_tripwire_hook",
+        build: &[
+            (-3, 0, 0, "minecraft:sticky_piston[facing=east]"),
+            (-2, 0, 0, "minecraft:stone"),
+            (-1, 0, 0, "minecraft:stone"),
+            (0, 0, 0, "minecraft:slime_block"),
+            (-1, 1, 0, "minecraft:tube_coral_fan"),
+            (0, 1, -1, "minecraft:stone"),
+            (0, 1, 0, "minecraft:tripwire_hook[facing=south]"),
+        ],
+        trigger: PUSH,
+        steps: 0,
+        end: false,
+        kinds: &[
+            "minecraft:tripwire_hook",
+            "minecraft:slime_block",
+            "minecraft:stone",
+        ],
+        vanilla: &[
+            ("minecraft:tripwire_hook", 1),
+            ("minecraft:slime_block", 1),
+            ("minecraft:stone", 3),
         ],
     },
     Design {
