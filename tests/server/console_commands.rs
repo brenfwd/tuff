@@ -386,7 +386,11 @@ async fn console_locates_biomes_and_rejects_unknown_structures() {
 #[tokio::test]
 async fn console_locates_points_of_interest_in_loaded_chunks() {
     let (_, session_url) = MockSessionServer::start().await;
-    let server = start_server("127.0.0.1:0", &session_url).await;
+    let instance = common::TempDir::new();
+    std::fs::write(instance.path().join("server.properties"), "level-seed=1\n").unwrap();
+    let server = common::start_server_in(instance, "127.0.0.1:0", &session_url, Some(false)).await;
+    let spawn = run(&server, "setworldspawn 0 100 0").await;
+    assert_eq!(key(&spawn[0]), "commands.setworldspawn.success");
 
     let loaded = run(&server, "forceload add ~ ~").await;
     assert_eq!(key(&loaded[0]), "commands.forceload.added.single");
