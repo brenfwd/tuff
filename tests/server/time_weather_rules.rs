@@ -107,6 +107,7 @@ async fn slept(advance_time: bool, advance_weather: bool, storm: bool) -> TestSe
             .contains("Successfully")
     })
     .await;
+    say(&server, &format!("gamerule advance_time {advance_time}")).await;
     for line in [
         "fill -10 150 -10 10 160 10 air replace air",
         "setblock 2 150 0 red_bed[part=foot,facing=east]",
@@ -122,7 +123,6 @@ async fn slept(advance_time: bool, advance_weather: bool, storm: bool) -> TestSe
         say(&server, "weather rain 1000000").await;
         until(|| async { raining(&server).await }).await;
     }
-    say(&server, &format!("gamerule advance_time {advance_time}")).await;
     say(
         &server,
         &format!("gamerule advance_weather {advance_weather}"),
