@@ -6,7 +6,12 @@
 //! to storage. Dropping one in debug builds is a bug (the entity would be
 //! lost); in release it costs nothing beyond its data.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use tuff_item::item::conservation::OpCounter;
 use tuff_nbt::Compound;
+
+use crate::world::entity_claim::EntityClaim;
 
 /// Why a stored entity is destroyed instead of spawned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,40 +24,88 @@ pub enum EntityBurn {
     Test,
 }
 
+static TAKEN: OpCounter = OpCounter::new();
+static LOADED: OpCounter = OpCounter::new();
+static SPAWNED: OpCounter = OpCounter::new();
+static STORED: OpCounter = OpCounter::new();
+static BURNED: OpCounter = OpCounter::new();
+static LOST: AtomicU64 = AtomicU64::new(0);
+
+/// What entered and left the stored form, process wide. The per-operation
+/// counts only run in debug builds; `lost` counts in every build.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EntityLedgerTotals {
+    pub taken: u64,
+    pub loaded: u64,
+    pub spawned: u64,
+    pub stored: u64,
+    pub burned: u64,
+    pub lost: u64,
+}
+
+impl EntityLedgerTotals {
+    pub fn since(self, before: Self) -> Self {
+        Self {
+            taken: self.taken - before.taken,
+            loaded: self.loaded - before.loaded,
+            spawned: self.spawned - before.spawned,
+            stored: self.stored - before.stored,
+            burned: self.burned - before.burned,
+            lost: self.lost - before.lost,
+        }
+    }
+}
+
+pub fn totals() -> EntityLedgerTotals {
+    EntityLedgerTotals {
+        taken: TAKEN.get(),
+        loaded: LOADED.get(),
+        spawned: SPAWNED.get(),
+        stored: STORED.get(),
+        burned: BURNED.get(),
+        lost: LOST.load(Ordering::Relaxed),
+    }
+}
+
 #[derive(Debug)]
 #[must_use = "a stored entity must be spawned, burned or stored"]
 pub struct StoredEntity {
     nbt: Compound,
-    #[cfg(debug_assertions)]
+    /// The UUID claim of the entity it was taken from; released when the
+    /// stored entity ends.
+    claim: Option<EntityClaim>,
     spent: bool,
 }
 
 impl StoredEntity {
-    fn new(nbt: Compound) -> Self {
+    /// Door: the saved form of an entity the region just removed, with the
+    /// claim on its UUID.
+    pub(crate) fn taken(nbt: Compound, claim: Option<EntityClaim>) -> Self {
+        TAKEN.add(1);
         Self {
             nbt,
-            #[cfg(debug_assertions)]
+            claim,
             spent: false,
         }
     }
 
-    /// Door: the saved form of an entity the region just removed.
-    pub(crate) fn taken(nbt: Compound) -> Self {
-        Self::new(nbt)
-    }
-
-    /// Door: an entity read back from a save.
+    /// Door: an entity read back from a save (it holds no claim until it
+    /// is spawned).
     pub fn from_storage(nbt: Compound) -> Self {
-        Self::new(nbt)
+        LOADED.add(1);
+        Self {
+            nbt,
+            claim: None,
+            spent: false,
+        }
     }
 
-    #[cfg(debug_assertions)]
-    fn spend(&mut self) {
+    fn finish(&mut self, counter: &OpCounter) -> Compound {
         self.spent = true;
+        self.claim = None;
+        counter.add(1);
+        std::mem::take(&mut self.nbt)
     }
-
-    #[cfg(not(debug_assertions))]
-    fn spend(&mut self) {}
 
     pub fn nbt(&self) -> &Compound {
         &self.nbt
@@ -64,16 +117,15 @@ impl StoredEntity {
     }
 
     /// Door: the data of the entity to load it as a live one; this spends
-    /// the stored entity (the caller spawns what it loads).
+    /// the stored entity (the caller spawns what it loads, which claims
+    /// the UUID again).
     pub fn into_spawn_data(mut self) -> Compound {
-        self.spend();
-        std::mem::take(&mut self.nbt)
+        self.finish(&SPAWNED)
     }
 
     /// Door: the data to write into a save or a holder's own data.
     pub fn into_storage(mut self) -> Compound {
-        self.spend();
-        std::mem::take(&mut self.nbt)
+        self.finish(&STORED)
     }
 
     /// A copy of the data for a periodic save that leaves the entity held.
@@ -82,14 +134,17 @@ impl StoredEntity {
     }
 
     pub fn burn(mut self, _reason: EntityBurn) {
-        self.spend();
+        self.finish(&BURNED);
     }
 }
 
-#[cfg(debug_assertions)]
 impl Drop for StoredEntity {
     fn drop(&mut self) {
-        if !self.spent && !std::thread::panicking() {
+        if self.spent {
+            return;
+        }
+        LOST.fetch_add(1, Ordering::Relaxed);
+        if cfg!(debug_assertions) && !std::thread::panicking() {
             panic!(
                 "a stored entity was dropped unspent: {:?}",
                 self.nbt.get_str("id")
@@ -110,6 +165,28 @@ mod tests {
         assert_eq!(held.snapshot(), nbt);
         assert_eq!(held.into_storage(), nbt);
         StoredEntity::from_storage(nbt).burn(EntityBurn::Test);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn every_door_is_counted_and_a_claim_ends_with_the_stored_entity() {
+        let uuids = std::sync::Arc::new(crate::world::entity_claim::EntityUuids::default());
+        let before = totals();
+        let claim = uuids.claim(5).unwrap();
+        assert!(uuids.claim(5).is_none());
+        let held = StoredEntity::taken(Compound::new(), Some(claim));
+        assert!(uuids.contains(5));
+        drop(held.into_storage());
+        assert!(!uuids.contains(5));
+        StoredEntity::from_storage(Compound::new()).burn(EntityBurn::Test);
+        let diff = totals().since(before);
+        if cfg!(debug_assertions) {
+            assert_eq!(
+                (diff.taken, diff.loaded, diff.stored, diff.burned),
+                (1, 1, 1, 1)
+            );
+        }
+        assert_eq!(diff.lost, 0);
     }
 
     #[cfg(debug_assertions)]

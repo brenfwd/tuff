@@ -585,9 +585,11 @@ pub trait RegionWorld: GrowthLevel {
     /// Takes the entity out of the world as data, to be held by a hive, a
     /// shoulder or any other holder; its items live on inside the data.
     fn take_entity(&mut self, id: i32) -> Option<crate::world::stored_entity::StoredEntity> {
-        let tracked = self.remove_entity_intact(id)?;
+        let mut tracked = self.remove_entity_intact(id)?;
+        let claim = tracked.entity.base_mut().claim.take();
         Some(crate::world::stored_entity::StoredEntity::taken(
             crate::world::entity::save(&*tracked.entity),
+            claim,
         ))
     }
     /// Like `remove_entity` for an entity that lives on elsewhere: its

@@ -214,7 +214,7 @@ impl RegionActor {
         let Some(old) = self.remove_entity_kept(id, &[]) else {
             return false;
         };
-        self.shared.release_entity_uuid(old.entity.base().uuid);
+        drop(old);
         self.receive_entity(entity, 0);
         true
     }
@@ -293,7 +293,6 @@ impl RegionActor {
         }
         self.chunk_io.pois.forget_holder(id);
         let mut tracked = self.remove_entity_kept(id, &[])?;
-        self.shared.release_entity_uuid(tracked.entity.base().uuid);
         place_teleported(&mut *tracked.entity, teleport);
         Some(crate::world::entity::save(&*tracked.entity))
     }

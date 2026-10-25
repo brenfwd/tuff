@@ -252,6 +252,18 @@ impl RegionActor {
         self.receive_entity(Box::new(entity), 0);
     }
 
+    /// Throws away an entity whose UUID is already alive, burning what it
+    /// carries.
+    fn refuse_duplicate(mut entity: Box<dyn RegionEntity>) {
+        log::warn!("dropping {}: its UUID already exists", entity.saved_id());
+        for stack in entity.take_items() {
+            stack.burn(tuff_item::item::BurnReason::Discarded);
+        }
+        if let Some(block) = entity.take_held() {
+            block.burn(crate::world::block_ledger::BlockBurn::Killed);
+        }
+    }
+
     /// Starts tracking an entity in a loaded chunk; `announce` reports it to
     /// the chunk's viewers at once.
     pub(super) fn add_entity(
@@ -260,16 +272,14 @@ impl RegionActor {
         seq: u64,
         announce: bool,
     ) {
-        let holds_claim = std::mem::replace(&mut entity.base_mut().claimed, true);
-        if !holds_claim && !self.shared.claim_entity_uuid(entity.base().uuid) {
-            log::warn!("dropping {}: its UUID already exists", entity.saved_id());
-            for stack in entity.take_items() {
-                stack.burn(tuff_item::item::BurnReason::Discarded);
+        if !entity.base().claim.is_held() {
+            match self.shared.claim_entity_uuid(entity.base().uuid) {
+                Some(claim) => entity.base_mut().claim.put(claim),
+                None => {
+                    Self::refuse_duplicate(entity);
+                    return;
+                }
             }
-            if let Some(block) = entity.take_held() {
-                block.burn(crate::world::block_ledger::BlockBurn::Killed);
-            }
-            return;
         }
         let span = entity.take_id_span();
         if span > 0 {
@@ -315,7 +325,6 @@ impl RegionActor {
         let parts = self.custom_entity_parts(id);
         let tracked = self.remove_entity_kept(id, chunks)?;
         self.ents.destroyed.push(tracked.entity.base().uuid);
-        self.shared.release_entity_uuid(tracked.entity.base().uuid);
         for part in parts {
             self.remove_entity(part, &[]);
         }
@@ -431,17 +440,8 @@ impl RegionActor {
             .collect();
         let mut gone: HashSet<i32> = self.stacks_on(&roots).into_iter().collect();
         gone.extend(roots);
-        let shared = &self.shared;
         let entities = &mut self.ents.entities;
-        tuff_item::item::conservation::releasing(|| {
-            entities.retain(|id, tracked| {
-                let keep = !gone.contains(id);
-                if !keep {
-                    shared.release_entity_uuid(tracked.entity.base().uuid);
-                }
-                keep
-            })
-        });
+        tuff_item::item::conservation::releasing(|| entities.retain(|id, _| !gone.contains(id)));
     }
 
     /// What other entities see of each entity, for this tick.

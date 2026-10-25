@@ -228,11 +228,11 @@ async fn a_mobs_hurt_sound_reaches_a_player_in_the_neighbouring_region() {
 async fn an_entity_uuid_is_unique_level_wide_until_released() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
-    assert!(world.shared.claim_entity_uuid(7));
-    assert!(!world.shared.claim_entity_uuid(7));
-    assert!(world.shared.claim_entity_uuid(8));
-    world.shared.release_entity_uuid(7);
-    assert!(world.shared.claim_entity_uuid(7));
+    let seven = world.shared.claim_entity_uuid(7).unwrap();
+    assert!(world.shared.claim_entity_uuid(7).is_none());
+    let _eight = world.shared.claim_entity_uuid(8).unwrap();
+    drop(seven);
+    assert!(world.shared.claim_entity_uuid(7).is_some());
     world.shutdown().await;
 }
 

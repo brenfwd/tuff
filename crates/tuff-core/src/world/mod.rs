@@ -319,7 +319,7 @@ pub struct Shared {
     pub entity_ids: AtomicI32,
     /// The UUID of every entity living in any region of any dimension, so a
     /// saved entity whose UUID is already taken is rejected on load.
-    pub entity_uuids: entity_claim::EntityUuids,
+    pub entity_uuids: std::sync::Arc<entity_claim::EntityUuids>,
     /// Objectives, scores and teams.
     pub scoreboard: scoreboard::ScoreboardHandle,
     /// `/data ... storage` compounds.
@@ -384,12 +384,8 @@ impl Shared {
     }
 
     /// Records `uuid` as living; false if some entity already holds it.
-    pub fn claim_entity_uuid(&self, uuid: u128) -> bool {
+    pub fn claim_entity_uuid(&self, uuid: u128) -> Option<entity_claim::EntityClaim> {
         self.entity_uuids.claim(uuid)
-    }
-
-    pub fn release_entity_uuid(&self, uuid: u128) {
-        self.entity_uuids.release(uuid);
     }
 
     pub fn next_entity_id(&self) -> i32 {

@@ -77,6 +77,11 @@ const DOORS: &[Door] = &[
             "crates/tuff-core/src/world/region_api.rs",
             "crates/tuff-core/src/world/region/entities/shoulder.rs",
         ],
+        in_tests: true,
+    },
+    Door {
+        needle: "entity_uuids.claim(",
+        allowed: &["crates/tuff-core/src/world/mod.rs"],
         in_tests: false,
     },
     Door {
