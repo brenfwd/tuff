@@ -450,6 +450,7 @@ fn bucket(player: &PlayerHandle, above: BlockPos, item: Item, sequence: i32) -> 
         creative: false,
         sequence,
         hit: None,
+        pay: Default::default(),
     })
 }
 

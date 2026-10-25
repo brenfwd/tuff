@@ -35,6 +35,7 @@ mod block_doors;
 mod block_from_items;
 mod bossbar;
 mod bot;
+mod bucket_conservation;
 mod console_commands;
 mod custom_pack;
 mod data_commands;

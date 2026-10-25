@@ -82,6 +82,10 @@ pub enum HandEffect {
     /// the result goes to the inventory (or the ground) and creative players
     /// keep the hand's stack.
     Split(Box<ItemStack>),
+    /// The region already spent the item that paid for the use and handed
+    /// the player its result; `Some` names the filled bucket for the
+    /// advancement trigger.
+    Spent(Option<Item>),
 }
 
 #[derive(Debug)]
@@ -149,6 +153,28 @@ pub struct BucketUse {
     /// The ray's hit, once a region resolved it; a neighbour owning the
     /// target applies it.
     pub hit: Option<crate::world::raycast::Hit>,
+    /// The one bucket this use is paid with, moved out of the hand with
+    /// the request: spent when the use works, handed back when it does
+    /// not.
+    pub pay: BucketPay,
+}
+
+/// The bucket that pays for a [`BucketUse`], shared by the copies of the
+/// request a neighbouring region may receive.
+#[derive(Debug, Clone, Default)]
+pub struct BucketPay(std::sync::Arc<std::sync::Mutex<Option<(usize, ItemStack)>>>);
+
+impl BucketPay {
+    pub fn new(slot: usize, stack: ItemStack) -> Self {
+        Self(std::sync::Arc::new(std::sync::Mutex::new(Some((
+            slot, stack,
+        )))))
+    }
+
+    /// Takes the bucket to spend or hand back, once.
+    pub fn take(&self) -> Option<(usize, ItemStack)> {
+        self.0.lock().ok()?.take()
+    }
 }
 
 /// One tick of a survival break, `ticks` after it started.

@@ -192,6 +192,14 @@ impl RegionActor {
             .then_some(kind)
     }
 
+    /// Whether ghosts react to updates as vanilla's blocks standing in a
+    /// piston's way do: while a glitch setting that relies on it is on.
+    pub(super) fn ghosts_react(&self) -> bool {
+        [VanillaDupe::Tnt.key(), VanillaDupe::CarpetRail.key()]
+            .into_iter()
+            .any(|key| self.shared.config.get_bool(key).unwrap_or(true))
+    }
+
     /// Whether the block at `pos` already left its place: it is a ghost
     /// that no longer reacts to anything until it is overwritten.
     pub(super) fn vacated(&self, pos: BlockPos) -> bool {
@@ -206,7 +214,9 @@ impl RegionActor {
         if redstone.vacated.is_empty() && redstone.moving.is_empty() {
             return;
         }
-        redstone.vacated.remove(&pos);
+        if old.block() != new.block() {
+            redstone.vacated.remove(&pos);
+        }
         if old.block() == Block::MovingPiston
             && new.block() != Block::MovingPiston
             && let Some(lifted) = self.sim.redstone.take_held(pos)

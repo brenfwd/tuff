@@ -1030,6 +1030,13 @@ pub trait Interact: RegionWorld + Rest {
     /// to the neighbour that owns the target.
     fn use_bucket(&mut self, mut request: BucketUse) {
         let reject = |region: &Self, request: &BucketUse, at: &[BlockPos]| {
+            if let Some((slot, stack)) = request.pay.take() {
+                request.player.send(PlayerEvent::HandReturned {
+                    slot,
+                    stack,
+                    creative: false,
+                });
+            }
             request.player.send(PlayerEvent::ActionResult {
                 sequence: request.sequence,
                 outcome: ActionOutcome::Rejected(region.corrections(at)),
@@ -1150,6 +1157,31 @@ pub trait Interact: RegionWorld + Rest {
                 HandEffect::Emptied(Item::Bucket)
             }
             (Some(_), None) => return reject(self, &request, &[pos]),
+        };
+        let effect = match (request.pay.take(), effect) {
+            (Some((slot, paid)), HandEffect::Emptied(result) | HandEffect::Exchange(result)) => {
+                let filled = (request.fluid.is_none() && !releases_mob).then_some(result);
+                paid.burn(tuff_item::item::BurnReason::Transform);
+                request.player.send(PlayerEvent::HandReturned {
+                    slot,
+                    stack: tuff_item::item::ItemStack::mint(
+                        result,
+                        1,
+                        tuff_item::item::MintReason::Transform,
+                    ),
+                    creative: false,
+                });
+                HandEffect::Spent(filled)
+            }
+            (Some((slot, paid)), other) => {
+                request.player.send(PlayerEvent::HandReturned {
+                    slot,
+                    stack: paid,
+                    creative: false,
+                });
+                other
+            }
+            (None, effect) => effect,
         };
         request.player.send(PlayerEvent::ActionResult {
             sequence: request.sequence,

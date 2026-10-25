@@ -255,6 +255,7 @@ pub fn place_bucket(
         creative: false,
         sequence,
         hit: None,
+        pay: Default::default(),
     })
 }
 

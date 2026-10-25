@@ -449,6 +449,14 @@ impl PlayerSession {
         )) else {
             return false;
         };
+        let slot = self.inventory.hand_slot(off_hand);
+        let pay = if !self.mode.abilities.instabuild && !egg {
+            ItemStack::take_from(self.inventory.slot_mut(slot), 1)
+                .map(|one| crate::world::messages::BucketPay::new(slot, one))
+                .unwrap_or_default()
+        } else {
+            Default::default()
+        };
         region
             .request(RegionRequest::UseBucket(BucketUse {
                 player: self.conn.handle.clone(),
@@ -466,6 +474,7 @@ impl PlayerSession {
                 creative: self.mode.game_mode == GameMode::Creative,
                 sequence,
                 hit: None,
+                pay,
             }))
             .await;
         true
@@ -948,6 +957,7 @@ impl PlayerSession {
                     }
                 }
             }
+            HandEffect::Spent(_) => {}
             HandEffect::Replace(stack) => {
                 let slot = if off_hand {
                     Inventory::OFFHAND_SLOT

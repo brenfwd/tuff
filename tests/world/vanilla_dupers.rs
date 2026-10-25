@@ -380,6 +380,7 @@ fn vanilla_script_layout() {
     for (n, chunk) in text.split("\n---\n").enumerate() {
         let (mut kinds, mut build, mut trigger) = (Vec::new(), Vec::new(), Vec::new());
         let mut probes = Vec::new();
+        let mut scans: Vec<(Vec<i32>, String)> = Vec::new();
         let mut end = false;
         let leak = |s: &str| -> &'static str { Box::leak(s.to_owned().into_boxed_str()) };
         for line in chunk
@@ -391,6 +392,10 @@ fn vanilla_script_layout() {
             match w.next().unwrap() {
                 "kinds" => kinds = w.next().unwrap().split(',').map(leak).collect(),
                 "end" => end = true,
+                "scan" => {
+                    let c: Vec<i32> = (0..4).map(|_| w.next().unwrap().parse().unwrap()).collect();
+                    scans.push((c, w.next().unwrap().to_owned()));
+                }
                 "q" => {
                     let c: Vec<i32> = (0..3).map(|_| w.next().unwrap().parse().unwrap()).collect();
                     probes.push((c, w.next().unwrap().to_owned()));
@@ -420,6 +425,22 @@ fn vanilla_script_layout() {
         let mut vanilla = Vanilla::start();
         let (built, after) = vanilla.run_design(&design);
         eprintln!("{}", table(&format!("script#{n}"), &built, &after));
+        for (c, id) in scans {
+            let mut found = Vec::new();
+            for x in c[0]..=c[1] {
+                let o = ORIGIN;
+                let r = vanilla.run(&format!(
+                    "execute if block {} {} {} {id}",
+                    o.0 + x,
+                    o.1 + c[2],
+                    o.2 + c[3]
+                ));
+                if r.contains("passed") {
+                    found.push(x);
+                }
+            }
+            eprintln!("script#{n} probe scan {id} at x {found:?}");
+        }
         for (c, id) in probes {
             let o = ORIGIN;
             let r = vanilla.run(&format!(

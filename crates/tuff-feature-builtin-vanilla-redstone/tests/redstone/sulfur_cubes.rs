@@ -342,6 +342,7 @@ async fn an_empty_bucket_scoops_up_a_cube_with_its_block_and_lets_it_out_again()
             creative: false,
             sequence: 3,
             hit: None,
+            pay: Default::default(),
         }))
         .await;
     let found = wait_for(&world, &region, 5, |found| {
