@@ -665,6 +665,11 @@ pub trait RegionWorld: GrowthLevel {
     /// Sets a block with full updates, forwarding it to the owning
     /// neighbour when it is not here.
     fn put_block(&mut self, pos: BlockPos, state: BlockState);
+    /// Writes `state` at `pos` for the block a custom item placing blocks
+    /// pays for with the click's one item (a creative player pays
+    /// nothing). False, and nothing written, when the click carries no
+    /// payment.
+    fn place_from_click(&mut self, place: &Place, pos: BlockPos, state: BlockState) -> bool;
     /// Places `state` for the block item `stack` at `pos` as a dispenser
     /// does: the item's components go to the block entity, the place sound
     /// plays. False when it is not this region's or a player is in the way.
