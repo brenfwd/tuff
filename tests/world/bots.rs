@@ -615,27 +615,36 @@ async fn a_bot_kills_a_zombie_within_reach_and_flags_nothing() {
         "summon minecraft:zombie 5.5 150 0.5 {UUID:[I;0,0,0,1],NoAI:1b,PersistenceRequired:1b}",
     )
     .await;
-    run.eventually(|| async {
-        run.server("execute if entity @e[type=minecraft:zombie]")
-            .await
-            .contains("passed")
-            .then_some(())
-    })
-    .await;
+    let summoned = run
+        .within(PATIENCE, || async {
+            run.server("execute if entity @e[type=minecraft:zombie]")
+                .await
+                .contains("passed")
+                .then_some(())
+        })
+        .await;
+    assert!(summoned.is_some(), "the zombie never appeared");
     run.ask("attack 1 00000000000000000000000000000001", |a| {
         a.contains("attacking 1")
     })
     .await;
     let events = run.process_end(1, 400).await;
     assert!(events.contains("done 1"), "{events}");
-    run.eventually(|| async {
-        (!run
-            .server("execute if entity @e[type=minecraft:zombie]")
+    let killed = run
+        .within(PATIENCE, || async {
+            (!run
+                .server("execute if entity @e[type=minecraft:zombie]")
+                .await
+                .contains("passed"))
+            .then_some(())
+        })
+        .await;
+    assert!(
+        killed.is_some(),
+        "the attack ended but the zombie lives: {events} | {}",
+        run.server("data get entity @e[type=minecraft:zombie,limit=1] Health")
             .await
-            .contains("passed"))
-        .then_some(())
-    })
-    .await;
+    );
     let flags = run.server("anticheat violations Botty").await;
     assert!(
         run.server("anticheat violations")
@@ -888,8 +897,10 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
             .then_some(())
     })
     .await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    run.server("give Mate wheat_seeds 16").await;
+    run.eventually(|| async { run.online().await.contains("Mate").then_some(()) })
+        .await;
+    let given = run.server("give Mate wheat_seeds 16").await;
+    assert!(given.contains("Gave"), "{given}");
     let said = run.op(op, "bots farm Mate 1 150 1 3 150 3").await;
     assert!(said.contains("farming"), "{said}");
     run.eventually(|| async {
