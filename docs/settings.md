@@ -225,6 +225,15 @@ that way.
 |-----|---------|--------|
 | `tuff.items.conservationChecks` | `true` | Check item moves in release builds and refuse, audit and quarantine on a violation |
 | `tuff.items.conservationKick` | `true` | Disconnect a player involved in a refused item operation |
+| `tuff.blocks.tntDuplication` | `true` | Keep vanilla's TNT duplication: a TNT block a piston lifts can still light where it stood, once, making one extra primed TNT |
+| `tuff.blocks.carpetRailDuplication` | `true` | Keep vanilla's carpet and rail duplication: a carpet or rail a piston lifts can still pop where it stood, once, making one extra drop |
+| `tuff.blocks.gravityBlockPortalDuplication` | `true` | Keep vanilla's gravity block duplication through End portals (takes effect with falling blocks owning their block) |
+
+Blocks are move-only like item stacks: a block exists once, in the world,
+inside a moving piston, inside an entity, or as its drops. The three
+`tuff.blocks.*Duplication` switches re-enable vanilla's own glitches
+through one named, counted door each; with a switch off, the glitch cannot
+happen. Tripwire hook duplication does not exist in 26.3 and has no switch.
 
 A world save lands whole or not at all. Before a save's first write to a
 chunk or player file, the previous contents go to a journal (a

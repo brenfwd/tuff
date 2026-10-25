@@ -16,6 +16,7 @@ use crate::world::items;
 use crate::world::region::shelves::Shelves as _;
 use tuff_core::protocol::play;
 use tuff_core::world::block_entity::{self, sign};
+use tuff_core::world::block_ledger::{ClaimReason, Remains, TntOrigin};
 use tuff_core::world::explosion::{BlockInteraction, Explosion};
 use tuff_core::world::messages::{
     ActionOutcome, AnchorUse, BedUse, BucketUse, HandEffect, Igniter, Place, PlayerEvent,
@@ -689,7 +690,7 @@ pub trait Interact: RegionWorld + Rest {
             (Some(content), None) => {
                 if let Some(item) = content.item() {
                     place.player.send(PlayerEvent::ItemGranted {
-                        stack: ItemStack::mint(item, 1, MintReason::BlockDrop),
+                        stack: ItemStack::mint(item, 1, MintReason::Growth),
                         picked_up: false,
                     });
                 }
@@ -777,13 +778,13 @@ pub trait Interact: RegionWorld + Rest {
                 ));
                 return None;
             }
-            self.put_block(pos, AIR);
+            let broken = self.claim_block(pos, Remains::Air, ClaimReason::Entity)?;
             let igniter = Igniter {
                 id: place.player.id,
                 uuid: place.uuid,
                 name: place.name.clone(),
             };
-            self.spawn_primed_tnt(pos, None, Some(igniter));
+            self.spawn_primed_tnt(TntOrigin::Block(broken), pos, None, Some(igniter));
             return Some(used(ignite_cost));
         }
         if igniter && interaction::can_light(state) {
@@ -1305,12 +1306,13 @@ pub trait Interact: RegionWorld + Rest {
         if is_air(old) {
             return;
         }
-        let saved = self.saved_block_entity(pos);
-        self.put_block(pos, placement::remains(old));
+        let Some(broken) = self.claim_block(pos, Remains::Vanilla, ClaimReason::Popped) else {
+            return;
+        };
         self.break_event(pos, old, None);
         if self.shared().rule_bool("block_drops") {
             let loot = self.shared().block_loot();
-            let stacks = loot.drops(old, None, saved.as_ref(), self.rng());
+            let stacks = loot.drops(broken, None, self.rng());
             self.drop_items(pos, stacks);
         }
         self.release_infestation(pos, old, None);

@@ -414,6 +414,7 @@ fn chest_arrives(tick: u64) -> BlockUpdate {
             true,
             false,
         )),
+        lifted: Some(crate::world::block_ledger::HeldBlock::test(chest)),
         tick,
         expected: Block::Air.default_state(),
         carry: None,

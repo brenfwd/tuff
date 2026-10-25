@@ -538,6 +538,24 @@ impl RegionWorld for RegionActor {
         self.destroy_by_update(pos, state, drops, crate::world::redstone::UPDATE_LIMIT);
     }
 
+    fn claim_block(
+        &mut self,
+        pos: BlockPos,
+        remains: crate::world::block_ledger::Remains,
+        why: crate::world::block_ledger::ClaimReason,
+    ) -> Option<crate::world::block_ledger::BrokenBlock> {
+        self.claim(pos, remains, why)
+    }
+
+    fn take_up_block(
+        &mut self,
+        pos: BlockPos,
+        remains: crate::world::block_ledger::Remains,
+        why: crate::world::block_ledger::ClaimReason,
+    ) -> Option<crate::world::block_ledger::HeldBlock> {
+        self.take_up(pos, remains, why)
+    }
+
     fn play_sound(
         &self,
         sound: SoundEvent,
@@ -638,8 +656,14 @@ impl RegionWorld for RegionActor {
         RegionActor::explode_shielded(self, explosion, shield);
     }
 
-    fn spawn_primed_tnt(&mut self, pos: BlockPos, fuse: Option<i32>, igniter: Option<Igniter>) {
-        RegionActor::spawn_primed_tnt(self, pos, fuse, igniter);
+    fn spawn_primed_tnt(
+        &mut self,
+        origin: crate::world::block_ledger::TntOrigin,
+        pos: BlockPos,
+        fuse: Option<i32>,
+        igniter: Option<Igniter>,
+    ) {
+        RegionActor::spawn_primed_tnt(self, origin, pos, fuse, igniter);
     }
 
     fn fire_sound(&mut self, item: Item) -> (SoundEvent, f32) {

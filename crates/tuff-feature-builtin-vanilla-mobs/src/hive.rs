@@ -8,6 +8,7 @@ use tuff_vanilla_data::{Block, BlockState, Item, tag};
 use tuff_core::world::game_event::{Context, GameEvent, Source};
 use tuff_core::world::messages::{ActionOutcome, HandEffect};
 use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
+use tuff_core::world::stored_entity::StoredEntity;
 use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -120,14 +121,14 @@ pub fn release_where(
     if blocked && reason != Release::Emergency {
         return Vec::new();
     }
-    let Some(hive) = world.raw_block_entity(pos) else {
+    let Some(hive) = world.raw_block_entity_mut(pos) else {
         return Vec::new();
     };
     let flower = hive.get("flower_pos").cloned();
-    let occupants: Vec<Tag> = hive
-        .get_list("bees")
-        .map(<[Tag]>::to_vec)
-        .unwrap_or_default();
+    let occupants = match hive.get_mut("bees") {
+        Some(Tag::List(list)) => std::mem::take(list),
+        _ => Vec::new(),
+    };
     if occupants.is_empty() {
         return Vec::new();
     }
@@ -135,23 +136,36 @@ pub fn release_where(
     let mut released = Vec::new();
     let mut honey = 0;
     for occupant in occupants {
-        if !occupant.as_compound().is_some_and(ready) {
+        let Tag::Compound(raw) = occupant else {
             kept.push(occupant);
+            continue;
+        };
+        if !ready(&raw) {
+            kept.push(Tag::Compound(raw));
             continue;
         }
-        let spawned = occupant.as_compound().and_then(|occupant| {
-            bee_of(
-                world,
-                pos,
-                occupant,
-                flower.as_ref(),
-                reason == Release::Exited,
-                &mut honey,
-            )
-        });
-        let Some(mut entity) = spawned else {
-            kept.push(occupant);
-            continue;
+        let occupant = match Occupant::from_nbt(raw) {
+            Ok(occupant) => occupant,
+            Err(raw) => {
+                kept.push(Tag::Compound(raw));
+                continue;
+            }
+        };
+        let spawned = bee_of(
+            world,
+            pos,
+            occupant,
+            flower.as_ref(),
+            reason == Release::Exited,
+            &mut honey,
+        );
+        let mut entity = match spawned {
+            Ok(entity) => entity,
+            Err(Some(occupant)) => {
+                kept.push(Tag::Compound((*occupant).into_nbt()));
+                continue;
+            }
+            Err(None) => continue,
         };
         let size = entity.base().kind.size();
         let delta = if blocked {
@@ -174,11 +188,11 @@ pub fn release_where(
         world.add_entity(entity);
         released.push(id);
     }
-    if !released.is_empty()
-        && let Some(hive) = world.raw_block_entity_mut(pos)
-    {
+    if let Some(hive) = world.raw_block_entity_mut(pos) {
         hive.insert("bees", Tag::List(kept));
-        world.block_entity_changed(pos);
+        if !released.is_empty() {
+            world.block_entity_changed(pos);
+        }
     }
     if honey > 0 {
         add_honey(world, pos, honey);
@@ -186,25 +200,71 @@ pub fn release_where(
     released
 }
 
-/// The live bee an occupant entry describes, aged by its time in the hive.
+/// A bee inside a hive: the stored entity and the hive's own bookkeeping
+/// of its stay. The block entity stays raw data, so an occupant crosses
+/// into and out of it only through the storage doors here.
+struct Occupant {
+    stored: StoredEntity,
+    stay: Compound,
+}
+
+impl Occupant {
+    fn new(stored: StoredEntity, min_ticks: i32) -> Self {
+        Self {
+            stored,
+            stay: Compound::new()
+                .with("ticks_in_hive", 0)
+                .with("min_ticks_in_hive", min_ticks),
+        }
+    }
+
+    /// Reads an occupant out of the hive's saved list entry.
+    fn from_nbt(mut raw: Compound) -> Result<Self, Compound> {
+        match raw.remove("entity_data") {
+            Some(Tag::Compound(data)) => Ok(Self {
+                stored: StoredEntity::from_storage(data),
+                stay: raw,
+            }),
+            other => {
+                if let Some(other) = other {
+                    raw.insert("entity_data", other);
+                }
+                Err(raw)
+            }
+        }
+    }
+
+    /// Writes the occupant back into the hive's saved list entry.
+    fn into_nbt(self) -> Compound {
+        self.stay.with("entity_data", self.stored.into_storage())
+    }
+}
+
+/// The live bee an occupant is, aged by its time in the hive. A bee that
+/// cannot come out goes back (`Err(Some)`), one that cannot load at all
+/// is burned (`Err(None)`).
 fn bee_of(
     world: &mut dyn RegionWorld,
     hive: BlockPos,
-    occupant: &Compound,
+    occupant: Occupant,
     flower: Option<&Tag>,
     deliver: bool,
     honey: &mut i32,
-) -> Option<Box<dyn tuff_core::world::entity::RegionEntity>> {
-    let mut data = occupant.get_compound("entity_data")?.clone();
+) -> Result<Box<dyn tuff_core::world::entity::RegionEntity>, Option<Box<Occupant>>> {
+    let Occupant { mut stored, stay } = occupant;
+    let inhabitor = tuff_vanilla_data::registry::EntityType::from_name(
+        stored.nbt().get_str("id").unwrap_or(""),
+    )
+    .is_some_and(|kind| tuff_datapack::tags::is(tag::entity_type::key::BEEHIVE_INHABITORS, kind));
+    if !inhabitor {
+        return Err(Some(Box::new(Occupant { stored, stay })));
+    }
+    let data = stored.nbt_mut();
     for key in IGNORED_TAGS {
         data.remove(key);
     }
-    let kind = tuff_vanilla_data::registry::EntityType::from_name(data.get_str("id")?)?;
-    if !tuff_datapack::tags::is(tag::entity_type::key::BEEHIVE_INHABITORS, kind) {
-        return None;
-    }
-    let ticks = occupant.get_int("ticks_in_hive").unwrap_or(0);
-    age(&mut data, ticks);
+    let ticks = stay.get_int("ticks_in_hive").unwrap_or(0);
+    age(data, ticks);
     data.insert("NoGravity", true);
     data.insert("CannotEnterHiveTicks", CANNOT_ENTER_TICKS);
     if deliver && data.get_bool("HasNectar").unwrap_or(false) {
@@ -225,7 +285,8 @@ fn bee_of(
         data.insert("flower_pos", flower.clone());
     }
     let id = world.shared().next_entity_id();
-    world.shared().entity_types.load(&data, id)
+    let data = stored.into_spawn_data();
+    world.shared().entity_types.load(&data, id).ok_or(None)
 }
 
 /// Brings a bee's age and love time forward by the ticks it spent inside.
@@ -579,25 +640,25 @@ fn enter(world: &mut dyn RegionWorld, id: i32, pos: BlockPos) {
     if tracked.entity.base().kind != tuff_vanilla_data::registry::EntityType::Bee {
         return;
     }
-    let mut data = tuff_core::world::entity::save(&*tracked.entity);
+    let Some(mut stored) = world.take_entity(id) else {
+        return;
+    };
+    let data = stored.nbt_mut();
     for key in IGNORED_TAGS {
         data.remove(key);
     }
     data.insert("TicksSincePollination", 0);
     let nectar = data.get_bool("HasNectar").unwrap_or(false);
     let flower = data.get("flower_pos").cloned();
-    world.remove_entity_intact(id);
-    let occupant = Compound::new()
-        .with("entity_data", data)
-        .with("ticks_in_hive", 0)
-        .with(
-            "min_ticks_in_hive",
-            if nectar {
-                MIN_TICKS_NECTAR
-            } else {
-                MIN_TICKS_EMPTY
-            },
-        );
+    let occupant = Occupant::new(
+        stored,
+        if nectar {
+            MIN_TICKS_NECTAR
+        } else {
+            MIN_TICKS_EMPTY
+        },
+    )
+    .into_nbt();
     if let Some(hive) = world.raw_block_entity_mut(pos) {
         if let Some(Tag::List(bees)) = hive.get_mut("bees") {
             bees.push(Tag::Compound(occupant));

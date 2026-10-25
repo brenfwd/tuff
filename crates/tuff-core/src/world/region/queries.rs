@@ -389,14 +389,17 @@ impl RegionActor {
                         continue;
                     }
                     if destroy && !is_air(old) {
-                        let saved = self.saved_block_entity(pos);
-                        let drops =
-                            self.shared
-                                .block_loot()
-                                .destroyed(old, saved.as_ref(), &mut self.rng);
-                        self.drop_items(pos, drops);
+                        if let Some(broken) = self.claim(
+                            pos,
+                            crate::world::block_ledger::Remains::Air,
+                            crate::world::block_ledger::ClaimReason::Command,
+                        ) {
+                            let drops = self.shared.block_loot().destroyed(broken, &mut self.rng);
+                            self.drop_items(pos, drops);
+                        } else {
+                            self.put_block(pos, Block::Air.default_state());
+                        }
                         self.break_event(pos, old, None);
-                        self.put_block(pos, Block::Air.default_state());
                         count += usize::from(is_air(state));
                     }
                     if quiet

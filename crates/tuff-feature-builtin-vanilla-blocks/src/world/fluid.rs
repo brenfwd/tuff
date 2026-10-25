@@ -476,7 +476,7 @@ pub fn apply_spread(
     }
     if !is_air(state) {
         match behaviour {
-            Some(FluidBehaviour::Water) => world.wash_away(pos, state),
+            Some(FluidBehaviour::Water) => world.wash_away(pos, state, fluid.block()),
             Some(FluidBehaviour::Lava) => world.fizz(pos),
             None => {}
         }
@@ -801,7 +801,7 @@ mod tests {
             });
         }
 
-        fn wash_away(&mut self, pos: BlockPos, _state: BlockState) {
+        fn wash_away(&mut self, pos: BlockPos, _state: BlockState, _left: BlockState) {
             self.washed.push(pos);
         }
 

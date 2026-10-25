@@ -12,6 +12,7 @@ use crate::projectile::{
     wind_charge::{self, WindCharge},
 };
 use tuff_core::protocol::play::level_event;
+use tuff_core::world::block_ledger::TntOrigin;
 use tuff_core::world::effects::ActiveEffect;
 use tuff_core::world::entity::{
     Culprit, Effect, EntityAttack, EntityHit, RegionEntity, TickContext,
@@ -144,7 +145,7 @@ impl RegionHooks for CombatRegionHooks {
                 if let Some(outcome) = world.dispense_on_entity_in(target, stack) {
                     return Some(outcome);
                 }
-                world.spawn_primed_tnt(target, None, None);
+                world.spawn_primed_tnt(TntOrigin::Item, target, None, None);
                 Some(DispenseOutcome::Dispensed)
             }
             _ => None,

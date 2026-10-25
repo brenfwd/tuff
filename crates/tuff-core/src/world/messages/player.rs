@@ -272,7 +272,7 @@ pub enum PlayerEvent {
     /// is gone or no longer offered.
     ShoulderGranted {
         offer: u64,
-        entity: Option<Box<tuff_nbt::Compound>>,
+        entity: Option<crate::world::stored_entity::StoredEntity>,
     },
     /// A dispenser put `stack` on this player; it goes in `slot` if that
     /// is still empty, else into the inventory.

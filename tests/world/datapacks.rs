@@ -748,12 +748,11 @@ fn sent(outbound: &mut mpsc::UnboundedReceiver<bytes::Bytes>, id: i32) -> usize 
 fn dirt_drops(world: &TestWorld) -> Vec<tuff_item::item::ItemStack> {
     use rand::SeedableRng;
     let mut rng = rand::rngs::StdRng::seed_from_u64(1);
-    world.shared.block_loot().drops(
+    let dirt = crate::world::block_ledger::BrokenBlock::test(
         tuff_vanilla_data::Block::Dirt.default_state(),
         None,
-        None,
-        &mut rng,
-    )
+    );
+    world.shared.block_loot().drops(dirt, None, &mut rng)
 }
 
 const DIRT_LOOT: &str = "minecraft/loot_table/blocks/dirt.json";

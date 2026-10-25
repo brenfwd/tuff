@@ -49,6 +49,7 @@ mod backups;
 mod beacon_menu;
 mod bedwars;
 mod beehive;
+mod block_dupers;
 mod block_entities;
 mod block_entity_tickers;
 mod block_write_flags;

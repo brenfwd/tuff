@@ -710,7 +710,13 @@ impl tuff_core::world::fluid_api::FluidWorld for LiveWindow<'_> {
     ) {
     }
 
-    fn wash_away(&mut self, _: tuff_world_model::BlockPos, _: tuff_vanilla_data::BlockState) {}
+    fn wash_away(
+        &mut self,
+        _: tuff_world_model::BlockPos,
+        _: tuff_vanilla_data::BlockState,
+        _: tuff_vanilla_data::BlockState,
+    ) {
+    }
 
     fn place_liquid(
         &mut self,

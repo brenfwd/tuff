@@ -304,6 +304,7 @@ impl PlayerSession {
                     off_hand, target, face, cursor, sequence, held, item, interact,
                 );
                 place.offer = self.place_offer(&region, off_hand, target, held).await;
+                self.hold_payment(off_hand, sequence);
                 self.send_place(&region, RegionRequest::Place(place)).await;
             }
             _ => {
@@ -333,7 +334,7 @@ impl PlayerSession {
         let Some(region) = self.region_of(target) else {
             return false;
         };
-        let place = self.place_request(
+        let mut place = self.place_request(
             off_hand,
             target,
             Face::Up,
@@ -343,6 +344,12 @@ impl PlayerSession {
             Some(item),
             false,
         );
+        let slot = self.inventory.hand_slot(off_hand);
+        if !self.mode.abilities.instabuild
+            && let Some(one) = ItemStack::take_from(self.inventory.slot_mut(slot), 1)
+        {
+            place.offer = crate::world::messages::PlaceOffer::paying(false, slot, one);
+        }
         self.send_place(&region, RegionRequest::PlaceOnWater(place))
             .await;
         true
@@ -443,6 +450,7 @@ impl PlayerSession {
         )) else {
             return false;
         };
+        self.hold_payment(off_hand, sequence);
         region
             .request(RegionRequest::UseBucket(BucketUse {
                 player: self.conn.handle.clone(),
@@ -900,6 +908,9 @@ impl PlayerSession {
                     } else {
                         Inventory::hotbar_slot(self.inventory.selected())
                     };
+                    if let Some(old) = self.inventory.slot_mut(slot).take() {
+                        old.burn(BurnReason::Transform);
+                    }
                     self.inventory.set_slot(
                         slot,
                         Some(ItemStack::mint(result, 1, MintReason::Transform)),

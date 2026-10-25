@@ -181,7 +181,9 @@ impl PlayerSession {
             .map(|(dimension, [x, y, z])| (dimension, BlockPos::new(x, y, z)));
         self.progress.entered_nether = state.entered_nether;
         self.mode.post_effects = state.post_effects;
-        self.body.shoulders.entities = state.shoulders;
+        self.body.shoulders.entities = state
+            .shoulders
+            .map(|s| s.map(crate::world::stored_entity::StoredEntity::from_storage));
         self.body.effects = state.effects;
         self.body.attributes = state.attributes;
         self.progress.last_inventory = tuff_item::item::snapshot_slots(self.inventory.slots());
@@ -242,7 +244,10 @@ impl PlayerSession {
                 .map(|(dimension, pos)| (dimension.clone(), [pos.x, pos.y, pos.z])),
             entered_nether: self.progress.entered_nether,
             post_effects: self.mode.post_effects.clone(),
-            shoulders: self.body.shoulders.entities.clone(),
+            shoulders: self.body.shoulders.entities.each_ref().map(|s| {
+                s.as_ref()
+                    .map(crate::world::stored_entity::StoredEntity::snapshot)
+            }),
             effects: self.body.effects.clone(),
             attributes: self.body.attributes.clone(),
         }

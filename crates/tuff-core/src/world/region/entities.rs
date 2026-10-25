@@ -160,10 +160,12 @@ impl RegionActor {
                 .is_ok();
             let Some(handle) = (if asked { handle.await.ok() } else { None }) else {
                 log::warn!("dropping {} outside of any region", entity.saved_id());
+                burn_held(entity);
                 return;
             };
             if let Err(entity) = handle.try_entity(entity, seq) {
                 log::warn!("dropping {} outside of any region", entity.saved_id());
+                burn_held(entity);
             }
             let _ = manager
                 .send(crate::world::messages::ManagerMessage::Release { dimension, region })
@@ -250,6 +252,18 @@ impl RegionActor {
         self.receive_entity(Box::new(entity), 0);
     }
 
+    /// Throws away an entity whose UUID is already alive, burning what it
+    /// carries.
+    fn refuse_duplicate(mut entity: Box<dyn RegionEntity>) {
+        log::warn!("dropping {}: its UUID already exists", entity.saved_id());
+        for stack in entity.take_items() {
+            stack.burn(tuff_item::item::BurnReason::Discarded);
+        }
+        if let Some(block) = entity.take_held() {
+            block.burn(crate::world::block_ledger::BlockBurn::Killed);
+        }
+    }
+
     /// Starts tracking an entity in a loaded chunk; `announce` reports it to
     /// the chunk's viewers at once.
     pub(super) fn add_entity(
@@ -258,6 +272,15 @@ impl RegionActor {
         seq: u64,
         announce: bool,
     ) {
+        if !entity.base().claim.is_held() {
+            match self.shared.claim_entity_uuid(entity.base().uuid) {
+                Some(claim) => entity.base_mut().claim.put(claim),
+                None => {
+                    Self::refuse_duplicate(entity);
+                    return;
+                }
+            }
+        }
         let span = entity.take_id_span();
         if span > 0 {
             entity.base_mut().id = self.shared.next_entity_ids(span + 1);
@@ -275,7 +298,6 @@ impl RegionActor {
             self.fanout_chunk(chunk, None, |_| PlayerEvent::Track(track.clone()));
         }
         let id = tracked.id();
-        self.shared.claim_entity_uuid(tracked.entity.base().uuid);
         self.ents.entities.insert(id, tracked);
         self.board_saved_passengers(id, announce, 0);
     }
@@ -286,6 +308,9 @@ impl RegionActor {
         let mut tracked = self.remove_entity_intact(id, chunks)?;
         for stack in tracked.entity.take_items() {
             stack.burn(tuff_item::item::BurnReason::Discarded);
+        }
+        if let Some(block) = tracked.entity.take_held() {
+            block.burn(crate::world::block_ledger::BlockBurn::Killed);
         }
         Some(tracked)
     }
@@ -300,7 +325,6 @@ impl RegionActor {
         let parts = self.custom_entity_parts(id);
         let tracked = self.remove_entity_kept(id, chunks)?;
         self.ents.destroyed.push(tracked.entity.base().uuid);
-        self.shared.release_entity_uuid(tracked.entity.base().uuid);
         for part in parts {
             self.remove_entity(part, &[]);
         }
@@ -416,17 +440,8 @@ impl RegionActor {
             .collect();
         let mut gone: HashSet<i32> = self.stacks_on(&roots).into_iter().collect();
         gone.extend(roots);
-        let shared = &self.shared;
         let entities = &mut self.ents.entities;
-        tuff_item::item::conservation::releasing(|| {
-            entities.retain(|id, tracked| {
-                let keep = !gone.contains(id);
-                if !keep {
-                    shared.release_entity_uuid(tracked.entity.base().uuid);
-                }
-                keep
-            })
-        });
+        tuff_item::item::conservation::releasing(|| entities.retain(|id, _| !gone.contains(id)));
     }
 
     /// What other entities see of each entity, for this tick.
@@ -664,16 +679,16 @@ impl RegionActor {
         let Some(state) = self.block(pos).filter(|_| self.owns(pos)) else {
             return;
         };
-        let saved = self.saved_block_entity(pos);
+        let broken = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Air,
+            crate::world::block_ledger::ClaimReason::Popped,
+        );
         self.break_event(pos, state, None);
-        if drop {
-            let stacks = self
-                .shared
-                .block_loot()
-                .destroyed(state, saved.as_ref(), &mut self.rng);
+        if drop && let Some(broken) = broken {
+            let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
             self.drop_items(pos, stacks);
         }
-        self.put_block(pos, tuff_vanilla_data::Block::Air.default_state());
         if drop {
             self.release_infestation(pos, state, None);
         }
@@ -852,6 +867,13 @@ impl RegionActor {
             for (collector, stack) in std::mem::take(&mut self.ents.taken_stacks) {
                 if collector == id {
                     tracked.entity.took_item(stack);
+                }
+            }
+            for (holder, block) in std::mem::take(&mut self.ents.taken_blocks) {
+                if holder == id {
+                    tracked.entity.receive_held(block);
+                } else {
+                    block.burn(crate::world::block_ledger::BlockBurn::Orphaned);
                 }
             }
             for (gap, top) in self.ents.lifts.take().unwrap_or_default() {
@@ -1276,5 +1298,12 @@ mod rider_lookup_tests {
             .push(rider);
         vehicles = rider_vehicles(&entities);
         assert_eq!(player_vehicle(&vehicles, &entities, 9), Some(2));
+    }
+}
+
+/// Burns the block an entity that is dropped outside of any region held.
+fn burn_held(mut entity: Box<dyn RegionEntity>) {
+    if let Some(block) = entity.take_held() {
+        block.burn(crate::world::block_ledger::BlockBurn::Orphaned);
     }
 }

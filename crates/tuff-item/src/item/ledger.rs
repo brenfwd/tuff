@@ -21,8 +21,10 @@ use super::{
 pub enum MintReason {
     /// Loot tables: containers, block drops, mob drops, fishing, archaeology.
     Loot,
-    /// A block broken or changed into its drops outside loot tables.
-    BlockDrop,
+    /// What a block that stays standing yields, outside loot tables: bone
+    /// meal from a composter, a flower popping off a bonemealed one, the
+    /// plant taken out of a flower pot.
+    Growth,
     /// Equipment and inventory a mob spawns with.
     Spawn,
     /// A mob or other entity dropping or producing items outside loot tables.
@@ -99,11 +101,46 @@ pub mod conservation {
     use super::LedgerTotals;
 
     static CHECKS: AtomicBool = AtomicBool::new(true);
-    static MINTED: AtomicU64 = AtomicU64::new(0);
-    static BURNED: AtomicU64 = AtomicU64::new(0);
-    static LOADED: AtomicU64 = AtomicU64::new(0);
+    static MINTED: OpCounter = OpCounter::new();
+    static BURNED: OpCounter = OpCounter::new();
+    static LOADED: OpCounter = OpCounter::new();
     static LOST: AtomicU64 = AtomicU64::new(0);
     static VIOLATIONS: AtomicU64 = AtomicU64::new(0);
+
+    /// A counter of an operation done on every item: it counts in debug
+    /// builds and is nothing in release builds, where such a counter
+    /// contended by every region thread would cost more than it tells.
+    pub struct OpCounter(#[cfg(debug_assertions)] AtomicU64);
+
+    impl OpCounter {
+        pub const fn new() -> Self {
+            Self(
+                #[cfg(debug_assertions)]
+                AtomicU64::new(0),
+            )
+        }
+
+        #[inline(always)]
+        pub fn add(&self, n: u64) {
+            #[cfg(debug_assertions)]
+            self.0.fetch_add(n, Ordering::Relaxed);
+            #[cfg(not(debug_assertions))]
+            let _ = n;
+        }
+
+        pub fn get(&self) -> u64 {
+            #[cfg(debug_assertions)]
+            return self.0.load(Ordering::Relaxed);
+            #[cfg(not(debug_assertions))]
+            0
+        }
+    }
+
+    impl Default for OpCounter {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     thread_local! {
         static RELEASING: Cell<u32> = const { Cell::new(0) };
@@ -185,9 +222,9 @@ pub mod conservation {
 
     pub fn totals() -> LedgerTotals {
         LedgerTotals {
-            minted: MINTED.load(Ordering::Relaxed),
-            burned: BURNED.load(Ordering::Relaxed),
-            loaded: LOADED.load(Ordering::Relaxed),
+            minted: MINTED.get(),
+            burned: BURNED.get(),
+            loaded: LOADED.get(),
             lost: LOST.load(Ordering::Relaxed),
             violations: VIOLATIONS.load(Ordering::Relaxed),
         }
@@ -263,15 +300,15 @@ pub mod conservation {
     }
 
     pub(super) fn minted(n: u64) {
-        MINTED.fetch_add(n, Ordering::Relaxed);
+        MINTED.add(n);
     }
 
     pub(super) fn burned(n: u64) {
-        BURNED.fetch_add(n, Ordering::Relaxed);
+        BURNED.add(n);
     }
 
     pub(super) fn loaded(n: u64) {
-        LOADED.fetch_add(n, Ordering::Relaxed);
+        LOADED.add(n);
     }
 
     pub(super) fn lost(stack: &super::ItemStack) {

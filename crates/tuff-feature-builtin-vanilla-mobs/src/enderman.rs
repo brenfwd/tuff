@@ -14,6 +14,7 @@ use super::physics::{self, block_pos};
 use super::target::{HurtByTarget, NearestAttackableEntity, TargetView, view};
 use super::{Damage, MobCore, MobSounds, Species, data};
 use tuff_core::protocol::play::{self, MetadataValue};
+use tuff_core::world::block_ledger::{BlockBurn, HeldBlock};
 use tuff_core::world::entity::{Effect, NearbyPlayer, TickContext, take};
 use tuff_core::world::{framed, packets};
 use tuff_nbt::Compound;
@@ -379,13 +380,13 @@ impl Goal for LeaveBlock {
     }
 
     fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
-        mob.signal_block.is_some()
+        mob.carried_block.is_some()
             && cx.shared.game_rules.borrow().bool("mob_griefing")
             && cx.rng.gen_range(0..reduced_delay(2000)) == 0
     }
 
     fn tick(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
-        let Some(carried) = mob.signal_block else {
+        let Some(carried) = mob.carried_block.as_ref().map(HeldBlock::state) else {
             return;
         };
         let [x, y, z] = mob.base.position;
@@ -414,9 +415,13 @@ impl Goal for LeaveBlock {
             && under.is_collision_full_block()
             && tuff_vanilla_common::placement::can_survive(placed, pos, &level)
             && !crowded
+            && let Some(block) = mob.carried_block.take()
         {
-            cx.effects.push(Effect::SetBlock { pos, state: placed });
-            mob.signal_block = None;
+            cx.effects.push(Effect::PlaceHeldBlock {
+                pos,
+                block,
+                state: placed,
+            });
         }
     }
 }
@@ -436,7 +441,7 @@ impl Goal for TakeBlock {
     }
 
     fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
-        mob.signal_block.is_none()
+        mob.carried_block.is_none()
             && cx.shared.game_rules.borrow().bool("mob_griefing")
             && cx.rng.gen_range(0..reduced_delay(20)) == 0
     }
@@ -476,19 +481,16 @@ impl Goal for TakeBlock {
         )
         .is_some_and(|hit| hit.pos == pos);
         if reached {
-            cx.effects.push(Effect::SetBlock {
-                pos,
-                state: state.fluid_state().block(),
-            });
-            mob.signal_block = Some(state.block().default_state());
+            cx.effects.push(Effect::TakeUpBlock { pos });
         }
     }
 }
 
 impl Enderman {
     fn sync(&mut self, core: &mut MobCore, cx: &TickContext) {
-        if core.signal_block != self.carried {
-            self.carried = core.signal_block;
+        let shown = core.carried_block.as_ref().map(HeldBlock::state);
+        if shown != self.carried {
+            self.carried = shown;
             core.changed(CARRIED);
         }
         if core.target != self.last_target {
@@ -556,11 +558,11 @@ impl Species for Enderman {
         })
         .filter(|state| !tuff_world_model::chunk::is_air(*state));
         self.carried = carried;
-        core.signal_block = carried;
+        core.carried_block = carried.map(HeldBlock::from_storage);
     }
 
     fn save(&self, core: &MobCore, out: &mut Compound) {
-        if let Some(state) = core.signal_block {
+        if let Some(state) = core.carried_block.as_ref().map(HeldBlock::state) {
             out.insert(
                 "carriedBlockState",
                 tuff_core::storage::chunk_nbt::encode_block_state(state),
@@ -572,7 +574,9 @@ impl Species for Enderman {
         vec![
             (
                 CARRIED,
-                MetadataValue::OptionalBlockState(core.signal_block.map(|s| s.id())),
+                MetadataValue::OptionalBlockState(
+                    core.carried_block.as_ref().map(|b| b.state().id()),
+                ),
             ),
             (CREEPY, MetadataValue::Boolean(self.creepy)),
             (STARED_AT, MetadataValue::Boolean(self.stared_at)),
@@ -633,10 +637,17 @@ impl Species for Enderman {
     }
 
     fn died(&mut self, core: &mut MobCore, _damage: &Damage, cx: &mut TickContext) {
-        if let Some(state) = core.signal_block.take() {
-            for stack in carried_drops(&*cx.shared.block_loot(), state, cx.rng) {
+        if let Some(block) = core.carried_block.take() {
+            for stack in carried_drops(&*cx.shared.block_loot(), block, cx.rng) {
                 core.drop_item(stack, 0.0, cx);
             }
+        }
+    }
+
+    fn received_block(&mut self, core: &mut MobCore, mut block: HeldBlock) {
+        block.become_state(block.state().block().default_state());
+        if let Some(old) = core.carried_block.replace(block) {
+            old.burn(BlockBurn::Discarded);
         }
     }
 
@@ -651,11 +662,11 @@ impl Species for Enderman {
 
 fn carried_drops(
     loot: &dyn tuff_core::world::drops::BlockLoot,
-    state: BlockState,
+    block: HeldBlock,
     rng: &mut rand::rngs::StdRng,
 ) -> Vec<tuff_item::item::ItemStack> {
     let tool = carried_block_tool(rng);
-    loot.drops(state, Some(tool.any()), None, rng)
+    loot.drops(block.into_broken(None), Some(tool.any()), rng)
 }
 
 /// The stand-in tool the carried block is mined with: a picture, never a
@@ -860,7 +871,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1);
         let drops = carried_drops(
             &*shared.block_loot(),
-            Block::GrassBlock.default_state(),
+            HeldBlock::test(Block::GrassBlock.default_state()),
             &mut rng,
         );
         assert_eq!(drops.len(), 1);

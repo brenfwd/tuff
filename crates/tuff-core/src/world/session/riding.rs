@@ -386,6 +386,7 @@ impl PlayerSession {
         let Some(region) = self.region_of(BlockPos::containing(eye)) else {
             return false;
         };
+        self.hold_payment(off_hand, sequence);
         region
             .request(RegionRequest::PlaceBoat(
                 crate::world::messages::BoatPlace {

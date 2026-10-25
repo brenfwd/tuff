@@ -1,5 +1,6 @@
 use super::*;
 use crate::world::messages::RegionInternal;
+use crate::world::stored_entity::StoredEntity;
 use tuff_nbt::{Compound, Tag};
 
 /// Ticks after an entity lands on a shoulder before anything can make it
@@ -16,7 +17,7 @@ const PARROT_ID: &str = "minecraft:parrot";
 #[derive(Debug, Default)]
 pub struct Shoulders {
     /// Left, then right.
-    pub entities: [Option<Compound>; 2],
+    pub entities: [Option<StoredEntity>; 2],
     /// The tick the last one landed.
     pub sat_at: u64,
     /// Accepted offers the region has not settled yet, with the tick each
@@ -28,6 +29,16 @@ pub struct Shoulders {
     published: [Option<i32>; 2],
 }
 
+impl Drop for Shoulders {
+    /// The session is gone: what rides the shoulders stays in the player's
+    /// saved data (the storage door).
+    fn drop(&mut self) {
+        for rider in self.entities.iter_mut().filter_map(Option::take) {
+            drop(rider.into_storage());
+        }
+    }
+}
+
 impl Shoulders {
     fn free(&self) -> usize {
         self.entities.iter().filter(|e| e.is_none()).count()
@@ -37,7 +48,7 @@ impl Shoulders {
     pub fn variants(&self) -> [Option<i32>; 2] {
         self.entities
             .each_ref()
-            .map(|e| e.as_ref().and_then(parrot_variant))
+            .map(|e| e.as_ref().and_then(|e| parrot_variant(e.nbt())))
     }
 }
 
@@ -85,17 +96,17 @@ impl PlayerSession {
     /// The region settled shoulder offer `offer`; a parrot that left the
     /// world takes the first free shoulder, or gets straight off again
     /// when both filled up meanwhile.
-    pub(super) async fn shoulder_granted(&mut self, offer: u64, entity: Option<Box<Compound>>) {
+    pub(super) async fn shoulder_granted(&mut self, offer: u64, entity: Option<StoredEntity>) {
         self.body.shoulders.pending.retain(|(o, _)| *o != offer);
         let Some(entity) = entity else { return };
         let dead = self.is_dead();
         let shoulders = &mut self.body.shoulders;
         match shoulders.entities.iter_mut().find(|e| e.is_none()) {
             Some(slot) if !dead => {
-                *slot = Some(*entity);
+                *slot = Some(entity);
                 shoulders.sat_at = self.tick;
             }
-            _ => self.respawn_shoulder_entity(*entity).await,
+            _ => self.respawn_shoulder_entity(entity).await,
         }
     }
 
@@ -110,6 +121,7 @@ impl PlayerSession {
         for side in 0..2 {
             let chirps = self.body.shoulders.entities[side]
                 .as_ref()
+                .map(StoredEntity::nbt)
                 .is_some_and(|e| {
                     e.get_str("id") == Some(PARROT_ID) && e.get_bool("Silent") != Some(true)
                 });
@@ -149,8 +161,9 @@ impl PlayerSession {
         }
     }
 
-    async fn respawn_shoulder_entity(&mut self, mut nbt: Compound) {
-        nbt.insert("Owner", Tag::uuid(self.profile.id));
+    async fn respawn_shoulder_entity(&mut self, mut stored: StoredEntity) {
+        stored.nbt_mut().insert("Owner", Tag::uuid(self.profile.id));
+        let nbt = stored.into_spawn_data();
         let [x, y, z] = self.pose.position;
         let position = [x, y + RESPAWN_HEIGHT, z];
         let region = ChunkPos::of_position(position).region();
@@ -213,10 +226,8 @@ mod tests {
             .with("id", "minecraft:cat")
             .with("Variant", 3);
         assert_eq!(parrot_variant(&other), None);
-        let shoulders = Shoulders {
-            entities: [None, Some(parrot)],
-            ..Default::default()
-        };
+        let mut shoulders = Shoulders::default();
+        shoulders.entities[1] = Some(StoredEntity::from_storage(parrot));
         assert_eq!(shoulders.variants(), [None, Some(3)]);
     }
 }

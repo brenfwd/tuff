@@ -13,6 +13,7 @@ use tuff_vanilla_data::{Block, BlockKind, BlockState, Item};
 use super::{AIR, RegionActor, UNBREAKABLE, menu_stat};
 use crate::protocol::play;
 use crate::world::block_entity::{self, ContainerKind};
+use crate::world::block_ledger::{ClaimReason, Remains, TntOrigin};
 use crate::world::items::{self};
 use crate::world::lighting::LightOp;
 use crate::world::menu::MenuKind;
@@ -62,6 +63,7 @@ impl RegionActor {
         }
         let column = self.columns.get_mut(&chunk_pos)?;
         let old = column.chunk.set(pos.x, pos.y, pos.z, state)?;
+        self.written_over(pos, old, state);
         if old == state {
             return Some(old);
         }
@@ -276,6 +278,7 @@ impl RegionActor {
         }
         self.batched_changes = Some(HashMap::new());
         let result = f(self);
+        self.settle_vacated();
         for (chunk, sections) in self.batched_changes.take().unwrap_or_default() {
             self.send_section_changes(chunk, sections);
         }
@@ -632,14 +635,6 @@ impl RegionActor {
         let unstable_tnt = state.block() == Block::Tnt
             && !matches!(mode, BreakMode::Creative)
             && state.get("unstable") == Some("true");
-        if unstable_tnt && self.shared.rule_bool("tnt_explodes") {
-            let igniter = self.ents.presence.get(&player.id).map(|p| Igniter {
-                id: player.id,
-                uuid: p.uuid,
-                name: p.name.clone(),
-            });
-            self.spawn_primed_tnt(pos, None, igniter);
-        }
         let drops = drops && !unstable_tnt;
         let partner_drops = drops || state.block().kind() != BlockKind::Door;
         if let Some(partner) = self.shared.block_rules.partner(state, pos)
@@ -663,7 +658,37 @@ impl RegionActor {
         {
             self.raw_set_block(pos, disarmed);
         }
+        let creative_drop = self
+            .block_entity(pos)
+            .filter(|entity| entity.kind == ContainerKind::ShulkerBox && !entity.is_empty())
+            .and(self.saved_block_entity(pos))
+            .map(|nbt| {
+                Components::from_nbt(&block_entity::raw::collect_components(
+                    BlockEntityType::ShulkerBox,
+                    &nbt,
+                ))
+            });
         let saved = self.saved_block_entity(pos);
+        self.player_breaking_block(
+            player.id,
+            pos,
+            state,
+            tool_stack.as_deref().map(ItemStack::any),
+        );
+        let Some(broken) = self.claim(pos, Remains::Vanilla, ClaimReason::Mined) else {
+            return reject(self);
+        };
+        let broken = if unstable_tnt && self.shared.rule_bool("tnt_explodes") {
+            let igniter = self.ents.presence.get(&player.id).map(|p| Igniter {
+                id: player.id,
+                uuid: p.uuid,
+                name: p.name.clone(),
+            });
+            self.spawn_primed_tnt(TntOrigin::Block(broken), pos, None, igniter);
+            None
+        } else {
+            Some(broken)
+        };
         if !matches!(mode, BreakMode::Creative)
             && matches!(state.block(), Block::BeeNest | Block::Beehive)
             && let Some(nbt) = &saved
@@ -677,23 +702,6 @@ impl RegionActor {
                 },
             )));
         }
-        self.player_breaking_block(
-            player.id,
-            pos,
-            state,
-            tool_stack.as_deref().map(ItemStack::any),
-        );
-        let creative_drop = self
-            .block_entity(pos)
-            .filter(|entity| entity.kind == ContainerKind::ShulkerBox && !entity.is_empty())
-            .and(saved.as_ref())
-            .map(|nbt| {
-                Components::from_nbt(&block_entity::raw::collect_components(
-                    BlockEntityType::ShulkerBox,
-                    nbt,
-                ))
-            });
-        self.put_block(pos, placement::remains(state));
         self.break_event(pos, state, Some(player.id));
         if !matches!(mode, BreakMode::Creative)
             && state.block() == Block::TurtleEgg
@@ -708,7 +716,7 @@ impl RegionActor {
         if tuff_datapack::tags::is(tuff_vanilla_data::tag::block::key::FIRE, state.block()) {
             self.level_event(play::level_event::SOUND_EXTINGUISH_FIRE, pos, 0, false);
         }
-        if drops {
+        if drops && let Some(broken) = broken {
             let at = self.location_facts(pos);
             let seed = self.rng.r#gen();
             let mut roll =
@@ -720,9 +728,8 @@ impl RegionActor {
                 seed,
                 |world| {
                     self.shared.block_loot().drops_at(
-                        state,
+                        broken,
                         tool.map(ItemStack::any),
-                        saved.as_ref(),
                         &at,
                         Some(world),
                         &mut roll,
@@ -898,11 +905,16 @@ impl RegionActor {
         }
         self.flush_halo();
         for (region, updates) in updates {
-            if let Some(neighbor) = self.border.neighbors.get(&region) {
-                neighbor.internal(RegionInternal::BlockUpdates {
-                    tick: Some(self.sched.tick),
-                    updates,
-                });
+            let message = RegionInternal::BlockUpdates {
+                tick: Some(self.sched.tick),
+                updates,
+            };
+            let sent = match self.border.neighbors.get(&region) {
+                Some(neighbor) => neighbor.try_internal(message).map_err(|back| *back),
+                None => Err(message),
+            };
+            if let Err(RegionInternal::BlockUpdates { updates, .. }) = sent {
+                updates.into_iter().for_each(BlockUpdate::orphaned);
             }
         }
     }
@@ -947,6 +959,7 @@ impl RegionActor {
     }
 
     fn apply_updates(&mut self, updates: Vec<BlockUpdate>) {
+        self.prelift(&updates);
         for update in updates {
             match update {
                 BlockUpdate::Shape {
@@ -974,9 +987,7 @@ impl RegionActor {
                     self.with_cause(cause, |region| region.put_block(pos, state))
                 }
                 BlockUpdate::PrimeTnt { pos } => {
-                    if self.owns(pos) && self.shared.rule_bool("tnt_explodes") {
-                        self.spawn_primed_tnt(pos, None, None);
-                    }
+                    self.prime_tnt_block(pos);
                 }
                 BlockUpdate::Piston {
                     pos,
@@ -984,13 +995,14 @@ impl RegionActor {
                     flags,
                     drops,
                     moving,
+                    lifted,
                     tick,
                     expected,
                     carry,
-                } => {
-                    self.receive_piston_set(pos, state, flags, drops, moving, tick, expected, carry)
-                }
-                BlockUpdate::Carried { pos, moved } => self.receive_carried(pos, moved),
+                } => self.receive_piston_set(
+                    pos, state, flags, drops, moving, lifted, tick, expected, carry,
+                ),
+                BlockUpdate::Lifted { pos, block } => self.receive_lifted(pos, block),
                 BlockUpdate::CarriedEntity { pos, nbt } => self.receive_carried_entity(pos, nbt),
                 BlockUpdate::FinishMove { pos } => {
                     let cause = BlockCause::Block(Block::MovingPiston);
@@ -1013,6 +1025,7 @@ impl RegionActor {
                 }
             }
         }
+        self.settle_prelifted();
     }
 
     /// Sets a block and updates its neighbours, handing it to the owning
@@ -1247,7 +1260,14 @@ impl RegionActor {
         if blocked || !self.allows_block_action(place.player.id, at, state, BlockAction::Placed) {
             return reject(self, &place, &corrected);
         }
-        self.put_block(at, state);
+        let solid_bucket_item = matches!(
+            context.item.bucket(),
+            Some(tuff_vanilla_data::item::Bucket::Solid { .. })
+        );
+        let paid = (!solid_bucket_item)
+            .then(|| place.offer.take_placing())
+            .flatten();
+        self.place_from_item(at, state, paid);
         self.apply_placed_item(at, &place);
         self.edit_placed_sign(at, &place.player);
         if let Some((pos, companion)) = self.shared.block_rules.companions(state, at) {
@@ -1296,11 +1316,50 @@ impl RegionActor {
     /// Answers a block click, handing the stacks it offered and did not
     /// keep back to the player first.
     pub(crate) fn answer_place(&mut self, place: &Place, outcome: ActionOutcome) {
+        match &outcome {
+            ActionOutcome::Placed { .. } => {
+                if let Some(paid) = place.offer.take_placing() {
+                    paid.burn(tuff_item::item::BurnReason::Consumed);
+                }
+            }
+            ActionOutcome::Used {
+                effect: crate::world::messages::HandEffect::Emptied(result),
+                ..
+            } => {
+                if let Some(paid) = place.offer.take_placing() {
+                    paid.burn(tuff_item::item::BurnReason::Transform);
+                    place.offer.give(
+                        place.hand_slot,
+                        tuff_item::item::ItemStack::mint(
+                            *result,
+                            1,
+                            tuff_item::item::MintReason::Transform,
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
         self.return_offer(place);
         place.player.send(PlayerEvent::ActionResult {
             sequence: place.sequence,
             outcome,
         });
+    }
+
+    /// Writes the block a placing item pays for and spends that item: the
+    /// one door that writes a block from an item. A creative player pays
+    /// nothing.
+    pub(crate) fn place_from_item(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        paid: Option<tuff_item::item::ItemStack>,
+    ) {
+        self.put_block(pos, state);
+        if let Some(paid) = paid {
+            paid.burn(tuff_item::item::BurnReason::Consumed);
+        }
     }
 
     /// Hands what is left of a block click's offer back to the player, or

@@ -14,8 +14,7 @@ use tuff_vanilla_data::{Block, BlockState};
 use super::{ChunkPos, RegionActor};
 use crate::world::growth::{self, GrowthLevel};
 use crate::world::messages::BlockUpdate;
-use crate::world::placement;
-use crate::world::redstone::{RedstoneLevel, TickPriority, UPDATE_ALL, UPDATE_LIMIT};
+use crate::world::redstone::{RedstoneLevel, TickPriority, UPDATE_LIMIT};
 use crate::world::region_api::BlockCause;
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::{Chunk, is_air, ticks_randomly};
@@ -206,18 +205,20 @@ impl RegionActor {
         if is_air(old) {
             return;
         }
-        let saved = self.saved_block_entity(pos);
+        let Some(broken) = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Vanilla,
+            crate::world::block_ledger::ClaimReason::Popped,
+        ) else {
+            return;
+        };
         if old.block().random_tick_kind() != Some("leaves") {
             self.break_event(pos, old, None);
         }
         if drop && self.shared.rule_bool("block_drops") {
-            let stacks = self
-                .shared
-                .block_loot()
-                .destroyed(old, saved.as_ref(), &mut self.rng);
+            let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
             self.drop_items(pos, stacks);
         }
-        self.set_block_flags(pos, placement::remains(old), UPDATE_ALL, UPDATE_LIMIT);
     }
 
     /// Lets the block at `pos` react to its neighbour in `direction`
@@ -306,17 +307,17 @@ impl GrowthLevel for RegionActor {
     }
 
     fn drop_resources(&mut self, pos: BlockPos) {
-        if !self.owns(pos) || !self.shared.rule_bool("block_drops") {
-            return;
-        }
-        let Some(state) = self.block(pos) else {
+        let Some(broken) = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Vanilla,
+            crate::world::block_ledger::ClaimReason::Popped,
+        ) else {
             return;
         };
-        let saved = self.saved_block_entity(pos);
-        let stacks = self
-            .shared
-            .block_loot()
-            .destroyed(state, saved.as_ref(), &mut self.rng);
+        if !self.shared.rule_bool("block_drops") {
+            return;
+        }
+        let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
         self.drop_items(pos, stacks);
     }
 
@@ -443,9 +444,7 @@ impl GrowthLevel for RegionActor {
 
     fn prime_tnt(&mut self, pos: BlockPos) {
         if self.owns(pos) {
-            if self.shared.rule_bool("tnt_explodes") {
-                self.spawn_primed_tnt(pos, None, None);
-            }
+            self.prime_tnt_block(pos);
         } else {
             let update = BlockUpdate::PrimeTnt { pos };
             let region = ChunkPos::of_block(pos).region();

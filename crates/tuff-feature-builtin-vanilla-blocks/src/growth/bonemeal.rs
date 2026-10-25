@@ -379,7 +379,7 @@ fn pop_self(level: &mut dyn GrowthLevel, pos: BlockPos, state: BlockState) {
     if let Some(item) = state.block().item() {
         level.drop_item(
             pos,
-            tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::BlockDrop),
+            tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::Growth),
         );
     }
 }

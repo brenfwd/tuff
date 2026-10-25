@@ -21,7 +21,7 @@ use crate::protocol::play;
 use crate::world::block_entity::analog;
 use crate::world::messages::BlockUpdate;
 use crate::world::messages::RegionInternal;
-use crate::world::placement::{self, step};
+use crate::world::placement::step;
 use crate::world::redstone::{
     self, BlockBehavior, Effect, MovingBlock, Orientation, Reader, RedstoneLevel,
     SHAPE_UPDATE_ORDER, TickPriority, UPDATE_KNOWN_SHAPE, UPDATE_LIMIT, UPDATE_MOVED_BY_PISTON,
@@ -196,8 +196,20 @@ pub(super) struct RedstoneState {
     pub(super) frame_changes: std::collections::HashSet<BlockPos>,
     /// Block events waiting for the block event phase, in queue order.
     pub(super) block_events: std::collections::VecDeque<super::pistons::BlockEventData>,
-    /// Blocks pistons are moving, by moving piston position.
-    pub(super) moving: HashMap<BlockPos, MovingBlock>,
+    /// Blocks pistons are moving, by moving piston position, each with the
+    /// block it owns until it lands.
+    pub(super) moving: HashMap<BlockPos, Moving>,
+    /// Places blocks were broken or lifted from, until written over.
+    pub(super) vacated: std::collections::HashSet<BlockPos>,
+    /// Moving blocks whose lifted block another region still hands over,
+    /// with the tick each started.
+    pub(super) awaiting_lift: HashMap<BlockPos, u64>,
+    /// Lifted blocks handed over before their moving block started, with
+    /// the tick each came.
+    pub(super) early_lifted:
+        HashMap<BlockPos, (Option<crate::world::block_ledger::HeldBlock>, u64)>,
+    /// Places lifted ahead of a batch of a neighbour's piston changes.
+    pub(super) prelifted: HashMap<BlockPos, super::ownership::Prelift>,
     /// The moving blocks in the order they tick.
     pub(super) moving_order: Vec<BlockPos>,
     /// Whether scheduled block ticks are running.
@@ -312,16 +324,12 @@ impl RegionActor {
         self.shared.redstone_behaviors.get(block)
     }
 
-    /// Sets a block the way the game does with `flags`: the old block's
-    /// removal and the new one's placement reactions, then (per the flags)
-    /// neighbour-changed updates, comparator updates and shape updates.
-    /// Returns the old state, or `None` if the position is not loaded here.
-    pub(super) fn set_block_flags(
+    /// The block standing at `pos` when a hook forbids the environment
+    /// from changing it to `state`.
+    pub(super) fn environment_vetoes(
         &mut self,
         pos: BlockPos,
         state: BlockState,
-        flags: u32,
-        limit: u32,
     ) -> Option<BlockState> {
         if matches!(
             self.sim.cause,
@@ -337,6 +345,23 @@ impl RegionActor {
             {
                 return Some(old);
             }
+        }
+        None
+    }
+
+    /// Sets a block the way the game does with `flags`: the old block's
+    /// removal and the new one's placement reactions, then (per the flags)
+    /// neighbour-changed updates, comparator updates and shape updates.
+    /// Returns the old state, or `None` if the position is not loaded here.
+    pub(super) fn set_block_flags(
+        &mut self,
+        pos: BlockPos,
+        state: BlockState,
+        flags: u32,
+        limit: u32,
+    ) -> Option<BlockState> {
+        if let Some(old) = self.environment_vetoes(pos, state) {
+            return Some(old);
         }
         let old = self.raw_set_block(pos, state)?;
         if old == state {
@@ -460,6 +485,12 @@ impl RegionActor {
     }
 
     fn run_action(&mut self, action: Action) {
+        let pos = match action {
+            Action::Neighbor { pos, .. } | Action::Shape { pos, .. } => pos,
+        };
+        if self.vacated(pos) && self.ghost_dupe(pos).is_none() {
+            return;
+        }
         match action {
             Action::Neighbor {
                 pos,
@@ -572,16 +603,19 @@ impl RegionActor {
         drops: bool,
         limit: u32,
     ) {
-        let saved = self.saved_block_entity(pos);
+        let Some(broken) = self.claim_limited(
+            pos,
+            crate::world::block_ledger::Remains::Vanilla,
+            crate::world::block_ledger::ClaimReason::Popped,
+            limit,
+        ) else {
+            return;
+        };
         self.break_event(pos, old, None);
         if drops {
-            let stacks = self
-                .shared
-                .block_loot()
-                .destroyed(old, saved.as_ref(), &mut self.rng);
+            let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
             self.drop_items(pos, stacks);
         }
-        self.set_block_flags(pos, placement::remains(old), redstone::UPDATE_ALL, limit);
     }
 
     /// Runs a redstone block tick.
@@ -1058,5 +1092,55 @@ impl RegionActor {
     /// Runs after a player placed a block.
     pub(super) fn redstone_placed(&mut self, pos: BlockPos, state: BlockState) {
         self.block_behavior(state.block()).placed(self, pos, state);
+    }
+}
+
+/// A block a piston is moving and the block it owns until it lands.
+#[derive(Debug)]
+pub(super) struct Moving {
+    pub(super) block: MovingBlock,
+    pub(super) held: Option<crate::world::block_ledger::HeldBlock>,
+}
+
+impl RedstoneState {
+    /// Sets the moving block at `pos`, keeping the block it holds; true if
+    /// it is new.
+    pub(super) fn set_moving(&mut self, pos: BlockPos, block: MovingBlock) -> bool {
+        match self.moving.get_mut(&pos) {
+            Some(entry) => {
+                entry.block = block;
+                false
+            }
+            None => {
+                self.moving.insert(pos, Moving { block, held: None });
+                true
+            }
+        }
+    }
+
+    pub(super) fn take_held(
+        &mut self,
+        pos: BlockPos,
+    ) -> Option<crate::world::block_ledger::HeldBlock> {
+        self.moving.get_mut(&pos)?.held.take()
+    }
+
+    pub(super) fn has_held(&self, pos: BlockPos) -> bool {
+        self.moving
+            .get(&pos)
+            .is_some_and(|entry| entry.held.is_some())
+    }
+
+    /// Gives the moving block at `pos` its block; the block it held
+    /// before, or `block` itself if nothing moves there.
+    pub(super) fn give_held(
+        &mut self,
+        pos: BlockPos,
+        block: crate::world::block_ledger::HeldBlock,
+    ) -> Option<crate::world::block_ledger::HeldBlock> {
+        match self.moving.get_mut(&pos) {
+            Some(entry) => entry.held.replace(block),
+            None => Some(block),
+        }
     }
 }

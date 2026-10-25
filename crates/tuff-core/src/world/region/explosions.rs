@@ -30,10 +30,12 @@ impl RegionActor {
     /// or the TNT feature's usual fuse. Nothing lights with no such feature.
     pub(super) fn spawn_primed_tnt(
         &mut self,
+        origin: crate::world::block_ledger::TntOrigin,
         pos: BlockPos,
         fuse: Option<i32>,
         igniter: Option<Igniter>,
     ) {
+        origin.spend();
         let Some(primer) = self.shared.tnt.clone() else {
             return;
         };
@@ -65,6 +67,39 @@ impl RegionActor {
             seed: self.rng.r#gen(),
         })]);
         self.send_sound_near(position, 1.0, None, packet);
+    }
+
+    /// Takes the TNT block at `pos` out of the world and lights it, when
+    /// this region owns it and TNT is allowed to explode.
+    pub(super) fn prime_tnt_block(&mut self, pos: BlockPos) {
+        if !self.owns(pos)
+            || !self.shared.rule_bool("tnt_explodes")
+            || RegionActor::block(self, pos).map(|state| state.block()) != Some(Block::Tnt)
+        {
+            return;
+        }
+        if self.ghost_dupe(pos) == Some(crate::world::block_ledger::VanillaDupe::Tnt) {
+            self.set_block_flags(
+                pos,
+                AIR,
+                crate::world::redstone::UPDATE_ALL,
+                crate::world::redstone::UPDATE_LIMIT,
+            );
+            if let Some(origin) = crate::world::block_ledger::duplicate_tnt(&self.shared.config) {
+                self.spawn_primed_tnt(origin, pos, None, None);
+            }
+        } else if let Some(broken) = self.claim(
+            pos,
+            crate::world::block_ledger::Remains::Air,
+            crate::world::block_ledger::ClaimReason::Entity,
+        ) {
+            self.spawn_primed_tnt(
+                crate::world::block_ledger::TntOrigin::Block(broken),
+                pos,
+                None,
+                None,
+            );
+        }
     }
 
     /// Sets off an explosion centred in this region.
@@ -509,16 +544,26 @@ impl RegionActor {
             hook.block_exploded(self, pos, state, cause);
         }
         let igniter = cause.igniter.clone();
-        let saved = self.saved_block_entity(pos);
-        self.with_cause(BlockCause::explosion(cause), |region| {
-            region.put_block(pos, AIR)
-        });
+        let Some(broken) = self.with_cause(BlockCause::explosion(cause), |region| {
+            region.claim(
+                pos,
+                crate::world::block_ledger::Remains::Air,
+                crate::world::block_ledger::ClaimReason::Exploded,
+            )
+        }) else {
+            return Vec::new();
+        };
         if state.block() == Block::Tnt
             && self.shared.rule_bool("tnt_explodes")
             && let Some(primer) = self.shared.tnt.clone()
         {
             let fuse = primer.chain_fuse(&mut self.rng);
-            self.spawn_primed_tnt(pos, Some(fuse), igniter);
+            self.spawn_primed_tnt(
+                crate::world::block_ledger::TntOrigin::Block(broken),
+                pos,
+                Some(fuse),
+                igniter,
+            );
             return Vec::new();
         }
         if !self.shared.rule_bool("block_drops") {
@@ -526,7 +571,7 @@ impl RegionActor {
         }
         self.release_infestation(pos, state, None);
         let loot = self.shared.block_loot();
-        loot.exploded(state, decay, saved.as_ref(), &mut self.rng)
+        loot.exploded(broken, decay, &mut self.rng)
     }
 }
 

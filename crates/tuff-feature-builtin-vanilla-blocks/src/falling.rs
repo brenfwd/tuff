@@ -16,11 +16,11 @@ use tuff_vanilla_data::registry::EntityType;
 use tuff_vanilla_data::{Block, BlockState, Item};
 
 use tuff_core::protocol::play;
+use tuff_core::world::block_ledger::{BlockBurn, HeldBlock};
 use tuff_core::world::entity::{
     Effect, EntityBase, EntityHit, RegionEntity, Tick, TickContext, take, take_bool, take_number,
 };
 use tuff_core::world::items::BLOCK_DROP_PICKUP_DELAY;
-use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_vanilla_common::placement;
 use tuff_world_model::BlockPos;
@@ -41,11 +41,22 @@ const LANDED_ON_DEPTH: f64 = 0.2;
 /// this again per whole block fallen.
 const DEGRADE_CHANCE: f32 = 0.05;
 
-/// A block, no longer in the world, falling under gravity.
-#[derive(Debug, Clone)]
+/// How long a falling block that came down inside an End portal waits to
+/// be taken through it before it settles where it is.
+const PORTAL_WAIT_TICKS: u32 = 40;
+
+/// A block, no longer in the world, falling under gravity. It owns the
+/// block it was made from until it lands, breaks or is removed.
+#[derive(Debug)]
 pub struct FallingBlock {
     pub base: EntityBase,
+    /// What the block looks like now (an anvil degrades as it lands).
     pub state: BlockState,
+    block: Option<HeldBlock>,
+    /// The copy of this block that settled where it entered an End portal
+    /// has been made (see [`FallingBlock::settles_in_end_portal`]).
+    portal_copy_made: bool,
+    portal_wait: u32,
     pub time: u32,
     /// Whether landing hurts living things under it, how much per block
     /// fallen, and the cap.
@@ -111,6 +122,9 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
     Some(Box::new(FallingBlock {
         base,
         state,
+        block: Some(HeldBlock::from_storage(state)),
+        portal_copy_made: false,
+        portal_wait: 0,
         time,
         hurt_entities,
         fall_hurt_amount,
@@ -186,8 +200,12 @@ impl FallingBlock {
         found
     }
 
-    pub fn new(id: i32, uuid: u128, pos: BlockPos, state: BlockState) -> Self {
-        let state = state.with_waterlogged(false).unwrap_or(state);
+    pub fn new(id: i32, uuid: u128, pos: BlockPos, mut block: HeldBlock) -> Self {
+        let state = block
+            .state()
+            .with_waterlogged(false)
+            .unwrap_or(block.state());
+        block.become_state(state);
         let anvil = is_anvil(state);
         Self {
             base: EntityBase::new(
@@ -198,6 +216,9 @@ impl FallingBlock {
                 [0.0; 3],
             ),
             state,
+            block: Some(block),
+            portal_copy_made: false,
+            portal_wait: 0,
             time: 0,
             hurt_entities: anvil,
             fall_hurt_amount: if anvil { ANVIL_HURT_AMOUNT } else { 0.0 },
@@ -428,6 +449,15 @@ impl RegionEntity for FallingBlock {
         self.state.id() as i32
     }
 
+    fn take_held(&mut self) -> Option<HeldBlock> {
+        self.block.take()
+    }
+
+    fn used_portal(&mut self) {
+        self.portal_copy_made = false;
+        self.portal_wait = 0;
+    }
+
     fn tick(&mut self, context: &mut TickContext) -> Tick {
         let block = context.block;
         let pistons = context.pistons;
@@ -444,25 +474,60 @@ impl RegionEntity for FallingBlock {
                 .effects
                 .push(Effect::DestroyBlock { pos, drop: false });
         }
+        let settling = !matches!(outcome, StepOutcome::Falling);
+        let mut token = None;
+        let mut waiting = false;
+        if settling && self.settles_in_end_portal(context) {
+            if !self.portal_copy_made {
+                token = tuff_core::world::block_ledger::duplicate_held(
+                    &context.shared.config,
+                    self.state,
+                );
+                self.portal_copy_made = token.is_some();
+            }
+            if self.portal_copy_made {
+                self.portal_wait += 1;
+                waiting = token.is_none() && self.portal_wait < PORTAL_WAIT_TICKS;
+            }
+        }
+        if waiting {
+            return Tick::Alive;
+        }
+        let hopping = token.is_some();
+        if !settling {
+            return Tick::Alive;
+        }
+        let token = token.or_else(|| self.block.take()).map(|mut block| {
+            block.become_state(self.state);
+            block
+        });
+        let end = if hopping { Tick::Alive } else { Tick::Discard };
         match outcome {
             StepOutcome::Falling => Tick::Alive,
             StepOutcome::Land(state, pos) => {
-                context.effects.push(Effect::PlaceFallenBlock {
-                    pos,
-                    state,
-                    data: self.block_data.clone(),
-                });
+                if let Some(mut block) = token {
+                    block.become_state(state);
+                    context.effects.push(Effect::PlaceFallenBlock {
+                        pos,
+                        block,
+                        data: self.block_data.clone(),
+                    });
+                }
                 if is_anvil(state) {
                     self.level_event(context, play::level_event::SOUND_ANVIL_LAND, pos);
                 }
-                Tick::Discard
+                end
             }
             StepOutcome::Broken(pos) => {
                 self.broken_after_fall(context, pos);
-                Tick::Discard
+                if let Some(block) = token {
+                    block.burn(BlockBurn::Discarded);
+                }
+                end
             }
             StepOutcome::Drop => {
-                if self.drop_item && context.shared.rule_bool("entity_drops") {
+                let drops = self.drop_item && context.shared.rule_bool("entity_drops");
+                if drops {
                     self.broken_after_fall(context, self.landing_pos());
                 }
                 if self.base.on_ground
@@ -471,25 +536,55 @@ impl RegionEntity for FallingBlock {
                 {
                     self.level_event(context, event, self.landing_pos());
                 }
-                if self.drop_item
-                    && context.shared.rule_bool("entity_drops")
-                    && let Some(item) = self.state.block().item()
-                {
-                    let jitter = |rng: &mut rand::rngs::StdRng| rng.gen_range(-0.1..0.1);
-                    context.effects.push(Effect::DropItem {
-                        stack: ItemStack::mint(item, 1, MintReason::BlockDrop),
-                        position: self.base.position,
-                        velocity: [jitter(context.rng), 0.2, jitter(context.rng)],
-                        pickup_delay: BLOCK_DROP_PICKUP_DELAY,
-                    });
+                if let Some(block) = token {
+                    if !drops {
+                        block.burn(BlockBurn::Discarded);
+                    } else if let Some(stack) = block.into_broken(None).into_item() {
+                        let jitter = |rng: &mut rand::rngs::StdRng| rng.gen_range(-0.1..0.1);
+                        context.effects.push(Effect::DropItem {
+                            stack,
+                            position: self.base.position,
+                            velocity: [jitter(context.rng), 0.2, jitter(context.rng)],
+                            pickup_delay: BLOCK_DROP_PICKUP_DELAY,
+                        });
+                    }
                 }
-                Tick::Discard
+                end
             }
         }
     }
 }
 
 impl FallingBlock {
+    /// Whether the block is about to settle while touching an End portal it
+    /// is free to enter: the game then takes it through while the copy
+    /// that stays behind finishes the tick, settling in the old dimension
+    /// (see `block_ledger::duplicate_held`).
+    fn settles_in_end_portal(&self, context: &TickContext) -> bool {
+        if self.portal_copy_made {
+            return true;
+        }
+        if self.base.portal_cooldown > 0 {
+            return false;
+        }
+        let bounds = self.bounds();
+        let inset = 1.0e-5;
+        let min = [0, 1, 2].map(|i| bounds[i] + inset);
+        let max = [0, 1, 2].map(|i| bounds[i + 3] - inset);
+        let cells = |axis: usize| min[axis].floor() as i32..=(max[axis].ceil() as i32 - 1);
+        cells(1).any(|y| {
+            let (low, high) = (f64::from(y) + 6.0 / 16.0, f64::from(y) + 12.0 / 16.0);
+            max[1] > low
+                && min[1] < high
+                && cells(2).any(|z| {
+                    cells(0).any(|x| {
+                        (context.block)(BlockPos::new(x, y, z))
+                            .is_some_and(|state| state.block() == Block::EndPortal)
+                    })
+                })
+        })
+    }
+
     /// Hurts every living, non-creative thing in its box after a fall of
     /// `fallen` blocks onto `below`, then rolls an anvil's degrade. The
     /// block only changes the distance (a bed halves it, a stalagmite tip
@@ -590,6 +685,18 @@ mod tests {
 
     use super::*;
 
+    impl Drop for FallingBlock {
+        fn drop(&mut self) {
+            if let Some(block) = self.block.take() {
+                block.burn(BlockBurn::Discarded);
+            }
+        }
+    }
+
+    fn new_falling(id: i32, uuid: u128, pos: BlockPos, state: BlockState) -> FallingBlock {
+        FallingBlock::new(id, uuid, pos, HeldBlock::test(state))
+    }
+
     /// A flat stone floor at `y`, air above, for every column.
     fn flat_floor(y: i32) -> impl Fn(BlockPos) -> Option<BlockState> {
         move |pos| {
@@ -614,7 +721,7 @@ mod tests {
     }
 
     fn falls_to_ground(state: BlockState) -> Option<(BlockState, BlockPos)> {
-        let mut block = FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), state);
+        let mut block = new_falling(1, 1, BlockPos::new(0, 70, 0), state);
         let level = flat_floor(64);
         for _ in 0..200 {
             match block.step_tick(&level, |_, _, _| {}) {
@@ -640,8 +747,7 @@ mod tests {
                 column
             })
         };
-        let mut block =
-            FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
+        let mut block = new_falling(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
         for _ in 0..40 {
             assert!(matches!(
                 block.step_tick(level, |_, _, _| {}),
@@ -659,7 +765,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_falling_block_overlapping_frogspawn_finds_it() {
-        let block = FallingBlock::new(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
+        let block = new_falling(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
         let spawn = Block::Frogspawn.default_state();
         let level = |pos: BlockPos| {
             Some(if pos == BlockPos::new(0, 64, 0) {
@@ -690,8 +796,7 @@ mod tests {
         // The entity is resting on top of solid ground (below is stone, not
         // free), but something already occupies the exact cell it would
         // place into (e.g. a block placed there while it was falling).
-        let mut block =
-            FallingBlock::new(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
+        let mut block = new_falling(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
         block.base.on_ground = true;
         let level = |pos: BlockPos| {
             Some(
@@ -710,8 +815,7 @@ mod tests {
     fn a_falling_block_lands_in_lava_and_replaces_it() {
         // Liquids are replaceable, so a block falling into a lava pool with
         // solid ground beneath it settles into the lava's spot.
-        let mut block =
-            FallingBlock::new(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
+        let mut block = new_falling(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
         block.base.on_ground = true;
         let level = |pos: BlockPos| {
             Some(if pos == BlockPos::new(0, 64, 0) {
@@ -731,8 +835,7 @@ mod tests {
         // If the block below the landing spot is also free, the landing
         // spot itself is not a stable resting place, so it drops rather
         // than placing a block that would immediately need to fall again.
-        let mut block =
-            FallingBlock::new(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
+        let mut block = new_falling(1, 1, BlockPos::new(0, 64, 0), Block::Sand.default_state());
         block.base.on_ground = true;
         let level = |_: BlockPos| Some(Block::Air.default_state());
         assert!(matches!(block.try_land(&level), StepOutcome::Drop));
@@ -741,7 +844,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_falling_concrete_powder_solidifies_when_it_lands_in_water() {
-        let mut block = FallingBlock::new(
+        let mut block = new_falling(
             1,
             1,
             BlockPos::new(0, 64, 0),
@@ -769,7 +872,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_falling_concrete_powder_solidifies_when_it_lands_touching_water() {
-        let mut block = FallingBlock::new(
+        let mut block = new_falling(
             1,
             1,
             BlockPos::new(0, 64, 0),
@@ -795,7 +898,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_falling_concrete_powder_away_from_water_lands_as_powder() {
-        let mut block = FallingBlock::new(
+        let mut block = new_falling(
             1,
             1,
             BlockPos::new(0, 64, 0),
@@ -812,8 +915,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_block_below_the_world_for_over_a_hundred_ticks_is_out_of_world() {
-        let mut block =
-            FallingBlock::new(1, 1, BlockPos::new(0, -70, 0), Block::Sand.default_state());
+        let mut block = new_falling(1, 1, BlockPos::new(0, -70, 0), Block::Sand.default_state());
         assert!(!block.out_of_world(-64, 319));
         block.time = 101;
         assert!(block.out_of_world(-64, 319));
@@ -824,8 +926,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn drop_item_is_saved_and_defaults_to_true() {
-        let mut block =
-            FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
+        let mut block = new_falling(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
         assert!(block.drop_item);
         block.drop_item = false;
         let mut out = Compound::new();
@@ -836,8 +937,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_stalled_falling_block_eventually_gives_up() {
-        let mut block =
-            FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
+        let mut block = new_falling(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
         block.base.no_gravity = true;
         let level = |_: BlockPos| Some(Block::Air.default_state());
         let mut outcome = StepOutcome::Falling;
@@ -850,8 +950,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn an_anvil_sees_the_block_it_lands_on_and_a_bed_halves_its_fall() {
-        let mut anvil =
-            FallingBlock::new(1, 1, BlockPos::new(0, 75, 0), Block::Anvil.default_state());
+        let mut anvil = new_falling(1, 1, BlockPos::new(0, 75, 0), Block::Anvil.default_state());
         let level = |pos: BlockPos| {
             Some(if pos.y < 64 {
                 Block::RedBed.default_state()
@@ -888,8 +987,8 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn only_anvils_hurt_what_they_land_on() {
-        let anvil = FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), Block::Anvil.default_state());
-        let sand = FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
+        let anvil = new_falling(1, 1, BlockPos::new(0, 70, 0), Block::Anvil.default_state());
+        let sand = new_falling(1, 1, BlockPos::new(0, 70, 0), Block::Sand.default_state());
         assert_eq!(anvil.landing_damage(5.0), Some((8.0, 4)));
         assert_eq!(sand.landing_damage(5.0), None);
     }
@@ -909,7 +1008,7 @@ mod tests {
     fn anvils_degrade_step_by_step_keeping_their_facing_then_break() {
         let facing = |s: BlockState| s.get("facing");
         let start = Block::Anvil.default_state().with("facing", "east").unwrap();
-        let mut anvil = FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), start);
+        let mut anvil = new_falling(1, 1, BlockPos::new(0, 70, 0), start);
         anvil.degrade(4.0, 2, 0.14);
         assert_eq!(anvil.state.block(), Block::ChippedAnvil);
         assert_eq!(facing(anvil.state), Some("east"));
@@ -935,8 +1034,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn a_broken_anvil_vanishes_on_landing() {
-        let mut anvil =
-            FallingBlock::new(1, 1, BlockPos::new(0, 64, 0), Block::Anvil.default_state());
+        let mut anvil = new_falling(1, 1, BlockPos::new(0, 64, 0), Block::Anvil.default_state());
         anvil.base.on_ground = true;
         anvil.cancel_drop = true;
         assert!(matches!(
@@ -948,8 +1046,7 @@ mod tests {
     #[tuff_core::watchdog]
     #[test]
     fn the_impact_sees_the_whole_fall_distance() {
-        let mut anvil =
-            FallingBlock::new(1, 1, BlockPos::new(0, 70, 0), Block::Anvil.default_state());
+        let mut anvil = new_falling(1, 1, BlockPos::new(0, 70, 0), Block::Anvil.default_state());
         let level = flat_floor(64);
         let mut fallen = None;
         for _ in 0..200 {
@@ -972,7 +1069,7 @@ mod tests {
         assert_eq!(out.get("HurtEntities"), Some(&Tag::Byte(1)));
         assert_eq!(out.get("FallHurtAmount"), Some(&Tag::Float(0.0)));
         assert_eq!(out.get("FallHurtMax"), Some(&Tag::Int(40)));
-        let fresh = FallingBlock::new(1, 1, BlockPos::new(0, 0, 0), Block::Anvil.default_state());
+        let fresh = new_falling(1, 1, BlockPos::new(0, 0, 0), Block::Anvil.default_state());
         let mut out = Compound::new();
         fresh.save(&mut out);
         out.insert("BlockState", "minecraft:anvil");
@@ -980,5 +1077,21 @@ mod tests {
         let mut again = Compound::new();
         reloaded.save(&mut again);
         assert_eq!(again.get("FallHurtAmount"), Some(&Tag::Float(2.0)));
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_saved_falling_block_loads_holding_its_block_and_a_kill_takes_it() {
+        let block = new_falling(1, 1, BlockPos::new(0, 70, 0), Block::Gravel.default_state());
+        let mut out = Compound::new();
+        block.save(&mut out);
+        let base = EntityBase::new(EntityType::FallingBlock, 2, 2, [0.0; 3], [0.0; 3]);
+        let mut loaded = load(base, &mut out).unwrap();
+        let held = loaded
+            .take_held()
+            .expect("the loaded block holds its block");
+        assert_eq!(held.state(), Block::Gravel.default_state());
+        assert!(loaded.take_held().is_none());
+        held.burn(BlockBurn::Killed);
     }
 }

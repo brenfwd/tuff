@@ -105,10 +105,36 @@ impl RegionActor {
                     }
                 }
                 Effect::ContainerOpen { pos, open } => self.mob_container_open(entity, pos, open),
-                Effect::PlaceFallenBlock { pos, state, data } => {
+                Effect::PlaceFallenBlock { pos, block, data } => {
+                    let state = block.land();
                     self.put_block(pos, state);
                     if let Some(data) = data {
                         self.load_block_entity_data(pos, state, &data);
+                    }
+                }
+                Effect::ReplaceBlock { pos, state } => self.put_block(pos, state),
+                Effect::TakeUpBlock { pos } => {
+                    if let Some(block) = self.take_up(
+                        pos,
+                        crate::world::block_ledger::Remains::Vanilla,
+                        crate::world::block_ledger::ClaimReason::Entity,
+                    ) {
+                        self.ents.taken_blocks.push((entity, block));
+                    }
+                }
+                Effect::PlaceHeldBlock {
+                    pos,
+                    mut block,
+                    state,
+                } => {
+                    if self.owns(pos)
+                        && self.block(pos).is_some_and(tuff_world_model::chunk::is_air)
+                    {
+                        block.become_state(state);
+                        let placed = block.land();
+                        self.put_block(pos, placed);
+                    } else {
+                        self.ents.taken_blocks.push((entity, block));
                     }
                 }
                 Effect::PassedThrough(boxes) => self.entities_passed_through(boxes),

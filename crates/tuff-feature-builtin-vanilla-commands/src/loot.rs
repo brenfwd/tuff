@@ -158,10 +158,12 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
                     )],
                 ));
             };
+            let mined =
+                || tuff_core::world::block_ledger::BrokenBlock::simulated(state, data.clone());
             let items = if tool.count() == 0 {
-                loot.destroyed(state, data.as_ref(), &mut rng)
+                loot.destroyed(mined(), &mut rng)
             } else {
-                let mut items = loot.drops(state, Some(tool.any()), data.as_ref(), &mut rng);
+                let mut items = loot.drops(mined(), Some(tool.any()), &mut rng);
                 if items.is_empty() && !loot.can_harvest(state, Some(tool.any())) {
                     items = loot.table(table, state, Some(tool.item()), &mut rng);
                 }

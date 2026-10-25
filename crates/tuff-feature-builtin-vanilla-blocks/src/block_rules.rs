@@ -16,6 +16,7 @@ use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::ChunkShape;
 
 use crate::falling::{self, FallingBlock};
+use tuff_core::world::block_ledger::{ClaimReason, Remains};
 
 const AIR: BlockState = Block::Air.default_state();
 
@@ -190,15 +191,18 @@ fn start_falling(
     hurt: Option<f32>,
     shatters: bool,
 ) {
-    let remain = if state.waterlogged() == Some(true) {
-        Block::Water.default_state()
+    let remains = if state.waterlogged() == Some(true) {
+        Remains::Fluid(Block::Water.default_state())
     } else {
-        AIR
+        Remains::Air
     };
-    world.put_block(pos, remain);
+    let Some(mut block) = world.take_up_block(pos, remains, ClaimReason::Entity) else {
+        return;
+    };
+    block.become_state(state);
     let id = world.shared().next_entity_id();
     let uuid = world.rng().r#gen();
-    let mut entity = FallingBlock::new(id, uuid, pos, state);
+    let mut entity = FallingBlock::new(id, uuid, pos, block);
     if let Some(amount) = hurt {
         entity.hurts_entities(amount, speleothem::MAX_DAMAGE);
     }

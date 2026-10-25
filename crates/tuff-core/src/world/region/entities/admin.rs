@@ -59,12 +59,7 @@ impl RegionActor {
             return false;
         };
         let uuid = entity.base().uuid;
-        if self
-            .ents
-            .entities
-            .values()
-            .any(|t| t.entity.base().uuid == uuid)
-        {
+        if self.shared.entity_uuids.contains(uuid) {
             return false;
         }
         if fresh {
@@ -216,9 +211,10 @@ impl RegionActor {
             return false;
         };
         self.chunk_io.pois.forget_holder(id);
-        if self.remove_entity_kept(id, &[]).is_none() {
+        let Some(old) = self.remove_entity_kept(id, &[]) else {
             return false;
-        }
+        };
+        drop(old);
         self.receive_entity(entity, 0);
         true
     }

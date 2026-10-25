@@ -7,8 +7,6 @@
 //! NBT for storage and clients, mirrored by a [`MovingBlock`] the region
 //! ticks after its entities.
 
-use std::collections::HashMap;
-
 use bytes::Bytes;
 use tuff_vanilla_data::block::{Axis, Facing, PushReaction};
 use tuff_vanilla_data::registry::BlockEntityType;
@@ -18,6 +16,7 @@ use super::{AIR, ChunkPos, RegionActor, block_at};
 use crate::protocol::play;
 use crate::storage::chunk_nbt::{decode_block_state, encode_block_state};
 use crate::world::block_entity;
+use crate::world::block_ledger::HeldBlock;
 use crate::world::messages::{BlockUpdate, PlayerEvent};
 use crate::world::physics::{self, Aabb};
 use crate::world::placement::step;
@@ -137,16 +136,16 @@ impl RegionActor {
     }
 
     pub(super) fn moving_at(&self, pos: BlockPos) -> Option<MovingBlock> {
-        let moving = self.sim.redstone.moving.get(&pos)?;
+        let moving = self.sim.redstone.moving.get(&pos)?.block;
         (RegionActor::block(self, pos).map(BlockState::block) == Some(Block::MovingPiston))
-            .then_some(*moving)
+            .then_some(moving)
     }
 
     pub(super) fn begin_move(&mut self, pos: BlockPos, moving: MovingBlock) {
         if RegionActor::block(self, pos).map(BlockState::block) != Some(Block::MovingPiston) {
             return;
         }
-        if self.sim.redstone.moving.insert(pos, moving).is_none() {
+        if self.sim.redstone.set_moving(pos, moving) {
             self.sim.redstone.moving_order.push(pos);
         }
         if let Some(started) = &mut self.sim.redstone.catching_up {
@@ -225,8 +224,14 @@ impl RegionActor {
             .collect();
         found.sort_by_key(|(pos, _)| (pos.x, pos.y, pos.z));
         for (pos, moving) in found {
-            if self.sim.redstone.moving.insert(pos, moving).is_none() {
+            if self.sim.redstone.set_moving(pos, moving) {
                 self.sim.redstone.moving_order.push(pos);
+            }
+            if !moving.source && !self.sim.redstone.has_held(pos) {
+                let _ = self
+                    .sim
+                    .redstone
+                    .give_held(pos, HeldBlock::from_storage(moving.moved));
             }
         }
     }
@@ -241,12 +246,13 @@ impl RegionActor {
             return;
         }
         self.landed_bare(pos);
-        self.sim.redstone.moving.remove(&pos);
+        let held = self.sim.redstone.moving.remove(&pos).and_then(|m| m.held);
         let piston = self.remove_block_entity(pos, None);
-        let new = if moving.source {
+        let landing = self.landing(pos, &moving, held);
+        let new = if moving.source || is_air(landing) {
             AIR
         } else {
-            self.shape_from_neighbours(moving.moved, pos)
+            self.shape_from_neighbours(landing, pos)
         };
         RedstoneLevel::set_block(self, pos, new, redstone::UPDATE_ALL);
         self.land_carried(pos, piston);
@@ -259,6 +265,7 @@ impl RegionActor {
         let tick = self.sched.tick;
         self.expire_displays();
         self.expire_carried();
+        self.expire_lifted();
         self.sim.redstone.moving_ticked = tick;
         self.sim
             .redstone
@@ -271,7 +278,8 @@ impl RegionActor {
         let mut kept = Vec::with_capacity(order.len());
         for pos in order {
             if self.moving_at(pos).is_none() {
-                self.sim.redstone.moving.remove(&pos);
+                let held = self.sim.redstone.moving.remove(&pos).and_then(|m| m.held);
+                self.forget_moving(pos, held);
                 continue;
             }
             let cause = BlockCause::Block(Block::MovingPiston);
@@ -287,19 +295,27 @@ impl RegionActor {
     /// One step of the block moving through `pos`, as on game tick `at`;
     /// false once it landed.
     fn tick_moving_block(&mut self, pos: BlockPos, at: u64) -> bool {
-        let Some(mut moving) = self.sim.redstone.moving.get(&pos).copied() else {
+        let Some(mut moving) = self.sim.redstone.moving.get(&pos).map(|m| m.block) else {
             return false;
         };
         moving.last_ticked = at;
         moving.progress_before = moving.progress;
         if moving.progress_before >= 1.0 {
-            if self.holds_landing(pos) {
-                self.sim.redstone.moving.insert(pos, moving);
+            if self.holds_landing(pos) || self.awaits_lift(pos) {
+                self.sim.redstone.set_moving(pos, moving);
                 return true;
             }
-            self.sim.redstone.moving.remove(&pos);
+            let held = self.sim.redstone.moving.remove(&pos).and_then(|m| m.held);
             let piston = self.remove_block_entity(pos, None);
             if RegionActor::block(self, pos).map(BlockState::block) != Some(Block::MovingPiston) {
+                self.forget_moving(pos, held);
+                return false;
+            }
+            moving.moved = self.landing(pos, &moving, held);
+            if is_air(moving.moved) {
+                RedstoneLevel::set_block(self, pos, AIR, ARRIVE);
+                self.land_carried(pos, piston);
+                RedstoneLevel::neighbor_changed(self, pos, Block::Air);
                 return false;
             }
             let new = self.shape_from_neighbours(moving.moved, pos);
@@ -321,7 +337,7 @@ impl RegionActor {
         self.push_entities(pos, &moving, progress);
         self.carry_stuck_entities(pos, &moving, progress);
         moving.progress = progress.min(1.0);
-        self.sim.redstone.moving.insert(pos, moving);
+        self.sim.redstone.set_moving(pos, moving);
         if let Some(nbt) = self.raw_block_entity_mut(pos) {
             nbt.insert("progress", moving.progress_before);
         }
@@ -341,20 +357,28 @@ impl RegionActor {
         flags: u32,
         drops: bool,
         moving: Option<MovingBlock>,
+        lifted: Option<crate::world::block_ledger::HeldBlock>,
         tick: u64,
         expected: BlockState,
         carry: Option<BlockPos>,
     ) {
         let cause = std::mem::replace(&mut self.sim.cause, BlockCause::Block(Block::Piston));
+        let lifted = match lifted {
+            Some(lifted) => Some(lifted),
+            None => moving.and_then(|moving| self.lift_for(pos, &moving)),
+        };
         if !drops
             && let Some(current) = RegionActor::block(self, pos)
             && current != expected
             && current.block() != Block::MovingPiston
+            && !self.vacated(pos)
         {
             self.stale_piston_read(pos, current, carry);
         }
         self.carry_out(pos, carry, expected, false);
+        self.hand_over_prelifted(pos, carry);
         self.apply_piston_set(pos, state, flags, drops, moving);
+        self.hold_lifted(pos, moving, lifted);
         if moving.is_some() {
             let behind = self.sched.tick.saturating_sub(tick).min(MOVE_TICKS);
             for step in 0..behind {
@@ -367,34 +391,25 @@ impl RegionActor {
     }
 
     /// The block at `pos` is `current`, not what a piston in a neighbouring
-    /// region read from a stale copy: what moves on to `carry` is
-    /// `current`, unless a piston could not have moved it (then it breaks);
-    /// with nowhere to go it is crushed.
+    /// region read from a stale copy: it was lifted to move on to `carry`
+    /// in its place, unless a piston could not have moved it (then it
+    /// breaks); with nowhere to go it is crushed.
     fn stale_piston_read(&mut self, pos: BlockPos, current: BlockState, carry: Option<BlockPos>) {
-        let movable = !is_air(current)
+        if !is_air(current) && (carry.is_none() || !self.piston_movable(current)) {
+            RedstoneLevel::effect(self, redstone::Effect::DropResources(pos, current));
+            self.remove_block_entity(pos, Some(current));
+        }
+    }
+
+    /// Whether a piston could move `current`.
+    pub(super) fn piston_movable(&self, current: BlockState) -> bool {
+        !is_air(current)
             && (current.block().block_entity().is_none() || self.carries(current))
             && current.destroy_speed().is_some()
             && matches!(
                 current.block().push_reaction(),
                 PushReaction::PushPull | PushReaction::Push | PushReaction::IgnoreEntity
-            );
-        if !is_air(current) && (carry.is_none() || !movable) {
-            RedstoneLevel::effect(self, redstone::Effect::DropResources(pos, current));
-            self.remove_block_entity(pos, Some(current));
-        }
-        let Some(dest) = carry else {
-            return;
-        };
-        let moved = if movable { current } else { AIR };
-        if self.pos.contains(ChunkPos::of_block(dest)) {
-            self.receive_carried(dest, moved);
-        } else {
-            let update = BlockUpdate::Carried { pos: dest, moved };
-            self.send_block_updates(HashMap::from([(
-                ChunkPos::of_block(dest).region(),
-                vec![update],
-            )]));
-        }
+            )
     }
 
     /// The block moving into `pos` is really `moved`.
@@ -402,9 +417,10 @@ impl RegionActor {
         if self.moving_at(pos).is_none() {
             return;
         }
-        let Some(moving) = self.sim.redstone.moving.get_mut(&pos) else {
+        let Some(entry) = self.sim.redstone.moving.get_mut(&pos) else {
             return;
         };
+        let moving = &mut entry.block;
         if moving.source {
             return;
         }
@@ -482,12 +498,12 @@ impl RegionActor {
     /// for entities moving into them.
     pub(super) fn moving_colliders(&self) -> Vec<Aabb> {
         let mut boxes = Vec::new();
-        for (pos, moving) in &self.sim.redstone.moving {
+        for (pos, entry) in &self.sim.redstone.moving {
             if self.moving_at(*pos).is_some() {
                 boxes.extend(moving_collision(
                     &*self.shared.redstone_behaviors,
                     *pos,
-                    moving,
+                    &entry.block,
                 ));
             }
         }

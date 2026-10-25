@@ -3,6 +3,7 @@
 //! enough hit breaks.
 
 use rand::Rng;
+use tuff_core::world::block_ledger::{ClaimReason, Remains, TntOrigin};
 use tuff_core::world::entity::ProjectileImpact;
 use tuff_core::world::messages::Igniter;
 use tuff_core::world::raycast::Hit;
@@ -56,12 +57,10 @@ impl RegionHooks for ProjectileImpacts {
                                 uuid: o.uuid,
                                 name: o.name.plain(),
                             });
-                    world.spawn_primed_tnt(pos, None, igniter);
-                    world.set(
-                        pos,
-                        tuff_vanilla_data::Block::Air.default_state(),
-                        UPDATE_ALL,
-                    );
+                    if let Some(broken) = world.claim_block(pos, Remains::Air, ClaimReason::Entity)
+                    {
+                        world.spawn_primed_tnt(TntOrigin::Block(broken), pos, None, igniter);
+                    }
                 }
             }
             Block::Campfire | Block::SoulCampfire => {

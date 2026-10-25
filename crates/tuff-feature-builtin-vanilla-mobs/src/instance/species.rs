@@ -117,6 +117,16 @@ pub trait Species: Sized + Send + Debug + 'static {
 
     fn finalize_spawn(&mut self, _core: &mut MobCore, _cx: &mut TickContext) {}
 
+    /// The block an `Effect::TakeUpBlock` it asked for took up, or an
+    /// `Effect::PlaceHeldBlock` could not place.
+    fn received_block(
+        &mut self,
+        _core: &mut MobCore,
+        block: tuff_core::world::block_ledger::HeldBlock,
+    ) {
+        block.burn(tuff_core::world::block_ledger::BlockBurn::Discarded);
+    }
+
     /// The stack an `Effect::TakeItem` it asked for took.
     fn took_item(&mut self, _core: &mut MobCore, stack: ItemStack) {
         stack.burn(tuff_item::item::BurnReason::Consumed);

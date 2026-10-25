@@ -295,7 +295,11 @@ pub fn update_shape(
         }
         _ => state,
     };
-    if can_survive(updated, pos, level) || block_support::defers_break(updated.block()) {
+    // Rails check their support on a neighbour update, never a shape update.
+    if can_survive(updated, pos, level)
+        || block_support::defers_break(updated.block())
+        || tuff_datapack::tags::is(tags::key::RAILS, updated.block())
+    {
         updated
     } else {
         AIR

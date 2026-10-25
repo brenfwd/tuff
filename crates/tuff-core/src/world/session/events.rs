@@ -709,6 +709,7 @@ impl PlayerSession {
     }
 
     pub async fn on_action_result(&mut self, sequence: i32, outcome: ActionOutcome) {
+        let spent = self.settle_payment(sequence, &outcome).await;
         match outcome {
             ActionOutcome::Broken { tool_damage, state } => {
                 if !self.mode.abilities.instabuild {
@@ -744,7 +745,11 @@ impl PlayerSession {
                     .map(|s| s.max_damage().is_some());
                 match held {
                     Some(true) => self.hurt_hand(off_hand, 1).await,
-                    Some(false) if !self.mode.abilities.instabuild => {
+                    Some(false)
+                        if !self.mode.abilities.instabuild
+                            && !spent
+                            && !self.places_a_block_from_the_hand(item) =>
+                    {
                         self.inventory.consume_from_hand(off_hand, 1);
                     }
                     _ => {}
@@ -781,10 +786,14 @@ impl PlayerSession {
                         filled.any(),
                     ));
                 }
-                if self
-                    .inventory
-                    .hand(off_hand)
-                    .is_some_and(|s| s.item() == item)
+                let emptied_by_region = matches!(effect, HandEffect::Emptied(_))
+                    && self.places_a_block_from_the_hand(item);
+                if !emptied_by_region
+                    && !spent
+                    && self
+                        .inventory
+                        .hand(off_hand)
+                        .is_some_and(|s| s.item() == item)
                 {
                     self.apply_hand_effect(off_hand, effect).await;
                 }

@@ -92,33 +92,31 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
 
     fn drops(
         &self,
-        state: tuff_vanilla_data::BlockState,
+        block: tuff_core::world::block_ledger::BrokenBlock,
         tool: Option<tuff_item::item::AnyItem<'_>>,
-        block_entity: Option<&tuff_nbt::Compound>,
         rng: &mut rand::rngs::StdRng,
     ) -> Vec<tuff_item::item::ItemStack> {
-        loot::block_drops_in(&self.tables, state, tool, block_entity, rng)
+        loot::block_drops_in(&self.tables, block.state(), tool, block.block_entity(), rng)
     }
 
     fn drops_at(
         &self,
-        state: tuff_vanilla_data::BlockState,
+        block: tuff_core::world::block_ledger::BrokenBlock,
         tool: Option<tuff_item::item::AnyItem<'_>>,
-        block_entity: Option<&tuff_nbt::Compound>,
         at: &tuff_core::world::predicate::LocationFacts,
         world: Option<&dyn tuff_core::world::predicate::PredicateWorld>,
         rng: &mut rand::rngs::StdRng,
     ) -> Vec<tuff_item::item::ItemStack> {
+        let (state, block_entity) = (block.state(), block.block_entity());
         loot::block_drops_located(&self.tables, state, tool, block_entity, at, world, rng)
     }
 
     fn destroyed(
         &self,
-        state: tuff_vanilla_data::BlockState,
-        block_entity: Option<&tuff_nbt::Compound>,
+        block: tuff_core::world::block_ledger::BrokenBlock,
         rng: &mut rand::rngs::StdRng,
     ) -> Vec<tuff_item::item::ItemStack> {
-        loot::destroyed_drops_in(&self.tables, state, block_entity, rng)
+        loot::destroyed_drops_in(&self.tables, block.state(), block.block_entity(), rng)
     }
 
     fn table(
@@ -133,11 +131,11 @@ impl tuff_core::world::drops::BlockLoot for VanillaLoot {
 
     fn exploded(
         &self,
-        state: tuff_vanilla_data::BlockState,
+        block: tuff_core::world::block_ledger::BrokenBlock,
         decay: Option<f32>,
-        block_entity: Option<&tuff_nbt::Compound>,
         rng: &mut rand::rngs::StdRng,
     ) -> Vec<tuff_item::item::ItemStack> {
+        let (state, block_entity) = (block.state(), block.block_entity());
         loot::exploded_drops_in(&self.tables, state, decay, block_entity, rng)
     }
 }

@@ -732,21 +732,7 @@ impl RegionActor {
         self.columns.insert(pos, column);
         self.block_entity_generation += 1;
         self.load_moving_blocks(pos);
-        let shared = self.shared.clone();
-        let arrived = prepared
-            .entities
-            .into_iter()
-            .filter(|entity| {
-                let fresh = shared.claim_entity_uuid(entity.base().uuid);
-                if !fresh {
-                    log::warn!(
-                        "skipping {} at {pos:?}: its UUID already exists",
-                        entity.saved_id()
-                    );
-                }
-                fresh
-            })
-            .map(|entity| (entity, 0));
+        let arrived = prepared.entities.into_iter().map(|entity| (entity, 0));
         for (entity, seq) in arrived.chain(loading.entities) {
             if entity.base().chunk() == pos {
                 self.add_entity(entity, seq, false);
