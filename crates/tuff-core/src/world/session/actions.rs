@@ -14,4 +14,5 @@ pub struct Actions {
     /// Cooldown group to the tick it ends.
     pub cooldowns: HashMap<String, u64>,
     pub portal_cooldown: u32,
+    pub paying: super::paid_entities::Paying,
 }

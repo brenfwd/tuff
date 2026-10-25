@@ -68,7 +68,7 @@ async fn meet(
 async fn granted(
     world: &TestWorld,
     events: &mut mpsc::UnboundedReceiver<PlayerEvent>,
-) -> (u64, Option<Box<Compound>>) {
+) -> (u64, Option<tuff_core::world::stored_entity::StoredEntity>) {
     tick_until(world, events, 20, |event| match event {
         PlayerEvent::ShoulderGranted { offer, entity } => Some((offer, entity)),
         _ => None,
@@ -118,7 +118,9 @@ async fn a_tamed_parrot_touching_its_owner_leaves_the_world_for_a_shoulder() {
     });
     let (settled, saved) = granted(&world, &mut events).await;
     assert_eq!(settled, offer);
-    let saved = saved.expect("an accepted offer hands the parrot over");
+    let saved = saved
+        .expect("an accepted offer hands the parrot over")
+        .into_spawn_data();
     assert_eq!(saved.get_str("id"), Some("minecraft:parrot"));
     assert_eq!(saved.get_int("Variant"), Some(2));
     world.ticks(1).await;
@@ -126,7 +128,7 @@ async fn a_tamed_parrot_touching_its_owner_leaves_the_world_for_a_shoulder() {
 
     region
         .request(RegionRequest::Summon {
-            nbt: *saved,
+            nbt: saved,
             position: at,
             fresh: false,
             reply: tokio::sync::oneshot::channel().0,

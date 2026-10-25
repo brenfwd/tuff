@@ -296,6 +296,14 @@ fn thrown(from: f64, speed: f64, moves: usize) -> Vec<(f64, bool)> {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_boat_flung_up_by_a_blast_is_not_refused() {
+    for delay in 0..2 {
+        fling_by_blast(delay).await;
+    }
+}
+
+/// The blast lands `delay` ticks later, so the boat and the TNT tick in
+/// either order.
+async fn fling_by_blast(delay: u64) {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let mut w = walker(&world, 1, ChunkPos::new(43, 43)).await;
@@ -316,6 +324,10 @@ async fn a_boat_flung_up_by_a_blast_is_not_refused() {
         at,
     )
     .await;
+    world.ticks(delay).await;
+    while let Ok(event) = w.events.try_recv() {
+        w.session.on_event(event).await;
+    }
     while w.frames.try_recv().is_ok() {}
     let region = world.region(RegionPos::new(1, 1)).await;
     summon(

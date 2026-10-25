@@ -94,6 +94,20 @@ pub(crate) async fn place_chest(handle: &tuff_core::ServerHandle) {
     panic!("the chest never appeared");
 }
 
+/// The items of the chest at 0 100 0 once its chunk is loaded again; a
+/// restarted world loads its forced chunks after it starts listening.
+async fn loaded_chest_items(handle: &tuff_core::ServerHandle) -> String {
+    handle.run_command("forceload add 0 0").await.unwrap();
+    for _ in 0..600 {
+        let items = said(handle, "data get block 0 100 0 Items").await;
+        if !items.contains("argument.pos.unloaded") {
+            return items;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("the chest's chunk never loaded");
+}
+
 pub(crate) fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for entry in std::fs::read_dir(from).unwrap().flatten() {
@@ -195,7 +209,7 @@ async fn a_crash_after_the_autosave_never_leaves_an_item_in_both_chest_and_playe
     let _ = server.task.await;
 
     let after = started(crashed.path()).await;
-    let in_chest = said(&after.handle, "data get block 0 100 0 Items").await;
+    let in_chest = loaded_chest_items(&after.handle).await;
     let _bot = join(&after, "Steve").await;
     let on_player = said(&after.handle, "clear Steve diamond 0").await;
     assert!(in_chest.contains("diamond"), "{in_chest}");

@@ -19,6 +19,9 @@ impl PlayerSession {
 
     /// Reads the player's saved data as joining does.
     pub async fn load_saved(&mut self) {
+        let uuid = self.profile.id;
+        self.lease
+            .get_or_insert_with(|| crate::world::player_lease::PlayerLease::detached(uuid));
         self.load().await.expect("player data loads");
     }
 

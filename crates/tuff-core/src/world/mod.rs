@@ -39,6 +39,7 @@ pub mod dimension;
 pub mod drops;
 pub mod effects;
 pub mod entity;
+pub mod entity_claim;
 pub mod entity_slots;
 pub mod exploration;
 pub mod explosion;
@@ -70,6 +71,7 @@ pub mod physics;
 pub mod place_work;
 pub mod placement;
 pub mod player;
+pub mod player_lease;
 pub mod predicate;
 pub mod pregen;
 pub mod raycast;
@@ -83,6 +85,7 @@ pub mod services;
 pub mod session;
 pub mod stations;
 pub mod stats;
+pub mod stored_entity;
 pub mod tick_barrier;
 pub mod tick_rate;
 pub mod ticks;
@@ -317,7 +320,7 @@ pub struct Shared {
     pub entity_ids: AtomicI32,
     /// The UUID of every entity living in any region of any dimension, so a
     /// saved entity whose UUID is already taken is rejected on load.
-    pub entity_uuids: std::sync::Mutex<std::collections::HashSet<u128>>,
+    pub entity_uuids: std::sync::Arc<entity_claim::EntityUuids>,
     /// Objectives, scores and teams.
     pub scoreboard: scoreboard::ScoreboardHandle,
     /// `/data ... storage` compounds.
@@ -382,18 +385,8 @@ impl Shared {
     }
 
     /// Records `uuid` as living; false if some entity already holds it.
-    pub fn claim_entity_uuid(&self, uuid: u128) -> bool {
-        self.entity_uuids
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(uuid)
-    }
-
-    pub fn release_entity_uuid(&self, uuid: u128) {
-        self.entity_uuids
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&uuid);
+    pub fn claim_entity_uuid(&self, uuid: u128) -> Option<entity_claim::EntityClaim> {
+        self.entity_uuids.claim(uuid)
     }
 
     pub fn next_entity_id(&self) -> i32 {
@@ -980,7 +973,7 @@ impl World {
             entity_compute_shuffle: Default::default(),
             entity_compute_min_batch: crate::world::entity::compute_min_batch().into(),
             entity_ids: AtomicI32::new(1),
-            entity_uuids: std::sync::Mutex::new(std::collections::HashSet::new()),
+            entity_uuids: Default::default(),
             scoreboard,
             command_storage,
             config: settings.clone(),

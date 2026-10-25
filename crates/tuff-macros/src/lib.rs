@@ -174,6 +174,9 @@ fn field_codec(field: &syn::Field) -> syn::Result<Codec> {
 
 /// Arms `tuff_core::watchdog` for the whole test: put it above
 /// `#[test]`/`#[tokio::test]` so a hung test aborts the run naming itself.
+/// A `#[tokio::test]` runtime is built here instead, so every thread it
+/// starts counts its item losses against the test, and the test fails on
+/// any loss once the runtime has shut down.
 #[proc_macro_attribute]
 pub fn watchdog(args: TokenStream, item: TokenStream) -> TokenStream {
     if !args.is_empty() {
@@ -182,17 +185,85 @@ pub fn watchdog(args: TokenStream, item: TokenStream) -> TokenStream {
             .into();
     }
     let mut function = parse_macro_input!(item as syn::ItemFn);
-    let guard: syn::Stmt = syn::parse_quote! {
-        let _watchdog = ::tuff_core::watchdog::arm(::tuff_core::watchdog::DEFAULT);
-    };
-    function.block.stmts.insert(0, guard);
     // tuff-item's own tests link a second copy of the crate through
     // tuff-core, whose fixture guard marks the other copy's thread.
-    if std::env::var("CARGO_CRATE_NAME").is_ok_and(|name| name == "tuff_item") {
-        let fixtures: syn::Stmt = syn::parse_quote! {
-            let _fixtures = crate::item::conservation::fixture_thread();
+    let fixtures: Option<syn::Stmt> = std::env::var("CARGO_CRATE_NAME")
+        .is_ok_and(|name| name == "tuff_item")
+        .then(|| {
+            syn::parse_quote! {
+                let _fixtures = crate::item::conservation::fixture_thread();
+            }
+        });
+    let tokio = function.attrs.iter().position(|attr| {
+        let segments: Vec<String> = attr
+            .path()
+            .segments
+            .iter()
+            .map(|s| s.ident.to_string())
+            .collect();
+        segments == ["tokio", "test"]
+    });
+    let Some(tokio) = tokio else {
+        let guard: syn::Stmt = syn::parse_quote! {
+            let _watchdog = ::tuff_core::watchdog::arm(::tuff_core::watchdog::DEFAULT);
         };
-        function.block.stmts.insert(1, fixtures);
-    }
+        function.block.stmts.insert(0, guard);
+        if let Some(fixtures) = fixtures {
+            function.block.stmts.insert(1, fixtures);
+        }
+        return quote!(#function).into();
+    };
+    let runtime = match tokio_runtime(&function.attrs[tokio]) {
+        Ok(runtime) => runtime,
+        Err(err) => return err.into_compile_error().into(),
+    };
+    function.attrs[tokio] = syn::parse_quote!(#[test]);
+    function.sig.asyncness = None;
+    let body = function.block.clone();
+    *function.block = syn::parse_quote! {{
+        let _watchdog = ::tuff_core::watchdog::arm(::tuff_core::watchdog::DEFAULT);
+        #fixtures
+        let runtime = #runtime
+            .enable_all()
+            .on_thread_start(_watchdog.thread_start())
+            .build()
+            .expect("cannot build the test runtime");
+        runtime.block_on(async #body)
+    }};
     quote!(#function).into()
+}
+
+/// The runtime builder a `#[tokio::test(...)]` attribute asks for.
+fn tokio_runtime(attr: &syn::Attribute) -> syn::Result<TokenStream2> {
+    let mut multi_thread = false;
+    let mut workers: Option<syn::LitInt> = None;
+    if !matches!(attr.meta, syn::Meta::Path(_)) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("flavor") {
+                let flavor: syn::LitStr = meta.value()?.parse()?;
+                multi_thread = match flavor.value().as_str() {
+                    "multi_thread" => true,
+                    "current_thread" => false,
+                    _ => return Err(meta.error("unknown tokio::test flavor")),
+                };
+            } else if meta.path.is_ident("worker_threads") {
+                workers = Some(meta.value()?.parse()?);
+            } else {
+                return Err(meta.error("watchdog does not know this tokio::test argument"));
+            }
+            Ok(())
+        })?;
+    }
+    if !multi_thread && workers.is_some() {
+        return Err(syn::Error::new(
+            attr.span(),
+            "worker_threads needs flavor = \"multi_thread\"",
+        ));
+    }
+    let workers = workers.map(|n| quote!(.worker_threads(#n)));
+    Ok(if multi_thread {
+        quote!(::tokio::runtime::Builder::new_multi_thread().thread_name("test-worker") #workers)
+    } else {
+        quote!(::tokio::runtime::Builder::new_current_thread().thread_name("test-blocking"))
+    })
 }

@@ -100,7 +100,7 @@ async fn a_world_of_one_plugin_dimension_spawns_players_there() {
     assert_eq!(world.shared.spawn().pos, BlockPos::new(3, FLOOR + 1, -5));
 
     let (mut session, _outbound) = session_with_outbound(&world, 1000);
-    session.load().await.unwrap();
+    session.load_saved().await;
     assert_eq!(session.dimension, lobby);
     assert_eq!(session.pose.position[1], f64::from(FLOOR + 1));
     world.shutdown().await;

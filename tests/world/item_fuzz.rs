@@ -142,7 +142,9 @@ async fn item_entities(region: &RegionHandle, census: &mut Census) {
 }
 
 fn lost_so_far() -> u64 {
-    conservation::totals().lost
+    conservation::LossScope::current()
+        .expect("the watchdog scopes every test's threads")
+        .lost()
 }
 
 fn chest_pos() -> BlockPos {

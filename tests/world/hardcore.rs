@@ -87,7 +87,9 @@ async fn entering_spectator_mode_drops_the_shoulder_entities() {
     let (mut session, _outbound) = session_with_outbound(&world, 1);
     session.tick = 100;
     session.body.shoulders.entities[0] =
-        Some(tuff_nbt::Compound::new().with("id", "minecraft:parrot"));
+        Some(tuff_core::world::stored_entity::StoredEntity::from_storage(
+            tuff_nbt::Compound::new().with("id", "minecraft:parrot"),
+        ));
     session.set_game_mode(GameMode::Spectator).await;
     assert!(session.body.shoulders.entities.iter().all(Option::is_none));
     world.shutdown().await;
