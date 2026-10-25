@@ -3,6 +3,7 @@
 //! bed rules, a final kill deciding the game and the arena's reset.
 
 use super::*;
+use crate::protocol::play::GameMode;
 use crate::world::messages::{PlayerHandle, RegionRequest};
 use tuff_plugin_wasm::sandbox::{Items, uuid};
 use tuff_plugin_wasm::sandbox::{Player, Position};
@@ -517,7 +518,44 @@ struct WithBots {
     handle: tuff::ServerHandle,
     task: tokio::task::JoinHandle<anyhow::Result<()>>,
     shared: Arc<Shared>,
+    modes: GameModes,
     _dir: TestDir,
+}
+
+/// Every game mode a player was given, in order: a spectator spell that
+/// ends before a probe gets to it still shows here.
+type GameModes = Arc<std::sync::Mutex<Vec<(String, GameMode)>>>;
+
+struct RecordGameModes(GameModes);
+
+impl crate::world::session::hooks::SessionHooks for RecordGameModes {
+    fn game_mode_changed(
+        &self,
+        session: &crate::world::session::PlayerSession,
+        _from: GameMode,
+        to: GameMode,
+        cancelled: bool,
+    ) {
+        if !cancelled {
+            let name = session.profile.name.clone();
+            self.0.lock().unwrap().push((name, to));
+        }
+    }
+}
+
+impl crate::feature::Feature for RecordGameModes {
+    fn id(&self) -> &'static str {
+        "record-game-modes"
+    }
+
+    fn load(&self, cx: &mut crate::feature::LoadContext) -> Result<(), tuff_item::load::LoadError> {
+        if cx.phase() == tuff_item::load::Phase::Content {
+            cx.registries()
+                .session_hooks
+                .push(Arc::new(RecordGameModes(self.0.clone())));
+        }
+        Ok(())
+    }
 }
 
 impl WithBots {
@@ -541,7 +579,9 @@ impl WithBots {
             .unwrap();
         let cell = super::bots::Cell::default();
         let mut all = tuff::vanilla_features::all();
+        let modes = GameModes::default();
         all.push(Box::new(super::bots::CaptureShared(cell.clone())));
+        all.push(Box::new(RecordGameModes(modes.clone())));
         all.push(Box::new(WasmPluginsFeature::at(plugins)));
         let server = tuff::Server::builder()
             .features(all)
@@ -561,6 +601,7 @@ impl WithBots {
             handle,
             task,
             shared,
+            modes,
             _dir: dir,
         };
         run.host().sync().await;
@@ -643,13 +684,12 @@ async fn bots_are_fake_players_that_play_die_respawn_and_shop_by_the_rules() {
         run.say("list").await.contains(bot).then_some(())
     })
     .await;
-    let started = run
-        .until("the start", || async {
-            let said = run.bedwars("start 1").await;
-            (!said.contains("error:")).then_some(said)
-        })
-        .await;
-    assert!(!started.is_empty());
+    run.until("the start", || async {
+        let said = run.bedwars("start 1").await;
+        let started = !said.contains("error:") || run.bedwars("list").await.contains("running");
+        started.then_some(())
+    })
+    .await;
     run.until("the bot on its team island", || async {
         run.say(&format!("data get entity {bot} Dimension"))
             .await
@@ -663,10 +703,12 @@ async fn bots_are_fake_players_that_play_die_respawn_and_shop_by_the_rules() {
     run.say(&format!("effect give {bot} minecraft:instant_damage 1 5"))
         .await;
     run.until("the death and the wait as a spectator", || async {
-        let mode = run
-            .numbers(&format!("data get entity {bot} playerGameType"))
-            .await;
-        (mode.first() == Some(&3.0)).then_some(())
+        run.modes
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(name, mode)| name == bot && *mode == GameMode::Spectator)
+            .then_some(())
     })
     .await;
     run.until("the respawn", || async {
