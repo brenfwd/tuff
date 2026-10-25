@@ -235,3 +235,79 @@ async fn an_entity_uuid_is_unique_level_wide_until_released() {
     assert!(world.shared.claim_entity_uuid(7));
     world.shutdown().await;
 }
+
+async fn summon_with_uuid(region: &RegionHandle, uuid: u128, position: [f64; 3]) -> bool {
+    let (reply, summoned) = oneshot::channel();
+    region
+        .request(RegionRequest::Summon {
+            nbt: Compound::new()
+                .with("id", "minecraft:zombie")
+                .with("NoAI", true)
+                .with("UUID", tuff_nbt::Tag::uuid(uuid)),
+            position,
+            fresh: false,
+            reply,
+        })
+        .await;
+    summoned.await.unwrap()
+}
+
+async fn entities_with(region: &RegionHandle, uuid: u128) -> usize {
+    let (count, found) = oneshot::channel();
+    run_on(region, move |world| {
+        let n = world
+            .entity_ids()
+            .into_iter()
+            .filter(|id| {
+                world
+                    .entity(*id)
+                    .is_some_and(|t| t.entity.base().uuid == uuid)
+            })
+            .count();
+        count.send(n).unwrap();
+    })
+    .await;
+    found.await.unwrap()
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_same_uuid_cannot_live_in_two_regions() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let (west, east) = two_regions(&world).await;
+    assert!(summon_with_uuid(&west, 77, [510.5, 64.0, 8.5]).await);
+    assert!(!summon_with_uuid(&east, 77, [518.5, 64.0, 8.5]).await);
+    world.ticks(2).await;
+    assert_eq!(
+        entities_with(&west, 77).await + entities_with(&east, 77).await,
+        1
+    );
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_entity_handed_over_with_a_taken_uuid_is_dropped() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let (west, east) = two_regions(&world).await;
+    assert!(summon_with_uuid(&west, 78, [510.5, 64.0, 8.5]).await);
+    run_on(&east, move |world| {
+        let nbt = Compound::new()
+            .with("id", "minecraft:zombie")
+            .with("UUID", tuff_nbt::Tag::uuid(78))
+            .with(
+                "Pos",
+                tuff_nbt::Tag::List([518.5, 64.0, 8.5].map(tuff_nbt::Tag::Double).to_vec()),
+            );
+        let id = world.shared().next_entity_id();
+        let copy = world.shared().entity_types.load_or_inert(&nbt, id).unwrap();
+        world.add_entity(copy);
+    })
+    .await;
+    world.ticks(2).await;
+    assert_eq!(entities_with(&east, 78).await, 0);
+    assert_eq!(entities_with(&west, 78).await, 1);
+    world.shutdown().await;
+}

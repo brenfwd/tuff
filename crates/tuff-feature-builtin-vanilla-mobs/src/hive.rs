@@ -8,6 +8,7 @@ use tuff_vanilla_data::{Block, BlockState, Item, tag};
 use tuff_core::world::game_event::{Context, GameEvent, Source};
 use tuff_core::world::messages::{ActionOutcome, HandEffect};
 use tuff_core::world::region_api::{DispenseOutcome, RegionWorld};
+use tuff_core::world::stored_entity::{EntityBurn, StoredEntity};
 use tuff_item::item::{ItemStack, MintReason};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
@@ -195,16 +196,22 @@ fn bee_of(
     deliver: bool,
     honey: &mut i32,
 ) -> Option<Box<dyn tuff_core::world::entity::RegionEntity>> {
-    let mut data = occupant.get_compound("entity_data")?.clone();
+    let mut stored = StoredEntity::from_storage(occupant.get_compound("entity_data")?.clone());
+    let data = stored.nbt_mut();
     for key in IGNORED_TAGS {
         data.remove(key);
     }
-    let kind = tuff_vanilla_data::registry::EntityType::from_name(data.get_str("id")?)?;
-    if !tuff_datapack::tags::is(tag::entity_type::key::BEEHIVE_INHABITORS, kind) {
+    let inhabitor =
+        tuff_vanilla_data::registry::EntityType::from_name(data.get_str("id").unwrap_or(""))
+            .is_some_and(|kind| {
+                tuff_datapack::tags::is(tag::entity_type::key::BEEHIVE_INHABITORS, kind)
+            });
+    if !inhabitor {
+        stored.burn(EntityBurn::Unloadable);
         return None;
     }
     let ticks = occupant.get_int("ticks_in_hive").unwrap_or(0);
-    age(&mut data, ticks);
+    age(data, ticks);
     data.insert("NoGravity", true);
     data.insert("CannotEnterHiveTicks", CANNOT_ENTER_TICKS);
     if deliver && data.get_bool("HasNectar").unwrap_or(false) {
@@ -225,6 +232,7 @@ fn bee_of(
         data.insert("flower_pos", flower.clone());
     }
     let id = world.shared().next_entity_id();
+    let data = stored.into_spawn_data();
     world.shared().entity_types.load(&data, id)
 }
 
@@ -579,16 +587,18 @@ fn enter(world: &mut dyn RegionWorld, id: i32, pos: BlockPos) {
     if tracked.entity.base().kind != tuff_vanilla_data::registry::EntityType::Bee {
         return;
     }
-    let mut data = tuff_core::world::entity::save(&*tracked.entity);
+    let Some(mut stored) = world.take_entity(id) else {
+        return;
+    };
+    let data = stored.nbt_mut();
     for key in IGNORED_TAGS {
         data.remove(key);
     }
     data.insert("TicksSincePollination", 0);
     let nectar = data.get_bool("HasNectar").unwrap_or(false);
     let flower = data.get("flower_pos").cloned();
-    world.remove_entity_intact(id);
     let occupant = Compound::new()
-        .with("entity_data", data)
+        .with("entity_data", stored.into_storage())
         .with("ticks_in_hive", 0)
         .with(
             "min_ticks_in_hive",

@@ -260,6 +260,17 @@ impl RegionActor {
         seq: u64,
         announce: bool,
     ) {
+        let holds_claim = std::mem::replace(&mut entity.base_mut().claimed, true);
+        if !holds_claim && !self.shared.claim_entity_uuid(entity.base().uuid) {
+            log::warn!("dropping {}: its UUID already exists", entity.saved_id());
+            for stack in entity.take_items() {
+                stack.burn(tuff_item::item::BurnReason::Discarded);
+            }
+            if let Some(block) = entity.take_held() {
+                block.burn(crate::world::block_ledger::BlockBurn::Killed);
+            }
+            return;
+        }
         let span = entity.take_id_span();
         if span > 0 {
             entity.base_mut().id = self.shared.next_entity_ids(span + 1);
@@ -277,7 +288,6 @@ impl RegionActor {
             self.fanout_chunk(chunk, None, |_| PlayerEvent::Track(track.clone()));
         }
         let id = tracked.id();
-        self.shared.claim_entity_uuid(tracked.entity.base().uuid);
         self.ents.entities.insert(id, tracked);
         self.board_saved_passengers(id, announce, 0);
     }

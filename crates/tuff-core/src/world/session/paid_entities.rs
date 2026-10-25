@@ -61,14 +61,14 @@ impl PlayerSession {
             return false;
         };
         let (_, slot, paid) = self.actions.paying.0.swap_remove(at);
-        let spent = match outcome {
+        let spent = matches!(
+            outcome,
             ActionOutcome::Placed { .. }
-            | ActionOutcome::Used {
-                effect: HandEffect::Consume(_) | HandEffect::Emptied(_),
-                ..
-            } => true,
-            _ => false,
-        };
+                | ActionOutcome::Used {
+                    effect: HandEffect::Consume(_) | HandEffect::Emptied(_),
+                    ..
+                }
+        );
         if !spent {
             self.return_one_payment(slot, paid).await;
             return false;

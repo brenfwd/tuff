@@ -59,12 +59,7 @@ impl RegionActor {
             return false;
         };
         let uuid = entity.base().uuid;
-        if self
-            .ents
-            .entities
-            .values()
-            .any(|t| t.entity.base().uuid == uuid)
-        {
+        if self.shared.entity_uuids.contains(uuid) {
             return false;
         }
         if fresh {
@@ -216,9 +211,10 @@ impl RegionActor {
             return false;
         };
         self.chunk_io.pois.forget_holder(id);
-        if self.remove_entity_kept(id, &[]).is_none() {
+        let Some(old) = self.remove_entity_kept(id, &[]) else {
             return false;
-        }
+        };
+        self.shared.release_entity_uuid(old.entity.base().uuid);
         self.receive_entity(entity, 0);
         true
     }
@@ -297,6 +293,7 @@ impl RegionActor {
         }
         self.chunk_io.pois.forget_holder(id);
         let mut tracked = self.remove_entity_kept(id, &[])?;
+        self.shared.release_entity_uuid(tracked.entity.base().uuid);
         place_teleported(&mut *tracked.entity, teleport);
         Some(crate::world::entity::save(&*tracked.entity))
     }

@@ -63,6 +63,8 @@ const LAVA_CONTACT_INSET: f64 = 1.0e-5;
 pub struct EntityBase {
     pub id: i32,
     pub uuid: u128,
+    /// Holds the level-wide claim on its UUID (kept across hand-offs).
+    pub claimed: bool,
     pub kind: EntityType,
     pub position: [f64; 3],
     pub velocity: [f64; 3],
@@ -236,6 +238,7 @@ impl EntityBase {
         Self {
             id,
             uuid,
+            claimed: false,
             kind,
             position,
             velocity,

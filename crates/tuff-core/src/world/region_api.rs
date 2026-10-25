@@ -582,6 +582,14 @@ pub trait RegionWorld: GrowthLevel {
     /// Like `remove_entity` for an entity whose items live on: it is
     /// saved elsewhere (a hive, a pearl list) or moved to another region.
     fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity>;
+    /// Takes the entity out of the world as data, to be held by a hive, a
+    /// shoulder or any other holder; its items live on inside the data.
+    fn take_entity(&mut self, id: i32) -> Option<crate::world::stored_entity::StoredEntity> {
+        let tracked = self.remove_entity_intact(id)?;
+        Some(crate::world::stored_entity::StoredEntity::taken(
+            crate::world::entity::save(&*tracked.entity),
+        ))
+    }
     /// Like `remove_entity` for an entity that lives on elsewhere: its
     /// scores and team stay.
     fn remove_entity_kept(&mut self, id: i32) -> Option<TrackedEntity>;

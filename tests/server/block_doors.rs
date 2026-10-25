@@ -64,6 +64,22 @@ const DOORS: &[Door] = &[
         in_tests: false,
     },
     Door {
+        needle: "StoredEntity::from_storage",
+        allowed: &[
+            "crates/tuff-core/src/world/session/persist.rs",
+            "crates/tuff-feature-builtin-vanilla-mobs/src/hive.rs",
+        ],
+        in_tests: true,
+    },
+    Door {
+        needle: "StoredEntity::taken(",
+        allowed: &[
+            "crates/tuff-core/src/world/region_api.rs",
+            "crates/tuff-core/src/world/region/entities/shoulder.rs",
+        ],
+        in_tests: false,
+    },
+    Door {
         needle: "MintReason::BlockDrop",
         allowed: &[],
         in_tests: false,

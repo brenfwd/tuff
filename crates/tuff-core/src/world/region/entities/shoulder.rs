@@ -68,7 +68,7 @@ impl RegionActor {
             let nbt = crate::world::entity::save(&*tracked.entity);
             if let Some(tracked) = self.remove_entity_kept(entity, &[]) {
                 self.shared.release_entity_uuid(tracked.entity.base().uuid);
-                saved = Some(Box::new(nbt));
+                saved = Some(crate::world::stored_entity::StoredEntity::taken(nbt));
             }
         }
         self.ents
