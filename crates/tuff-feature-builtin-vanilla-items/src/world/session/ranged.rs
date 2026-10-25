@@ -36,7 +36,10 @@ fn is_intangible<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> bool {
     stack.components.other.get(INTANGIBLE).is_some()
 }
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "crate-internal trait whose futures are awaited in place"
+)]
 pub trait RangedExt {
     /// What a crossbow would load: arrows or rockets held in either hand
     /// (off hand first), else the first arrows in the inventory; creative
@@ -358,6 +361,10 @@ fn load(
             continue;
         }
         if uses == 0 {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "creative inventory, pick-block or creative copy (load)"
+            )]
             drawn.push(intangible(ItemStack::mint_like(
                 &ammo,
                 1,
@@ -367,6 +374,10 @@ fn load(
             left -= uses;
             let taken = match slot {
                 Some(slot) => ItemStack::take_from(session.inventory.slot_mut(slot), uses),
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "creative inventory, pick-block or creative copy (load)"
+                )]
                 None => Some(ItemStack::mint_like(&ammo, uses, MintReason::Creative)),
             };
             drawn.extend(taken);

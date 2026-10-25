@@ -55,6 +55,7 @@ impl OminousItemSpawner {
 }
 
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
+    #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (load)")]
     let item = take(nbt, "item", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     });
@@ -158,6 +159,10 @@ impl OminousItemSpawner {
             Item::Arrow | Item::TippedArrow | Item::SpectralArrow => {
                 let velocity =
                     projectile::shot_velocity(down, SHOT_POWER, SHOT_UNCERTAINTY, cx.rng);
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (release)"
+                )]
                 let mut arrow = ArrowShot::new(
                     ItemStack::mint_like(&item, 1, tuff_item::item::MintReason::Transform),
                     velocity,
@@ -174,6 +179,10 @@ impl OminousItemSpawner {
                 direction: down
                     .map(|c| tuff_core::world::physics::triangle(cx.rng, c, DISPENSE_SPREAD)),
             }),
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "ominous item spawner fires a projectile of the held item (release)"
+            )]
             held => projectile::thrown_kind(held)
                 .filter(|_| held != Item::EnderPearl)
                 .map(|kind| {

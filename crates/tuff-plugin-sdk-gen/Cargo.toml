@@ -6,6 +6,9 @@ license = "MIT"
 publish = false
 description = "Generates the C plugin SDK bindings and typed surface from the plugin WIT"
 
+[lints]
+workspace = true
+
 [dependencies]
 wit-bindgen-c = "0.62"
 wit-bindgen-core = "0.62"

@@ -1004,6 +1004,10 @@ fn create_entry_item(
     }
     let from = drops.len();
     match forced {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "loot table output (create_entry_item)"
+        )]
         Some(item) => drops.push(ItemStack::mint(item, 1, MintReason::Loot)),
         None => create_entry_leaf(entry, context, rng, drops),
     }
@@ -1098,6 +1102,10 @@ fn create_entry_leaf(
             while count > 0 {
                 let chunk = count.min(max);
                 count -= chunk;
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "loot table output (create_entry_leaf)"
+                )]
                 let mut stack = ItemStack::mint(item, chunk as u8, MintReason::Loot);
                 for (kind, params) in &stack_functions {
                     stack = modify_stack(stack, kind, params, context, rng);
@@ -1129,11 +1137,19 @@ fn create_entry_leaf(
                     if let Some([back, left, right, front]) =
                         tuff_item::item::pot_decorations_from_nbt(sherds)
                     {
+                        #[expect(
+                            clippy::disallowed_methods,
+                            reason = "loot table output (create_entry_leaf)"
+                        )]
                         drops.extend([left, back, front, right].into_iter().flatten().map(
                             |side| ItemStack::mint_like(&side, side.count(), MintReason::Loot),
                         ));
                     }
                 }
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "loot table output (create_entry_leaf)"
+                )]
                 None => {
                     drops.extend((0..4).map(|_| ItemStack::mint(Item::Brick, 1, MintReason::Loot)))
                 }
@@ -1151,6 +1167,10 @@ fn create_entry_leaf(
             } else {
                 items.to_vec()
             };
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "loot table output (create_entry_leaf)"
+            )]
             drops.extend(
                 chosen
                     .into_iter()

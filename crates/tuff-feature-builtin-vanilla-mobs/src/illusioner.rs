@@ -130,6 +130,10 @@ impl Species for Illusioner {
     }
 
     fn finalize_spawn(&mut self, core: &mut MobCore, _cx: &mut TickContext) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (finalize_spawn)"
+        )]
         core.equipment.set(
             EquipmentSlot::Mainhand,
             Some(ItemStack::mint(Item::Bow, 1, MintReason::Spawn)),

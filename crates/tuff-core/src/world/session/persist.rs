@@ -181,9 +181,14 @@ impl PlayerSession {
             .map(|(dimension, [x, y, z])| (dimension, BlockPos::new(x, y, z)));
         self.progress.entered_nether = state.entered_nether;
         self.mode.post_effects = state.post_effects;
-        self.body.shoulders.entities = state
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity read back from a save (load)"
+        )]
+        let shoulders = state
             .shoulders
             .map(|s| s.map(crate::world::stored_entity::StoredEntity::from_storage));
+        self.body.shoulders.entities = shoulders;
         self.body.effects = state.effects;
         self.body.attributes = state.attributes;
         self.progress.last_inventory = tuff_item::item::snapshot_slots(self.inventory.slots());
@@ -322,6 +327,10 @@ impl PlayerSession {
         let name = self.profile.name.clone();
         let access = match &self.lease {
             Some(lease) => lease.access(),
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "lease for a load or save outside the coordinator table (save_task_in)"
+            )]
             None => crate::world::player_lease::PlayerLease::detached(uuid).access(),
         };
         tokio::task::spawn_blocking(move || {

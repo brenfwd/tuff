@@ -28,9 +28,17 @@ fn shrink_with_remainder(items: &mut [Option<ItemStack>], slot: usize, drops: &m
     stack.shrink(1, BurnReason::CraftingInput);
     let empty = stack.count() == 0;
     match remainder {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item left over after use (shrink_with_remainder)"
+        )]
         Some((item, count)) if empty => {
             items[slot] = Some(ItemStack::mint(item, count, MintReason::Remainder))
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item left over after use (shrink_with_remainder)"
+        )]
         Some((item, count)) => drops.push(ItemStack::mint(item, count, MintReason::Remainder)),
         None if empty => items[slot] = None,
         None => {}

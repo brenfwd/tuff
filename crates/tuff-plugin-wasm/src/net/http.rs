@@ -46,7 +46,7 @@ pub(super) fn tls() -> rustls::ClientConfig {
     static CONFIG: OnceLock<rustls::ClientConfig> = OnceLock::new();
     CONFIG
         .get_or_init(|| {
-            #[allow(unused_mut)]
+            #[cfg_attr(not(test), expect(unused_mut, reason = "only the test CA is added"))]
             let mut roots =
                 rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
             #[cfg(test)]

@@ -350,6 +350,10 @@ impl State {
                         return Err(WorldError::OverBudget);
                     }
                     match tuff_nbt::Tag::from_snbt(&text) {
+                        #[expect(
+                            clippy::disallowed_methods,
+                            reason = "plugin item grant (host_set_slot)"
+                        )]
                         Ok(tuff_nbt::Tag::Compound(nbt)) => Some(
                             tuff_item::item::ItemStack::mint_from_nbt(
                                 &nbt,

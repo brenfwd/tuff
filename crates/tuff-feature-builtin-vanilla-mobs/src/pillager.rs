@@ -84,11 +84,13 @@ impl Species for Pillager {
 
     fn load(&mut self, _core: &mut MobCore, nbt: &mut tuff_nbt::Compound) {
         if let Some(tuff_nbt::Tag::List(list)) = nbt.remove("Inventory") {
-            self.inventory = list
+            #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (load)")]
+            let minted = list
                 .iter()
                 .filter_map(|tag| ItemStack::from_storage(tag.as_compound()?))
                 .take(INVENTORY_SLOTS)
                 .collect();
+            self.inventory = minted;
         }
     }
 
@@ -173,6 +175,10 @@ impl Species for Pillager {
         core.can_pick_up_loot = true;
         let in_raid = core.raider.as_ref().is_some_and(|r| r.raid.is_some());
         if !in_raid || core.equipment.get(EquipmentSlot::Mainhand).is_none() {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (finalize_spawn)"
+            )]
             core.equipment.set(
                 EquipmentSlot::Mainhand,
                 Some(ItemStack::mint(Item::Crossbow, 1, MintReason::Spawn)),

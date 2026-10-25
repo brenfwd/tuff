@@ -6,7 +6,7 @@
 //! process and prints the two reports side by side.
 
 // Shared by several bench targets, each of which uses only part of it.
-#![allow(dead_code)]
+#![expect(dead_code, reason = "helpers used by only some targets")]
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};

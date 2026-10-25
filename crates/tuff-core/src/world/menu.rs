@@ -747,6 +747,10 @@ impl View<'_> {
             if made == 0 {
                 return None;
             }
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "result stack taken from a menu preview, minted for the caller's reason (take)"
+            )]
             let stack = ItemStack::mint_like(preview, made, reason);
             ItemStack::burn_from(entry, made, BurnReason::Preview);
             return Some(stack);
@@ -905,6 +909,10 @@ impl View<'_> {
         }
         if !moved {
             if self.is_result(slot) && self.kind.result_is_preview() {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "preview stand-in stack for a slot or click, burned as Preview (quick_move)"
+                )]
                 let preview = ItemStack::mint_like(&stack, stack.count(), MintReason::Preview);
                 stack.burn(BurnReason::Preview);
                 ItemStack::put_back(self.get_mut(slot), preview);
@@ -988,6 +996,10 @@ pub fn click(
             (mode::SWAP, Some(index)) => swap_with_hotbar(&mut view, index, button),
             (mode::CLONE, Some(index)) if creative && view.inventory.carried().is_none() => {
                 if let Some(stack) = view.get(index) {
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "creative inventory, pick-block or creative copy (click)"
+                    )]
                     let cloned =
                         ItemStack::mint_like(stack, stack.max_stack_size(), MintReason::Creative);
                     view.inventory.set_carried(Some(cloned));
@@ -1380,6 +1392,10 @@ fn finish_drag(view: &mut View<'_>, drag: Drag) {
             _ => limit,
         };
         let added = per_slot.saturating_add(existing).min(limit) - existing;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "creative inventory, pick-block or creative copy (finish_drag)"
+        )]
         let part = if drag.kind == 2 {
             carried.shrink(added, BurnReason::Creative);
             ItemStack::mint_like(&carried, added, MintReason::Creative)

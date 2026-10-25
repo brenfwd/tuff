@@ -101,6 +101,10 @@ fn default_falling_state() -> BlockState {
     Block::Sand.default_state()
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "held block loaded from a save (load)"
+)]
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
     let state = take(nbt, "BlockState", |tag| {
         let name = match tag {
@@ -479,10 +483,15 @@ impl RegionEntity for FallingBlock {
         let mut waiting = false;
         if settling && self.settles_in_end_portal(context) {
             if !self.portal_copy_made {
-                token = tuff_core::world::block_ledger::duplicate_held(
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "vanilla duplication glitch (tick)"
+                )]
+                let minted = tuff_core::world::block_ledger::duplicate_held(
                     &context.shared.config,
                     self.state,
                 );
+                token = minted;
                 self.portal_copy_made = token.is_some();
             }
             if self.portal_copy_made {

@@ -9,7 +9,10 @@ use super::anticheat::{Walker, operator_alerts, physical_walker};
 
 const FRICTION: f64 = (0.6f32 * 0.91f32) as f64;
 /// One tick of walking forward: movement speed x 0.98 input damping.
-#[allow(clippy::eq_op)]
+#[expect(
+    clippy::eq_op,
+    reason = "the test compares a value with itself on purpose"
+)]
 const ACCEL: f64 =
     (0.1f32 * (0.216_000_02f32 / (0.6f32 * 0.6f32 * 0.6f32))) as f64 * 0.98f32 as f64;
 

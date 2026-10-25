@@ -90,6 +90,10 @@ fn nautilus_taming_item(item: Item) -> bool {
 
 const NAUTILUS_FEED_HEAL: f32 = 2.0;
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "item a mob spawns, wears or throws (food_effect)"
+)]
 fn food_effect<M: tuff_item::item::Mode>(stack: &ItemStack<M>) -> HandEffect {
     if tuff_datapack::tags::is(tag::item::key::NAUTILUS_BUCKET_FOOD, stack.item()) {
         HandEffect::ExchangeStack(Box::new(ItemStack::mint(

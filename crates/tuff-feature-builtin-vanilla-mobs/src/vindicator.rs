@@ -86,6 +86,10 @@ impl Species for Vindicator {
 
     fn finalize_spawn(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         if !core.raider.as_ref().is_some_and(|r| r.raid.is_some()) {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (finalize_spawn)"
+            )]
             core.equipment.set(
                 EquipmentSlot::Mainhand,
                 Some(ItemStack::mint(Item::IronAxe, 1, MintReason::Spawn)),

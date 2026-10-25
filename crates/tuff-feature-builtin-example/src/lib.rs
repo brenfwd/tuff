@@ -522,6 +522,10 @@ impl Recipe for DirtToDiamond {
         input.ingredient_count() == 1 && input.stacks().any(|s| s.item() == Item::Dirt)
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "crafting-style result (assemble)"
+    )]
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
         Some(ItemStack::mint(Item::Diamond, 1, MintReason::Crafting))
     }
@@ -562,6 +566,10 @@ impl Recipe for DiamondRepair {
     }
 
     fn assemble(&self, input: &CraftingInput) -> Option<ItemStack> {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "crafting-style result (assemble)"
+        )]
         let mut repaired =
             ItemStack::mint_like(Self::damaged_tool(input)?, 1, MintReason::Crafting);
         repaired.set_damage(0);

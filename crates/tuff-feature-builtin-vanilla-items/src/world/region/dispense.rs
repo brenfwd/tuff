@@ -52,6 +52,10 @@ pub fn dispense(
     }
     let outcome = match item {
         Item::Bucket => Some(match world.take_fluid(target) {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item turning into another (dispense)"
+            )]
             Some((filled, _)) => {
                 world.game_event(
                     GameEvent::FluidPickup,
@@ -90,6 +94,10 @@ pub fn dispense(
             Some(Bucket::Solid { block, place_sound }) => {
                 Some(pour_solid(world, target, block, place_sound))
             }
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "dispenser fills a mob bucket from a bucket of fluid (dispense)"
+            )]
             Some(Bucket::Fluid {
                 fluid: None,
                 mob: Some(kind),
@@ -170,6 +178,10 @@ fn is_shulker_box(block: Block) -> bool {
     tuff_datapack::tags::is(tuff_vanilla_data::tag::block::key::SHULKER_BOXES, block)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "dispenser pours a fluid and leaves an empty bucket (pour)"
+)]
 fn pour<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     target: BlockPos,
@@ -200,6 +212,10 @@ fn pour<M: tuff_item::item::Mode>(
     DispenseOutcome::Exchanged(ItemStack::mint(Item::Bucket, 1, MintReason::Transform))
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "dispenser pours a solid bucket and leaves an empty bucket (pour_solid)"
+)]
 fn pour_solid(
     world: &mut dyn RegionWorld,
     target: BlockPos,
@@ -242,6 +258,10 @@ fn is_water(state: BlockState) -> bool {
 }
 
 fn water_bottle() -> ItemStack {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item turning into another (water_bottle)"
+    )]
     let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Transform);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Water),
@@ -258,6 +278,10 @@ fn fill_bottle(world: &mut dyn RegionWorld, target: BlockPos) -> DispenseOutcome
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "dispenser turns water into mud and leaves a bottle (water_to_mud)"
+)]
 fn water_to_mud<M: tuff_item::item::Mode>(
     world: &mut dyn RegionWorld,
     pos: BlockPos,

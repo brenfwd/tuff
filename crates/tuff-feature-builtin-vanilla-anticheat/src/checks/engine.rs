@@ -897,7 +897,10 @@ impl Engine {
     /// A state estimated from an observed move: its delta taken as the
     /// tick's motion, stopped on axes that touch a block, then carried
     /// through the end of the tick.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn seed(
         &self,
         prior: Option<State>,
@@ -1132,7 +1135,10 @@ fn silent_ticks(
 }
 
 /// Replays the reported tick `t` from `state`; true when it ends at `to`.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 fn evaluate(
     search: &mut Search,
     start: State,

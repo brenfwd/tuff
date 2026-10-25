@@ -1,9 +1,9 @@
 #[path = "../benches/common/alloc.rs"]
 mod alloc;
-#[allow(dead_code)]
+#[expect(dead_code, reason = "helpers used by only some targets")]
 #[path = "../benches/stress/heap.rs"]
 mod heap;
-#[allow(dead_code)]
+#[expect(dead_code, reason = "helpers used by only some targets")]
 #[path = "../benches/common/memory.rs"]
 mod memory;
 

@@ -450,6 +450,10 @@ impl PlayerSession {
         let wear = if item == Item::CarrotOnAStick { 7 } else { 1 };
         self.hurt_hand(off_hand, wear).await;
         if !self.mode.abilities.instabuild && self.inventory.hand(off_hand).is_none() {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item turning into another (boosted)"
+            )]
             self.inventory.set_hand(
                 off_hand,
                 Some(ItemStack::mint(Item::FishingRod, 1, MintReason::Transform)),

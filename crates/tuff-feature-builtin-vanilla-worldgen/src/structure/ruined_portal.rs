@@ -307,7 +307,10 @@ pub struct RuinedPortalPiece {
 }
 
 impl RuinedPortalPiece {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn new(
         position: BlockPos,
         placement: VerticalPlacement,

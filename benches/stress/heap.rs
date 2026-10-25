@@ -164,13 +164,6 @@ fn function(frame: &str) -> String {
 /// An `atos` line with a v0-mangled Rust symbol turned into its path
 /// segments (`crate::module::Type::method`, generic arguments flattened
 /// in), keeping the `(file:line)` when there is one.
-#[cfg_attr(
-    not(target_os = "macos"),
-    allow(
-        dead_code,
-        reason = "only the macOS atos path and the bench_memory test call it"
-    )
-)]
 pub fn readable(line: &str) -> String {
     let (symbol, rest) = line.split_once(' ').unwrap_or((line, ""));
     let Some(mangled) = symbol.strip_prefix("_R") else {

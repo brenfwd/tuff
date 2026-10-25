@@ -71,6 +71,10 @@ impl RegionActor {
 
     /// Takes the TNT block at `pos` out of the world and lights it, when
     /// this region owns it and TNT is allowed to explode.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "TNT block primed by the duplication glitch (prime_tnt_block)"
+    )]
     pub(super) fn prime_tnt_block(&mut self, pos: BlockPos) {
         if !self.owns(pos)
             || !self.shared.rule_bool("tnt_explodes")

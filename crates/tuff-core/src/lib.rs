@@ -1,4 +1,12 @@
 #![recursion_limit = "512"]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 extern crate self as tuff_core;
 
 pub mod admin;

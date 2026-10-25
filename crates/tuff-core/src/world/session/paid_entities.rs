@@ -79,6 +79,10 @@ impl PlayerSession {
             ..
         } = outcome
         {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item turning into another (settle_payment)"
+            )]
             let stack = ItemStack::mint(*result, 1, MintReason::Transform);
             self.return_one_payment(slot, stack).await;
         }

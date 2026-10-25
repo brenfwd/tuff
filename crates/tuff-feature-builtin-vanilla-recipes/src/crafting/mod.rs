@@ -530,6 +530,10 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             let remaining = (first.max_damage()? - first.damage())
                 + (second.max_damage()? - second.damage())
                 + durability * REPAIR_BONUS_PERCENT / 100;
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "crafting-style result (assemble)"
+            )]
             let mut result = ItemStack::mint(first.item(), 1, MintReason::Crafting);
             if first.item().max_damage() != Some(durability) {
                 result.components.max_damage = Some(durability);
@@ -701,6 +705,10 @@ pub fn assemble(recipe: &Recipe, input: &CraftingInput) -> Option<ItemStack> {
             Some(result)
         }
         Recipe::CraftingSpecialMapExtending(_) => {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "crafting-style result (assemble)"
+            )]
             let mut result = ItemStack::mint_like(input.get(1, 1)?, 1, MintReason::Crafting);
             result
                 .components
@@ -724,8 +732,13 @@ pub fn remaining_items(recipe: &Recipe, input: &CraftingInput) -> Vec<Option<Ite
                         && stack.components.written_book.is_some()
                 })
             }) {
-                remaining[index] =
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "crafting-style result (remaining_items)"
+                )]
+                let minted =
                     input.items[index].map(|s| ItemStack::mint_like(s, 1, MintReason::Crafting));
+                remaining[index] = minted;
             }
         }
         Recipe::CraftingSpecialBannerDuplicate(_) => {
@@ -734,7 +747,12 @@ pub fn remaining_items(recipe: &Recipe, input: &CraftingInput) -> Vec<Option<Ite
                     && stack.item().crafting_remainder().is_none()
                     && banner_layers(stack) > 0
                 {
-                    remaining[index] = Some(ItemStack::mint_like(stack, 1, MintReason::Remainder));
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "item left over after use (remaining_items)"
+                    )]
+                    let minted = Some(ItemStack::mint_like(stack, 1, MintReason::Remainder));
+                    remaining[index] = minted;
                 }
             }
         }
@@ -758,6 +776,10 @@ pub fn apply_trim(
     if base.components.trim.as_deref() == Some(&trim) {
         return None;
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "crafting-style result (apply_trim)"
+    )]
     let mut result = ItemStack::mint_like(base, 1, MintReason::Crafting);
     result.components.trim = Some(Box::new(trim));
     Some(result)

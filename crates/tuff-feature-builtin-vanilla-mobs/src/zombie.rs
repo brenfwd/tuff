@@ -93,6 +93,10 @@ impl MobCore {
             } else {
                 Item::CarvedPumpkin
             };
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (wear_halloween_head)"
+            )]
             self.equipment.set(
                 EquipmentSlot::Head,
                 Some(ItemStack::mint(item, 1, MintReason::Spawn)),
@@ -648,6 +652,10 @@ fn ride_camel_husk(core: &mut MobCore, cx: &mut TickContext) {
     if !super::physics::no_collision(area, cx.block) || cx.rng.r#gen::<f32>() >= CAMEL_HUSK_CHANCE {
         return;
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (ride_camel_husk)"
+    )]
     core.equipment.set(
         EquipmentSlot::Mainhand,
         Some(ItemStack::mint(Item::IronSpear, 1, MintReason::Spawn)),
@@ -712,6 +720,10 @@ impl Zombie {
                 } else {
                     Item::FishingRod
                 };
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (setup_spawn)"
+                )]
                 core.equipment.set(
                     EquipmentSlot::Mainhand,
                     Some(ItemStack::mint(item, 1, MintReason::Spawn)),
@@ -720,6 +732,10 @@ impl Zombie {
             if core.equipment.get(EquipmentSlot::Offhand).is_none()
                 && cx.rng.r#gen::<f32>() < NAUTILUS_SHELL_CHANCE
             {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (setup_spawn)"
+                )]
                 core.equipment.set(
                     EquipmentSlot::Offhand,
                     Some(ItemStack::mint(Item::NautilusShell, 1, MintReason::Spawn)),
@@ -734,6 +750,10 @@ impl Zombie {
                     1 => Item::IronSpear,
                     _ => Item::IronShovel,
                 };
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (setup_spawn)"
+                )]
                 core.equipment.set(
                     EquipmentSlot::Mainhand,
                     Some(ItemStack::mint(item, 1, MintReason::Spawn)),

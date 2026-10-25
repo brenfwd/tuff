@@ -4,7 +4,11 @@
 //! `world` module and the test-support helpers are re-exported here so the
 //! files can use them unqualified.
 
-#![allow(unused_imports, hidden_glob_reexports)]
+#![expect(hidden_glob_reexports, reason = "test modules share one glob prelude")]
+#![expect(
+    clippy::disallowed_methods,
+    reason = "test code is exempt from the door gate"
+)]
 
 pub use tuff_core::world::*;
 pub use tuff_core::*;

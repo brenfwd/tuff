@@ -691,7 +691,10 @@ impl MinePiece {
         );
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn place_corridor(
         &self,
         level: &mut Region,

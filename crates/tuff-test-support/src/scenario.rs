@@ -1,4 +1,7 @@
-#![allow(unused_imports)]
+#![expect(
+    unused_imports,
+    reason = "shared prelude imports used by only some modules"
+)]
 use crate::*;
 use std::collections::HashMap;
 use std::path::Path;

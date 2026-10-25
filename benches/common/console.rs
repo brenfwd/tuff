@@ -3,7 +3,7 @@
 //! in the same words, so one parser serves both.
 
 // Shared by several bench targets, each of which uses only part of it.
-#![allow(dead_code)]
+#![expect(dead_code, reason = "helpers used by only some targets")]
 
 use serde_json::{Value, json};
 

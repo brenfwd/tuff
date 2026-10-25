@@ -196,6 +196,10 @@ pub trait Interact: RegionWorld + Rest {
             off_hand: place.off_hand,
         };
         let inserted = place.held.and_then(|item| {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "decoding a saved stack (use_decorated_pot)"
+            )]
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
@@ -551,6 +555,10 @@ pub trait Interact: RegionWorld + Rest {
                 place
                     .player
                     .send(PlayerEvent::AwardStat(CustomStat::UseCauldron, 1));
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (use_cauldron)"
+                )]
                 let mut water = ItemStack::mint(Item::Potion, 1, MintReason::Transform);
                 water.components.potion_contents =
                     Some(Box::new(tuff_item::item::PotionContents {
@@ -563,6 +571,10 @@ pub trait Interact: RegionWorld + Rest {
             _ if tuff_datapack::tags::is(item_tags::key::BANNERS, item) => {
                 let mut layers = place.components.banner_patterns.clone()?;
                 layers.pop()?;
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (use_cauldron)"
+                )]
                 let mut cleaned =
                     ItemStack::mint_with(item, 1, &place.components, MintReason::Transform);
                 cleaned.components.banner_patterns = Some(layers);
@@ -575,6 +587,10 @@ pub trait Interact: RegionWorld + Rest {
             _ if item != Item::ShulkerBox
                 && tuff_datapack::tags::is(item_tags::key::SHULKER_BOXES, item) =>
             {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (use_cauldron)"
+                )]
                 let cleaned = ItemStack::mint_with(
                     Item::ShulkerBox,
                     1,
@@ -589,6 +605,10 @@ pub trait Interact: RegionWorld + Rest {
             }
             _ if tuff_datapack::tags::is(item_tags::key::CAULDRON_CAN_REMOVE_DYE, item) => {
                 place.components.dyed_color?;
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (use_cauldron)"
+                )]
                 let mut cleaned = ItemStack::mint_with(
                     item,
                     place.held_count,
@@ -689,6 +709,10 @@ pub trait Interact: RegionWorld + Rest {
             (Some(_), Some(_)) | (None, None) => interacted,
             (Some(content), None) => {
                 if let Some(item) = content.item() {
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "block yields an item outside loot tables (use_flower_pot)"
+                    )]
                     place.player.send(PlayerEvent::ItemGranted {
                         stack: ItemStack::mint(item, 1, MintReason::Growth),
                         picked_up: false,
@@ -878,6 +902,10 @@ pub trait Interact: RegionWorld + Rest {
             self.play_sound(SoundEvent::ItemLodestoneCompassLock, pos, 1.0, 1.0, None);
             let tracker =
                 LodestoneTracker::locked(&self.dimension_info().key, [pos.x, pos.y, pos.z]);
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item turning into another (use_tool_on)"
+            )]
             let mut locked =
                 ItemStack::mint_with(Item::Compass, 1, &place.components, MintReason::Transform);
             locked
@@ -1162,6 +1190,10 @@ pub trait Interact: RegionWorld + Rest {
             (Some((slot, paid)), HandEffect::Emptied(result) | HandEffect::Exchange(result)) => {
                 let filled = (request.fluid.is_none() && !releases_mob).then_some(result);
                 paid.burn(tuff_item::item::BurnReason::Transform);
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (use_bucket)"
+                )]
                 request.player.send(PlayerEvent::HandReturned {
                     slot,
                     stack: tuff_item::item::ItemStack::mint(

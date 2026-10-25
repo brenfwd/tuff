@@ -13,6 +13,10 @@ const MAX_DEPTH: usize = 16;
 /// of the broken block's block entity, minted as loot. Entity inventories
 /// are not part of the loot context, so sources on entities select
 /// nothing.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "loot slots entry copies container contents as loot (provide)"
+)]
 pub(super) fn provide(raw: &str, context: &Context) -> Vec<ItemStack> {
     let Ok(entry) = serde_json::from_str::<Value>(raw) else {
         return Vec::new();

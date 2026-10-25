@@ -347,6 +347,10 @@ fn pot_item(world: &dyn RegionWorld, pos: BlockPos) -> Option<ItemStack> {
         .raw_block_entity(pos)?
         .get("item")
         .and_then(|tag| match tag {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "command-granted stack (pot_item)"
+            )]
             tuff_nbt::Tag::Compound(nbt) => ItemStack::mint_from_nbt(nbt, MintReason::Command),
             _ => None,
         })
@@ -369,6 +373,10 @@ fn undo_containers(
                 .is_some();
             let pot =
                 undo.entity.is_none() && world.container_items(pos).is_none() && is_pot(world, pos);
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "command-granted stack (undo_containers)"
+            )]
             let working = |slots: &mut dyn Iterator<Item = Option<&ItemStack>>| {
                 slots
                     .map(|slot| {

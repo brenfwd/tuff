@@ -74,6 +74,10 @@ pub fn offer_from_trade(
     {
         return None;
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (offer_from_trade)"
+    )]
     let mut result = ItemStack::mint(
         trade.gives,
         trade.gives_count.clamp(1, 99) as u8,
@@ -198,7 +202,12 @@ fn apply_function(
         "minecraft:set_enchantments" => {
             let add = function["add"].as_bool().unwrap_or(false);
             if stack.item() == Item::Book {
-                stack = ItemStack::mint(Item::EnchantedBook, stack.count(), MintReason::Spawn);
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (apply_function)"
+                )]
+                let minted = ItemStack::mint(Item::EnchantedBook, stack.count(), MintReason::Spawn);
+                stack = minted;
             }
             let target = if stack.item() == Item::EnchantedBook {
                 &mut stack.components.stored_enchantments

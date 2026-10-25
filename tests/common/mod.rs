@@ -1,5 +1,5 @@
 // Shared by several test crates, each of which uses only part of it.
-#![allow(dead_code)]
+#![expect(dead_code, reason = "helpers used by only some targets")]
 
 use std::collections::HashMap;
 use std::net::SocketAddr;

@@ -424,6 +424,10 @@ impl Painting {
         if creative {
             return;
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity drops or fires an item outside loot tables (drop_item)"
+        )]
         let mut stack = ItemStack::mint(Item::Painting, 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base

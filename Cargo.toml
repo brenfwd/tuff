@@ -5,6 +5,9 @@ edition = "2024"
 autotests = false
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = ["runtime-wasmi"]
 runtime-wasmi = ["tuff-plugin-wasm/runtime-wasmi"]
@@ -141,6 +144,10 @@ members = [
     "crates/tuff-plugin-sdk-gen",
     "crates/tuff-client-harness",
 ]
+
+[workspace.lints.clippy]
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
 
 [workspace.package]
 license = "AGPL-3.0-only"

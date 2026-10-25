@@ -189,6 +189,10 @@ impl Species for Strider {
             return;
         }
         if cx.rng.gen_range(0..30) == 0 && monsters {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (finalize_spawn)"
+            )]
             core.base.passengers.push(
                 tuff_nbt::Compound::new()
                     .with("id", EntityType::ZombifiedPiglin.name())
@@ -202,6 +206,10 @@ impl Species for Strider {
                     )
                     .with(tuff_core::world::entity::FINALIZE_SPAWN, true),
             );
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (finalize_spawn)"
+            )]
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Saddle,
                 Some(ItemStack::mint(Item::Saddle, 1, MintReason::Spawn)),
@@ -224,6 +232,10 @@ impl Species for Strider {
         if tuff_core::world::entity::take_bool(nbt, "Saddle").unwrap_or(false)
             && !super::equine::saddled(core)
         {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (load)"
+            )]
             core.equipment.set(
                 tuff_vanilla_data::item::EquipmentSlot::Saddle,
                 Some(ItemStack::mint(Item::Saddle, 1, MintReason::Spawn)),

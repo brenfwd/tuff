@@ -281,6 +281,10 @@ impl Balance {
             let limit = u32::from(kind.max_stack_size().max(1));
             while count > 0 {
                 let part = count.min(limit);
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "the settle door mints the missing items for its caller's reason (mint_short)"
+                )]
                 minted.push(ItemStack::mint_like(kind, part as u8, reason));
                 count -= part;
             }

@@ -584,6 +584,10 @@ pub trait RegionWorld: GrowthLevel {
     fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity>;
     /// Takes the entity out of the world as data, to be held by a hive, a
     /// shoulder or any other holder; its items live on inside the data.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "entity taken out of the world as saved data (take_entity)"
+    )]
     fn take_entity(&mut self, id: i32) -> Option<crate::world::stored_entity::StoredEntity> {
         let mut tracked = self.remove_entity_intact(id)?;
         let claim = tracked.entity.base_mut().claim.take();

@@ -82,7 +82,10 @@ pub fn lerp2(a1: f32, a2: f32, x00: f32, x10: f32, x01: f32, x11: f32) -> f32 {
     lerp(a2, lerp(a1, x00, x10), lerp(a1, x01, x11))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 pub fn lerp3(
     a1: f32,
     a2: f32,
@@ -155,7 +158,10 @@ impl Gradient {
         GRADIENTS[(self.permute(x) & 15) as usize]
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn sample_and_lerp(
         &self,
         x: i32,
@@ -477,7 +483,10 @@ fn blend_lanes_impl(
 
 #[cfg(test)]
 impl Gradient {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn sample_and_lerp_int(
         &self,
         x: i32,

@@ -489,6 +489,10 @@ impl Inventory {
     /// Stand-in copies of the slots and the cursor, for working a click
     /// out before real stacks move (see `MintReason::Preview`).
     pub fn template_copy(&self) -> Self {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "preview stand-in stack for a slot or click, burned as Preview (template_copy)"
+        )]
         let template = |slot: &Option<ItemStack>| {
             slot.as_ref().map(|stack| {
                 ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Preview)

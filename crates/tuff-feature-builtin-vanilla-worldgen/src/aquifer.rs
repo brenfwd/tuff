@@ -437,7 +437,10 @@ impl<'s> NoiseAquifer<'s> {
         near
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn pressure(
         &self,
         ctx: &mut Context,
@@ -532,7 +535,10 @@ impl<'s> NoiseAquifer<'s> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn flooded_level(
         &self,
         ctx: &mut Context,

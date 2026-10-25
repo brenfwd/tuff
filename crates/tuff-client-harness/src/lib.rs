@@ -2,7 +2,13 @@
 //! opt-in real-client test harness. Launching is supervised and lock-guarded; nothing here runs under `cargo t`.
 
 #[path = "../../tuff-vanilla-data/build/cache.rs"]
-#[allow(dead_code)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the cache helpers are used by the build script, tests use a subset"
+    )
+)]
 mod cache;
 pub mod control;
 pub mod fetch;

@@ -157,7 +157,10 @@ fn lit(state: BlockState) -> bool {
 
 /// A thrown potion of `kind` with `item` landing: `bounds` is its box moved
 /// to where it hit, `at` its block, `struck` the entity it hit directly.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 pub fn land(
     kind: EntityType,
     item: &ItemStack,

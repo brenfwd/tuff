@@ -2,6 +2,14 @@
 //! its id counter, terrain drawn onto a map held in hand, player and
 //! banner markers, and the Map Data packets that keep clients current.
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod crafted;
 pub mod data;
 pub mod explore;

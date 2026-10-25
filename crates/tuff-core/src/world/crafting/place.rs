@@ -222,7 +222,10 @@ pub fn place_recipe(
     PostPlace::Nothing
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 fn try_place(
     recipe: &dyn Recipe,
     placement: &Placement,

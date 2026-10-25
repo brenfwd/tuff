@@ -8,6 +8,14 @@
 //! records; a writer thread batches them into the file, and a reader
 //! thread answers lookups beside it.
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod actors;
 pub mod command;
 pub mod container;

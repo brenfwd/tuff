@@ -1,5 +1,10 @@
 //! The example's hooks driven through a running world beside vanilla.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "test code is exempt from the door gate"
+)]
+
 use tuff_core::protocol::play::Serverbound;
 use tuff_core::world::advancement::SessionAdvancements;
 use tuff_feature_builtin_example::{

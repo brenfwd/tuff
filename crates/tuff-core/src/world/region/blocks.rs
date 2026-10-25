@@ -748,6 +748,10 @@ impl RegionActor {
         } else if let Some(components) = creative_drop
             && let Some(item) = state.block().item()
         {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "creative inventory, pick-block or creative copy (break_block)"
+            )]
             let stack = ItemStack::mint_with(item, 1, &components, MintReason::Creative);
             self.drop_items(pos, vec![stack]);
         }
@@ -1328,6 +1332,10 @@ impl RegionActor {
             } => {
                 if let Some(paid) = place.offer.take_placing() {
                     paid.burn(tuff_item::item::BurnReason::Transform);
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "item turning into another (answer_place)"
+                    )]
                     place.offer.give(
                         place.hand_slot,
                         tuff_item::item::ItemStack::mint(

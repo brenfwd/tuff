@@ -134,7 +134,10 @@ fn clamped_map(value: f64, from_min: f64, from_max: f64, to_min: f64, to_max: f6
 /// from `feet` gives a cube holding a block: the hit's angle steers it,
 /// aiming high or low trades height for distance, and hitting it from
 /// below or above lifts or flattens it.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 fn ball_velocity(
     velocity: [f64; 3],
     modifiers: KnockbackModifiers,
@@ -694,6 +697,10 @@ impl SulfurCube {
             nbt.insert("age", age);
             nbt.insert("age_locked", locked);
         });
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (bucket)"
+        )]
         let mut bucket = ItemStack::mint(Item::SulfurCubeBucket, 1, MintReason::Spawn);
         bucket
             .components
@@ -1214,6 +1221,10 @@ pub fn from_bucket(
     }
     nbt.insert("from_bucket", true);
     let mut entity = super::load::<SulfurCube>(base, &mut nbt)?;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "decoding a saved stack (from_bucket)"
+    )]
     let content = components
         .and_then(|c| c.get_compound(CONTENT))
         .and_then(ItemStack::from_storage);

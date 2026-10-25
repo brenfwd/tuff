@@ -638,7 +638,10 @@ pub struct PlayerSession {
 }
 
 impl PlayerSession {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub fn new(
         shared: Arc<Shared>,
         id: PlayerId,

@@ -93,6 +93,7 @@ pub enum BorderMerge {
 pub const THROWER: &str = "Thrower";
 
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
+    #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (load)")]
     let stack = take(nbt, "Item", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     })?;

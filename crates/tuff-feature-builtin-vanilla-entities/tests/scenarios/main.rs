@@ -4,7 +4,11 @@
 //! submodules use core's `world` paths unqualified, so core, its `world`
 //! module and the test-support helpers are re-exported here.
 
-#![allow(unused_imports, hidden_glob_reexports)]
+#![expect(unused_imports, reason = "test modules share one glob prelude")]
+#![expect(
+    clippy::disallowed_methods,
+    reason = "test code is exempt from the door gate"
+)]
 
 pub use tuff_core::world::*;
 pub use tuff_core::*;

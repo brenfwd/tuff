@@ -194,6 +194,10 @@ impl Recipe for CustomShaped {
             && (self.matches_flipped(input, false) || self.matches_flipped(input, true))
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "crafting-style result (assemble)"
+    )]
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
         Some(ItemStack::mint_like(
             &self.result,
@@ -306,6 +310,10 @@ impl Recipe for CustomShapeless {
         stacks.len() == self.ingredients.len() && assign(&stacks, &self.ingredients)
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "crafting-style result (assemble)"
+    )]
     fn assemble(&self, _input: &CraftingInput) -> Option<ItemStack> {
         Some(ItemStack::mint_like(
             &self.result,

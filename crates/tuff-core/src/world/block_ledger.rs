@@ -147,6 +147,10 @@ pub(crate) fn duplicate(
 /// when its setting is on.
 #[track_caller]
 pub fn duplicate_held(config: &crate::config::ConfigStore, state: BlockState) -> Option<HeldBlock> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "duplication glitch token (duplicate_held)"
+    )]
     let broken = duplicate(VanillaDupe::GravityPortal, config, state)?;
     let mut trail = broken.trail;
     trail.note(format_args!("held by the duplicate falling block"));
@@ -157,6 +161,10 @@ pub fn duplicate_held(config: &crate::config::ConfigStore, state: BlockState) ->
 /// Primed TNT the TNT duplication glitch makes, when its setting is on.
 #[track_caller]
 pub(crate) fn duplicate_tnt(config: &crate::config::ConfigStore) -> Option<TntOrigin> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "TNT duplication glitch token (duplicate_tnt)"
+    )]
     let broken = duplicate(
         VanillaDupe::Tnt,
         config,
@@ -345,6 +353,10 @@ impl BrokenBlock {
     /// A block for tests.
     #[doc(hidden)]
     #[track_caller]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "test constructor delegates to the simulated door"
+    )]
     pub fn test(state: BlockState, block_entity: Option<Compound>) -> Self {
         Self::simulated(state, block_entity)
     }
@@ -372,6 +384,7 @@ impl BrokenBlock {
     /// The block drops itself as its own item, if it has one: what a block
     /// does that falls with nowhere to land.
     #[track_caller]
+    #[expect(clippy::disallowed_methods, reason = "loot table output (into_item)")]
     pub fn into_item(mut self) -> Option<tuff_item::item::ItemStack> {
         self.trail.note(format_args!("dropped as its item"));
         let item = self.state.block().item()?;

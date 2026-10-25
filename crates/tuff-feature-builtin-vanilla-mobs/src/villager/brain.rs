@@ -686,6 +686,10 @@ impl Villager {
                 continue;
             };
             if crate::physics::intersects(entity.bounds, reach) {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (pick_up_items)"
+                )]
                 let stack = tuff_item::item::ItemStack::mint(
                     item,
                     room,

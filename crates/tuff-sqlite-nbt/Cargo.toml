@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 description = "SQL functions and views for querying NBT blobs in tuff server files"
 
+[lints]
+workspace = true
+
 [dependencies]
 flate2 = { workspace = true }
 rusqlite = { version = "0.40", default-features = false, features = ["cache", "functions"] }

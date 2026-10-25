@@ -34,7 +34,13 @@ mod imp {
             }
             stats.assume_init()
         };
-        #[allow(clippy::unnecessary_cast)]
+        #[cfg_attr(
+            not(target_os = "linux"),
+            expect(
+                clippy::unnecessary_cast,
+                reason = "the cast type differs between platforms"
+            )
+        )]
         let (blocks, size) = (stats.f_bavail as u64, stats.f_frsize as u64);
         Some(blocks.saturating_mul(size))
     }
