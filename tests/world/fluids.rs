@@ -72,6 +72,7 @@ pub(super) fn pour(
         creative: false,
         sequence,
         hit: None,
+        pay: Default::default(),
     })
 }
 

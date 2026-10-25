@@ -449,6 +449,7 @@ async fn beds_refuse_sleep_without_exploding_and_water_stays() {
             creative: false,
             sequence: 2,
             hit: None,
+            pay: Default::default(),
         },
     ))
     .await;

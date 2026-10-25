@@ -671,3 +671,203 @@ async fn sand_landing_in_an_end_portal_comes_through_once_with_the_setting_off()
     let (_, sand) = sand_into_an_end_portal(false).await;
     assert_eq!(sand, 1);
 }
+
+mod designs {
+    use super::*;
+    use crate::dupe_designs::{COUNT_BOX, DESIGNS, Design, ORIGIN};
+
+    impl Bench {
+        async fn design_tally(&self, design: &Design) -> Tally {
+            let (lo, hi) = COUNT_BOX;
+            let positions: Vec<BlockPos> = (lo.0..=hi.0)
+                .flat_map(|x| (lo.1..=hi.1).map(move |y| (x, y)))
+                .flat_map(|(x, y)| (lo.2..=hi.2).map(move |z| (x, y, z)))
+                .map(|(x, y, z)| BlockPos::new(ORIGIN.0 + x, ORIGIN.1 + y, ORIGIN.2 + z))
+                .collect();
+            let mut tally = Tally::new();
+            self.count_blocks(positions, &mut tally).await;
+            self.count_drops(ORIGIN.0, &mut tally).await;
+            let primed = self.primed_tnt().await;
+            if primed > 0 {
+                let tnt = tally.entry("minecraft:tnt".to_owned()).or_default();
+                *tnt = tnt.saturating_sub(primed);
+                tally.insert("primed_tnt".to_owned(), primed);
+            }
+            tally.retain(|id, n| {
+                *n > 0 && (id == "primed_tnt" || design.kinds.contains(&id.as_str()))
+            });
+            tally
+        }
+
+        async fn end_tally(&self, design: &Design) -> Tally {
+            let platform = BlockPos::new(100, 49, 0);
+            let end = self
+                .world
+                .region_in(
+                    crate::storage::level::THE_END,
+                    ChunkPos::of_block(platform).region(),
+                )
+                .await;
+            let positions: Vec<BlockPos> = (94..=106)
+                .flat_map(|x| (44..=56).map(move |y| (x, y)))
+                .flat_map(|(x, y)| (-8..=8).map(move |z| BlockPos::new(x, y, z)))
+                .collect();
+            let (reply, answer) = oneshot::channel();
+            end.request(RegionRequest::Blocks {
+                op: BlockOp::Copy { positions },
+                reply,
+            })
+            .await;
+            let BlockOpResult::Copied(found) = answer.await.unwrap() else {
+                panic!("copy failed");
+            };
+            let mut tally = Tally::new();
+            for (state, _) in found.into_iter().flatten() {
+                if state.block() != Block::Air {
+                    *tally
+                        .entry(format!("end:{}", state.block().name()))
+                        .or_default() += 1;
+                }
+            }
+            let (reply, answer) = oneshot::channel();
+            end.request(RegionRequest::Entities { reply }).await;
+            for entity in answer.await.unwrap() {
+                if entity.kind != EntityType::Item {
+                    continue;
+                }
+                let (reply, data) = oneshot::channel();
+                end.request(RegionRequest::EntityData {
+                    id: entity.id,
+                    reply,
+                })
+                .await;
+                let item = data
+                    .await
+                    .unwrap()
+                    .and_then(|d| d.get_compound("Item").cloned());
+                if let Some(id) = item.as_ref().and_then(|i| i.get_str("id")) {
+                    *tally.entry(id.to_owned()).or_default() +=
+                        item.as_ref().and_then(|i| i.get_int("count")).unwrap_or(1) as u32;
+                }
+            }
+            tally
+                .into_iter()
+                .filter(|(id, _)| design.kinds.contains(&id.trim_start_matches("end:")))
+                .collect()
+        }
+
+        async fn primed_tnt(&self) -> u32 {
+            let (reply, answer) = oneshot::channel();
+            self.west.request(RegionRequest::Entities { reply }).await;
+            answer
+                .await
+                .unwrap()
+                .into_iter()
+                .filter(|e| e.kind == EntityType::Tnt)
+                .count() as u32
+        }
+    }
+
+    /// Builds and fires `design`, returning the counts afterwards.
+    pub async fn run(design: &Design, dupes: bool) -> (Tally, u64) {
+        let dir = TestDir::new();
+        let b = bench(dir.path(), dupes).await;
+        let at = |(x, y, z, _): (i32, i32, i32, &str)| {
+            BlockPos::new(ORIGIN.0 + x, ORIGIN.1 + y, ORIGIN.2 + z)
+        };
+        for &part in design.build {
+            b.paste_as(at(part), part.3, true).await;
+        }
+        b.world.ticks(4).await;
+        let before = tuff_core::world::block_ledger::totals();
+        let mut end_seen = Tally::new();
+        for &part in design.trigger {
+            match part.3.strip_prefix("@step:") {
+                Some(n) if design.end => {
+                    for _ in 0..n.parse::<u64>().unwrap() {
+                        b.world.ticks(1).await;
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                        for (id, n) in b.end_tally(design).await {
+                            let seen = end_seen.entry(id).or_default();
+                            *seen = (*seen).max(n);
+                        }
+                    }
+                }
+                Some(n) => b.world.ticks(n.parse::<u64>().unwrap()).await,
+                None if part.3.starts_with("@fall:") => {
+                    b.drop_falling(&part.3["@fall:".len()..], at(part)).await;
+                }
+                None => b.paste(at(part), part.3).await,
+            }
+        }
+        b.world.ticks(u64::from(design.steps.max(1))).await;
+        let mut after = b.design_tally(design).await;
+        if design.end {
+            for _ in 0..60 {
+                b.world.ticks(2).await;
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                for (id, n) in b.end_tally(design).await {
+                    let seen = end_seen.entry(id).or_default();
+                    *seen = (*seen).max(n);
+                }
+            }
+            after = b.design_tally(design).await;
+            for (id, n) in end_seen {
+                *after.entry(id).or_default() += n;
+            }
+        }
+        let doored = tuff_core::world::block_ledger::totals()
+            .since(before)
+            .duplicated;
+        b.world.shutdown().await;
+        (after, doored)
+    }
+
+    fn recorded(design: &Design) -> Tally {
+        design
+            .vanilla
+            .iter()
+            .map(|&(id, n)| (id.to_owned(), n))
+            .collect()
+    }
+
+    #[tuff_core::watchdog]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn tuff_matches_vanilla_with_the_settings_on_and_never_exceeds_the_build_with_them_off() {
+        let mut report = Vec::new();
+        for design in DESIGNS {
+            if std::env::var("TUFF_ONLY").is_ok_and(|n| n != design.name) {
+                continue;
+            }
+            let (on, doored) = run(design, true).await;
+            let (off, off_doored) = run(design, false).await;
+            let wanted = recorded(design);
+            eprintln!(
+                "{}: vanilla {wanted:?}\n  on {on:?} (door {doored})\n  off {off:?} (door {off_doored})",
+                design.name
+            );
+            if on != wanted {
+                report.push(format!("{} on: {on:?} vs vanilla {wanted:?}", design.name));
+            }
+            let built = crate::vanilla_dupers::built_counts(design);
+            let mut summed = Tally::new();
+            for (id, n) in &off {
+                *summed
+                    .entry(id.trim_start_matches("end:").to_owned())
+                    .or_default() += n;
+            }
+            for (id, n) in &summed {
+                if id != "primed_tnt" && *n > built.get(id).copied().unwrap_or(0) {
+                    report.push(format!(
+                        "{} off: {off:?} exceeds the build {built:?}",
+                        design.name
+                    ));
+                }
+            }
+            if off.contains_key("primed_tnt") {
+                report.push(format!("{} off: primed TNT {off:?}", design.name));
+            }
+        }
+        assert!(report.is_empty(), "{}", report.join("\n"));
+    }
+}

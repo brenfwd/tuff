@@ -208,6 +208,9 @@ pub(super) struct RedstoneState {
     /// the tick each came.
     pub(super) early_lifted:
         HashMap<BlockPos, (Option<crate::world::block_ledger::HeldBlock>, u64)>,
+    /// Blocks a piston is about to move, lifted before its destinations are
+    /// written.
+    pub(super) lifted_ahead: HashMap<BlockPos, crate::world::block_ledger::HeldBlock>,
     /// Places lifted ahead of a batch of a neighbour's piston changes.
     pub(super) prelifted: HashMap<BlockPos, super::ownership::Prelift>,
     /// The moving blocks in the order they tick.
@@ -488,7 +491,7 @@ impl RegionActor {
         let pos = match action {
             Action::Neighbor { pos, .. } | Action::Shape { pos, .. } => pos,
         };
-        if self.vacated(pos) && self.ghost_dupe(pos).is_none() {
+        if self.vacated(pos) && !self.ghosts_react() {
             return;
         }
         match action {
@@ -666,12 +669,30 @@ impl RegionActor {
         moving: Option<MovingBlock>,
     ) {
         if drops {
-            let old = Reader::block(self, pos);
-            RedstoneLevel::effect(self, Effect::DropResources(pos, old));
+            self.drop_destroyed_by_piston(pos, state, flags);
+        } else {
+            RedstoneLevel::set_block(self, pos, state, flags);
         }
-        RedstoneLevel::set_block(self, pos, state, flags);
         if let Some(moving) = moving {
             self.begin_move(pos, moving);
+        }
+    }
+
+    /// A block a piston destroys: its drops, and `state` written with the
+    /// piston's own flags (vanilla sends no updates here).
+    fn drop_destroyed_by_piston(&mut self, pos: BlockPos, state: BlockState, flags: u32) {
+        let Some(broken) = self.claim_flagged(
+            pos,
+            crate::world::block_ledger::Remains::State(state),
+            crate::world::block_ledger::ClaimReason::Popped,
+            flags,
+            UPDATE_LIMIT,
+        ) else {
+            return;
+        };
+        if self.shared.rule_bool("block_drops") {
+            let stacks = self.shared.block_loot().destroyed(broken, &mut self.rng);
+            self.drop_items(pos, stacks);
         }
     }
 

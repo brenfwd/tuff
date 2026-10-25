@@ -1030,6 +1030,13 @@ pub trait Interact: RegionWorld + Rest {
     /// to the neighbour that owns the target.
     fn use_bucket(&mut self, mut request: BucketUse) {
         let reject = |region: &Self, request: &BucketUse, at: &[BlockPos]| {
+            if let Some((slot, stack)) = request.pay.take() {
+                request.player.send(PlayerEvent::HandReturned {
+                    slot,
+                    stack,
+                    creative: false,
+                });
+            }
             request.player.send(PlayerEvent::ActionResult {
                 sequence: request.sequence,
                 outcome: ActionOutcome::Rejected(region.corrections(at)),
@@ -1150,6 +1157,31 @@ pub trait Interact: RegionWorld + Rest {
                 HandEffect::Emptied(Item::Bucket)
             }
             (Some(_), None) => return reject(self, &request, &[pos]),
+        };
+        let effect = match (request.pay.take(), effect) {
+            (Some((slot, paid)), HandEffect::Emptied(result) | HandEffect::Exchange(result)) => {
+                let filled = (request.fluid.is_none() && !releases_mob).then_some(result);
+                paid.burn(tuff_item::item::BurnReason::Transform);
+                request.player.send(PlayerEvent::HandReturned {
+                    slot,
+                    stack: tuff_item::item::ItemStack::mint(
+                        result,
+                        1,
+                        tuff_item::item::MintReason::Transform,
+                    ),
+                    creative: false,
+                });
+                HandEffect::Spent(filled)
+            }
+            (Some((slot, paid)), other) => {
+                request.player.send(PlayerEvent::HandReturned {
+                    slot,
+                    stack: paid,
+                    creative: false,
+                });
+                other
+            }
+            (None, effect) => effect,
         };
         request.player.send(PlayerEvent::ActionResult {
             sequence: request.sequence,
@@ -1367,7 +1399,10 @@ pub trait Interact: RegionWorld + Rest {
 
 impl<T: RegionWorld + ?Sized> Interact for T {}
 
+mod helpers;
 mod rest;
+pub use helpers::locate_eye_request;
+use helpers::{potted_block_for, potted_content};
 pub use rest::Rest;
 
 /// Vanilla block and item interactions as region hooks.
@@ -1459,33 +1494,4 @@ impl tuff_core::world::region_api::RegionHooks for InteractionHooks {
         }
         Interact::use_bucket(world, request.clone());
     }
-}
-
-/// The request that throws an eye of ender from `eye` along `look`: unless
-/// it looks at an end portal frame within `reach`, the nearest stronghold
-/// is looked up off the actor and the player answered with
-/// [`PlayerEvent::EyeTarget`].
-pub fn locate_eye_request(
-    player: PlayerHandle,
-    eye: [f64; 3],
-    look: [f64; 3],
-    reach: f64,
-    from: BlockPos,
-    off_hand: bool,
-) -> RegionRequest {
-    RegionRequest::Run(RegionTask::new(move |world| {
-        Interact::locate_eye(world, player, eye, look, reach, from, off_hand)
-    }))
-}
-
-/// The block that a `potted_*` flower pot variant holds.
-fn potted_content(block: Block) -> Option<Block> {
-    let name = block.name().strip_prefix("minecraft:potted_")?;
-    Block::from_name(&format!("minecraft:{name}"))
-}
-
-/// The flower pot variant holding `content`.
-fn potted_block_for(content: Block) -> Option<Block> {
-    let name = content.name().strip_prefix("minecraft:")?;
-    Block::from_name(&format!("minecraft:potted_{name}"))
 }

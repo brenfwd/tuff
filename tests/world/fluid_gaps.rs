@@ -260,6 +260,7 @@ fn bucket(
         creative,
         sequence,
         hit: None,
+        pay: Default::default(),
     })
 }
 

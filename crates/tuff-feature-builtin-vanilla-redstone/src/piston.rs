@@ -392,6 +392,7 @@ fn move_blocks(
         level.piston_set(at, Block::Air.default_state(), DESTROYED, true, None, None);
         updated.push(state);
     }
+    level.lift_pushed(&to_push);
     for (i, &from) in to_push.iter().enumerate().rev() {
         let state = level.block(from);
         let to = step(from, direction);
@@ -424,6 +425,7 @@ fn move_blocks(
             carry,
         );
     }
+    level.settle_pushed();
     hash_map_order(&mut left, to_push.len());
     let air = Block::Air.default_state();
     for &(at, _) in &left {

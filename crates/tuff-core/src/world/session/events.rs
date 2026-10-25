@@ -779,15 +779,16 @@ impl PlayerSession {
                     .stats
                     .award(Stat::item(StatType::Used, item), 1);
                 if item == Item::Bucket
-                    && let HandEffect::Exchange(filled) = effect
+                    && let HandEffect::Exchange(filled) | HandEffect::Spent(Some(filled)) = effect
                 {
                     let filled = tuff_item::item::ItemPicture::new(filled, 1);
                     self.fire(crate::world::advancement::trigger::Event::FilledBucket(
                         filled.any(),
                     ));
                 }
-                let emptied_by_region = matches!(effect, HandEffect::Emptied(_))
-                    && self.places_a_block_from_the_hand(item);
+                let emptied_by_region = matches!(effect, HandEffect::Spent(_))
+                    || matches!(effect, HandEffect::Emptied(_))
+                        && self.places_a_block_from_the_hand(item);
                 if !emptied_by_region
                     && !spent
                     && self

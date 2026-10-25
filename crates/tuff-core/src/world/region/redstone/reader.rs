@@ -287,6 +287,14 @@ impl RedstoneLevel for RegionActor {
         }
     }
 
+    fn lift_pushed(&mut self, from: &[BlockPos]) {
+        self.lift_ahead(from);
+    }
+
+    fn settle_pushed(&mut self) {
+        self.settle_lifted_ahead();
+    }
+
     fn piston_set(
         &mut self,
         pos: BlockPos,

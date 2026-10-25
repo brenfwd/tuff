@@ -335,6 +335,7 @@ async fn block_rules_refuse_bucket_pours_and_relight_with_a_resync() {
             creative: false,
             sequence,
             hit: None,
+            pay: Default::default(),
         })
     };
     region.request(pour(1)).await;

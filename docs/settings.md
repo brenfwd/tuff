@@ -235,6 +235,15 @@ inside a moving piston, inside an entity, or as its drops. The three
 through one named, counted door each; with a switch off, the glitch cannot
 happen. Tripwire hook duplication does not exist in 26.3 and has no switch.
 
+A block a piston is moving still stands in its old place while the
+destinations are written (vanilla clears the old places afterwards), so
+updates reach it. With `tuff.blocks.tntDuplication` or
+`tuff.blocks.carpetRailDuplication` on, such a block reacts to those
+updates as in vanilla, and only the TNT, carpet and rail outputs come
+through the glitch door. With both switches off the block is inert until
+it is gone: a contraption that relies on a moving observer, dust or note
+block reacting in its old place behaves differently than in vanilla.
+
 A world save lands whole or not at all. Before a save's first write to a
 chunk or player file, the previous contents go to a journal (a
 `tuff-journal` directory in a world folder, two tables in a server file),
