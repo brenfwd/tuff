@@ -42,6 +42,7 @@ mod motion;
 mod net;
 pub use net::TickThrottler;
 mod packets;
+mod paid_entities;
 mod persist;
 mod place_offer;
 mod pose;
@@ -1165,6 +1166,7 @@ impl PlayerSession {
     pub async fn leave(&mut self) {
         self.progress.stats.award_custom(CustomStat::LeaveGame, 1);
         self.disconnected = true;
+        self.return_payments().await;
         self.close_menu(false).await;
         if let Some(menu) = self.menus.menu.as_mut() {
             menu.pending = None;

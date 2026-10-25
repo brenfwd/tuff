@@ -304,6 +304,7 @@ impl PlayerSession {
                     off_hand, target, face, cursor, sequence, held, item, interact,
                 );
                 place.offer = self.place_offer(&region, off_hand, target, held).await;
+                self.hold_payment(off_hand, sequence);
                 self.send_place(&region, RegionRequest::Place(place)).await;
             }
             _ => {
@@ -449,6 +450,7 @@ impl PlayerSession {
         )) else {
             return false;
         };
+        self.hold_payment(off_hand, sequence);
         region
             .request(RegionRequest::UseBucket(BucketUse {
                 player: self.conn.handle.clone(),

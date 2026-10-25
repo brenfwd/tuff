@@ -43,6 +43,7 @@ mod datapack_registries;
 mod debugconfig_command;
 mod dimension_settings;
 mod dylib_linking;
+mod entity_from_items;
 mod fetch_profile;
 mod file_size;
 mod fill_biome;
