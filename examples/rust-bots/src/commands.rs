@@ -326,11 +326,11 @@ pub fn run(
                 };
                 if let Ok(state) = bots.state(OWNER, id) {
                     lines.push(format!(
-                        "{name}: {} at {:.0} {:.0} {:.0}",
+                        "{name}: {} at {} {} {}",
                         describe_process(&state.process),
-                        state.position.x,
-                        state.position.y,
-                        state.position.z
+                        state.position.x.floor() as i32,
+                        state.position.y.floor() as i32,
+                        state.position.z.floor() as i32
                     ));
                 }
             }

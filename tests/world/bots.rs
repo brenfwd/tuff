@@ -77,6 +77,9 @@ impl Feature for CaptureShared {
     }
 }
 
+/// Server ticks a wait may take: 30 seconds at full speed.
+const PATIENCE: u64 = 600;
+
 struct Run {
     handle: tuff::ServerHandle,
     task: tokio::task::JoinHandle<anyhow::Result<()>>,
@@ -163,48 +166,100 @@ impl Run {
             position: None,
             items: None,
         };
-        for _ in 0..600 {
-            let outcome = self
-                .host()
-                .command(player.clone(), format!("botuser {line}"))
-                .await;
-            if let Some(outcome) = outcome {
-                return outcome.replies.join("\n");
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-        panic!("the consumer does not own its command");
+        let line = format!("botuser {line}");
+        self.within(PATIENCE, || async {
+            let outcome = self.host().command(player.clone(), line.clone()).await?;
+            Some(outcome.replies.join("\n"))
+        })
+        .await
+        .expect("the consumer does not own its command")
     }
 
     /// Runs `line` and waits until the consumer's answer satisfies `want`.
     async fn ask(&self, line: &str, want: impl Fn(&str) -> bool) -> String {
         self.say(line).await;
-        let mut last = String::new();
-        for _ in 0..600 {
-            last = self.say("answer").await;
+        let end = self.ticks() + PATIENCE;
+        loop {
+            let last = self.say("answer").await;
             if want(&last) {
                 return last;
             }
+            assert!(self.ticks() < end, "`{line}` answered {last:?}");
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        panic!("`{line}` answered {last:?}");
     }
 
     async fn online(&self) -> String {
         self.say("online").await
     }
 
-    async fn eventually<T, F: Future<Output = Option<T>>>(
+    fn ticks(&self) -> u64 {
+        *self.shared.server_ticks.borrow()
+    }
+
+    async fn ticks_pass(&self, ticks: u64) {
+        let end = self.ticks() + ticks;
+        let mut clock = self.shared.server_ticks.clone();
+        drop(
+            clock
+                .wait_for(|now| *now >= end)
+                .await
+                .expect("the server ticks"),
+        );
+    }
+
+    /// Polls `probe` every 50 ms until it answers or `ticks` server ticks
+    /// pass.
+    async fn within<T, F: Future<Output = Option<T>>>(
         &self,
+        ticks: u64,
         mut probe: impl FnMut() -> F,
-    ) -> T {
-        for _ in 0..600 {
+    ) -> Option<T> {
+        let end = self.ticks() + ticks;
+        loop {
             if let Some(found) = probe().await {
-                return found;
+                return Some(found);
+            }
+            if self.ticks() >= end {
+                return None;
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        panic!("the condition did not hold within 30 seconds");
+    }
+
+    async fn eventually<T, F: Future<Output = Option<T>>>(&self, probe: impl FnMut() -> F) -> T {
+        match self.within(PATIENCE, probe).await {
+            Some(found) => found,
+            None => panic!("the condition did not hold within {PATIENCE} server ticks"),
+        }
+    }
+
+    /// The consumer's events once bot `bot`'s process ended, or as they
+    /// stand after `ticks` server ticks.
+    async fn process_end(&self, bot: u32, ticks: u64) -> String {
+        let (done, failed) = (format!("done {bot}"), format!("failed {bot}"));
+        let ended = self
+            .within(ticks, || async {
+                let events = self.say("events").await;
+                (events.contains(&done) || events.contains(&failed)).then_some(events)
+            })
+            .await;
+        match ended {
+            Some(events) => events,
+            None => self.say("events").await,
+        }
+    }
+
+    /// Runs `fill` once the forceloaded chunks it covers have loaded.
+    async fn fill_loaded(&self, fill: &str) {
+        loop {
+            let reply = self.server(fill).await;
+            if reply.contains("Successfully") {
+                return;
+            }
+            assert!(reply.contains("loaded"), "{fill}: {reply}");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 
     /// Waits until `Botty` is online (or not) as `players::online` sees it.
@@ -249,7 +304,14 @@ async fn unloading_the_owner_removes_its_bots() {
     run.ask("spawn Botty", |a| a.contains("spawned 1")).await;
     run.botty_online(true).await;
     run.host().unload("bots-consumer").await.unwrap();
-    tokio::time::sleep(Duration::from_millis(2500)).await;
+    run.eventually(|| async {
+        (!run
+            .server("execute if entity @a[name=Botty]")
+            .await
+            .contains("passed"))
+        .then_some(())
+    })
+    .await;
     run.host().load("bots_consumer.wasm").await.unwrap();
     run.host().sync().await;
     run.botty_online(false).await;
@@ -294,13 +356,7 @@ async fn goto_climbs_steps_and_a_hurdle_takes_a_drop_and_flags_nothing() {
         return;
     };
     run.server("forceload add -16 -16 31 47").await;
-    run.eventually(|| async {
-        run.server("fill -3 140 -3 3 149 12 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -3 140 -3 3 149 12 stone").await;
     for line in [
         "fill -3 150 -3 3 165 30 air",
         "fill -3 150 5 3 150 12 stone",
@@ -347,13 +403,7 @@ async fn goto_swims_a_pool_climbs_a_ladder_and_jumps_a_three_block_gap() {
         return;
     };
     run.server("forceload add -16 -16 31 47").await;
-    run.eventually(|| async {
-        run.server("fill -6 140 -3 6 149 34 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -6 140 -3 6 149 34 stone").await;
     for line in [
         "fill -6 150 -3 6 170 34 air",
         "fill -6 150 -3 -6 170 34 stone",
@@ -370,16 +420,8 @@ async fn goto_swims_a_pool_climbs_a_ladder_and_jumps_a_three_block_gap() {
     run.ask("spawnat Botty 0 150 0", |a| a.contains("spawned 1"))
         .await;
     run.botty_online(true).await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
     run.ask("goto 1 0 156 28", |a| a.contains("going 1")).await;
-    let mut events = String::new();
-    for _ in 0..1200 {
-        events = run.say("events").await;
-        if events.contains("done 1") || events.contains("failed 1") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
+    let events = run.process_end(1, 1200).await;
     let state = run.ask("state 1", |a| a.contains("alive")).await;
     assert!(events.contains("done 1"), "{events} {state}");
     assert!(
@@ -414,29 +456,28 @@ async fn a_bot_follows_a_moving_player_for_200_ticks_within_range() {
         return;
     };
     run.server("forceload add -16 -16 31 47").await;
-    run.eventually(|| async {
-        run.server("fill -3 140 -3 3 149 30 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -3 140 -3 3 149 30 stone").await;
     run.server("fill -3 150 -3 3 165 30 air").await;
     run.ask("spawnat Leader 0 150 0", |a| a.contains("spawned 1"))
         .await;
     run.ask("spawnat Botty 0 150 -2", |a| a.contains("spawned 2"))
         .await;
-    run.botty_online(true).await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    run.eventually(|| async {
+        let online = run.online().await;
+        (online.contains("Leader") && online.contains("Botty")).then_some(())
+    })
+    .await;
     run.ask("follow 2 Leader 4", |a| a.contains("following 2"))
         .await;
     run.ask("goto 1 0 150 26", |a| a.contains("going 1")).await;
+    let end = run.ticks() + 200;
     let mut worst = 0.0f64;
     let mut moved = 0.0f64;
-    for _ in 0..40 {
-        tokio::time::sleep(Duration::from_millis(250)).await;
+    let mut follower = String::new();
+    while run.ticks() < end {
+        run.ticks_pass(5).await;
         let leader = run.ask("state 1", |a| a.starts_with("state 1 ")).await;
-        let follower = run.ask("state 2", |a| a.starts_with("state 2 ")).await;
+        follower = run.ask("state 2", |a| a.starts_with("state 2 ")).await;
         let (Some(l), Some(f)) = (position(&leader), position(&follower)) else {
             panic!("{leader} {follower}");
         };
@@ -446,7 +487,6 @@ async fn a_bot_follows_a_moving_player_for_200_ticks_within_range() {
     }
     assert!(moved > 15.0, "the leader barely moved: z={moved}");
     assert!(worst <= 9.0, "the follower fell {worst} blocks behind");
-    let follower = run.ask("state 2", |a| a.starts_with("state 2 ")).await;
     assert!(
         position(&follower).is_some_and(|f| f.2 > 15.0),
         "{follower}"
@@ -479,13 +519,7 @@ async fn an_operator_spawns_a_bot_by_command_and_goto_reaches_the_target() {
         return;
     };
     run.server("forceload add -16 -16 31 47").await;
-    run.eventually(|| async {
-        run.server("fill -3 140 -3 3 149 30 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -3 140 -3 3 149 30 stone").await;
     run.server("fill -3 150 -3 3 165 30 air").await;
     run.ask("spawnat Op 0 150 0", |a| a.contains("spawned 1"))
         .await;
@@ -497,7 +531,6 @@ async fn an_operator_spawns_a_bot_by_command_and_goto_reaches_the_target() {
             .then_some(())
     })
     .await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
     let reply = run.op(op, "bots goto Mate 0 150 20").await;
     assert!(reply.contains("on its way"), "{reply}");
     let list = run
@@ -517,13 +550,7 @@ async fn a_bot_mines_three_iron_ore_and_holds_raw_iron() {
         return;
     };
     run.server("forceload add -16 -16 31 31").await;
-    run.eventually(|| async {
-        run.server("fill -6 140 -6 6 149 6 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -6 140 -6 6 149 6 stone").await;
     for line in [
         "fill -6 150 -6 6 160 6 air",
         "setblock 3 150 0 iron_ore",
@@ -569,13 +596,7 @@ async fn a_bot_kills_a_zombie_within_reach_and_flags_nothing() {
         return;
     };
     run.server("forceload add -16 -16 31 31").await;
-    run.eventually(|| async {
-        run.server("fill -16 140 -16 31 149 31 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -16 140 -16 31 149 31 stone").await;
     for line in [
         "fill -16 150 -16 31 160 31 air",
         "gamerule spawn_mobs false",
@@ -594,19 +615,18 @@ async fn a_bot_kills_a_zombie_within_reach_and_flags_nothing() {
         "summon minecraft:zombie 5.5 150 0.5 {UUID:[I;0,0,0,1],NoAI:1b,PersistenceRequired:1b}",
     )
     .await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    run.eventually(|| async {
+        run.server("execute if entity @e[type=minecraft:zombie]")
+            .await
+            .contains("passed")
+            .then_some(())
+    })
+    .await;
     run.ask("attack 1 00000000000000000000000000000001", |a| {
         a.contains("attacking 1")
     })
     .await;
-    let mut events = String::new();
-    for _ in 0..400 {
-        events = run.say("events").await;
-        if events.contains("done 1") || events.contains("failed 1") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
+    let events = run.process_end(1, 400).await;
     assert!(events.contains("done 1"), "{events}");
     run.eventually(|| async {
         (!run
@@ -633,13 +653,7 @@ async fn a_bot_shoots_a_stationary_zombie_dead_at_twenty_blocks_and_flags_nothin
         return;
     };
     run.server("forceload add -16 -16 31 31").await;
-    run.eventually(|| async {
-        run.server("fill -16 140 -16 31 149 31 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -16 140 -16 31 149 31 stone").await;
     for line in [
         "fill -16 150 -16 31 160 31 air",
         "gamerule spawn_mobs false",
@@ -698,13 +712,7 @@ async fn use_item_throws_a_snowball_toward_an_entity_and_flags_nothing() {
         return;
     };
     run.server("forceload add -16 -16 31 31").await;
-    run.eventually(|| async {
-        run.server("fill -16 140 -16 31 149 31 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -16 140 -16 31 149 31 stone").await;
     for line in [
         "fill -16 150 -16 31 160 31 air",
         "gamerule spawn_mobs false",
@@ -756,13 +764,7 @@ async fn a_bot_flies_an_elytra_200_blocks_over_flat_ground_and_lands_at_the_goal
         return;
     };
     run.server("forceload add -32 -16 31 255").await;
-    run.eventually(|| async {
-        run.server("fill -24 149 -8 24 149 230 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -24 149 -8 24 149 230 stone").await;
     for line in [
         "fill -24 150 -8 24 190 230 air",
         "gamerule spawn_mobs false",
@@ -808,13 +810,7 @@ async fn a_bot_bridges_a_void_gap_and_breaks_the_wool_wall_in_its_way() {
         return;
     };
     run.server("forceload add -16 -16 31 31").await;
-    run.eventually(|| async {
-        run.server("fill -3 149 -3 3 149 3 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -3 149 -3 3 149 3 stone").await;
     for line in [
         "gamerule fall_damage false",
         "fill -3 150 -3 18 156 3 air",
@@ -872,13 +868,7 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
         return;
     };
     run.server("forceload add -16 -16 31 31").await;
-    run.eventually(|| async {
-        run.server("fill -6 140 -6 6 149 6 stone")
-            .await
-            .contains("Successfully")
-            .then_some(())
-    })
-    .await;
+    run.fill_loaded("fill -6 140 -6 6 149 6 stone").await;
     for line in [
         "fill -6 150 -6 6 160 6 air",
         "fill 1 149 1 3 149 3 farmland[moisture=7]",
