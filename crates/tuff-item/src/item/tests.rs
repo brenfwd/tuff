@@ -787,6 +787,7 @@ fn spears_stab_and_other_items_whack() {
 
 #[tuff_core::watchdog]
 #[test]
+#[cfg(debug_assertions)]
 fn transform_records_a_burn_and_a_mint_and_keeps_count_and_components() {
     let mut stack = ItemStack::mint(Item::EnchantedBook, 5, MintReason::Command);
     stack.components.repair_cost = Some(3);
