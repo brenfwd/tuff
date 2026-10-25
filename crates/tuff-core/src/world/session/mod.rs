@@ -619,6 +619,8 @@ pub struct PlayerSession {
     pub net: net::Net,
     /// Set for a fake player: no socket, no saved data, no chunk bytes.
     pub fake: Option<crate::world::fake::FakeSpec>,
+    /// The profile's lease, held from load to the end of the final save.
+    pub lease: Option<crate::world::player_lease::PlayerLease>,
     pub fake_driver: Option<crate::world::fake::driver::Driver>,
     pub surroundings: surroundings::Surroundings,
     pub progress: progress::Progress,
@@ -671,6 +673,7 @@ impl PlayerSession {
             published: Default::default(),
             net,
             fake: None,
+            lease: None,
             fake_driver: None,
             surroundings: Default::default(),
             progress: progress::Progress {
@@ -719,10 +722,14 @@ impl PlayerSession {
         }
     }
 
-    /// Runs the player until disconnect, then saves its data. `previous` is
-    /// the save of an earlier session of the same player, which must finish
-    /// before this one reads the file.
-    pub async fn run(self, previous: Option<watch::Receiver<bool>>, done: watch::Sender<bool>) {
+    /// Runs the player until disconnect, then saves its data. The session
+    /// reads the file only once `lease` is granted, after any earlier owner
+    /// of the profile returned it.
+    pub async fn run(
+        self,
+        lease: crate::world::player_lease::LeaseRequest,
+        done: watch::Sender<bool>,
+    ) {
         let (tags, enchantments, registries) = {
             let contents = self.shared.datapacks.contents();
             (
@@ -734,19 +741,24 @@ impl PlayerSession {
         let run: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> =
             Box::pin(tuff_item::registries::scope(
                 registries,
-                tuff_item::enchantment::scope(enchantments, self.run_scoped(previous, done)),
+                tuff_item::enchantment::scope(enchantments, self.run_scoped(lease, done)),
             ));
         tuff_datapack::tags::scope(tags, run).await;
     }
 
     async fn run_scoped(
         mut self,
-        previous: Option<watch::Receiver<bool>>,
+        lease: crate::world::player_lease::LeaseRequest,
         done: watch::Sender<bool>,
     ) {
-        if let Some(mut previous) = previous {
-            let _ = previous.wait_for(|saved| *saved).await;
+        let lease = lease.granted().await;
+        if lease.was_dirty() {
+            log::warn!(
+                "{} loads the last completed save: the previous session ended without its final save",
+                self.profile.name
+            );
         }
+        self.lease = Some(lease);
         match self.load().await {
             Ok(()) => {
                 let states = self
@@ -784,6 +796,9 @@ impl PlayerSession {
             .coordinator
             .send(CoordinatorMessage::Left { player: self.id })
             .await;
+        if let Some(lease) = self.lease.take() {
+            lease.release();
+        }
         tuff_item::item::conservation::release(self);
         let _ = done.send(true);
     }

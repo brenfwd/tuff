@@ -290,7 +290,10 @@ async fn a_panicking_session_leaves_normally() {
         PermissionLevel::Owners,
     );
     let (done, mut finished) = tokio::sync::watch::channel(false);
-    let running = tokio::spawn(session.run(None, done));
+    let running = tokio::spawn(session.run(
+        tuff_core::world::player_lease::LeaseTable::default().request(id as u128),
+        done,
+    ));
 
     packets
         .send(Serverbound::Chat("boom".into()))

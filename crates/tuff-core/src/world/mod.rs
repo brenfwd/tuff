@@ -69,6 +69,7 @@ pub mod physics;
 pub mod place_work;
 pub mod placement;
 pub mod player;
+pub mod player_lease;
 pub mod predicate;
 pub mod pregen;
 pub mod raycast;
