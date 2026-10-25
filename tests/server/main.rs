@@ -84,5 +84,6 @@ mod tuff_config;
 mod vanilla_drops;
 mod velocity_forwarding;
 mod watchdog_coverage;
+mod water_bucket;
 mod waypoints;
 mod world_lifecycle;
