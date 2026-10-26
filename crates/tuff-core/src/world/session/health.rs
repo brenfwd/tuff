@@ -391,6 +391,13 @@ impl PlayerSession {
         true
     }
 
+    fn close_menu_on_death(&mut self) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            self.abandon_pending().await;
+            self.close_menu(true).await;
+        })
+    }
+
     pub async fn die(&mut self, kind: &'static DamageType, killer: Option<&Culprit>) {
         self.died_hooks(kind, killer);
         let death_dimension = self.shared.dimension(self.dimension).key.to_string();
@@ -455,6 +462,7 @@ impl PlayerSession {
         self.react_to_mob_effects(PlayerEffectTrigger::Died).await;
         self.body.effects = ActiveEffects::default();
         self.body.absorption = 0.0;
+        self.close_menu_on_death().await;
         let keep_inventory = self.keeps_inventory();
         let drops = if keep_inventory {
             Vec::new()

@@ -32,7 +32,9 @@ impl PlayerSession {
             return;
         };
         let pos = *pos;
-        menu.container[0] = None;
+        if let Some(payment) = menu.container[0].take() {
+            payment.burn(tuff_item::item::BurnReason::Consumed);
+        }
         let region = menu.region.clone();
         self.send_menu_slot(0);
         self.send_menu_data(1, beacon::encode_effect(primary) as i16);

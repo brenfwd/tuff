@@ -337,10 +337,13 @@ impl PlayerSession {
         if pool.is_empty() {
             return;
         }
-        let left: Vec<ItemStack> = pool
-            .into_iter()
-            .filter_map(|stack| self.inventory.add(stack))
-            .collect();
+        let left: Vec<ItemStack> = if self.loses_inventory() {
+            pool
+        } else {
+            pool.into_iter()
+                .filter_map(|stack| self.inventory.add(stack))
+                .collect()
+        };
         for stack in left {
             self.throw_item(stack).await;
         }
@@ -385,7 +388,7 @@ impl PlayerSession {
         }
         let screen = self.screen_changes(&sim);
         if screen.is_empty() && !took_result {
-            self.settle_local(sim, false, resend).await;
+            self.settle_local(sim, resend).await;
             return;
         }
         let (balance, reasons) = match self.plan(&sim, &screen, false) {
@@ -404,6 +407,8 @@ impl PlayerSession {
             reasons,
             resend,
             merchant: None,
+            pool: Vec::new(),
+            made: None,
         });
         let window_id = menu.window_id;
         let region = menu.region.clone();
@@ -505,8 +510,8 @@ impl PlayerSession {
 
     /// Settles a click whose changes all fall on the session's side.
     /// Returns false when it was refused for not balancing.
-    async fn settle_local(&mut self, sim: Sim, trade: bool, resend: bool) -> bool {
-        let (balance, reasons) = match self.plan(&sim, &Vec::new(), trade) {
+    async fn settle_local(&mut self, sim: Sim, resend: bool) -> bool {
+        let (balance, reasons) = match self.plan(&sim, &Vec::new(), false) {
             Ok(plan) => plan,
             Err(balance) => {
                 self.refuse_click(sim, balance);
@@ -827,6 +832,107 @@ impl PlayerSession {
         self.after_answer().await;
     }
 
+    /// Asks the merchant to agree to the trades a click made. The payment
+    /// leaves its places now and waits in the pending trade; the click
+    /// settles once the merchant agrees, making only what the trade sells.
+    /// Until then the screen shows what it did, with the offers as they
+    /// were kept to restore on refusal.
+    pub async fn submit_trade(
+        &mut self,
+        sim: Sim,
+        offers_before: Vec<MerchantOffer>,
+        trades: Vec<(usize, u32)>,
+        resend: bool,
+    ) {
+        let times: u32 = trades.iter().map(|(_, n)| n).sum();
+        self.progress
+            .stats
+            .award_custom(CustomStat::TradedWithVillager, times as i32);
+        let merchant = match self.menus.menu.as_ref().map(|m| &m.backing) {
+            Some(MenuBacking::Merchant(merchant)) => Some(*merchant),
+            _ => None,
+        };
+        let Some(merchant) = merchant else {
+            sim.discard();
+            return;
+        };
+        self.traded(merchant, &offers_before, &trades);
+        let (balance, reasons) = match self.plan(&sim, &Vec::new(), true) {
+            Ok(plan) => plan,
+            Err(balance) => {
+                self.refuse_click(sim, balance);
+                self.restore_offers(Some(offers_before));
+                return;
+            }
+        };
+        let (pool, origins) = self.take_losses(&sim, &balance, None);
+        let menu = self.menus.menu.as_mut().expect("checked above");
+        menu.pending = Some(Pending {
+            origins,
+            sim,
+            reasons,
+            resend,
+            merchant: Some(offers_before),
+            pool,
+            made: Some(balance),
+        });
+        let window_id = menu.window_id;
+        let region = match self.view.entities.visible_entity(merchant) {
+            Some((_, chunk, _)) => self.region(chunk.region()).await,
+            None => None,
+        };
+        let request = TradeRequest {
+            merchant,
+            player: self.profile.id,
+            trades,
+        };
+        let sent = match region {
+            Some(region) => {
+                region
+                    .request(RegionRequest::Trade {
+                        player: self.conn.handle.clone(),
+                        window_id,
+                        request,
+                    })
+                    .await
+            }
+            None => false,
+        };
+        if !sent {
+            Box::pin(self.trade_answered(window_id, false)).await;
+        }
+    }
+
+    /// Shows the merchant's offers as they were before a refused trade.
+    fn restore_offers(&mut self, offers: Option<Vec<MerchantOffer>>) {
+        if let (Some(offers), Some(menu)) = (offers, self.menus.menu.as_mut()) {
+            if let Some(Station::Merchant { view, .. }) = &mut menu.station {
+                view.offers = offers;
+            }
+            menu.queued.clear();
+            menu.drag = None;
+        }
+        self.send_merchant_offers();
+        self.send_inventory();
+        self.send_menu_content();
+    }
+
+    /// Whether what this player holds is lost where it stands: it left, or
+    /// died without keeping its inventory.
+    pub(in crate::world::session) fn loses_inventory(&self) -> bool {
+        self.disconnected || (self.is_dead() && !self.keeps_inventory())
+    }
+
+    /// Lets go of the transaction waiting on an answer: its pictures are
+    /// burned and what it took out of the places goes back to the player.
+    pub(in crate::world::session) async fn abandon_pending(&mut self) {
+        let Some(pending) = self.menus.menu.as_mut().and_then(|m| m.pending.take()) else {
+            return;
+        };
+        pending.sim.discard();
+        self.give_back(pending.pool).await;
+    }
+
     /// A merchant's answer to a trade: accepted, the click settles now
     /// (what it paid is used up, what it bought is made); refused, the
     /// screen and offers show as they were.
@@ -836,31 +942,38 @@ impl PlayerSession {
             _ => None,
         };
         let Some(Pending {
+            origins,
             sim,
+            reasons,
             resend,
             merchant,
-            ..
+            mut pool,
+            made,
         }) = pending
         else {
             return;
         };
-        let settled = if accepted {
-            self.settle_local(sim, true, resend).await
+        let settled = accepted && !self.loses_inventory();
+        if settled {
+            if let (Some(made), Some(reasons)) = (&made, reasons) {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "an agreed trade makes what it sells, as priced at the click (trade_answered)"
+                )]
+                pool.extend(made.mint_short(reasons.mint));
+            }
+            self.fill_gains(sim, pool, reasons).await;
+            if resend {
+                self.send_menu_content();
+            }
         } else {
             sim.discard();
-            false
-        };
-        if !settled {
-            if let (Some(offers), Some(menu)) = (merchant, self.menus.menu.as_mut()) {
-                if let Some(Station::Merchant { view, .. }) = &mut menu.station {
-                    view.offers = offers;
-                }
-                menu.queued.clear();
-                menu.drag = None;
+            if self.loses_inventory() {
+                self.give_back(pool).await;
+            } else {
+                self.restore_pool(origins, pool, None).await;
             }
-            self.send_merchant_offers();
-            self.send_inventory();
-            self.send_menu_content();
+            self.restore_offers(merchant);
         }
         self.after_answer().await;
     }

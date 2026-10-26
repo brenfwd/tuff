@@ -158,9 +158,16 @@ impl Inventory {
                 self.selected = slot - HOTBAR.start();
             }
             Some(slot) => self.pick_slot(slot),
-            None if create => self.add_and_pick(stack),
-            None => return false,
+            None if create => {
+                self.add_and_pick(stack);
+                return true;
+            }
+            None => {
+                stack.burn(BurnReason::Creative);
+                return false;
+            }
         }
+        stack.burn(BurnReason::Creative);
         true
     }
 
@@ -437,9 +444,13 @@ impl Inventory {
 
     /// Like `clear`, but items with a vanishing enchantment are destroyed.
     pub fn clear_dropping_survivors(&mut self) -> Vec<ItemStack> {
-        let mut items = self.clear();
-        items.retain(|stack| !prevents_equipment_drop(stack));
-        items
+        let items = self.clear();
+        let (vanishing, survivors): (Vec<ItemStack>, Vec<ItemStack>) =
+            items.into_iter().partition(prevents_equipment_drop);
+        for stack in vanishing {
+            stack.burn(BurnReason::Destroyed);
+        }
+        survivors
     }
 
     /// Closing the window returns crafting grid items and the cursor stack,
@@ -551,6 +562,29 @@ mod tests {
         let mut stack = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
         stack.set_damage(damage);
         stack
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn picking_and_vanishing_burn_what_they_do_not_keep() {
+        let mut inv = Inventory::default();
+        let diamond = || ItemStack::mint(Item::Diamond, 1, MintReason::Creative);
+        inv.slots[36] = Some(diamond());
+        assert!(inv.pick(diamond(), false));
+        assert!(!inv.pick(ItemStack::mint(Item::Glass, 1, MintReason::Creative), false));
+        let mut cursed = ItemStack::mint(Item::Stone, 1, MintReason::Creative);
+        cursed.components.enchantments = Some(tuff_item::item::Enchantments::new(vec![(
+            "minecraft:vanishing_curse".to_string(),
+            1,
+        )]));
+        inv.slots[10] = Some(cursed);
+        for stack in inv.clear_dropping_survivors() {
+            stack.burn(BurnReason::Test);
+        }
+        let lost = tuff_item::item::conservation::LossScope::current()
+            .expect("scoped by the watchdog")
+            .lost();
+        assert_eq!(lost, 0);
     }
 
     #[tuff_core::watchdog]
