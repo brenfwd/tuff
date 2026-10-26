@@ -478,6 +478,16 @@ fn move_blocks(
 
 /// Removes what is left of the arm, leaving its fluid behind.
 fn remove_arm(level: &mut dyn RedstoneLevel, arm: BlockPos) {
+    // Parity: on a vanilla server a retraction queued before its piston was replaced
+    // (or a headless piston) still clears unbreakable blocks such as bedrock in front
+    // of it; tuff.blocks.permanentBlockBreaking=false keeps them standing.
+    let standing = level.block(arm);
+    if standing.destroy_speed().is_none()
+        && standing.block() != Block::MovingPiston
+        && !level.permanent_block_breaking()
+    {
+        return;
+    }
     let left = tuff_vanilla_common::placement::remains(level.block(arm));
     level.piston_set(arm, left, super::UPDATE_ALL, false, None, None);
 }

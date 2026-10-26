@@ -28,7 +28,8 @@ struct Bench {
     _events: mpsc::UnboundedReceiver<PlayerEvent>,
 }
 
-const DUPE_KEYS: [&str; 3] = [
+const DUPE_KEYS: [&str; 4] = [
+    tuff_core::config::BLOCKS_PERMANENT_BLOCK_BREAKING,
     tuff_core::config::BLOCKS_TNT_DUPLICATION,
     tuff_core::config::BLOCKS_CARPET_RAIL_DUPLICATION,
     tuff_core::config::BLOCKS_GRAVITY_PORTAL_DUPLICATION,
