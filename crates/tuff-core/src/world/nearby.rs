@@ -8,6 +8,7 @@
 //! its own square, once a tick, so players register their *presence* (for
 //! touching, pickups and relaying) only with regions within a few blocks.
 
+use crate::world::PlayerId;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -36,6 +37,7 @@ pub struct PlayerIndex {
     near: HashMap<(DimensionId, RegionPos), Vec<IndexedPlayer>>,
     per_dimension: HashMap<DimensionId, usize>,
     spectators: HashMap<(DimensionId, RegionPos), Vec<[f64; 3]>>,
+    spectator_positions: HashMap<PlayerId, (DimensionId, [f64; 3])>,
 }
 
 impl PlayerIndex {
@@ -83,6 +85,25 @@ impl PlayerIndex {
             }
         }
         self
+    }
+
+    /// Also records where living spectators are, by id, wherever they are.
+    pub fn with_spectator_positions(
+        mut self,
+        spectators: impl IntoIterator<Item = (PlayerId, DimensionId, [f64; 3])>,
+    ) -> Self {
+        for (id, dimension, position) in spectators {
+            self.spectator_positions.insert(id, (dimension, position));
+        }
+        self
+    }
+
+    /// Where the living spectator `id` is, if it is in `dimension`.
+    pub fn spectator_position(&self, dimension: DimensionId, id: PlayerId) -> Option<[f64; 3]> {
+        self.spectator_positions
+            .get(&id)
+            .filter(|(at, _)| *at == dimension)
+            .map(|(_, position)| *position)
     }
 
     /// Spectator positions within [`REACH`] of `region`.

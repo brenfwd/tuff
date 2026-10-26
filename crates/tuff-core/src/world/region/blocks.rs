@@ -432,7 +432,7 @@ impl RegionActor {
     }
 
     /// Where a viewer of this region is: from its presence here, else from
-    /// the shared player index. `None` when neither knows.
+    /// the shared player index (spectators included). `None` when neither knows.
     pub(super) fn viewer_position(
         &self,
         id: PlayerId,
@@ -444,6 +444,7 @@ impl RegionActor {
                 .iter()
                 .find(|p| p.handle.id == id)
                 .map(|p| p.position)
+                .or_else(|| index.spectator_position(self.dimension, id))
         })
     }
 

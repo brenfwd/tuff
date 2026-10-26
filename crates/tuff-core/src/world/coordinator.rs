@@ -653,7 +653,14 @@ impl Coordinator {
             (state.alive && state.game_mode == crate::protocol::play::GameMode::Spectator)
                 .then_some((state.dimension, state.position))
         });
-        let index = crate::world::nearby::PlayerIndex::build(players).with_spectators(spectators);
+        let spectator_ids = self.players.iter().filter_map(|(id, online)| {
+            let state = online.state.as_ref()?;
+            (state.alive && state.game_mode == crate::protocol::play::GameMode::Spectator)
+                .then_some((*id, state.dimension, state.position))
+        });
+        let index = crate::world::nearby::PlayerIndex::build(players)
+            .with_spectators(spectators)
+            .with_spectator_positions(spectator_ids);
         self.players_index.send_replace(Arc::new(index));
     }
 
@@ -845,11 +852,7 @@ impl Coordinator {
                     else {
                         continue;
                     };
-                    let Some(at) =
-                        global_event_position(dimension, pos, state.dimension, state.position)
-                    else {
-                        continue;
-                    };
+                    let at = global_event_position(dimension, pos, state.dimension, state.position);
                     let _ = online.outbound.send(framed(&play::LevelEvent {
                         event,
                         position: at,

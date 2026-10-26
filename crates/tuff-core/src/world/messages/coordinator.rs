@@ -26,8 +26,9 @@ pub enum CoordinatorMessage {
         png: Option<Vec<u8>>,
         reply: oneshot::Sender<Result<(), String>>,
     },
-    /// A level event delivered to every player in `dimension`, its
-    /// position clamped to at most 32 blocks from each player.
+    /// A level event delivered to every player in every dimension: those
+    /// in `dimension` get its position clamped to at most 32 blocks away,
+    /// the others get their own position.
     GlobalLevelEvent {
         dimension: crate::world::dimension::DimensionId,
         event: i32,

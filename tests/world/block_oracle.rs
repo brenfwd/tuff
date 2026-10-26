@@ -155,9 +155,26 @@ async fn player_sounds_reach_only_viewers_in_range_of_the_source() {
     w.session.view.regions.insert(key, region.clone());
     let (far, mut far_events) = PlayerHandle::new(901);
     subscribe(&region, &far, &mut far_events, &[ChunkPos::new(40, 40)]).await;
+    let (spectator, mut spectator_events) = PlayerHandle::new(902);
+    subscribe(
+        &region,
+        &spectator,
+        &mut spectator_events,
+        &[ChunkPos::new(40, 40)],
+    )
+    .await;
+    let spectator_at = [w.x, 101.0, w.z];
+    world.players.send_replace(Arc::new(
+        crate::world::nearby::PlayerIndex::default().with_spectator_positions([(
+            902,
+            w.session.dimension,
+            spectator_at,
+        )]),
+    ));
     w.session.run_tick().await;
     world.ticks(2).await;
     while far_events.try_recv().is_ok() {}
+    while spectator_events.try_recv().is_ok() {}
     let position = w.session.pose.position;
     w.session
         .sound_at(
@@ -175,6 +192,14 @@ async fn player_sounds_reach_only_viewers_in_range_of_the_source() {
         heard_by_far += usize::from(matches!(event, PlayerEvent::ChunkPackets { .. }));
     }
     assert_eq!(heard_by_far, 0, "a viewer with no known position does not");
+    let mut heard_by_spectator = 0;
+    while let Ok(event) = spectator_events.try_recv() {
+        heard_by_spectator += usize::from(matches!(event, PlayerEvent::ChunkPackets { .. }));
+    }
+    assert_eq!(
+        heard_by_spectator, 1,
+        "a spectator is found through the index"
+    );
     world.shutdown().await;
 }
 
