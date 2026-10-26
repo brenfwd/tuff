@@ -1489,15 +1489,3 @@ mod state;
 pub use state::*;
 mod transactions;
 pub use transactions::{Place, Reasons, Sim, mirror_of};
-
-/// Whether `now` still counts as the block a menu opened on: the anvil
-/// wears down through its three blocks while in use.
-fn same_menu_block(opened: Block, now: Block) -> bool {
-    let anvil = |block| {
-        matches!(
-            block,
-            Block::Anvil | Block::ChippedAnvil | Block::DamagedAnvil
-        )
-    };
-    opened == now || (anvil(opened) && anvil(now))
-}

@@ -476,6 +476,23 @@ fn by_region(chunks: Vec<ChunkPos>) -> HashMap<RegionPos, Vec<ChunkPos>> {
 }
 
 /// Squared distance from `point` to the block at `pos`.
+/// Whether `now` still counts as the block a menu opened on: the anvil
+/// wears down through its three blocks while in use.
+pub(crate) fn same_menu_block(
+    opened: tuff_vanilla_data::Block,
+    now: tuff_vanilla_data::Block,
+) -> bool {
+    let anvil = |block| {
+        matches!(
+            block,
+            tuff_vanilla_data::Block::Anvil
+                | tuff_vanilla_data::Block::ChippedAnvil
+                | tuff_vanilla_data::Block::DamagedAnvil
+        )
+    };
+    opened == now || (anvil(opened) && anvil(now))
+}
+
 pub fn block_distance_sq(pos: BlockPos, point: [f64; 3]) -> f64 {
     let min = [pos.x as f64, pos.y as f64, pos.z as f64];
     (0..3)

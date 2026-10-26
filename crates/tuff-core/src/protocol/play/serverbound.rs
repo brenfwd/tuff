@@ -1111,6 +1111,22 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+fn write_hashed_slot(w: &mut PacketWriter, slot: Option<&HashedSlot>) {
+    w.write_bool(slot.is_some());
+    let Some(slot) = slot else { return };
+    w.write_var_int(slot.item as i32);
+    w.write_var_int(slot.count);
+    w.write_var_int(slot.added.len() as i32);
+    for (kind, hash) in &slot.added {
+        w.write_var_int(*kind as i32);
+        w.write_int(*hash);
+    }
+    w.write_var_int(slot.removed.len() as i32);
+    for kind in &slot.removed {
+        w.write_var_int(*kind as i32);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1434,21 +1450,5 @@ mod tests {
             w.write_var_int(index);
             assert_eq!(Serverbound::decode(w.into_bytes()).is_ok(), ok);
         }
-    }
-}
-
-fn write_hashed_slot(w: &mut PacketWriter, slot: Option<&HashedSlot>) {
-    w.write_bool(slot.is_some());
-    let Some(slot) = slot else { return };
-    w.write_var_int(slot.item as i32);
-    w.write_var_int(slot.count);
-    w.write_var_int(slot.added.len() as i32);
-    for (kind, hash) in &slot.added {
-        w.write_var_int(*kind as i32);
-        w.write_int(*hash);
-    }
-    w.write_var_int(slot.removed.len() as i32);
-    for kind in &slot.removed {
-        w.write_var_int(*kind as i32);
     }
 }
