@@ -213,6 +213,7 @@ impl State {
             let uuids = entities.into_iter().map(uuid_of).collect();
             let states = env
                 .wait(crate::entities::states(env.shared.clone(), uuids))
+                .flatten()
                 .ok_or(WorldError::Unavailable)?;
             Ok(states
                 .into_iter()

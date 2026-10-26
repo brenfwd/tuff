@@ -74,6 +74,22 @@ pub enum Delivery {
     Gone,
 }
 
+/// What a target lookup found.
+pub enum Lookup {
+    Found(Target),
+    Gone,
+    Unknown,
+}
+
+impl Lookup {
+    pub fn found(self) -> Option<Target> {
+        match self {
+            Lookup::Found(target) => Some(target),
+            Lookup::Gone | Lookup::Unknown => None,
+        }
+    }
+}
+
 pub trait Host {
     fn spawn(&mut self, spec: &SpawnSpec) -> Result<Body, ControlError>;
     fn remove(&mut self, body: Body);
@@ -101,10 +117,11 @@ pub trait Host {
     /// Where an online player is, `None` when they are gone or in
     /// another dimension than the body.
     fn locate(&mut self, body: Body, target: &str) -> Option<Vec3>;
-    /// The player or entity with this uuid (32 hex digits), `None` when it
-    /// is gone or in another dimension than the body.
-    fn target(&mut self, _body: Body, _uuid: &str) -> Option<Target> {
-        None
+    /// The player or entity with this uuid (32 hex digits): `Gone` when it
+    /// is gone or in another dimension than the body, `Unknown` when the
+    /// server could not tell right now.
+    fn target(&mut self, _body: Body, _uuid: &str) -> Lookup {
+        Lookup::Gone
     }
     /// Swings at the target, hitting it when the server finds it in reach.
     fn attack(&mut self, _body: Body, _uuid: &str) {}
@@ -518,8 +535,12 @@ impl Bots {
             _ => None,
         };
         match bot.process.clone() {
-            Process::Shoot(spec) => {
-                let target = host.target(bot.body, &spec.target);
+            Process::Shoot(spec) => 'hold: {
+                let target = match host.target(bot.body, &spec.target) {
+                    Lookup::Found(target) => Some(target),
+                    Lookup::Gone => None,
+                    Lookup::Unknown => break 'hold,
+                };
                 let visible = match (&target, host.blocks(bot.body)) {
                     (Some(t), Some(world)) => line_of_sight(world, &seen.pos, t),
                     (Some(_), None) => true,
@@ -569,7 +590,7 @@ impl Bots {
                 let aim = match &spec.look_at {
                     None => None,
                     Some(LookTarget::Position(p)) => Some((p.clone(), still)),
-                    Some(LookTarget::Entity(uuid)) => host.target(bot.body, uuid).map(|t| {
+                    Some(LookTarget::Entity(uuid)) => host.target(bot.body, uuid).found().map(|t| {
                         let mut p = t.pos;
                         p.y += t.height * 0.6;
                         (p, still)
@@ -677,9 +698,13 @@ impl Bots {
                     Hands::Wait => {}
                 }
             }
-            Process::Attack(_) | Process::Shoot(_) | Process::UseItem(_) => {
+            Process::Attack(_) | Process::Shoot(_) | Process::UseItem(_) => 'hold: {
                 if let Some(spec) = fight.take() {
-                    let target = host.target(bot.body, &spec.target);
+                    let target = match host.target(bot.body, &spec.target) {
+                        Lookup::Found(target) => Some(target),
+                        Lookup::Gone => None,
+                        Lookup::Unknown => break 'hold,
+                    };
                     let visible = match (&target, host.blocks(bot.body)) {
                         (Some(t), Some(world)) => line_of_sight(world, &seen.pos, t),
                         (Some(_), None) => true,
