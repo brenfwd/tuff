@@ -386,7 +386,14 @@ impl PlayerSession {
         let Some(region) = self.region_of(BlockPos::containing(eye)) else {
             return false;
         };
-        self.hold_payment(off_hand, sequence);
+        let slot = self.inventory.hand_slot(off_hand);
+        let pay = if self.mode.abilities.instabuild {
+            Default::default()
+        } else {
+            ItemStack::take_from(self.inventory.slot_mut(slot), 1)
+                .map(|one| crate::world::messages::BucketPay::new(slot, one))
+                .unwrap_or_default()
+        };
         region
             .request(RegionRequest::PlaceBoat(
                 crate::world::messages::BoatPlace {
@@ -400,6 +407,7 @@ impl PlayerSession {
                     name,
                     sequence,
                     off_hand,
+                    pay,
                 },
             ))
             .await;

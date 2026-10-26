@@ -41,8 +41,8 @@ mod mode;
 mod motion;
 mod net;
 pub use net::TickThrottler;
+mod click_costs;
 mod packets;
-mod paid_entities;
 mod persist;
 mod place_offer;
 mod pose;
@@ -1188,6 +1188,10 @@ impl PlayerSession {
         client_roots.mark_unchanged();
         while !self.disconnected {
             self.settle_save_barrier().await;
+            if let Some(packet) = self.next_held_use() {
+                self.on_packet(packet).await;
+                continue;
+            }
             if let Some(next) = self.next_deferred() {
                 match next {
                     menus::Deferred::Packet(packet) => self.on_packet(packet).await,
@@ -1230,7 +1234,6 @@ impl PlayerSession {
     pub async fn leave(&mut self) {
         self.progress.stats.award_custom(CustomStat::LeaveGame, 1);
         self.disconnected = true;
-        self.return_payments().await;
         self.close_menu(false).await;
         self.abandon_pending().await;
         self.finish_menu_close().await;

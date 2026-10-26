@@ -53,6 +53,7 @@ mod gameplay_properties;
 mod gamerule_time;
 mod gametest_server;
 mod http_wiring;
+mod in_flight_payments;
 mod inert_core;
 mod item_conservation;
 mod menu_close_dupes;
