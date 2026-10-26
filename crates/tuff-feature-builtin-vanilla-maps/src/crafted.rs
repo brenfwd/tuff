@@ -44,6 +44,10 @@ pub fn cartography_result<M: tuff_item::item::Mode>(
     data: &MapData,
 ) -> Option<ItemStack> {
     match additional.item() {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "crafting-style result (cartography_result)"
+        )]
         Item::Paper
             if tuff_datapack::tags::is(
                 tuff_vanilla_data::tag::item::key::EXTENDABLE_MAPS,
@@ -56,10 +60,18 @@ pub fn cartography_result<M: tuff_item::item::Mode>(
                 Derivation::ZoomOut,
             ))
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "crafting-style result (cartography_result)"
+        )]
         Item::GlassPane if !data.locked => Some(with_post_processing(
             ItemStack::mint_like(map, 1, MintReason::Crafting),
             Derivation::Lock,
         )),
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "crafting-style result (cartography_result)"
+        )]
         Item::Map => Some(ItemStack::mint_like(map, 2, MintReason::Crafting)),
         _ => None,
     }

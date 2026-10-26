@@ -309,6 +309,10 @@ pub struct Body<'a> {
 }
 
 /// The lead stack an entity drops when its lead comes off.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "entity drops or fires an item outside loot tables (lead)"
+)]
 pub fn lead() -> ItemStack {
     ItemStack::mint(Item::Lead, 1, MintReason::EntityDrop)
 }

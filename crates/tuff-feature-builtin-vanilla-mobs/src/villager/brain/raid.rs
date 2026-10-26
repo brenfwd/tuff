@@ -35,6 +35,10 @@ fn has_no_blocks_above(core: &MobCore, target: BlockPos, cx: &TickContext) -> bo
 fn launch_firework(core: &MobCore, cx: &mut TickContext) {
     let dyes = DyeColor::ALL;
     let color = dyes[cx.rng.gen_range(0..dyes.len())].firework_color();
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (launch_firework)"
+    )]
     let mut rocket = ItemStack::mint(Item::FireworkRocket, 1, MintReason::Spawn);
     rocket.components.fireworks = Some(Box::new(Fireworks {
         flight_duration: cx.rng.gen_range(0..3),

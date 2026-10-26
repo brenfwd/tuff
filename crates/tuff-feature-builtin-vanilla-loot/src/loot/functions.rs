@@ -130,6 +130,7 @@ fn modifier_functions(modifier: &Value) -> Vec<LootFunction> {
     parse_item_modifier(modifier, &Predicates::vanilla()).unwrap_or_default()
 }
 
+#[expect(clippy::disallowed_methods, reason = "loot table output (item_stacks)")]
 pub(super) fn item_stacks(tags: &[Tag]) -> Vec<ItemStack> {
     tags.iter()
         .filter_map(|tag| ItemStack::mint_from_nbt(tag.as_compound()?, MintReason::Loot))

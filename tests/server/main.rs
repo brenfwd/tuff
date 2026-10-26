@@ -8,15 +8,14 @@ mod common;
 
 #[path = "../../benches/common/console.rs"]
 mod console;
-#[allow(dead_code)]
+#[expect(dead_code, reason = "helpers used by only some targets")]
 #[path = "../../benches/stress/options.rs"]
 mod options;
 #[path = "../../benches/common/servers.rs"]
 mod servers;
-#[allow(dead_code)]
+#[expect(dead_code, reason = "helpers used by only some targets")]
 #[path = "../../benches/common/vanilla.rs"]
 mod vanilla;
-#[allow(dead_code)]
 #[path = "../../benches/common/watchers.rs"]
 mod watchers;
 

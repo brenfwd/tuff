@@ -46,7 +46,7 @@ pub fn place(player: &PlayerHandle, target: BlockPos, item: Item, sequence: i32)
 /// does for blocks that keep one (a campfire, a pot, a composter).
 pub fn offering(mut place: Place) -> Place {
     if let Some(item) = place.held {
-        place.offer = tuff_core::world::messages::PlaceOffer::new(
+        let minted = tuff_core::world::messages::PlaceOffer::new(
             false,
             vec![(
                 place.hand_slot,
@@ -58,6 +58,7 @@ pub fn offering(mut place: Place) -> Place {
                 ),
             )],
         );
+        place.offer = minted;
     }
     place
 }

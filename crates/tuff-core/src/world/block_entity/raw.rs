@@ -431,6 +431,10 @@ pub fn contents(kind: BlockEntityType, nbt: &Compound) -> Vec<ItemStack> {
         let Some(Tag::List(entries)) = get(kind, nbt, field) else {
             continue;
         };
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "decoding a saved stack (contents)"
+        )]
         stacks.extend(entries.iter().filter_map(|entry| {
             ItemStack::from_storage(entry.as_compound()?.get_compound("item")?)
         }));
@@ -453,6 +457,10 @@ pub fn held_drop(
     let (x, y, z) = (pos.x as f64 + 0.5, pos.y as f64, pos.z as f64 + 0.5);
     let (stack, position) = match kind {
         BlockEntityType::Jukebox => {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "decoding a saved stack (held_drop)"
+            )]
             let stack = ItemStack::from_storage(nbt.get_compound("RecordItem")?)?;
             let dx = (rng.r#gen::<f32>() - 0.5) * 0.7;
             let dz = (rng.r#gen::<f32>() - 0.5) * 0.7;
@@ -462,6 +470,10 @@ pub fn held_drop(
             if state.get("has_book") != Some("true") {
                 return None;
             }
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "decoding a saved stack (held_drop)"
+            )]
             let stack = ItemStack::from_storage(nbt.get_compound("Book")?)?;
             let (sx, sz) = match state.get("facing")? {
                 "north" => (0.0, -0.25),

@@ -355,7 +355,10 @@ impl PlayerSession {
         true
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn place_request(
         &self,
         off_hand: bool,
@@ -822,6 +825,10 @@ impl PlayerSession {
             return;
         }
         if let Some(item) = picked_entity_item(kind) {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item turning into another (pick_entity)"
+            )]
             self.try_pick(ItemStack::mint(item, 1, MintReason::Transform));
         }
     }
@@ -884,6 +891,10 @@ impl PlayerSession {
         }
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "creative inventory, pick-block or creative copy (framed_item)"
+    )]
     async fn framed_item(&mut self, entity: i32, chunk: ChunkPos) -> Option<ItemStack> {
         let region = self.region(chunk.region()).await?;
         let (reply, answer) = tokio::sync::oneshot::channel();
@@ -922,6 +933,10 @@ impl PlayerSession {
                     if let Some(old) = self.inventory.slot_mut(slot).take() {
                         old.burn(BurnReason::Transform);
                     }
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "item turning into another (apply_hand_effect)"
+                    )]
                     self.inventory.set_slot(
                         slot,
                         Some(ItemStack::mint(result, 1, MintReason::Transform)),
@@ -929,6 +944,10 @@ impl PlayerSession {
                 }
             }
             HandEffect::Exchange(result) => {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (apply_hand_effect)"
+                )]
                 self.apply_exchange(
                     off_hand,
                     creative,
@@ -1332,6 +1351,10 @@ pub fn distance_sq_to_block(point: [f64; 3], block: BlockPos) -> f64 {
 /// block always carries over (banner patterns, pot sherds, statue pose,
 /// light level) and, when `include_data`, the block entity's data and
 /// components.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pick-block stack for a block, creative inventory (picked_block_stack)"
+)]
 pub fn picked_block_stack(
     state: tuff_vanilla_data::BlockState,
     saved: Option<&tuff_nbt::Compound>,

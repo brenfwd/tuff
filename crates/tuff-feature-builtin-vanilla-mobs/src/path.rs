@@ -1150,7 +1150,10 @@ impl<'a, 'b> Evaluator<'a, 'b> {
         node
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn accepted(
         &mut self,
         x: i32,
@@ -1202,7 +1205,10 @@ impl<'a, 'b> Evaluator<'a, 'b> {
         best
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn jump_on(
         &mut self,
         x: i32,

@@ -114,6 +114,10 @@ impl Arrow {
     /// A plain arrow minted for a shot that spends no item (mob ammo),
     /// leaving `shooter`'s eyes (0.1 below them), owned by it.
     pub fn new(id: i32, position: [f64; 3], velocity: [f64; 3], owner: Owner) -> Self {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity drops or fires an item outside loot tables (new)"
+        )]
         let item = ItemStack::mint(Item::Arrow, 1, MintReason::EntityDrop);
         Self::of(EntityType::Arrow, item, id, position, velocity, owner)
     }
@@ -946,7 +950,12 @@ impl RegionEntity for Arrow {
                     )])));
                     std::mem::replace(&mut self.item, ItemStack::empty())
                         .burn(tuff_item::item::BurnReason::Transform);
-                    self.item = ItemStack::mint(Item::Arrow, 1, MintReason::Transform);
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "item turning into another (tick)"
+                    )]
+                    let minted = ItemStack::mint(Item::Arrow, 1, MintReason::Transform);
+                    self.item = minted;
                     self.changed.push(DATA_COLOR);
                 }
                 let kept = self.pickup == Pickup::Allowed
@@ -995,6 +1004,10 @@ impl RegionEntity for Arrow {
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
     let position = base.position;
     let velocity = base.velocity;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "decoding a saved stack and entity drops or fires an item outside loot tables (load)"
+    )]
     let item = take(nbt, "item", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     })

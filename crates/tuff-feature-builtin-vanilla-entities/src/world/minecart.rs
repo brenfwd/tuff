@@ -453,6 +453,10 @@ impl Minecart {
         })
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "entity drops or fires an item outside loot tables (drop_item)"
+    )]
     fn drop_item(&self) -> Option<ItemStack> {
         Some(ItemStack::mint(
             minecart_item(self.base.kind)?,

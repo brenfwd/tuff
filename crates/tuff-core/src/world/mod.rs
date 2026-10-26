@@ -385,6 +385,10 @@ impl Shared {
     }
 
     /// Records `uuid` as living; false if some entity already holds it.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "claims an entity UUID on behalf of the region caller (claim_entity_uuid)"
+    )]
     pub fn claim_entity_uuid(&self, uuid: u128) -> Option<entity_claim::EntityClaim> {
         self.entity_uuids.claim(uuid)
     }

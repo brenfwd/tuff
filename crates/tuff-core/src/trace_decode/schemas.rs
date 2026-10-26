@@ -171,7 +171,7 @@ pub(super) const CONFIGURATION: &[(p::configuration::Clientbound, Fields)] = {
 };
 
 /// Never sent by the server.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(not(test), expect(dead_code, reason = "read only by the schema tests"))]
 pub(super) const CONFIGURATION_SKIPPED: &[p::configuration::Clientbound] = {
     use p::configuration::Clientbound as C;
     &[
@@ -962,7 +962,7 @@ pub(super) const PLAY: &[(p::play::Clientbound, Fields)] = {
 };
 
 /// Never sent by the server.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(not(test), expect(dead_code, reason = "read only by the schema tests"))]
 pub(super) const PLAY_SKIPPED: &[p::play::Clientbound] = {
     use p::play::Clientbound as C;
     &[

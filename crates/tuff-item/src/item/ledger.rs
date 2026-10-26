@@ -6,6 +6,11 @@
 //! burns its contents, a part split off gets its own minted copy of them,
 //! and a stack merged away or emptied takes its copy with it.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "the ledger's own doors are built on each other"
+)]
+
 use std::fmt;
 use std::sync::LazyLock;
 
@@ -1027,6 +1032,7 @@ mod tests {
     /// each check is a lower bound.
     #[tuff_core::watchdog]
     #[test]
+    #[cfg(debug_assertions)]
     fn doors_count_nested_stacks_once_per_stack() {
         let before = conservation::totals();
         let shulkers = ItemStack::mint_like(&shulker_holding(5), 2, MintReason::Test);

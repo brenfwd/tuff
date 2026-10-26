@@ -613,6 +613,10 @@ impl Boat {
 
     fn drop_item(&self) -> Option<ItemStack> {
         let item = Item::of_boat(self.base.kind)?;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity drops or fires an item outside loot tables (drop_item)"
+        )]
         let mut stack = ItemStack::mint(item, 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base

@@ -53,6 +53,10 @@ pub fn enchant<S: AsRef<str>>(mut stack: ItemStack, chosen: &[(S, i32)]) -> Item
     }
     if stack.item == Item::Book {
         let count = stack.count;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item turning into another (enchant)"
+        )]
         std::mem::replace(
             &mut stack,
             ItemStack::mint(Item::EnchantedBook, count, MintReason::Transform),

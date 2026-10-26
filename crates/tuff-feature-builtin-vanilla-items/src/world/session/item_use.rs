@@ -35,7 +35,10 @@ const BUNDLE_USE_TICKS: u32 = 200;
 const BUNDLE_FIRST_THROW_TICKS: u32 = 10;
 const BUNDLE_THROW_INTERVAL: u32 = 2;
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "crate-internal trait whose futures are awaited in place"
+)]
 pub trait ItemUseExt {
     /// A firework rocket used while gliding: consumed, and its boost
     /// applied to the tracked glide velocity for its flight duration.
@@ -305,6 +308,10 @@ impl ItemUseExt for PlayerSession {
             let hand = self.inventory.slot_mut(hand_slot).take();
             let worn = self.inventory.slot_mut(slot).take();
             let to_hand = match (worn, &hand) {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "creative inventory, pick-block or creative copy (swap_equipment)"
+                )]
                 (None, Some(hand)) if creative => Some(ItemStack::mint_like(
                     hand,
                     hand.count(),
@@ -454,6 +461,10 @@ impl ItemUseExt for PlayerSession {
         };
         let projectile = match taken {
             Some(taken) => taken.keep(1, tuff_item::item::BurnReason::Consumed),
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "creative inventory, pick-block or creative copy (release_bow)"
+            )]
             None => ItemStack::mint_like(&ammo, 1, MintReason::Creative),
         };
         let velocity = self.shot_velocity(power * 3.0);
@@ -1195,6 +1206,10 @@ fn goat_horn_sound(instrument: &str) -> Option<SoundEvent> {
 
 /// One item from the hand for a projectile: taken from the held stack, or
 /// minted for a creative player, whose stack stays.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "creative inventory, pick-block or creative copy (use_one)"
+)]
 pub(super) fn use_one(session: &mut PlayerSession, off_hand: bool) -> Option<ItemStack> {
     if session.mode.abilities.instabuild {
         let held = session.inventory.hand(off_hand)?;

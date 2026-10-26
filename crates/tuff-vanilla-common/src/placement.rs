@@ -28,7 +28,10 @@ pub fn places_on_water(item: Item) -> bool {
 }
 
 /// A player's click with `item`, with where the block goes decided.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 pub fn context(
     clicked: BlockPos,
     face: Facing,

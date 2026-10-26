@@ -756,6 +756,10 @@ fn throw_snowball(core: &MobCore, target: &TargetView, cx: &mut TickContext) {
     let velocity = shot_velocity([dx, dy, dz], 1.6, 12.0, cx.rng);
     let id = cx.shared.next_entity_id();
     let owner = Owner::of(Culprit::entity(&core.base), None);
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (throw_snowball)"
+    )]
     let item = ItemStack::mint(Item::Snowball, 1, MintReason::Spawn);
     let shot = Shot::Thrown {
         kind: EntityType::Snowball,
@@ -1221,6 +1225,10 @@ impl Species for CopperGolem {
                 self.set_oxidation(core, previous);
             }
             Notice::Gifted(item) if core.equipment.get(EquipmentSlot::Saddle).is_none() => {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (heard)"
+                )]
                 core.equipment.set(
                     EquipmentSlot::Saddle,
                     Some(ItemStack::mint(item, 1, MintReason::Spawn)),

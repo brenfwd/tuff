@@ -16,7 +16,10 @@ use tuff_world_model::chunk::{ChunkShape, is_air};
 pub trait BlockRules: Send + Sync {
     /// A player's click with `item` on `clicked`, with where the block goes
     /// decided.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn context(
         &self,
         clicked: BlockPos,

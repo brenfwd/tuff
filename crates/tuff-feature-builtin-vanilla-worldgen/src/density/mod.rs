@@ -31,7 +31,6 @@ pub struct DensityVolume {
 }
 
 impl DensityVolume {
-    #[allow(clippy::too_many_arguments)]
     pub fn stepped(size: [i32; 3], min: [i32; 3], step: [i32; 3]) -> Self {
         assert!(size.iter().all(|&s| s > 0), "volume size must be positive");
         assert!(step.iter().all(|&s| s > 0), "volume step must be positive");

@@ -367,6 +367,7 @@ impl PlayerRecord {
     pub fn decode(raw: Compound, defaults: &PlayerState) -> (Self, PlayerState) {
         let slots = stored_slots(&raw);
         let mut ender_items = Vec::new();
+        #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (decode)")]
         for entry in raw.get_list("EnderItems").unwrap_or(&[]) {
             let Some(entry) = entry.as_compound() else {
                 continue;
@@ -623,6 +624,10 @@ impl PlayerRecord {
 /// The survival inventory slots `raw` stores, in window numbering.
 fn stored_slots(raw: &Compound) -> Vec<(usize, ItemStack)> {
     let mut slots = Vec::new();
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "decoding a saved stack (stored_slots)"
+    )]
     let mut take = |window: usize, nbt: &Compound| {
         if let Some(stack) = ItemStack::from_storage(nbt) {
             slots.push((window, stack));

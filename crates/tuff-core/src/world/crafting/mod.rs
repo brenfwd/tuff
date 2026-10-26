@@ -242,6 +242,10 @@ impl<'a> CraftingInput<'a> {
     }
 
     /// Each cell's item crafting remainder (a bucket for a milk bucket).
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "crafting-style result (crafting_remainders)"
+    )]
     pub fn crafting_remainders(&self) -> Vec<Option<ItemStack>> {
         self.items
             .iter()
@@ -294,6 +298,10 @@ impl Placement {
 }
 
 /// The stack a data recipe's result describes.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "crafting-style result (result_stack)"
+)]
 pub fn result_stack(result: &RecipeResult) -> ItemStack {
     let count = result.count.clamp(1, MAX_RESULT_COUNT) as u8;
     ItemStack::mint_with(
@@ -336,6 +344,10 @@ pub fn with_input_components(
         ),
         None => (input.item(), 1 + extra_count, Components::default()),
     };
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "crafting-style result (with_input_components)"
+    )]
     let mut stack = ItemStack::mint_with(
         item,
         count.clamp(1, MAX_RESULT_COUNT) as u8,
@@ -348,6 +360,10 @@ pub fn with_input_components(
         if let Some(id) = key.strip_prefix('!') {
             components.removed.push(id.to_owned());
         } else {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "crafting-style result (with_input_components)"
+            )]
             let mut patch =
                 Components::from_nbt(&Compound::new().with(key, value)).mint(MintReason::Crafting);
             let other = std::mem::take(&mut patch.other);

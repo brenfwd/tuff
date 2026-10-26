@@ -226,7 +226,10 @@ impl std::ops::DerefMut for Cursor {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 pub fn update_cursor(
     cursor: &mut SculkCursor,
     level: &mut Region,
@@ -251,7 +254,10 @@ pub fn update_cursor(
 }
 
 impl Cursor {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn update(
         &mut self,
         level: &mut Region,
@@ -349,7 +355,10 @@ impl Cursor {
             > 0
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn attempt_use_charge(
         &self,
         level: &mut Region,

@@ -50,6 +50,10 @@ pub struct CustomItemDef {
     pub behavior: Option<ItemBehavior>,
     /// Whether `custom_data` beyond the identity stays on the server.
     pub private_data: bool,
+    /// Whether the item's `use_on_block` places a block with
+    /// `RegionWorld::place_from_click`: a click then carries one item that
+    /// the block spends.
+    pub places_blocks: bool,
 }
 
 impl CustomItemDef {
@@ -62,6 +66,7 @@ impl CustomItemDef {
             inherit_behavior: false,
             behavior: None,
             private_data: false,
+            places_blocks: false,
         }
     }
 
@@ -77,6 +82,10 @@ impl CustomItemDef {
     }
 
     /// A stack of this item.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "/give style stack of a custom item (stack)"
+    )]
     pub fn stack(&self, count: u8) -> ItemStack {
         ItemStack::mint_with(self.base, count, &self.components(), MintReason::Command)
     }

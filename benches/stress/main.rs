@@ -36,6 +36,13 @@ mod alloc;
 #[path = "../common/console.rs"]
 mod console;
 mod fleet;
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(
+        dead_code,
+        reason = "only the macOS atos path and the bench_memory test call the symbol reader"
+    )
+)]
 mod heap;
 mod linger;
 #[path = "../common/memory.rs"]
@@ -581,7 +588,10 @@ fn setbacks(bots: &BotTotals) -> Value {
     setbacks
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 fn report(
     options: &Options,
     (summoned, failed): (usize, usize),

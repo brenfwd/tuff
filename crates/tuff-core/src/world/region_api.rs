@@ -584,6 +584,10 @@ pub trait RegionWorld: GrowthLevel {
     fn remove_entity_intact(&mut self, id: i32) -> Option<TrackedEntity>;
     /// Takes the entity out of the world as data, to be held by a hive, a
     /// shoulder or any other holder; its items live on inside the data.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "entity taken out of the world as saved data (take_entity)"
+    )]
     fn take_entity(&mut self, id: i32) -> Option<crate::world::stored_entity::StoredEntity> {
         let mut tracked = self.remove_entity_intact(id)?;
         let claim = tracked.entity.base_mut().claim.take();
@@ -665,6 +669,11 @@ pub trait RegionWorld: GrowthLevel {
     /// Sets a block with full updates, forwarding it to the owning
     /// neighbour when it is not here.
     fn put_block(&mut self, pos: BlockPos, state: BlockState);
+    /// Writes `state` at `pos` for the block a custom item placing blocks
+    /// pays for with the click's one item (a creative player pays
+    /// nothing). False, and nothing written, when the click carries no
+    /// payment.
+    fn place_from_click(&mut self, place: &Place, pos: BlockPos, state: BlockState) -> bool;
     /// Places `state` for the block item `stack` at `pos` as a dispenser
     /// does: the item's components go to the block entity, the place sound
     /// plays. False when it is not this region's or a player is in the way.

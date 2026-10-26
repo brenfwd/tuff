@@ -28,7 +28,10 @@ struct PortalProcess {
     inside_this_tick: bool,
 }
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "crate-internal trait whose futures are awaited in place"
+)]
 pub trait PortalExt {
     /// The first exit from the end: the player leaves the world and the
     /// client rolls the credits, then asks to respawn.

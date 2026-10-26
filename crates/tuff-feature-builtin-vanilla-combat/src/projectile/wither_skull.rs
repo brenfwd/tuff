@@ -202,7 +202,6 @@ impl RegionEntity for WitherSkull {
 
 /// One tick of a wither skull's flight, like [`super::fireball::fly`] but
 /// with a caller-chosen inertia (dangerous skulls drift less).
-#[allow(clippy::type_complexity)]
 fn fly(
     base: &mut EntityBase,
     owner: &mut Owner,

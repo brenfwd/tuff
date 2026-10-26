@@ -18,7 +18,7 @@ use crate::names::str_literal;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "helpers used by only some targets")]
 struct Variant {
     /// A cow/pig/chicken/cat/frog-shaped variant names one texture per age.
     #[serde(default)]

@@ -221,6 +221,10 @@ impl Occupant {
     /// Reads an occupant out of the hive's saved list entry.
     fn from_nbt(mut raw: Compound) -> Result<Self, Compound> {
         match raw.remove("entity_data") {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "entity read back from a save (from_nbt)"
+            )]
             Some(Tag::Compound(data)) => Ok(Self {
                 stored: StoredEntity::from_storage(data),
                 stay: raw,
@@ -463,6 +467,10 @@ pub fn harvest(
                 0.2,
                 world.rng().r#gen::<f64>() * 0.2 - 0.1,
             ];
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (harvest)"
+            )]
             world.spawn_item_at(
                 ItemStack::mint(Item::Honeycomb, 1, MintReason::Spawn),
                 at,
@@ -500,6 +508,10 @@ pub fn dispensed_at(
         return None;
     }
     let state = world.block(target).filter(|s| full(*s))?;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (dispensed_at)"
+    )]
     let outcome = if item == Item::Shears {
         world.play_sound(SoundEvent::BlockBeehiveShear, target, 1.0, 1.0, None);
         let at = target.center();
@@ -509,6 +521,10 @@ pub fn dispensed_at(
                 0.2,
                 world.rng().r#gen::<f64>() * 0.2 - 0.1,
             ];
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (dispensed_at)"
+            )]
             world.spawn_item_at(
                 ItemStack::mint(Item::Honeycomb, 1, MintReason::Spawn),
                 at,

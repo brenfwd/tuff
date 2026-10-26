@@ -600,6 +600,10 @@ impl PlayerSession {
             let Some(slot) = self.game_slot(*id) else {
                 continue;
             };
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "command-granted stack (set_game_slots)"
+            )]
             let mint = || ItemStack::mint_like(stack, stack.count(), MintReason::Command);
             let value = match mode {
                 SlotFill::Fill => Some(Some(mint())),
@@ -700,6 +704,10 @@ impl PlayerSession {
         while remaining > 0 {
             let size = remaining.min(max);
             remaining -= size;
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "/give splits the granted items into stacks (give_items)"
+            )]
             parts.push(ItemStack::mint_like(template, size as u8, reason));
         }
         let fake = ItemSnapshot::of(template).with_count(1);

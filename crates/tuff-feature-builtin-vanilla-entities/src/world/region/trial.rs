@@ -992,6 +992,10 @@ impl Tick<'_> {
         let id = self.world.shared().next_entity_id();
         let delay = self.world.rng().gen_range(60..=120);
         let uuid = self.world.rng().r#gen();
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "loot table output (spawn_item_spawner)"
+        )]
         let mut entity = OminousItemSpawner::new(
             id,
             uuid,

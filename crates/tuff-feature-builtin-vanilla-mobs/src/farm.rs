@@ -354,6 +354,10 @@ impl Species for Mooshroom {
         if stack.item() == Item::Bowl {
             let (sound, result) = match self.stew.take() {
                 Some(effects) => {
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "item a mob spawns, wears or throws (interact)"
+                    )]
                     let mut stew = ItemStack::mint(Item::SuspiciousStew, 1, MintReason::Spawn);
                     stew.components.suspicious_stew_effects = Some(effects);
                     (
@@ -675,6 +679,10 @@ fn mixed_color(recipes: &RecipeSet, a: DyeColor, b: DyeColor) -> Option<DyeColor
     };
     for first in dyes(a) {
         for second in dyes(b) {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "preview stand-in stack for a slot or click, burned as Preview (mixed_color)"
+            )]
             let probes = [
                 ItemStack::mint(first, 1, MintReason::Preview),
                 ItemStack::mint(second, 1, MintReason::Preview),

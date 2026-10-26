@@ -825,7 +825,9 @@ async fn a_plugin_glides_an_entity_and_reads_its_state() {
     let uuid = cows(&region).await[0].uuid;
 
     let unknown = uuid ^ 1;
-    let before = entities::states(world.shared.clone(), vec![uuid, unknown]).await;
+    let before = entities::states(world.shared.clone(), vec![uuid, unknown])
+        .await
+        .unwrap();
     assert!(before[0].is_some() && before[1].is_none());
     let from = before[0].unwrap().position;
 
@@ -841,6 +843,7 @@ async fn a_plugin_glides_an_entity_and_reads_its_state() {
     .await;
     let after = entities::states(world.shared.clone(), vec![uuid])
         .await
+        .unwrap()
         .remove(0)
         .unwrap();
     assert_eq!(after.position, to);

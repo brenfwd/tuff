@@ -2438,7 +2438,10 @@ async fn command_block(
     .await;
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 async fn command_block_in(
     b: &Bench,
     region: &RegionHandle,

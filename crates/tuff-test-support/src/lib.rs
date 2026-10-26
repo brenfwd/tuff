@@ -1,6 +1,11 @@
 //! Tests of the region actors and their manager, driven through the same
 //! channels player sessions use.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "test support crate holds test fixtures only"
+)]
+
 pub use std::collections::HashSet;
 pub use std::path::Path;
 pub use std::sync::Arc;

@@ -91,6 +91,7 @@ pub fn compute(
     let Some(input) = input else {
         return AnvilOutcome::NOTHING;
     };
+    #[expect(clippy::disallowed_methods, reason = "crafting-style result (compute)")]
     let mut result = Candidate(Some(ItemStack::mint_like(
         input,
         input.count(),

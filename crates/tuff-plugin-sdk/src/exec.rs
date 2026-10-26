@@ -263,7 +263,10 @@ pub(crate) struct Call {
     kind: Kind,
     handle: u32,
     done: bool,
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        expect(dead_code, reason = "used only by the wasm guest build")
+    )]
     cancel: Cancel,
 }
 

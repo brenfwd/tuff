@@ -15,7 +15,10 @@ use crate::world::region::portals::PortalQuery;
 use tuff_world_model::chunk::Chunk;
 
 /// A source of region handles for a portal search.
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "crate-internal trait whose futures are awaited in place"
+)]
 pub trait Regions {
     async fn region_in(
         &mut self,

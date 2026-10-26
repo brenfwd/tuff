@@ -75,6 +75,26 @@ impl CustomItemBehavior for Recorder {
     }
 }
 
+struct Builder;
+
+impl CustomItemBehavior for Builder {
+    fn use_on_block(
+        &self,
+        world: &mut dyn RegionWorld,
+        place: &Place,
+        _state: BlockState,
+    ) -> Option<ActionOutcome> {
+        let at = BlockPos::new(place.target.x, place.target.y + 1, place.target.z);
+        world
+            .place_from_click(place, at, Block::GoldBlock.default_state())
+            .then_some(ActionOutcome::Used {
+                off_hand: place.off_hand,
+                item: Item::Stick,
+                effect: HandEffect::Spent(None),
+            })
+    }
+}
+
 struct Items(Log);
 
 const CHARM: &str = "test:apple_charm";
@@ -82,6 +102,7 @@ const SWEET: &str = "test:sweet_apple";
 const WAND: &str = "test:wand";
 const DUD: &str = "test:dud";
 const LIGHTER: &str = "test:lighter";
+const BUILDER: &str = "test:builder";
 
 impl Feature for Items {
     fn id(&self) -> &'static str {
@@ -119,6 +140,12 @@ impl Feature for Items {
                 .with_behavior(recorder("wand", Handled::Consumed)),
         )?;
         custom.register_item(self.id(), CustomItemDef::new(DUD, Item::FlintAndSteel))?;
+        custom.register_item(
+            self.id(),
+            CustomItemDef::new(BUILDER, Item::Stick)
+                .placing_blocks()
+                .with_behavior(Arc::new(Builder)),
+        )?;
         custom.register_item(
             self.id(),
             CustomItemDef::new(LIGHTER, Item::FlintAndSteel).inheriting(),
@@ -299,6 +326,60 @@ async fn block_clicks_go_to_the_behaviour_and_hide_the_base_item() {
         block_at(&region, lit_tnt).await.map(|s| s.block()),
         Some(Block::Air),
         "an inheriting one lights TNT"
+    );
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_custom_item_placing_a_block_spends_its_one_item_exactly_once() {
+    let dir = TestDir::new();
+    let (world, _log) = start(&dir);
+    let chunk = ChunkPos::new(0, 0);
+    let region = world.region(chunk.region()).await;
+    let (player, mut events) = PlayerHandle::new(100);
+    subscribe(&region, &player, &mut events, &[chunk]).await;
+    let stone = BlockPos::new(4, SKY, 4);
+    place_blocks(&world, &region, vec![(stone, Block::Stone.default_state())]).await;
+    let one = stack(&world, BUILDER, 1);
+    let mut click = place(&player, stone, Item::Stick, 1);
+    click.components = tuff_item::item::ComponentsSnapshot::of(&one.components);
+    click.offer = tuff_core::world::messages::PlaceOffer::paying(false, 0, one);
+    region.request(RegionRequest::Place(click)).await;
+    assert!(matches!(
+        result(&mut events, 1).await,
+        ActionOutcome::Used {
+            effect: HandEffect::Spent(None),
+            ..
+        }
+    ));
+    assert_eq!(
+        block_at(&region, BlockPos::new(4, SKY + 1, 4))
+            .await
+            .map(|s| s.block()),
+        Some(Block::GoldBlock)
+    );
+    world.ticks(2).await;
+    while let Ok(event) = events.try_recv() {
+        assert!(
+            !matches!(event, PlayerEvent::HandReturned { .. }),
+            "the item that paid for the block came back"
+        );
+    }
+
+    let other = BlockPos::new(6, SKY, 6);
+    place_blocks(&world, &region, vec![(other, Block::Stone.default_state())]).await;
+    let two = stack(&world, BUILDER, 1);
+    let mut free = place(&player, other, Item::Stick, 2);
+    free.components = tuff_item::item::ComponentsSnapshot::of(&two.components);
+    region.request(RegionRequest::Place(free)).await;
+    let _ = result(&mut events, 2).await;
+    assert_eq!(
+        block_at(&region, BlockPos::new(6, SKY + 1, 6))
+            .await
+            .map(|s| s.block()),
+        Some(Block::Air),
+        "a click carrying no payment writes no block"
     );
     world.shutdown().await;
 }

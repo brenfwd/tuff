@@ -748,6 +748,10 @@ impl RegionActor {
         } else if let Some(components) = creative_drop
             && let Some(item) = state.block().item()
         {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "creative inventory, pick-block or creative copy (break_block)"
+            )]
             let stack = ItemStack::mint_with(item, 1, &components, MintReason::Creative);
             self.drop_items(pos, vec![stack]);
         }
@@ -1264,9 +1268,17 @@ impl RegionActor {
             context.item.bucket(),
             Some(tuff_vanilla_data::item::Bucket::Solid { .. })
         );
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "block placement takes the stack the player placed from (place)"
+        )]
         let paid = (!solid_bucket_item)
             .then(|| place.offer.take_placing())
             .flatten();
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "block placement writes the block through the item placement door (place)"
+        )]
         self.place_from_item(at, state, paid);
         self.apply_placed_item(at, &place);
         self.edit_placed_sign(at, &place.player);
@@ -1317,17 +1329,29 @@ impl RegionActor {
     /// keep back to the player first.
     pub(crate) fn answer_place(&mut self, place: &Place, outcome: ActionOutcome) {
         match &outcome {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "answer_place takes the stack offered for a placement"
+            )]
             ActionOutcome::Placed { .. } => {
                 if let Some(paid) = place.offer.take_placing() {
                     paid.burn(tuff_item::item::BurnReason::Consumed);
                 }
             }
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "answer_place takes the stack offered for a placement"
+            )]
             ActionOutcome::Used {
                 effect: crate::world::messages::HandEffect::Emptied(result),
                 ..
             } => {
                 if let Some(paid) = place.offer.take_placing() {
                     paid.burn(tuff_item::item::BurnReason::Transform);
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "item turning into another (answer_place)"
+                    )]
                     place.offer.give(
                         place.hand_slot,
                         tuff_item::item::ItemStack::mint(

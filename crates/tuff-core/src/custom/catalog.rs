@@ -82,6 +82,10 @@ impl Catalog {
             NEXT_SLOT if self.page + 1 < content.catalog_pages(PAGE_SIZE) => {
                 CatalogClick::Page(self.page + 1)
             }
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "creative catalog hands out a copy of the clicked custom item (click)"
+            )]
             s if usize::from(s) < PAGE_SIZE => content
                 .catalog_page(self.page, PAGE_SIZE)
                 .into_iter()

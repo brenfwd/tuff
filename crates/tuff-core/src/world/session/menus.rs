@@ -36,6 +36,10 @@ impl PlayerSession {
         }
         let stack = match stack {
             CreativeSlot::Empty => None,
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "creative inventory, pick-block or creative copy (set_creative_slot)"
+            )]
             CreativeSlot::Stack(shown) => Some(ItemStack::mint_like(
                 &shown,
                 shown.count(),

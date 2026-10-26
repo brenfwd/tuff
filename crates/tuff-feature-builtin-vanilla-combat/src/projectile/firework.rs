@@ -384,6 +384,10 @@ impl RegionEntity for FireworkRocket {
 pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity>> {
     let mut owner = Owner::default();
     owner.load(nbt);
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "decoding a saved stack and item a mob spawns, wears or throws (load)"
+    )]
     let item = take(nbt, "FireworksItem", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     })

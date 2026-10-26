@@ -450,7 +450,10 @@ impl MaterialSystem {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn frozen_ocean_extension(
         &self,
         chunk: &mut ProtoChunk,
@@ -946,7 +949,10 @@ pub struct PointRules<'s> {
 }
 
 impl PointRules<'_> {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub fn top_material(
         &mut self,
         ctx: &mut Context,

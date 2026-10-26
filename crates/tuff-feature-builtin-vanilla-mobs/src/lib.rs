@@ -5,6 +5,14 @@
 //! and [`Mob`] joins the two into a [`RegionEntity`], so new mob types
 //! (vanilla or feature) are one `Species` impl and a registry entry.
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod allay;
 pub mod animal;
 pub mod armadillo;

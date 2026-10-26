@@ -25,6 +25,7 @@ pub struct Lecterns;
 
 fn book(world: &dyn RegionWorld, pos: BlockPos) -> Option<(ItemStack, i32)> {
     let nbt = world.raw_block_entity(pos)?;
+    #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (book)")]
     let book = nbt.get_compound("Book").and_then(ItemStack::from_storage)?;
     Some((book, nbt.get_int("Page").unwrap_or(0)))
 }

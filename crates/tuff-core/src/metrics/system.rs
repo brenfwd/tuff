@@ -64,7 +64,10 @@ fn sample_macos() -> Option<MemoryStats> {
     // the return code and the written count before reading the fields.
     // `mach_task_self` returns the calling task's own port, no ownership
     // to release.
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "the replacement is unavailable on the supported platforms"
+    )]
     unsafe {
         let mut info = MaybeUninit::<libc::mach_task_basic_info>::zeroed();
         let mut count = (std::mem::size_of::<libc::mach_task_basic_info>()

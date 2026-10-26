@@ -137,16 +137,19 @@ async fn spawn(
 }
 
 async fn regions(shared: &Arc<Shared>) -> Vec<tuff_core::world::messages::RegionHandle> {
+    try_regions(shared).await.unwrap_or_default()
+}
+
+async fn try_regions(
+    shared: &Arc<Shared>,
+) -> Option<Vec<tuff_core::world::messages::RegionHandle>> {
     let (reply, regions) = oneshot::channel();
-    if shared
+    shared
         .manager
         .send(ManagerMessage::Regions { reply })
         .await
-        .is_err()
-    {
-        return Vec::new();
-    }
-    regions.await.unwrap_or_default()
+        .ok()?;
+    regions.await.ok()
 }
 
 /// Runs `run` on the loaded region that owns the non-player entity `uuid`.
@@ -185,32 +188,49 @@ async fn per_region<T: Send + 'static>(
     + Send
     + 'static,
 ) -> Vec<T> {
+    sweep(shared, wanted, run).await.0
+}
+
+/// `per_region`, also telling whether every region answered.
+async fn sweep<T: Send + 'static>(
+    shared: &Arc<Shared>,
+    wanted: Vec<u128>,
+    run: impl Fn(&mut dyn tuff_core::world::region_api::RegionWorld, Vec<(u128, i32)>) -> Vec<T>
+    + Clone
+    + Send
+    + 'static,
+) -> (Vec<T>, bool) {
     let mut out = Vec::new();
-    for region in regions(shared).await {
+    let Some(handles) = try_regions(shared).await else {
+        return (out, false);
+    };
+    let mut complete = true;
+    for region in handles {
         let wanted = wanted.clone();
         let run = run.clone();
-        out.extend(
-            region
-                .ask(move |world| {
-                    let found: Vec<(u128, i32)> = world
-                        .entity_ids()
-                        .into_iter()
-                        .filter_map(|id| {
-                            let uuid = world.entity(id)?.entity.base().uuid;
-                            wanted.contains(&uuid).then_some((uuid, id))
-                        })
-                        .collect();
-                    if found.is_empty() {
-                        Vec::new()
-                    } else {
-                        run(world, found)
-                    }
-                })
-                .await
-                .unwrap_or_default(),
-        );
+        let answer = region
+            .ask(move |world| {
+                let found: Vec<(u128, i32)> = world
+                    .entity_ids()
+                    .into_iter()
+                    .filter_map(|id| {
+                        let uuid = world.entity(id)?.entity.base().uuid;
+                        wanted.contains(&uuid).then_some((uuid, id))
+                    })
+                    .collect();
+                if found.is_empty() {
+                    Vec::new()
+                } else {
+                    run(world, found)
+                }
+            })
+            .await;
+        match answer {
+            Some(found) => out.extend(found),
+            None => complete = false,
+        }
     }
-    out
+    (out, complete)
 }
 
 async fn glide(shared: &Arc<Shared>, moves: Vec<Glide>) {
@@ -226,33 +246,56 @@ async fn glide(shared: &Arc<Shared>, moves: Vec<Glide>) {
     .await;
 }
 
-/// The state of each entity of `uuids` that is in a loaded region.
-pub async fn states(shared: Arc<Shared>, uuids: Vec<u128>) -> Vec<Option<State>> {
-    let found = per_region(&shared, uuids.clone(), |world, found| {
-        found
-            .into_iter()
-            .filter_map(|(uuid, id)| {
-                let entity = &world.entity(id)?.entity;
-                let base = entity.base();
-                Some((
-                    uuid,
-                    State {
-                        position: base.position,
-                        motion: base.velocity,
-                        yaw: base.yaw,
-                        pitch: base.pitch,
-                        on_ground: base.on_ground,
-                        health: entity.living().map_or(0.0, |l| l.health),
-                    },
-                ))
-            })
-            .collect()
-    })
-    .await;
-    uuids
+/// Passes over the regions a lookup makes before an entity that no region
+/// reported counts as gone: one that is between two regions is in neither
+/// for a moment.
+const SWEEPS: usize = 4;
+
+/// The state of each entity of `uuids` that is in a loaded region. `None`
+/// when an entity was not found and a region could not be asked, so its
+/// absence is unknown rather than a fact.
+pub async fn states(shared: Arc<Shared>, uuids: Vec<u128>) -> Option<Vec<Option<State>>> {
+    let mut found: Vec<(u128, State)> = Vec::new();
+    let mut complete = true;
+    for _ in 0..SWEEPS {
+        let missing: Vec<u128> = uuids
+            .iter()
+            .copied()
+            .filter(|uuid| !found.iter().any(|(u, _)| u == uuid))
+            .collect();
+        if missing.is_empty() {
+            break;
+        }
+        let (now, whole) = sweep(&shared, missing, |world, found| {
+            found
+                .into_iter()
+                .filter_map(|(uuid, id)| {
+                    let entity = &world.entity(id)?.entity;
+                    let base = entity.base();
+                    Some((
+                        uuid,
+                        State {
+                            position: base.position,
+                            motion: base.velocity,
+                            yaw: base.yaw,
+                            pitch: base.pitch,
+                            on_ground: base.on_ground,
+                            health: entity.living().map_or(0.0, |l| l.health),
+                        },
+                    ))
+                })
+                .collect()
+        })
+        .await;
+        found.extend(now);
+        complete = whole;
+        tokio::task::yield_now().await;
+    }
+    let states: Vec<Option<State>> = uuids
         .iter()
         .map(|uuid| found.iter().find(|(u, _)| u == uuid).map(|(_, s)| *s))
-        .collect()
+        .collect();
+    (complete || states.iter().all(Option::is_some)).then_some(states)
 }
 
 /// The saved data of the non-player entity `uuid` in a loaded region.

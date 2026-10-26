@@ -70,6 +70,10 @@ pub struct Reasons {
 }
 
 /// A template copy of a slot, for pictures that work like stacks.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "preview stand-in stack for a slot or click, burned as Preview (template)"
+)]
 pub fn template(slot: &Option<ItemStack>) -> Option<ItemStack> {
     slot.as_ref()
         .map(|stack| ItemStack::mint_like(stack, stack.count(), MintReason::Preview))
@@ -77,6 +81,10 @@ pub fn template(slot: &Option<ItemStack>) -> Option<ItemStack> {
 
 /// Template stacks showing what `pictures` show, for a screen mirroring
 /// slots another actor owns.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "preview stand-in stack for a slot or click, burned as Preview (mirror_of)"
+)]
 pub fn mirror_of(pictures: &[Option<ItemSnapshot>]) -> Vec<Option<ItemStack>> {
     pictures
         .iter()
@@ -89,6 +97,10 @@ pub fn mirror_of(pictures: &[Option<ItemSnapshot>]) -> Vec<Option<ItemStack>> {
 
 /// Shows `shown` in a mirrored slot.
 fn mirror_slot(slot: &mut Option<ItemStack>, shown: Option<&ItemSnapshot>) {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "preview stand-in stack for a slot or click, burned as Preview (mirror_slot)"
+    )]
     let mirrored =
         shown.map(|shown| ItemStack::mint_like(shown, shown.count(), MintReason::Preview));
     if let Some(old) = std::mem::replace(slot, mirrored) {
@@ -242,6 +254,10 @@ impl PlayerSession {
                 origins.push(Some(place));
             }
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "menu transaction mints the items a rejected click was short by (take_losses)"
+        )]
         if let Some(reasons) = reasons {
             for stack in balance.mint_short(reasons.mint) {
                 pool.push(stack);

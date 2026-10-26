@@ -319,6 +319,10 @@ impl Species for Skeleton {
             core.populate_spawn_armor(LocalDifficulty::at(cx, core.base.position), cx.rng);
             Item::Bow
         };
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (finalize_spawn)"
+        )]
         core.equipment.set(
             EquipmentSlot::Mainhand,
             Some(ItemStack::mint(weapon, 1, MintReason::Spawn)),

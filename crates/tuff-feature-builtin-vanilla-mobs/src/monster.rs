@@ -58,6 +58,10 @@ impl MobCore {
             if self.equipment.get(*slot).is_none()
                 && let Some(item) = tiers.get(tier)
             {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (populate_spawn_armor)"
+                )]
                 self.equipment.set(
                     *slot,
                     Some(tuff_item::item::ItemStack::mint(

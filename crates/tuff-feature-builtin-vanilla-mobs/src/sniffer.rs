@@ -407,6 +407,10 @@ impl Species for Sniffer {
         let pitch = (cx.rng.r#gen::<f32>() - cx.rng.r#gen::<f32>()) * 0.2 + 0.5;
         mob.core
             .sound(SoundEvent::BlockSnifferEggPlop, 1.0, pitch, cx);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (breed)"
+        )]
         cx.effects.push(Effect::DropItem {
             stack: ItemStack::mint(Item::SnifferEgg, 1, MintReason::Spawn),
             position: mob.core.base.position,

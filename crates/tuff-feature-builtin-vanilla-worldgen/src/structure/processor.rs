@@ -24,7 +24,10 @@ pub trait Processor: Send + Sync {
     /// The block `info` (already at its world position) as it will be
     /// placed, or `None` to skip it. `template_pos` is where it sits in the
     /// template.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn process(
         &self,
         level: &mut Region,

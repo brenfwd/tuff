@@ -54,7 +54,7 @@ pub fn ns(ticks: u64) -> u64 {
 
 #[cfg_attr(
     all(target_arch = "aarch64", any(target_os = "macos", target_os = "linux")),
-    allow(dead_code)
+    expect(dead_code, reason = "unused where the counter is read directly")
 )]
 fn monotonic() -> u64 {
     static ORIGIN: OnceLock<Instant> = OnceLock::new();
@@ -119,10 +119,7 @@ mod counter {
     pub fn read() -> u64 {
         if TSC.load(Ordering::Relaxed) {
             // SAFETY: every x86_64 CPU has RDTSC; it only reads a counter.
-            #[allow(unused_unsafe)]
-            unsafe {
-                core::arch::x86_64::_rdtsc()
-            }
+            unsafe { core::arch::x86_64::_rdtsc() }
         } else {
             super::monotonic()
         }
@@ -130,12 +127,7 @@ mod counter {
 
     fn invariant_tsc() -> bool {
         use core::arch::x86_64::__cpuid;
-        // SAFETY: CPUID exists on every x86_64 CPU and has no side effects;
-        // the extended leaf is only read when the CPU reports it.
-        #[allow(unused_unsafe)]
-        unsafe {
-            __cpuid(0x8000_0000).eax >= 0x8000_0007 && __cpuid(0x8000_0007).edx & (1 << 8) != 0
-        }
+        __cpuid(0x8000_0000).eax >= 0x8000_0007 && __cpuid(0x8000_0007).edx & (1 << 8) != 0
     }
 
     /// One (TSC, Instant) pair, retried until the two reads are close.
@@ -143,7 +135,6 @@ mod counter {
         let mut best = None;
         for _ in 0..16 {
             // SAFETY: as in `read`.
-            #[allow(unused_unsafe)]
             let (before, at, after) = unsafe {
                 let before = core::arch::x86_64::_rdtsc();
                 let at = Instant::now();
