@@ -1355,3 +1355,104 @@ async fn a_hopper_facing_a_full_chest_keeps_its_items() {
     assert!(contents.iter().all(|slot| *slot == dirt()));
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_region_refuses_a_click_from_a_window_that_was_closed() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let pos = ChunkPos::new(0, 0);
+    let region = world.region(pos.region()).await;
+    let (alice, mut alice_events) = PlayerHandle::new(100);
+    let (bob, mut bob_events) = PlayerHandle::new(101);
+    subscribe(&region, &alice, &mut alice_events, &[pos]).await;
+    subscribe(&region, &bob, &mut bob_events, &[pos]).await;
+    let chest = BlockPos::new(1, Generator::new(1).height(1, 1) + 1, 1);
+    place_blocks(&world, &region, [(chest, Block::Chest.default_state())]).await;
+    for player in [&alice, &bob] {
+        region
+            .request(RegionRequest::Place(place(player, chest, Item::Torch, 1)))
+            .await;
+    }
+    expect(&mut alice_events, container_menu).await;
+    expect(&mut bob_events, container_menu).await;
+
+    let stone = ItemStack::mint(Item::Stone, 5, MintReason::Test);
+    let put = set_slot(chest, 0, None, Some(stone.test_copy()));
+    region
+        .request(RegionRequest::ContainerTransaction {
+            player: alice.clone(),
+            window_id: 1,
+            changes: put.clone(),
+            pool: pool_for(&put),
+            took_result: false,
+        })
+        .await;
+    assert!(expect(&mut alice_events, transaction_answer).await.0);
+
+    region
+        .request(RegionRequest::CloseContainer {
+            player: alice.id,
+            positions: vec![chest],
+        })
+        .await;
+    let take = set_slot(chest, 0, Some(stone.test_copy()), None);
+    region
+        .request(RegionRequest::ContainerTransaction {
+            player: alice.clone(),
+            window_id: 1,
+            changes: take,
+            pool: Vec::new(),
+            took_result: false,
+        })
+        .await;
+    let (accepted, contents) = expect(&mut alice_events, transaction_answer).await;
+    assert!(!accepted, "a closed window cannot take from the chest");
+    assert_eq!(stacks(&contents[0].1)[0], Some(stone.test_copy()));
+
+    let dirt = ItemStack::mint(Item::Dirt, 2, MintReason::Test);
+    let give = set_slot(chest, 1, None, Some(dirt.test_copy()));
+    let pool = pool_for(&give);
+    let given = pool.iter().map(ItemStack::count).sum::<u8>();
+    region
+        .request(RegionRequest::ContainerTransaction {
+            player: alice.clone(),
+            window_id: 1,
+            changes: give,
+            pool,
+            took_result: false,
+        })
+        .await;
+    let answer = expect(&mut alice_events, |event| match event {
+        PlayerEvent::Transaction {
+            accepted, pool, ..
+        } => Some((accepted, pool)),
+        _ => None,
+    })
+    .await;
+    assert!(!answer.0, "a closed window cannot put into the chest");
+    assert_eq!(
+        answer.1.iter().map(ItemStack::count).sum::<u8>(),
+        given,
+        "everything the player gave comes straight back"
+    );
+    for stack in answer.1 {
+        stack.burn(tuff_item::item::BurnReason::Test);
+    }
+
+    let take = set_slot(chest, 0, Some(stone.test_copy()), None);
+    region
+        .request(RegionRequest::ContainerTransaction {
+            player: bob.clone(),
+            window_id: 1,
+            changes: take,
+            pool: Vec::new(),
+            took_result: false,
+        })
+        .await;
+    assert!(
+        expect(&mut bob_events, transaction_answer).await.0,
+        "the chest still holds what alice put there"
+    );
+    world.shutdown().await;
+}

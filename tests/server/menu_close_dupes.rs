@@ -117,6 +117,7 @@ enum Event {
     SecondPlayer,
     Piston,
     Carried,
+    Unloaded,
 }
 
 async fn start() -> TestServer {
@@ -503,6 +504,16 @@ fn stale_clicks(bot: &Bot, window: i32, kind: Kind) {
     bot.send(click(bot, window, -999, 0, 0));
 }
 
+async fn game_time(rig: &Rig) -> i64 {
+    rig.say("time query gametime")
+        .await
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>()
+        .parse()
+        .unwrap_or(0)
+}
+
 async fn scenario(kind: Kind, event: Event) {
     let mut rig = Rig::new().await;
     rig.reset(kind).await;
@@ -566,6 +577,22 @@ async fn scenario(kind: Kind, event: Event) {
             taker = Some((bot, theirs));
             players = vec!["Opener", "Taker"];
         }
+        Event::Unloaded => {
+            rig.say("tp Opener 1500.5 150 1500.5").await;
+            let before = game_time(&rig).await;
+            rig.say("tick sprint 400").await;
+            until("the sprint is over", || async {
+                game_time(&rig).await >= before + 400
+            })
+            .await;
+            rig.settle().await;
+            until("the chunk is unloaded", || async {
+                !rig.say("execute if loaded 4 150 0")
+                    .await
+                    .contains("Test passed")
+            })
+            .await;
+        }
         Event::Carried => {
             rig.say("tp @e[type=donkey] 1.5 150 30.5").await;
             rig.settle().await;
@@ -583,7 +610,12 @@ async fn scenario(kind: Kind, event: Event) {
         || (matches!(event, Event::Piston) && (!kind.station() || matches!(kind, Kind::Anvil)));
     if matches!(
         event,
-        Event::Break | Event::Piston | Event::Away | Event::Nether | Event::Carried
+        Event::Break
+            | Event::Piston
+            | Event::Away
+            | Event::Nether
+            | Event::Carried
+            | Event::Unloaded
     ) {
         let watcher = rig.bot();
         let shut = tokio::time::timeout(
@@ -605,7 +637,7 @@ async fn scenario(kind: Kind, event: Event) {
         stale_clicks(bot, *theirs, kind);
     }
     match event {
-        Event::Away | Event::Nether => {
+        Event::Away | Event::Nether | Event::Unloaded => {
             rig.say("execute in minecraft:overworld run tp Opener 0.5 150 0.5")
                 .await;
         }
@@ -670,6 +702,10 @@ scenarios! {
     minecart_left_far_behind: Kind::Minecart, Event::Away;
     chest_boat_killed_while_open: Kind::ChestBoat, Event::Break;
     chest_disconnected_while_open: Kind::Chest, Event::Disconnect;
+    chest_unloaded_while_open: Kind::Chest, Event::Unloaded;
+    furnace_unloaded_while_open: Kind::Furnace, Event::Unloaded;
+    minecart_unloaded_while_open: Kind::Minecart, Event::Unloaded;
+    donkey_unloaded_while_open: Kind::Donkey, Event::Unloaded;
     donkey_clicks_while_open: Kind::Donkey, Event::Live;
     donkey_closed_properly: Kind::Donkey, Event::Closed;
     donkey_killed_while_open: Kind::Donkey, Event::Break;
@@ -692,7 +728,7 @@ struct Station {
 /// Fills a station with items that make a result, changes the result
 /// (buttons, taking an input away) and closes: nothing may be lost.
 async fn result_replaced(station: Station) {
-    let mut rig = Rig::new().await;
+    let rig = Rig::new().await;
     let [x, y, z] = CONTAINER;
     for (n, (_, stack)) in station.gives.iter().enumerate() {
         rig.say(&format!("item replace entity Opener hotbar.{n} with {stack}"))

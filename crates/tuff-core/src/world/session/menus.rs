@@ -207,11 +207,8 @@ impl PlayerSession {
                         .map(|item| self.shared.recipes().stonecutter_options(item))
                         .unwrap_or_default();
                     *selected = None;
-                    let old = menu.container[stonecutter::RESULT].take();
-                    let cleared = old.is_some();
-                    if let Some(old) = old {
-                        old.burn(BurnReason::Preview);
-                    }
+                    let cleared = menu.container[stonecutter::RESULT].is_some();
+                    menu::show_preview(&mut menu.container[stonecutter::RESULT], None);
                     self.send_menu_data(0, -1);
                     if cleared {
                         self.send_menu_slot(stonecutter::RESULT);
@@ -255,11 +252,9 @@ impl PlayerSession {
                 *error = has_error;
                 if changed {
                     menu::show_preview(&mut menu.container[smithing::RESULT], result);
+                    self.send_menu_slot(smithing::RESULT);
                 } else if let Some(result) = result {
                     result.burn(BurnReason::Preview);
-                }
-                if changed {
-                    self.send_menu_slot(smithing::RESULT);
                 }
                 if error_changed {
                     self.send_menu_data(0, has_error as i16);
