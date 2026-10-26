@@ -4,7 +4,7 @@
 //! console. Opt-in: skipped unless `TUFF_VANILLA_TESTS=1` and
 //! `TUFF_ACCEPT_MOJANG_EULA=1`, so it never runs in `cargo t`.
 
-use super::dupe_designs::{COUNT_BOX, DESIGNS, Design, ORIGIN, Part};
+use super::dupe_designs::{COUNT_BOX, DESIGNS, Design, ORIGIN, Part, Slabs};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -123,13 +123,25 @@ impl Vanilla {
     }
 
     fn step(&mut self, ticks: u32) {
+        assert!(self.try_step(ticks), "the server never stepped");
+    }
+
+    fn try_step(&mut self, ticks: u32) -> bool {
         let before = self.game_time();
         self.run(&format!("tick step {ticks}"));
-        let limit = Instant::now() + Duration::from_secs(60);
+        let limit = Instant::now() + Duration::from_secs(12);
+        let mut retry = Instant::now() + Duration::from_secs(3);
         while self.game_time() < before + u64::from(ticks) {
-            assert!(Instant::now() < limit, "the server never stepped");
+            if Instant::now() > limit {
+                return false;
+            }
+            if Instant::now() > retry && self.game_time() == before {
+                self.run(&format!("tick step {ticks}"));
+                retry = Instant::now() + Duration::from_secs(3);
+            }
             std::thread::sleep(Duration::from_millis(50));
         }
+        true
     }
 
     fn place(&mut self, (dx, dy, dz, state): (i32, i32, i32, &str)) {
@@ -164,7 +176,7 @@ impl Vanilla {
         if primed > 0 {
             counts.insert("primed_tnt".to_owned(), primed);
         }
-        let (lo, hi) = COUNT_BOX;
+        let (lo, hi) = design.area;
         let o = ORIGIN;
         let (a, b) = (
             (o.0 + lo.0, o.1 + lo.1, o.2 + lo.2),
@@ -234,6 +246,41 @@ impl Vanilla {
             if cloned_count(&text) > 0 {
                 counts.insert(kind.to_owned(), cloned_count(&text));
             }
+            if let Some(axis) = design.slabs {
+                let (lo, hi) = design.area;
+                let (from, to) = match axis {
+                    Slabs::X => (lo.0, hi.0),
+                    Slabs::Z => (lo.2, hi.2),
+                };
+                for offset in from..=to {
+                    let (mut sa, mut sb) = (a, b);
+                    match axis {
+                        Slabs::X => {
+                            sa.0 = ORIGIN.0 + offset;
+                            sb.0 = sa.0;
+                        }
+                        Slabs::Z => {
+                            sa.2 = ORIGIN.2 + offset;
+                            sb.2 = sa.2;
+                        }
+                    }
+                    let text = self.run(&format!(
+                        "clone {} {} {} {} {} {} {} {} {} filtered {kind}",
+                        sa.0,
+                        sa.1,
+                        sa.2,
+                        sb.0,
+                        sb.1,
+                        sb.2,
+                        sa.0,
+                        sa.1 + 20,
+                        sa.2 + aside
+                    ));
+                    if cloned_count(&text) > 0 {
+                        counts.insert(format!("{kind}@{offset}"), cloned_count(&text));
+                    }
+                }
+            }
             if design.end {
                 let text = self.run(&format!(
                     "execute in minecraft:the_end run clone 94 44 -8 106 56 8 94 44 {} filtered {kind}",
@@ -263,7 +310,7 @@ impl Vanilla {
         }
         self.run("tick freeze");
         self.step(2);
-        let (lo, hi) = COUNT_BOX;
+        let (lo, hi) = design.area;
         let o = ORIGIN;
         self.run(&format!(
             "fill {} {} {} {} {} {} minecraft:air",
@@ -382,6 +429,8 @@ fn vanilla_script_layout() {
         let mut probes = Vec::new();
         let mut scans: Vec<(Vec<i32>, String)> = Vec::new();
         let mut end = false;
+        let mut slabs = None;
+        let mut area = COUNT_BOX;
         let leak = |s: &str| -> &'static str { Box::leak(s.to_owned().into_boxed_str()) };
         for line in chunk
             .lines()
@@ -392,6 +441,16 @@ fn vanilla_script_layout() {
             match w.next().unwrap() {
                 "kinds" => kinds = w.next().unwrap().split(',').map(leak).collect(),
                 "end" => end = true,
+                "slabs" => {
+                    slabs = Some(match w.next().unwrap() {
+                        "x" => Slabs::X,
+                        _ => Slabs::Z,
+                    })
+                }
+                "area" => {
+                    let c: Vec<i32> = (0..6).map(|_| w.next().unwrap().parse().unwrap()).collect();
+                    area = ((c[0], c[1], c[2]), (c[3], c[4], c[5]));
+                }
                 "scan" => {
                     let c: Vec<i32> = (0..4).map(|_| w.next().unwrap().parse().unwrap()).collect();
                     scans.push((c, w.next().unwrap().to_owned()));
@@ -421,6 +480,8 @@ fn vanilla_script_layout() {
             end,
             kinds: Box::leak(kinds.into_boxed_slice()),
             vanilla: &[],
+            slabs,
+            area,
         };
         let mut vanilla = Vanilla::start();
         let (built, after) = vanilla.run_design(&design);
@@ -452,4 +513,139 @@ fn vanilla_script_layout() {
             eprintln!("script#{n} probe {c:?} {id}: {r}");
         }
     }
+}
+
+/// Exploration: searches observer placements that make a given piston and
+/// slime skeleton fly on real vanilla (`TUFF_VANILLA_SEARCH=1`).
+#[tuff_core::watchdog]
+#[test]
+fn vanilla_engine_search() {
+    if !enabled() || std::env::var_os("TUFF_VANILLA_SEARCH").is_none() {
+        return;
+    }
+    let mut vanilla = Vanilla::start();
+    let o = ORIGIN;
+    vanilla.run("forceload add 60 30 120 150");
+    vanilla.run("tick freeze");
+    vanilla.step(2);
+    let skeleton = [
+        (0, 0, 1, "minecraft:slime_block"),
+        (1, 0, 1, "minecraft:sticky_piston[facing=west]"),
+        (0, 0, 2, "minecraft:sticky_piston[facing=east]"),
+        (1, 0, 2, "minecraft:slime_block"),
+    ];
+    let flip = |f: &str| match f {
+        "east" => "west",
+        "west" => "east",
+        "north" => "south",
+        "south" => "north",
+        "up" => "up",
+        _ => "down",
+    };
+    let mut found = Vec::new();
+    for dy in -1..=1 {
+        for dx in -1..=2 {
+            for dz in -1..=4 {
+                if skeleton.iter().any(|s| (s.0, s.1, s.2) == (dx, dy, dz)) {
+                    continue;
+                }
+                for f in ["north", "south", "east", "west", "up", "down"] {
+                    let (mx, mz) = (1 - dx, 3 - dz);
+                    if skeleton.iter().any(|s| (s.0, s.1, s.2) == (mx, dy, mz))
+                        || (mx, mz) == (dx, dz)
+                    {
+                        continue;
+                    }
+                    vanilla.run(&format!(
+                        "fill {} {} {} {} {} {} minecraft:air",
+                        o.0 - 4,
+                        o.1 - 4,
+                        o.2 - 4,
+                        o.0 + 8,
+                        o.1 + 4,
+                        o.2 + 20
+                    ));
+                    let parts = skeleton
+                        .iter()
+                        .map(|s| (s.0, s.1, s.2, s.3.to_owned()))
+                        .chain([
+                            (dx, dy, dz, format!("minecraft:observer[facing={f}]")),
+                            (
+                                mx,
+                                dy,
+                                mz,
+                                format!("minecraft:observer[facing={}]", flip(f)),
+                            ),
+                        ]);
+                    for (x, y, z, s) in parts {
+                        vanilla.run(&format!(
+                            "setblock {} {} {} {s} strict",
+                            o.0 + x,
+                            o.1 + y,
+                            o.2 + z
+                        ));
+                    }
+                    let toward = |f: &str| match f {
+                        "east" => (1, 0, 0),
+                        "west" => (-1, 0, 0),
+                        "north" => (0, 0, -1),
+                        "south" => (0, 0, 1),
+                        "up" => (0, 1, 0),
+                        _ => (0, -1, 0),
+                    };
+                    for (x, z, f) in [(dx, dz, f), (mx, mz, flip(f))] {
+                        let d = toward(f);
+                        let (wx, wy, wz) = (o.0 + x + d.0, o.1 + dy + d.1, o.2 + z + d.2);
+                        if skeleton
+                            .iter()
+                            .any(|s| (o.0 + s.0, o.1 + s.1, o.2 + s.2) == (wx, wy, wz))
+                        {
+                            continue;
+                        }
+                        vanilla.run(&format!("setblock {wx} {wy} {wz} minecraft:stone"));
+                        vanilla.run(&format!("setblock {wx} {wy} {wz} minecraft:air"));
+                    }
+                    eprintln!("try dx={dx} dy={dy} dz={dz} f={f}");
+                    if !vanilla.try_step(30) {
+                        eprintln!("STALL dx={dx} dy={dy} dz={dz} f={f}");
+                        drop(vanilla);
+                        vanilla = Vanilla::start();
+                        vanilla.run("forceload add 60 30 120 150");
+                        vanilla.run("tick freeze");
+                        vanilla.step(2);
+                        continue;
+                    }
+                    let r = vanilla.run(&format!(
+                        "clone {} {} {} {} {} {} {} {} {} filtered minecraft:sticky_piston",
+                        o.0 - 6,
+                        o.1 - 3,
+                        o.2 + 6,
+                        o.0 + 8,
+                        o.1 + 3,
+                        o.2 + 40,
+                        o.0 - 6,
+                        o.1 + 20,
+                        o.2 + 6
+                    ));
+                    let r2 = vanilla.run(&format!(
+                        "clone {} {} {} {} {} {} {} {} {} filtered minecraft:sticky_piston",
+                        o.0 - 6,
+                        o.1 - 3,
+                        o.2 - 40,
+                        o.0 + 8,
+                        o.1 + 3,
+                        o.2 - 2,
+                        o.0 - 6,
+                        o.1 + 20,
+                        o.2 - 40
+                    ));
+                    if r.contains("Successfully") || r2.contains("Successfully") {
+                        eprintln!("MOVED dx={dx} dy={dy} dz={dz} f={f}");
+                        found.push((dx, dy, dz, f));
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("found {found:?}");
 }

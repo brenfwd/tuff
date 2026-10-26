@@ -23,9 +23,22 @@ pub struct Design {
     /// Counts that vanilla 26.3 reaches after the run, by id; `primed_tnt`
     /// is the primed TNT entities. Verified by `vanilla_dupers.rs`.
     pub vanilla: &'static [(&'static str, u32)],
+    /// When set, standing blocks of each kind are also counted per slab
+    /// along the axis, under `<id>@<offset>` (offset from `ORIGIN`).
+    pub slabs: Option<Slabs>,
+    /// The counted box (offsets from `ORIGIN`).
+    pub area: Area,
 }
 
-pub const COUNT_BOX: ((i32, i32, i32), (i32, i32, i32)) = ((-3, -4, -6), (9, 6, 6));
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Slabs {
+    X,
+    Z,
+}
+
+pub type Area = ((i32, i32, i32), (i32, i32, i32));
+
+pub const COUNT_BOX: Area = ((-3, -4, -6), (9, 6, 6));
 
 const PUSH: &[Part] = &[
     (-3, -1, 0, "minecraft:redstone_block"),
@@ -39,7 +52,127 @@ const PUSH_PULL: &[Part] = &[
     (0, 0, 0, "@step:6"),
 ];
 
+macro_rules! pot_layout {
+    ($top:expr) => {
+        &[
+            (-3, 0, 0, "minecraft:sticky_piston[facing=east]"),
+            (-2, 0, 0, "minecraft:stone"),
+            (-1, 0, 0, "minecraft:slime_block"),
+            (0, 0, 0, "minecraft:flower_pot"),
+            (-1, 1, 0, "minecraft:slime_block"),
+            (1, 0, 0, "minecraft:stone"),
+            (-1, 0, 1, "minecraft:stone"),
+            (0, 0, 1, "minecraft:stone"),
+            (0, 1, 1, "minecraft:tube_coral_fan"),
+            (0, 1, 0, $top),
+        ]
+    };
+}
+
+macro_rules! pot_design {
+    ($name:expr, $top:expr, $kind:expr, $kept:expr) => {
+        Design {
+            name: $name,
+            build: pot_layout!($top),
+            trigger: PUSH,
+            steps: 0,
+            end: false,
+            kinds: &[
+                $kind,
+                "minecraft:flower_pot",
+                "minecraft:slime_block",
+                "minecraft:stone",
+            ],
+            vanilla: &[
+                ("minecraft:flower_pot", 1),
+                ($kind, $kept),
+                ("minecraft:slime_block", 2),
+                ("minecraft:stone", 4),
+            ],
+            slabs: None,
+            area: COUNT_BOX,
+        }
+    };
+}
+
 pub const DESIGNS: &[Design] = &[
+    pot_design!(
+        "pot_powered_rail",
+        "minecraft:powered_rail",
+        "minecraft:powered_rail",
+        2
+    ),
+    pot_design!(
+        "pot_detector_rail",
+        "minecraft:detector_rail",
+        "minecraft:detector_rail",
+        2
+    ),
+    pot_design!(
+        "pot_activator_rail",
+        "minecraft:activator_rail",
+        "minecraft:activator_rail",
+        2
+    ),
+    pot_design!(
+        "pot_repeater",
+        "minecraft:repeater[facing=north]",
+        "minecraft:repeater",
+        1
+    ),
+    pot_design!(
+        "pot_comparator",
+        "minecraft:comparator[facing=north]",
+        "minecraft:comparator",
+        1
+    ),
+    pot_design!("pot_lantern", "minecraft:lantern", "minecraft:lantern", 1),
+    Design {
+        name: "fan_dust",
+        build: &[
+            (-3, 0, 0, "minecraft:sticky_piston[facing=east]"),
+            (-2, 0, 0, "minecraft:stone"),
+            (-1, 0, 0, "minecraft:stone"),
+            (0, 0, 0, "minecraft:slime_block"),
+            (-1, 1, 0, "minecraft:tube_coral_fan"),
+            (0, 1, 0, "minecraft:redstone_wire"),
+        ],
+        trigger: PUSH,
+        steps: 0,
+        end: false,
+        kinds: &[
+            "minecraft:redstone_wire",
+            "minecraft:redstone",
+            "minecraft:slime_block",
+            "minecraft:stone",
+        ],
+        vanilla: &[
+            ("minecraft:redstone", 1),
+            ("minecraft:slime_block", 1),
+            ("minecraft:stone", 2),
+        ],
+        slabs: None,
+        area: COUNT_BOX,
+    },
+    Design {
+        name: "dust_on_slime",
+        build: &[
+            (0, 0, 0, "minecraft:sticky_piston[facing=east]"),
+            (1, 0, 0, "minecraft:slime_block"),
+            (1, 1, 0, "minecraft:redstone_wire"),
+        ],
+        trigger: PUSH_PULL,
+        steps: 0,
+        end: false,
+        kinds: &[
+            "minecraft:redstone_wire",
+            "minecraft:redstone",
+            "minecraft:slime_block",
+        ],
+        vanilla: &[("minecraft:redstone", 1), ("minecraft:slime_block", 1)],
+        slabs: None,
+        area: COUNT_BOX,
+    },
     Design {
         name: "fan_rail",
         build: &[
@@ -59,6 +192,8 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:slime_block", 1),
             ("minecraft:stone", 2),
         ],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "fan_tnt",
@@ -81,6 +216,8 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:tnt", 1),
             ("primed_tnt", 1),
         ],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "fan_carpet",
@@ -105,6 +242,8 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:stone", 2),
             ("minecraft:white_carpet", 1),
         ],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "carpet_pot",
@@ -135,6 +274,8 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:stone", 4),
             ("minecraft:white_carpet", 2),
         ],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "rail_pot",
@@ -165,6 +306,8 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:slime_block", 2),
             ("minecraft:stone", 4),
         ],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "gravity_inside_portal",
@@ -177,6 +320,8 @@ pub const DESIGNS: &[Design] = &[
         end: true,
         kinds: &["minecraft:sand"],
         vanilla: &[("minecraft:sand", 1), ("end:minecraft:sand", 1)],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "gravity_fall_into_portal",
@@ -189,6 +334,8 @@ pub const DESIGNS: &[Design] = &[
         end: true,
         kinds: &["minecraft:sand"],
         vanilla: &[("end:minecraft:sand", 1)],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "fan_tripwire_hook",
@@ -214,6 +361,8 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:slime_block", 1),
             ("minecraft:stone", 3),
         ],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "rail_on_slime",
@@ -227,6 +376,8 @@ pub const DESIGNS: &[Design] = &[
         end: false,
         kinds: &["minecraft:rail", "minecraft:slime_block"],
         vanilla: &[("minecraft:rail", 1), ("minecraft:slime_block", 1)],
+        slabs: None,
+        area: COUNT_BOX,
     },
     Design {
         name: "carpet_on_slime",
@@ -240,5 +391,7 @@ pub const DESIGNS: &[Design] = &[
         end: false,
         kinds: &["minecraft:white_carpet", "minecraft:slime_block"],
         vanilla: &[("minecraft:slime_block", 1), ("minecraft:white_carpet", 1)],
+        slabs: None,
+        area: COUNT_BOX,
     },
 ];
