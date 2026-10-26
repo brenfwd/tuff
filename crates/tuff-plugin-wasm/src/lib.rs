@@ -11,6 +11,14 @@
 //! sandbox (pure Rust) with metered fuel and capped memory. The ABI is in
 //! [`abi`], and the manifest format in [`manifest`].
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod abi;
 pub mod background;
 pub mod bridge;

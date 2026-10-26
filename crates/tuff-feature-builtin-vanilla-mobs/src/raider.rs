@@ -139,6 +139,10 @@ pub fn save(state: &RaiderState, out: &mut Compound) {
 }
 
 /// The banner raid and patrol leaders wear.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "item a mob spawns, wears or throws (ominous_banner)"
+)]
 pub fn ominous_banner() -> ItemStack {
     ItemStack::mint_like(&ominous_banner_picture(), 1, MintReason::Spawn)
 }
@@ -400,6 +404,10 @@ pub fn apply_raid_buffs(core: &mut MobCore, wave: i32, omen_level: i32, rng: &mu
                 None
             };
             if enchant && let Some(provider) = provider {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item a mob spawns, wears or throws (apply_raid_buffs)"
+                )]
                 let crossbow = tuff_item::item::enchanting::enchant_from_provider(
                     ItemStack::mint(Item::Crossbow, 1, MintReason::Spawn),
                     provider,
@@ -410,6 +418,10 @@ pub fn apply_raid_buffs(core: &mut MobCore, wave: i32, omen_level: i32, rng: &mu
             }
         }
         EntityType::Vindicator => {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (apply_raid_buffs)"
+            )]
             let mut axe = ItemStack::mint(Item::IronAxe, 1, MintReason::Spawn);
             if enchant {
                 let provider = if wave > 5 {

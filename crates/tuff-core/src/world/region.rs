@@ -813,6 +813,10 @@ impl RegionActor {
                 }
                 let id = self.shared.next_entity_id();
                 let uuid = self.rng.r#gen();
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "preview stand-in stack for a slot or click, burned as Preview (handle_request)"
+                )]
                 let mut item = crate::world::items::ItemEntity::new(
                     id,
                     uuid,

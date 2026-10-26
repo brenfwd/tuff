@@ -195,7 +195,10 @@ fn can_reach(chunk: ChunkPos, x: f64, z: f64, step: i32, total: i32, thickness: 
     xd * xd + zd * zd - remaining * remaining <= rr * rr
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 fn carve_ellipsoid(
     chunk: ChunkPos,
     x: f64,
@@ -262,7 +265,10 @@ impl Cave {
         t
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn tunnel(
         &self,
         chunk: ChunkPos,
@@ -508,7 +514,10 @@ impl CarverKind for Canyon {
 }
 
 impl Canyon {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn canyon(
         &self,
         span: GenContext,

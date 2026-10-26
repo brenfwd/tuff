@@ -339,7 +339,10 @@ impl FoliagePlacer {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn row_with_hanging(
         &self,
         g: &mut Grow,

@@ -51,6 +51,37 @@ fn is_valid_repair_item(input: &ItemStack, addition: &ItemStack) -> bool {
     input.item().repairable_with().contains(&addition.item())
 }
 
+/// The stack an operation is working out; burned if it is abandoned.
+struct Candidate(Option<ItemStack>);
+
+impl Candidate {
+    fn release(mut self) -> ItemStack {
+        self.0.take().expect("held until released")
+    }
+}
+
+impl std::ops::Deref for Candidate {
+    type Target = ItemStack;
+
+    fn deref(&self) -> &ItemStack {
+        self.0.as_ref().expect("held until released")
+    }
+}
+
+impl std::ops::DerefMut for Candidate {
+    fn deref_mut(&mut self) -> &mut ItemStack {
+        self.0.as_mut().expect("held until released")
+    }
+}
+
+impl Drop for Candidate {
+    fn drop(&mut self) {
+        if let Some(stack) = self.0.take() {
+            stack.burn(tuff_item::item::BurnReason::Preview);
+        }
+    }
+}
+
 pub fn compute(
     input: Option<&ItemStack>,
     addition: Option<&ItemStack>,
@@ -60,7 +91,12 @@ pub fn compute(
     let Some(input) = input else {
         return AnvilOutcome::NOTHING;
     };
-    let mut result = ItemStack::mint_like(input, input.count(), MintReason::Crafting);
+    #[expect(clippy::disallowed_methods, reason = "crafting-style result (compute)")]
+    let mut result = Candidate(Some(ItemStack::mint_like(
+        input,
+        input.count(),
+        MintReason::Crafting,
+    )));
     let registry = enchantment::current();
     let mut enchantments = crafting_enchantments(&registry, &result);
     let tax = i64::from(input.components.repair_cost.unwrap_or(0))
@@ -78,7 +114,8 @@ pub fn compute(
             }
             let mut count = 0u8;
             while amount > 0 && count < addition.count() {
-                result.set_damage(result.damage() - amount);
+                let worn = result.damage() - amount;
+                result.set_damage(worn);
                 price += 1;
                 amount = step(result.damage());
                 count += 1;
@@ -201,7 +238,7 @@ pub fn compute(
     set_enchantments(&mut result, &enchantments);
     result.components.compact();
     AnvilOutcome {
-        result: Some(result),
+        result: Some(result.release()),
         cost: cost as i32,
         repair_count,
         only_renaming,

@@ -441,6 +441,9 @@ pub struct OpenMenu {
     /// The two-region transaction whose votes are being collected.
     pub split: Option<SplitTransaction>,
     pub queued: VecDeque<QueuedClick>,
+    /// The block each backing position held when the window opened; the
+    /// menu closes once one of them is no longer that block.
+    pub anchors: Vec<(BlockPos, Option<tuff_vanilla_data::Block>)>,
     /// The client's window is shut; the menu is torn down once no
     /// transaction is in flight.
     pub closing: Option<u64>,
@@ -473,6 +476,23 @@ fn by_region(chunks: Vec<ChunkPos>) -> HashMap<RegionPos, Vec<ChunkPos>> {
 }
 
 /// Squared distance from `point` to the block at `pos`.
+/// Whether `now` still counts as the block a menu opened on: the anvil
+/// wears down through its three blocks while in use.
+pub(crate) fn same_menu_block(
+    opened: tuff_vanilla_data::Block,
+    now: tuff_vanilla_data::Block,
+) -> bool {
+    let anvil = |block| {
+        matches!(
+            block,
+            tuff_vanilla_data::Block::Anvil
+                | tuff_vanilla_data::Block::ChippedAnvil
+                | tuff_vanilla_data::Block::DamagedAnvil
+        )
+    };
+    opened == now || (anvil(opened) && anvil(now))
+}
+
 pub fn block_distance_sq(pos: BlockPos, point: [f64; 3]) -> f64 {
     let min = [pos.x as f64, pos.y as f64, pos.z as f64];
     (0..3)
@@ -638,7 +658,10 @@ pub struct PlayerSession {
 }
 
 impl PlayerSession {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub fn new(
         shared: Arc<Shared>,
         id: PlayerId,

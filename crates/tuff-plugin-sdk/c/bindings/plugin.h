@@ -2953,7 +2953,9 @@ extern bool tuff_plugin_host_glide_entities(tuff_plugin_host_list_entity_glide_t
 // The state of each given non-player entity, in order; none for one
 // not in a loaded region. One pass over the loaded regions for the
 // whole list, so read all entities at once rather than one per call.
-// At most 64 per call.
+// When an entity is missing and a region could not be asked (busy or
+// stopping), its absence is unknown and the call fails with
+// unavailable instead of reporting it gone. At most 64 per call.
 extern bool tuff_plugin_host_entity_states(tuff_plugin_host_list_uuid_t *entities, tuff_plugin_host_list_option_entity_state_t *ret, tuff_plugin_host_world_error_t *err);
 // Queues moving the acting player within their current dimension;
 // unavailable without an acting player.

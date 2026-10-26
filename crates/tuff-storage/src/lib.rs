@@ -6,6 +6,14 @@
 //! and player data live in core, which owns the block entity and item models
 //! they map.
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod admin;
 pub mod backend;
 pub mod backup;

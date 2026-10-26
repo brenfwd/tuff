@@ -62,6 +62,10 @@ pub(crate) fn arm_zombified(core: &mut MobCore, cx: &mut TickContext) {
     } else {
         Item::GoldenSword
     };
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (arm_zombified)"
+    )]
     core.equipment.set(
         EquipmentSlot::Mainhand,
         Some(ItemStack::mint(weapon, 1, MintReason::Spawn)),

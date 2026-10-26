@@ -279,7 +279,10 @@ impl<'r> Frame<'r> {
 
     /// Runs `f` with a tick context over the frame. `ticking` is the
     /// entity whose own parts it should not see.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub(in crate::world::region) fn run<R>(
         &self,
         summaries: &[EntitySummary],
@@ -394,7 +397,10 @@ impl<'r> Frame<'r> {
 
 impl Frame<'_> {
     /// One entity's own tick; see `RegionActor::compute_entity`.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub(super) fn compute(
         &self,
         tracked: &mut TrackedEntity,

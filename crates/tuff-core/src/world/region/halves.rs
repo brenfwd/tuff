@@ -193,6 +193,10 @@ impl RegionActor {
         pos: BlockPos,
         items: Option<Vec<Option<ItemSnapshot>>>,
     ) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "preview stand-in stack for a slot or click, burned as Preview (half_snapshot)"
+        )]
         let mirror = items.map(|items| {
             items
                 .iter()
@@ -480,6 +484,10 @@ impl RegionActor {
             return Some(stack);
         }
         let (moving, rest) = stack.split(inserted);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "preview stand-in stack for a slot or click, burned as Preview (insert_far)"
+        )]
         let shown = ItemStack::mint_like(&moving, moving.count(), MintReason::Preview);
         if let Err(message) = neighbour.try_internal(RegionInternal::HalfInsert {
             pos: part,

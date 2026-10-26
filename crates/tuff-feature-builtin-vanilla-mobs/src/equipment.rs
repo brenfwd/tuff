@@ -275,6 +275,7 @@ impl Equipment {
             let mut kept = Compound::new();
             for (key, value) in saved.iter() {
                 let slot = SLOTS.iter().position(|(_, name, _)| *name == key);
+                #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (load)")]
                 let stack = value.as_compound().and_then(ItemStack::from_storage);
                 match (slot, stack) {
                     (Some(i), Some(stack)) => self.items[i] = Some(stack),

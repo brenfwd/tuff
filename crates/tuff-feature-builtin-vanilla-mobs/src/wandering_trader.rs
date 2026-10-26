@@ -241,6 +241,10 @@ fn finish_drinking(mob: &mut MobCore, cx: &mut TickContext) {
 }
 
 fn invisibility_potion() -> ItemStack {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (invisibility_potion)"
+    )]
     let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Spawn);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Invisibility),
@@ -249,6 +253,10 @@ fn invisibility_potion() -> ItemStack {
     stack
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "item a mob spawns, wears or throws (milk)"
+)]
 fn milk() -> ItemStack {
     ItemStack::mint(Item::MilkBucket, 1, MintReason::Spawn)
 }

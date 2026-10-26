@@ -90,6 +90,10 @@ fn eject(world: &mut dyn RegionWorld, pos: BlockPos) {
         f64::from(pos.y) + 1.01,
         f64::from(pos.z) + 0.5 + dz,
     ];
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "block yields an item outside loot tables (eject)"
+    )]
     world.spawn_item_at(
         ItemStack::mint(Item::BoneMeal, 1, MintReason::Growth),
         position,
@@ -119,6 +123,10 @@ impl ItemPort for ComposterPort {
         ripe(world, at).then(|| ItemSnapshot::new(Item::BoneMeal, 1))
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "block yields an item outside loot tables (take)"
+    )]
     fn take(&self, world: &mut dyn RegionWorld, at: &PortAccess) -> Option<ItemStack> {
         if !ripe(world, at) {
             return None;
@@ -158,6 +166,7 @@ impl ItemPort for PotPort {
         let Some(nbt) = world.raw_block_entity_mut(at.pos) else {
             return Err(stack);
         };
+        #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (offer)")]
         let merged = match nbt.get_compound(POT_ITEM).and_then(ItemStack::from_storage) {
             None => stack,
             Some(mut held) => {

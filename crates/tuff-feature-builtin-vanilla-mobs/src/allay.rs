@@ -572,9 +572,11 @@ impl Species for Allay {
 
     fn load(&mut self, core: &mut MobCore, nbt: &mut Compound) {
         if let Some(list) = take(nbt, "Inventory", |t| t.as_list().map(<[Tag]>::to_vec)) {
-            self.inventory = list
+            #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (load)")]
+            let minted = list
                 .iter()
                 .find_map(|t| ItemStack::from_storage(t.as_compound()?));
+            self.inventory = minted;
         }
         let cooldown = take_number(nbt, "DuplicationCooldown").map_or(0, |v| v as i64);
         self.set_duplication_cooldown(core, cooldown);

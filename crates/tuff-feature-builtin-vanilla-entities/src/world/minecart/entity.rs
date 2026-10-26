@@ -215,6 +215,11 @@ impl RegionEntity for Minecart {
         Tick::Alive
     }
 
+    fn kill(&mut self, cx: &mut TickContext) -> bool {
+        self.spill(cx);
+        true
+    }
+
     fn hurt(&mut self, amount: f32, damage_type: &'static DamageType) -> bool {
         self.mark_hurt(amount);
         let ignites = tuff_datapack::tags::has(

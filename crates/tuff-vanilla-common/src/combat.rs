@@ -119,7 +119,10 @@ pub fn scales_with_difficulty(kind: &DamageType, caused_by_living: bool, by_play
     match tuff_core::world::effective_damage_type(kind).scaling {
         Scaling::Always => true,
         Scaling::WhenCausedByLivingNonPlayer => caused_by_living && !by_player,
-        #[allow(unreachable_patterns)]
+        #[expect(
+            unreachable_patterns,
+            reason = "arm kept for variants added by data updates"
+        )]
         _ => false,
     }
 }

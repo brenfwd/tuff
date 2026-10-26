@@ -1,5 +1,13 @@
 //! Stateless gameplay helpers shared by the vanilla feature crates.
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod block_support;
 pub mod brushable;
 pub mod combat;

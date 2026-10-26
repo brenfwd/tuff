@@ -33,7 +33,7 @@ use tuff_plugin_sdk::prelude::*;
 use tuff_plugin_sdk::schedule::every;
 use tuff_plugin_sdk::types::FakeError;
 
-use crate::core::{Body, Bots, Delivery, Event, Host, Perceived};
+use crate::core::{Body, Bots, Delivery, Event, Host, Lookup, Perceived};
 use crate::exec::Drive;
 
 const DEFAULT_DIMENSION: &str = "minecraft:overworld";
@@ -309,35 +309,42 @@ impl Host for Real {
         })
     }
 
-    fn target(&mut self, body: Body, uuid: &str) -> Option<combat::Target> {
-        let dimension = &self.bodies.get(&body)?.2;
+    fn target(&mut self, body: Body, uuid: &str) -> Lookup {
+        let Some((_, _, dimension)) = self.bodies.get(&body) else {
+            return Lookup::Gone;
+        };
         if let Some(player) = tuff_plugin_sdk::players::state(uuid) {
             let at = player.location;
-            return (&at.dimension == dimension).then_some(combat::Target {
-                pos: control::Vec3 {
-                    x: at.pos.x,
-                    y: at.pos.y,
-                    z: at.pos.z,
-                },
-                alive: player.alive,
-                width: 0.6,
-                height: 1.8,
-            });
+            return match &at.dimension == dimension {
+                true => Lookup::Found(combat::Target {
+                    pos: control::Vec3 {
+                        x: at.pos.x,
+                        y: at.pos.y,
+                        z: at.pos.z,
+                    },
+                    alive: player.alive,
+                    width: 0.6,
+                    height: 1.8,
+                }),
+                false => Lookup::Gone,
+            };
         }
-        let state = tuff_plugin_sdk::entity_states(&[uuid])
-            .ok()?
-            .into_iter()
-            .next()??;
-        Some(combat::Target {
-            pos: control::Vec3 {
-                x: state.pos.x,
-                y: state.pos.y,
-                z: state.pos.z,
+        match tuff_plugin_sdk::entity_states(&[uuid]) {
+            Err(_) => Lookup::Unknown,
+            Ok(states) => match states.into_iter().next().flatten() {
+                None => Lookup::Gone,
+                Some(state) => Lookup::Found(combat::Target {
+                    pos: control::Vec3 {
+                        x: state.pos.x,
+                        y: state.pos.y,
+                        z: state.pos.z,
+                    },
+                    alive: state.health > 0.0,
+                    width: 0.6,
+                    height: 1.95,
+                }),
             },
-            alive: state.health > 0.0,
-            width: 0.6,
-            height: 1.95,
-        })
+        }
     }
 
     fn attack(&mut self, body: Body, uuid: &str) {

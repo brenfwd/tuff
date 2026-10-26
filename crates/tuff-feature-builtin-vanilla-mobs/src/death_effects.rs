@@ -114,6 +114,10 @@ pub fn wither_rose(core: &MobCore, cx: &mut TickContext) {
     if plants {
         cx.effects.push(Effect::SetBlock { pos, state });
     } else {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (wither_rose)"
+        )]
         core.drop_item(
             ItemStack::mint(Item::WitherRose, 1, MintReason::Spawn),
             0.0,

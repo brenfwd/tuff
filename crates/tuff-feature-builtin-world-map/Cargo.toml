@@ -5,6 +5,9 @@ edition = "2024"
 license.workspace = true
 build = "build.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 tuff-web-ui = { workspace = true }
 tuff-item = { workspace = true }

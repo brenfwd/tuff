@@ -82,6 +82,10 @@ impl CustomItemDef {
     }
 
     /// A stack of this item.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "/give style stack of a custom item (stack)"
+    )]
     pub fn stack(&self, count: u8) -> ItemStack {
         ItemStack::mint_with(self.base, count, &self.components(), MintReason::Command)
     }

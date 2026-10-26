@@ -295,6 +295,10 @@ async fn use_empty_map(session: &mut PlayerSession, off_hand: bool) {
     session
         .player_sound(SoundEvent::UiCartographyTableTakeResult, 1.0, 1.0)
         .await;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item turning into another (use_empty_map)"
+    )]
     let mut map = ItemStack::mint(Item::FilledMap, 1, MintReason::Transform);
     map.components.map_id = Some(id);
     if session.inventory.hand(off_hand).is_none() {

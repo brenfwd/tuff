@@ -849,6 +849,10 @@ impl Equine {
             core.drop_item(stack, 0.0, cx);
         }
         if std::mem::take(&mut self.has_chest) {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (died)"
+            )]
             core.drop_item(ItemStack::mint(Item::Chest, 1, MintReason::Spawn), 0.0, cx);
             core.changed(FLAGS + 1);
         }

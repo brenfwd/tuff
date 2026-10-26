@@ -70,7 +70,6 @@ impl Entry {
     /// An advancement with its criteria sorted by name. `requirements`
     /// default to one group per criterion; given ones must name exactly the
     /// criteria.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: Frozen<str>,
         parent_name: Option<Frozen<str>>,

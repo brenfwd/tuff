@@ -1,6 +1,7 @@
 //! A block exists exactly once. The tokens (`BrokenBlock`, `HeldBlock`) make
-//! that a matter of types; this scan keeps the few doors that mint one out
-//! of thin air confined to the places that need them.
+//! that a matter of types; clippy.toml gates the methods that mint one,
+//! and this scan keeps the enum variants and writes clippy cannot name out
+//! of the places that must not use them.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,30 +16,6 @@ struct Door {
 
 const DOORS: &[Door] = &[
     Door {
-        needle: "BrokenBlock::simulated",
-        allowed: &["crates/tuff-feature-builtin-vanilla-commands/src/loot.rs"],
-        in_tests: false,
-    },
-    Door {
-        needle: "HeldBlock::from_storage",
-        allowed: &[
-            "crates/tuff-core/src/world/region/pistons.rs",
-            "crates/tuff-feature-builtin-vanilla-blocks/src/falling.rs",
-            "crates/tuff-feature-builtin-vanilla-mobs/src/enderman.rs",
-        ],
-        in_tests: false,
-    },
-    Door {
-        needle: "BrokenBlock::test(",
-        allowed: &[],
-        in_tests: true,
-    },
-    Door {
-        needle: "HeldBlock::test(",
-        allowed: &[],
-        in_tests: true,
-    },
-    Door {
         needle: "TntOrigin::Command",
         allowed: &[],
         in_tests: false,
@@ -46,78 +23,6 @@ const DOORS: &[Door] = &[
     Door {
         needle: "TntOrigin::Duplicated",
         allowed: &[],
-        in_tests: false,
-    },
-    Door {
-        needle: "block_ledger::duplicate(",
-        allowed: &["crates/tuff-core/src/world/region/ownership.rs"],
-        in_tests: false,
-    },
-    Door {
-        needle: "block_ledger::duplicate_tnt(",
-        allowed: &["crates/tuff-core/src/world/region/explosions.rs"],
-        in_tests: false,
-    },
-    Door {
-        needle: "block_ledger::duplicate_held(",
-        allowed: &["crates/tuff-feature-builtin-vanilla-blocks/src/falling.rs"],
-        in_tests: false,
-    },
-    Door {
-        needle: "StoredEntity::from_storage",
-        allowed: &[
-            "crates/tuff-core/src/world/session/persist.rs",
-            "crates/tuff-feature-builtin-vanilla-mobs/src/hive.rs",
-        ],
-        in_tests: true,
-    },
-    Door {
-        needle: "StoredEntity::taken(",
-        allowed: &[
-            "crates/tuff-core/src/world/region_api.rs",
-            "crates/tuff-core/src/world/region/entities/shoulder.rs",
-        ],
-        in_tests: true,
-    },
-    Door {
-        needle: "entity_uuids.claim(",
-        allowed: &["crates/tuff-core/src/world/mod.rs"],
-        in_tests: false,
-    },
-    Door {
-        needle: "PlayerLease::detached(",
-        allowed: &[
-            "crates/tuff-core/src/world/session/accessors.rs",
-            "crates/tuff-core/src/world/session/persist.rs",
-        ],
-        in_tests: true,
-    },
-    Door {
-        needle: "place_from_item(",
-        allowed: &[
-            "crates/tuff-core/src/world/region/blocks.rs",
-            "crates/tuff-core/src/world/region/api.rs",
-        ],
-        in_tests: false,
-    },
-    Door {
-        needle: "take_placing(",
-        allowed: &[
-            "crates/tuff-core/src/world/region/blocks.rs",
-            "crates/tuff-core/src/world/region/api.rs",
-            "crates/tuff-core/src/world/messages/action.rs",
-        ],
-        in_tests: false,
-    },
-    Door {
-        needle: "place_item_block(",
-        allowed: &[
-            "crates/tuff-core/src/world/region/api.rs",
-            "crates/tuff-core/src/world/region/blocks.rs",
-            "crates/tuff-core/src/world/region/blocks/interaction.rs",
-            "crates/tuff-core/src/world/region_api.rs",
-            "crates/tuff-feature-builtin-vanilla-items/src/world/region/dispense.rs",
-        ],
         in_tests: false,
     },
     Door {

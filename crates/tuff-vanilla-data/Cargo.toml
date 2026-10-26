@@ -5,6 +5,9 @@ edition = "2024"
 license.workspace = true
 build = "build/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 # Parses the raw-JSON escape hatches (biome attributes, loot table condition
 # and function parameters, command argument-parser properties, ...) that this

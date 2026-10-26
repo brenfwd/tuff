@@ -329,6 +329,10 @@ impl Species for Armadillo {
             .as_ref()
             .is_some_and(|stack| stack.item() == Item::Brush);
         if brush && !core.is_baby() {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item a mob spawns, wears or throws (interact)"
+            )]
             core.drop_item(
                 ItemStack::mint(Item::ArmadilloScute, 1, MintReason::Spawn),
                 0.0,
@@ -382,6 +386,10 @@ impl Species for Armadillo {
         if stack.item() != Item::Brush || core.is_baby() {
             return None;
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (dispensed_on)"
+        )]
         core.drop_item(
             ItemStack::mint(Item::ArmadilloScute, 1, MintReason::Spawn),
             0.0,

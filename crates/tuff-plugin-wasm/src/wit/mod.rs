@@ -23,6 +23,11 @@ pub mod testing;
 pub mod tree;
 pub mod value;
 
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "generated bindings carry their own allow attributes"
+)]
 #[allow(clippy::all, dead_code)]
 pub mod bindings {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

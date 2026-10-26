@@ -1,6 +1,11 @@
 //! The example feature loads beside the vanilla set, and its recipes work
 //! beside vanilla's and on an inert core.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "test code is exempt from the door gate"
+)]
+
 use tuff_core::command::ParseContext;
 use tuff_core::feature::{Feature, load_all};
 use tuff_core::registry::Registries;

@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 license.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 tuff-item = { workspace = true }
 tuff-web-ui = { workspace = true }

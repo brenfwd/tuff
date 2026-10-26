@@ -103,6 +103,10 @@ fn slot_nbt(nbt: &Compound, id: i32, holder: Holder) -> Option<Option<&Compound>
 
 /// The stack in slot `id`, loaded to be changed and written back with
 /// [`write_slot`] (or released). `None` when the holder has no such slot.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "decoding a saved stack (read_slot)"
+)]
 pub(super) fn read_slot(nbt: &Compound, id: i32, holder: Holder) -> Option<Option<ItemStack>> {
     Some(slot_nbt(nbt, id, holder)?.and_then(ItemStack::from_storage))
 }
@@ -464,6 +468,7 @@ fn spread<M: tuff_item::item::Mode>(
     ids: &[i32],
     stack: &ItemStack<M>,
 ) -> Vec<(i32, Option<ItemStack>)> {
+    #[expect(clippy::disallowed_methods, reason = "command-granted stack (spread)")]
     let value = || {
         (stack.count() > 0).then(|| ItemStack::mint_like(stack, stack.count(), MintReason::Command))
     };
@@ -500,6 +505,10 @@ impl Executor for ItemCommand {
                 let source = source_stack(ctx, &source_slot).await?;
                 if ctx.arg("modifier").is_some() {
                     let functions = modifier(ctx)?;
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "command-granted stack (execute)"
+                    )]
                     let working =
                         ItemStack::mint_like(&source, source.count(), MintReason::Command);
                     apply(ctx, &functions, working, &mut StdRng::from_entropy())

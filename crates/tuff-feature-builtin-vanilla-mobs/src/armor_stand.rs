@@ -315,6 +315,10 @@ impl ArmorStand {
     }
 
     fn broken_by_player(&mut self, core: &mut MobCore, cx: &mut TickContext) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (broken_by_player)"
+        )]
         let mut item = ItemStack::mint(Item::ArmorStand, 1, MintReason::Spawn);
         if let Some(name) = core
             .base

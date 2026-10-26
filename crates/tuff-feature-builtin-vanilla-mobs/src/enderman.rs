@@ -558,7 +558,12 @@ impl Species for Enderman {
         })
         .filter(|state| !tuff_world_model::chunk::is_air(*state));
         self.carried = carried;
-        core.carried_block = carried.map(HeldBlock::from_storage);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "held block loaded from a save (load)"
+        )]
+        let minted = carried.map(HeldBlock::from_storage);
+        core.carried_block = minted;
     }
 
     fn save(&self, core: &MobCore, out: &mut Compound) {

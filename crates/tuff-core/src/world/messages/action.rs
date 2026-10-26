@@ -273,6 +273,10 @@ impl PlaceOffer {
             .position(|(at, stack)| *at == slot && !stack.is_empty())?;
         let stack = &mut stacks[index].1;
         if self.creative {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "creative inventory, pick-block or creative copy (keep_one)"
+            )]
             return Some(ItemStack::mint_like(
                 &*stack,
                 1,
@@ -297,6 +301,10 @@ impl PlaceOffer {
 
     /// Takes the whole stack offered from `slot` for a block to keep: a
     /// creative copy for a creative player.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "creative player keeps a copy of the offered stack (keep_all)"
+    )]
     pub fn keep_all(&self, slot: usize) -> Option<ItemStack> {
         if !self.creative {
             return self.take_all(slot);

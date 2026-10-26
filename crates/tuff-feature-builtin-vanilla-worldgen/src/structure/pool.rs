@@ -295,7 +295,10 @@ impl Element {
     }
 
     /// Places the element's part inside `chunk_box`.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub fn place(
         &self,
         level: &mut Region,

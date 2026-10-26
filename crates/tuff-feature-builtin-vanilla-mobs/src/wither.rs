@@ -392,6 +392,10 @@ impl Species for Wither {
             0.2,
             cx.rng.r#gen::<f64>() * 0.2 - 0.1,
         ];
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (died)"
+        )]
         cx.effects.push(Effect::DropExtendedItem {
             stack: tuff_item::item::ItemStack::mint(
                 tuff_vanilla_data::Item::NetherStar,

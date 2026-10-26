@@ -205,6 +205,10 @@ impl Villager {
             return false;
         };
         core.move_to_block(target, 1, SPEED, cx);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (start_bonemeal)"
+        )]
         core.equipment.set(
             EquipmentSlot::Mainhand,
             Some(ItemStack::mint(Item::BoneMeal, 1, MintReason::Spawn)),
@@ -430,6 +434,10 @@ impl Villager {
     }
 
     /// At its composter it turns wheat into bread.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "farmer villager turns wheat into bread (bake_bread)"
+    )]
     pub(super) fn bake_bread(&mut self, core: &MobCore, job_site: BlockPos, cx: &mut TickContext) {
         if !self.is_farmer()
             || (cx.block)(job_site).is_none_or(|s| s.block() != Block::Composter)

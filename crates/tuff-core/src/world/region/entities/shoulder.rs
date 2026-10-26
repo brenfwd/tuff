@@ -67,10 +67,15 @@ impl RegionActor {
         {
             let nbt = crate::world::entity::save(&*tracked.entity);
             if let Some(mut tracked) = self.remove_entity_kept(entity, &[]) {
-                saved = Some(crate::world::stored_entity::StoredEntity::taken(
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "shoulder entity leaves the player as saved data (shoulder_taken)"
+                )]
+                let taken = crate::world::stored_entity::StoredEntity::taken(
                     nbt,
                     tracked.entity.base_mut().claim.take(),
-                ));
+                );
+                saved = Some(taken);
             }
         }
         self.ents

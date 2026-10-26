@@ -238,6 +238,10 @@ pub fn brush(
 fn complete(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState, player: &PlayerHandle) {
     unpack_loot(world, pos, state, player);
     let (item, face) = match world.raw_block_entity_mut(pos) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "decoding a saved stack (complete)"
+        )]
         Some(nbt) => (
             nbt.remove(ITEM)
                 .and_then(|tag| tag.as_compound().and_then(ItemStack::from_storage)),
@@ -299,6 +303,10 @@ pub fn check_reset(world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState
 }
 
 /// The item a brushable block entity holds.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "decoding a saved stack (held_item)"
+)]
 pub fn held_item(nbt: &Compound) -> Option<ItemStack> {
     nbt.get(ITEM)
         .and_then(|tag| tag.as_compound())

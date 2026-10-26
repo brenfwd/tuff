@@ -234,6 +234,10 @@ impl Species for Vex {
     }
 
     fn finalize_spawn(&mut self, core: &mut MobCore, cx: &mut TickContext) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (finalize_spawn)"
+        )]
         core.equipment.set(
             EquipmentSlot::Mainhand,
             Some(ItemStack::mint(Item::IronSword, 1, MintReason::Spawn)),

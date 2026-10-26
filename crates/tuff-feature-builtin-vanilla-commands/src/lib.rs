@@ -3,6 +3,14 @@
 //! the administration set in `core-commands` (stop, save-all, op, deop,
 //! whitelist and the ban lists), registered into core's command registry.
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod admin;
 pub mod advancement;
 pub mod attribute;

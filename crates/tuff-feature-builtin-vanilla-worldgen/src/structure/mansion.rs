@@ -496,7 +496,10 @@ impl Placer<'_> {
         walker.rotation = r.then(Rotation::CounterClockwise90);
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn outer_walls(
         &mut self,
         walker: &mut Walker,
@@ -739,7 +742,6 @@ impl Placer<'_> {
         self.add(&name, at, piece_rotation.then(rotation));
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn room_1x2(
         &mut self,
         room: BlockPos,

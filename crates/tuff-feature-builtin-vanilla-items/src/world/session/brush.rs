@@ -88,7 +88,10 @@ fn brush_at(
     }
 }
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "crate-internal trait whose futures are awaited in place"
+)]
 pub trait BrushExt {
     /// One tick of brushing: applies the last stroke's answer, strokes on
     /// the fifth tick of every ten, and ends with the use duration.
