@@ -43,6 +43,7 @@ mod shulkers;
 mod spawn_caps;
 mod swimming;
 mod tadpoles;
+mod trade_settlement;
 mod trial_chambers;
 mod village_life;
 mod village_pois;

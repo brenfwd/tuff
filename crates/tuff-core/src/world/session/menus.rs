@@ -746,9 +746,7 @@ impl PlayerSession {
         }
         if self.menus.menu.is_some() {
             self.close_menu(true).await;
-            if let Some(menu) = self.menus.menu.as_mut() {
-                menu.pending = None;
-            }
+            self.abandon_pending().await;
             self.finish_menu_close().await;
         }
         let mut data = Vec::new();
@@ -1021,7 +1019,7 @@ impl PlayerSession {
         }
         returned.extend(self.inventory.carried_mut().take());
         for stack in returned {
-            let leftover = if self.disconnected {
+            let leftover = if self.loses_inventory() {
                 Some(stack)
             } else {
                 self.inventory.place_back(stack)
@@ -1041,7 +1039,7 @@ impl PlayerSession {
         };
         if let Some(since) = menu.closing {
             if self.tick.saturating_sub(since) > MENU_CLOSE_TIMEOUT_TICKS {
-                self.menus.menu.as_mut().unwrap().pending = None;
+                self.abandon_pending().await;
                 self.finish_menu_close().await;
             }
             return;
@@ -1369,69 +1367,6 @@ impl PlayerSession {
         self.settle_click(sim, took_result, resend).await;
     }
 
-    /// Asks the merchant to agree to the trades a click made; the click
-    /// settles once it does. Until then the screen and inventory stay as
-    /// they were, with the offers as they were kept to restore on refusal.
-    pub async fn submit_trade(
-        &mut self,
-        sim: Sim,
-        offers_before: Vec<MerchantOffer>,
-        trades: Vec<(usize, u32)>,
-        resend: bool,
-    ) {
-        let times: u32 = trades.iter().map(|(_, n)| n).sum();
-        self.progress
-            .stats
-            .award_custom(CustomStat::TradedWithVillager, times as i32);
-        let merchant = match self.menus.menu.as_ref().map(|m| &m.backing) {
-            Some(MenuBacking::Merchant(merchant)) => Some(*merchant),
-            _ => None,
-        };
-        if let Some(merchant) = merchant {
-            self.traded(merchant, &offers_before, &trades);
-        }
-        let Some(menu) = self.menus.menu.as_mut() else {
-            sim.discard();
-            return;
-        };
-        let MenuBacking::Merchant(merchant) = menu.backing else {
-            sim.discard();
-            return;
-        };
-        menu.pending = Some(Pending {
-            origins: Vec::new(),
-            sim,
-            reasons: None,
-            resend,
-            merchant: Some(offers_before),
-        });
-        let window_id = menu.window_id;
-        let region = match self.view.entities.visible_entity(merchant) {
-            Some((_, chunk, _)) => self.region(chunk.region()).await,
-            None => None,
-        };
-        let request = TradeRequest {
-            merchant,
-            player: self.profile.id,
-            trades,
-        };
-        let sent = match region {
-            Some(region) => {
-                region
-                    .request(RegionRequest::Trade {
-                        player: self.conn.handle.clone(),
-                        window_id,
-                        request,
-                    })
-                    .await
-            }
-            None => false,
-        };
-        if !sent {
-            Box::pin(self.trade_answered(window_id, false)).await;
-        }
-    }
-
     /// A merchant's screen opens: an empty payment section, then its
     /// offers.
     pub async fn open_merchant(
@@ -1450,9 +1385,7 @@ impl PlayerSession {
         };
         if self.menus.menu.is_some() {
             self.close_menu(true).await;
-            if let Some(menu) = self.menus.menu.as_mut() {
-                menu.pending = None;
-            }
+            self.abandon_pending().await;
             self.finish_menu_close().await;
         }
         self.menus.window_counter = self.menus.window_counter % 100 + 1;

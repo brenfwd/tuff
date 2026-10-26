@@ -343,6 +343,10 @@ pub struct Pending {
     pub resend: bool,
     /// A merchant screen's offers before the trade.
     pub merchant: Option<Vec<MerchantOffer>>,
+    /// A trade's payment, taken out of its places when the click was made.
+    pub pool: Vec<ItemStack>,
+    /// What a trade makes on the merchant's agreement.
+    pub made: Option<crate::world::menu::settle::Balance>,
 }
 
 /// A transaction over both regions of a split double chest, waiting for
@@ -1228,9 +1232,7 @@ impl PlayerSession {
         self.disconnected = true;
         self.return_payments().await;
         self.close_menu(false).await;
-        if let Some(menu) = self.menus.menu.as_mut() {
-            menu.pending = None;
-        }
+        self.abandon_pending().await;
         self.finish_menu_close().await;
         for stack in self.inventory.close() {
             self.throw_item(stack).await;
