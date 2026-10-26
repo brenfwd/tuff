@@ -281,6 +281,9 @@ impl RegionActor {
             .iter()
             .filter_map(|pos| {
                 let state = self.block(*pos)?;
+                if self.anti_xray_conceals(*pos) {
+                    return None;
+                }
                 Some(framed(&play::BlockUpdate {
                     position: *pos,
                     state: state.id(),

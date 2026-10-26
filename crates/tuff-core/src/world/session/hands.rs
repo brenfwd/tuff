@@ -23,6 +23,9 @@ use tuff_world_model::pos::ChunkPos;
 
 /// Ticks between checks that a compass's lodestone still stands.
 const LODESTONE_CHECK_INTERVAL: u64 = 10;
+/// How far from the eye a block correction may be sent; actions beyond it
+/// are only acknowledged.
+const RESEND_RANGE: f64 = REACH + 2.0;
 const CAN_BREAK: &str = "minecraft:can_break";
 const CAN_PLACE_ON: &str = "minecraft:can_place_on";
 
@@ -241,7 +244,9 @@ impl PlayerSession {
     /// Asks the owning region to resend a block, undoing the client's
     /// prediction, and acknowledges `sequence`.
     pub async fn resend(&mut self, pos: BlockPos, sequence: i32) {
-        match self.region_of(pos) {
+        let reachable = distance_sq(self.eye(), pos.center()) <= RESEND_RANGE * RESEND_RANGE
+            && self.view.sent.contains(&ChunkPos::of_block(pos));
+        match self.region_of(pos).filter(|_| reachable) {
             Some(handle) => {
                 handle
                     .request(RegionRequest::Resend {

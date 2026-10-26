@@ -309,6 +309,7 @@ impl RegionActor {
             if self
                 .block_entity_kind(pos)
                 .is_some_and(BlockEntityType::sends_updates)
+                && self.anti_xray_allows_entity_data(pos)
             {
                 self.send_block_entity_data(pos);
             }

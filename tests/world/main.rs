@@ -60,6 +60,7 @@ mod beehive;
 mod block_dupers;
 mod block_entities;
 mod block_entity_tickers;
+mod block_oracle;
 mod block_write_flags;
 mod book_edit;
 mod bots;

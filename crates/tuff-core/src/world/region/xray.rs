@@ -22,6 +22,7 @@ use tuff_world_model::pos::ChunkPos;
 pub(super) struct AntiXray {
     plan: Option<Arc<Plan>>,
     changes: watch::Receiver<Option<Change>>,
+    revealed: HashSet<BlockPos>,
 }
 
 impl AntiXray {
@@ -29,6 +30,7 @@ impl AntiXray {
         Self {
             changes: shared.config.subscribe(),
             plan: build(shared, dimension),
+            revealed: HashSet::new(),
         }
     }
 }
@@ -145,6 +147,38 @@ impl RegionActor {
         }
     }
 
+    /// Whether clients are not to learn the block at `pos`: it is hidden
+    /// and enclosed.
+    pub(super) fn anti_xray_conceals(&self, pos: BlockPos) -> bool {
+        let Some(plan) = self.chunk_io.anti_xray.plan.as_ref() else {
+            return false;
+        };
+        let Some(state) = self.block(pos) else {
+            return false;
+        };
+        pos.y <= plan.max_y
+            && plan.hides(state)
+            && [
+                (1, 0, 0),
+                (-1, 0, 0),
+                (0, 1, 0),
+                (0, -1, 0),
+                (0, 0, 1),
+                (0, 0, -1),
+            ]
+            .iter()
+            .all(|(dx, dy, dz)| {
+                self.block(BlockPos::new(pos.x + dx, pos.y + dy, pos.z + dz))
+                    .is_none_or(anti_xray::occludes)
+            })
+    }
+
+    /// Whether a block entity update at `pos` may go out, now that its
+    /// update has been taken off the queue.
+    pub(super) fn anti_xray_allows_entity_data(&mut self, pos: BlockPos) -> bool {
+        self.chunk_io.anti_xray.revealed.remove(&pos) || !self.anti_xray_conceals(pos)
+    }
+
     /// A player started mining at `pos`: what is next to it is sent as it
     /// is, before the block breaks.
     pub(super) fn anti_xray_mining(&mut self, pos: BlockPos) {
@@ -246,6 +280,7 @@ impl RegionActor {
             }
         }
         for at in entities {
+            self.chunk_io.anti_xray.revealed.insert(at);
             if !self.block_entity_updates.contains(&at) {
                 self.block_entity_updates.push(at);
             }
