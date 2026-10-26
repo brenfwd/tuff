@@ -1424,9 +1424,7 @@ async fn the_region_refuses_a_click_from_a_window_that_was_closed() {
         })
         .await;
     let answer = expect(&mut alice_events, |event| match event {
-        PlayerEvent::Transaction {
-            accepted, pool, ..
-        } => Some((accepted, pool)),
+        PlayerEvent::Transaction { accepted, pool, .. } => Some((accepted, pool)),
         _ => None,
     })
     .await;

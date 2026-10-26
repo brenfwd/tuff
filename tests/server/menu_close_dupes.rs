@@ -319,7 +319,11 @@ impl Rig {
                 }
             }
         } else if let Some((name, _)) = kind.entity() {
-            let at = if matches!(kind, Kind::Donkey) { x - 3 } else { x };
+            let at = if matches!(kind, Kind::Donkey) {
+                x - 3
+            } else {
+                x
+            };
             let said = self.say(&format!(
                 "summon {name} {}.5 {y} {z}.5 {{Owner:[I;1,2,3,4],Tame:1b,ChestedHorse:1b,Items:[{{Slot:0b,id:\"minecraft:{ITEM}\",count:{SLOT_ZERO}}},{{Slot:1b,id:\"minecraft:{ITEM}\",count:{SLOT_ONE}}}]}}",
                 at
@@ -731,8 +735,10 @@ async fn result_replaced(station: Station) {
     let rig = Rig::new().await;
     let [x, y, z] = CONTAINER;
     for (n, (_, stack)) in station.gives.iter().enumerate() {
-        rig.say(&format!("item replace entity Opener hotbar.{n} with {stack}"))
-            .await;
+        rig.say(&format!(
+            "item replace entity Opener hotbar.{n} with {stack}"
+        ))
+        .await;
     }
     rig.say(&format!("setblock {x} {y} {z} {}", station.block))
         .await;
