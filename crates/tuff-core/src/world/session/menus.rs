@@ -21,6 +21,7 @@ use std::collections::VecDeque;
 use tuff_item::item::BurnReason;
 use tuff_item::item::ItemStack;
 use tuff_item::item::enchanting::TableOffers;
+use tuff_vanilla_data::Block;
 use tuff_vanilla_data::registry::CustomStat;
 use tuff_vanilla_data::registry::SoundEvent;
 use tuff_world_model::BlockPos;
@@ -832,6 +833,16 @@ impl PlayerSession {
             }),
             (None, None) => unreachable!("checked above"),
         }
+        let anchors = backing
+            .positions()
+            .into_iter()
+            .map(|pos| {
+                (
+                    pos,
+                    self.client_world().block_at(pos).map(|state| state.block()),
+                )
+            })
+            .collect();
         self.menus.menu = Some(OpenMenu {
             window_id,
             kind: open.kind,
@@ -846,6 +857,7 @@ impl PlayerSession {
             remote: remote.clone(),
             split: None,
             queued: VecDeque::new(),
+            anchors,
             closing: None,
         });
         self.send_menu_content();
@@ -977,7 +989,11 @@ impl PlayerSession {
                     }
                 }
             }
-            MenuBacking::Blocks(_) | MenuBacking::Entity(_) => {}
+            MenuBacking::Blocks(_) | MenuBacking::Entity(_) => {
+                for stack in menu.container.iter_mut().filter_map(Option::take) {
+                    stack.burn(BurnReason::Preview);
+                }
+            }
         }
         if let MenuBacking::Merchant(merchant) = menu.backing {
             self.stop_trading(merchant).await;
@@ -1017,23 +1033,44 @@ impl PlayerSession {
             }
             return;
         }
+        let learned: Vec<(usize, Block)> = menu
+            .anchors
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, opened))| opened.is_none())
+            .filter_map(|(i, (pos, _))| Some((i, self.client_world().block_at(*pos)?.block())))
+            .collect();
+        if !learned.is_empty() {
+            let menu = self.menus.menu.as_mut().unwrap();
+            for (i, block) in learned {
+                menu.anchors[i].1 = Some(block);
+            }
+        }
+        let menu = self.menus.menu.as_ref().unwrap();
         let range = BLOCK_INTERACTION_RANGE + MENU_RANGE_BUFFER;
         let eye = self.eye();
-        let valid = match menu.backing {
-            MenuBacking::Merchant(merchant) | MenuBacking::Entity(merchant) => self
-                .view
-                .entities
-                .visible_entity(merchant)
-                .is_some_and(|(_, _, [x, y, z])| {
-                    let reach = ENTITY_INTERACTION_RANGE + MENU_RANGE_BUFFER + 1.0;
-                    distance_sq(eye, [x, y + 1.0, z]) < reach * reach
-                }),
-            _ => menu
-                .backing
-                .positions()
-                .iter()
-                .all(|pos| block_distance_sq(*pos, eye) < range * range),
-        };
+        let anchored = menu.anchors.iter().all(|(pos, opened)| {
+            let Some(opened) = opened else { return true };
+            self.client_world()
+                .block_at(*pos)
+                .is_none_or(|state| same_menu_block(*opened, state.block()))
+        });
+        let valid = anchored
+            && match menu.backing {
+                MenuBacking::Merchant(merchant) | MenuBacking::Entity(merchant) => self
+                    .view
+                    .entities
+                    .visible_entity(merchant)
+                    .is_some_and(|(_, _, [x, y, z])| {
+                        let reach = ENTITY_INTERACTION_RANGE + MENU_RANGE_BUFFER + 1.0;
+                        distance_sq(eye, [x, y + 1.0, z]) < reach * reach
+                    }),
+                _ => menu
+                    .backing
+                    .positions()
+                    .iter()
+                    .all(|pos| block_distance_sq(*pos, eye) < range * range),
+            };
         if !valid || self.is_dead() {
             self.close_menu(true).await;
         }
@@ -1435,6 +1472,7 @@ impl PlayerSession {
             split: None,
             queued: VecDeque::new(),
             closing: None,
+            anchors: Vec::new(),
         });
         self.send_menu_content();
         self.send_merchant_offers();
@@ -1447,3 +1485,15 @@ mod state;
 pub use state::*;
 mod transactions;
 pub use transactions::{Place, Reasons, Sim, mirror_of};
+
+/// Whether `now` still counts as the block a menu opened on: the anvil
+/// wears down through its three blocks while in use.
+fn same_menu_block(opened: Block, now: Block) -> bool {
+    let anvil = |block| {
+        matches!(
+            block,
+            Block::Anvil | Block::ChippedAnvil | Block::DamagedAnvil
+        )
+    };
+    opened == now || (anvil(opened) && anvil(now))
+}

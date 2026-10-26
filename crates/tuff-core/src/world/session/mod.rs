@@ -441,6 +441,9 @@ pub struct OpenMenu {
     /// The two-region transaction whose votes are being collected.
     pub split: Option<SplitTransaction>,
     pub queued: VecDeque<QueuedClick>,
+    /// The block each backing position held when the window opened; the
+    /// menu closes once one of them is no longer that block.
+    pub anchors: Vec<(BlockPos, Option<tuff_vanilla_data::Block>)>,
     /// The client's window is shut; the menu is torn down once no
     /// transaction is in flight.
     pub closing: Option<u64>,
