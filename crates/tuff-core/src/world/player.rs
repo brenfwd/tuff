@@ -643,6 +643,10 @@ impl Fall {
         }
     }
 
+    pub fn in_impulse_grace(&self) -> bool {
+        self.impulse_grace > 0
+    }
+
     pub fn tick_impulse(&mut self) {
         self.impulse_grace = self.impulse_grace.saturating_sub(1);
     }

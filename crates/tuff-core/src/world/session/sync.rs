@@ -28,6 +28,10 @@ pub struct MoveSync {
     /// Feeds this player's ordered chat filtering worker, started on the first filtered message.
     pub chat_filter: Option<tokio::sync::mpsc::Sender<String>>,
     pub moved_this_tick: bool,
+    /// Move packets received, and how many of them earlier ticks had
+    /// already seen; the difference is how many may have piled up this tick.
+    pub(super) move_packets: u32,
+    pub(super) known_move_packets: u32,
 }
 
 impl PlayerSession {
@@ -178,7 +182,7 @@ impl PlayerSession {
             return;
         }
         let old = self.pose.position;
-        let new = movement.position.unwrap_or(old);
+        let new = movement.position.map_or(old, move_check::clamp_position);
         if new.iter().any(|c| !c.is_finite())
             || (self.mode.game_mode != GameMode::Spectator
                 && self.dimension().border().blocks_move(
@@ -189,6 +193,9 @@ impl PlayerSession {
                 ))
         {
             self.teleport(old);
+            return;
+        }
+        if self.refuses_move(old, new) {
             return;
         }
         let (dx, dy, dz) = (new[0] - old[0], new[1] - old[1], new[2] - old[2]);
@@ -255,6 +262,8 @@ impl PlayerSession {
             || self.pose.on_ground
             || dy < -0.03125
             || self.is_gliding()
+            || self.motion.spin_attack_ticks > 0
+            || self.mode.game_mode == GameMode::Spectator
             || self.ride.riding.is_some()
             || self.effect(MobEffect::Levitation).is_some()
             || self.shared.live.network().allow_flight
@@ -270,6 +279,37 @@ impl PlayerSession {
             y + 1.8625,
             z + 0.3625,
         ];
+        self.nothing_around(area)
+    }
+
+    /// A driven vehicle held up by nothing, which the game kicks for like
+    /// a hovering player.
+    pub(super) fn vehicle_floating(&self, dy: f64, on_ground: bool, at: [f64; 3]) -> bool {
+        let Some(riding) = self.ride.riding.as_ref() else {
+            return false;
+        };
+        if on_ground
+            || dy < -0.03125
+            || riding.flying
+            || riding.no_gravity
+            || self.shared.live.network().allow_flight
+        {
+            return false;
+        }
+        let size = riding.kind.size();
+        let half = f64::from(size.width) / 2.0 + 0.0625;
+        let area = [
+            at[0] - half,
+            at[1] - 0.6125,
+            at[2] - half,
+            at[0] + half,
+            at[1] + f64::from(size.height) + 0.0625,
+            at[2] + half,
+        ];
+        self.nothing_around(area)
+    }
+
+    fn nothing_around(&self, area: [f64; 6]) -> bool {
         let mirror = &self.view.mirror;
         !mirror.touches_unknown(area)
             && (area[0].floor() as i32..=area[3].floor() as i32).all(|bx| {

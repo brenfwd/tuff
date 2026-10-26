@@ -87,6 +87,7 @@ impl PlayerSession {
         };
         self.ride.riding = Some(riding);
         if mounted {
+            self.sync.client_floating = false;
             self.fire(crate::world::advancement::trigger::Event::StartedRiding);
         }
         if self.chunk() != chunk_before {
@@ -215,6 +216,12 @@ impl PlayerSession {
         else {
             return;
         };
+        if let VehicleMotion::Corrected(position) = motion {
+            riding.position = position;
+            let seat = self.seat_position(self.ride.riding.as_ref().expect("riding"));
+            self.pose.position = seat;
+            return;
+        }
         let given = &mut riding.given;
         let launch = |given: &mut GivenMotion, velocity: [f64; 3]| {
             let higher = given
@@ -239,6 +246,7 @@ impl PlayerSession {
                 given.piston = Some(tick);
             }
             VehicleMotion::Ridden(speed) => riding.ridden = Some(speed),
+            VehicleMotion::Corrected(_) => {}
         }
     }
 
@@ -257,6 +265,23 @@ impl PlayerSession {
             return;
         }
         let (vehicle, from) = (riding.vehicle, BlockPos::containing(riding.position));
+        let (last, half) = (riding.position, f64::from(riding.kind.size().width) / 2.0);
+        if self.mode.game_mode != GameMode::Spectator
+            && self
+                .dimension()
+                .border()
+                .blocks_move(last, position, half, BORDER_TOLERANCE)
+        {
+            self.send(&play::MoveVehicle {
+                position: last,
+                yaw: self.pose.yaw,
+                pitch: self.pose.pitch,
+            });
+            return;
+        }
+        let floating = self.vehicle_floating(position[1] - last[1], on_ground, position);
+        self.sync.client_floating = floating;
+        let riding = self.ride.riding.as_mut().expect("riding");
         riding.position = position;
         let seat = self.seat_position(self.ride.riding.as_ref().expect("riding"));
         let chunk_before = self.chunk();

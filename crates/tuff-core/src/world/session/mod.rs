@@ -39,6 +39,8 @@ mod events;
 mod game_events;
 mod mode;
 mod motion;
+mod move_check;
+pub use move_check::ENTITY_REACH_TOLERANCE;
 mod net;
 pub use net::TickThrottler;
 mod packets;
@@ -122,7 +124,6 @@ const SPRINTING_MODIFIER: play::AttributeModifierData<'static> = play::Attribute
 
 pub const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(10);
 pub const KEEP_ALIVE_TIMEOUT: Duration = Duration::from_secs(15);
-pub const ATTACK_REACH: f64 = 6.0;
 /// Air gained back each tick out of water.
 pub const AIR_REFILL: i32 = 4;
 /// The air at which a submerged player takes drowning damage and gets a
@@ -1333,6 +1334,7 @@ impl PlayerSession {
         self.tick_combat();
         self.body.fall.tick_impulse();
         self.tick_floating();
+        self.tick_move_packets();
         if !self.is_dead() {
             self.body.health.tick();
             let max_health = self.max_health();

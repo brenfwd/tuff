@@ -99,6 +99,8 @@ pub enum VehicleMotion {
     Piston { bounce: Option<[f64; 3]> },
     /// How fast its driver can ride it now, sent each tick it steers.
     Ridden(crate::world::entity::RiddenSpeed),
+    /// The region refused or held the driver's move: the vehicle is here.
+    Corrected([f64; 3]),
 }
 
 /// What a rider does with its vehicle, sent to the region holding it.

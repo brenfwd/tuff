@@ -8,8 +8,13 @@ use super::{RegionActor, block_at, framed, packets};
 use crate::protocol::play;
 use crate::world::entity::{self, Rider, TrackedEntity};
 use crate::world::messages::{PlayerEvent, PlayerHandle, Riding, VehicleMotion, VehicleRequest};
+use crate::world::physics;
 use tuff_world_model::BlockPos;
 use tuff_world_model::pos::ChunkPos;
+
+const VEHICLE_MOVED_TOO_QUICKLY: f64 = 100.0;
+const VEHICLE_MOVED_WRONGLY: f64 = 0.0625;
+const VEHICLE_SHRINK: f64 = 1.0e-5;
 
 impl RegionActor {
     /// Tells viewers and every rider who rides `tracked` now.
@@ -339,6 +344,47 @@ impl RegionActor {
         mounted
     }
 
+    /// The baseline checks on a vehicle position its driver reports: more
+    /// distance than one packet may cover, or a replay of the move against
+    /// the world that ends elsewhere, or a body pushed into blocks it was
+    /// not in.
+    fn vehicle_move_refused(&self, tracked: &TrackedEntity, position: [f64; 3]) -> bool {
+        let base = tracked.entity.base();
+        let delta = [0, 1, 2].map(|i| position[i] - base.position[i]);
+        let moved_sq: f64 = delta.iter().map(|v| v * v).sum();
+        let velocity_sq: f64 = base.velocity.iter().map(|v| v * v).sum();
+        if moved_sq - velocity_sq > VEHICLE_MOVED_TOO_QUICKLY {
+            return true;
+        }
+        let (columns, halo) = (&self.columns, &self.border.halo);
+        let lookup = |p: BlockPos| block_at(columns, halo, p);
+        let old_box = tracked.entity.bounds();
+        let reach = physics::expand_towards(old_box, delta);
+        let chunk = |value: f64| (value.floor() as i32) >> 4;
+        let loaded = (chunk(reach[0])..=chunk(reach[3])).all(|x| {
+            (chunk(reach[2])..=chunk(reach[5])).all(|z| {
+                let at = ChunkPos::new(x, z);
+                self.columns.contains_key(&at) || halo.contains_key(&at)
+            })
+        });
+        if !loaded {
+            return false;
+        }
+        let step = base
+            .kind
+            .base_attribute(tuff_vanilla_data::registry::Attribute::StepHeight)
+            .unwrap_or(0.0) as f32;
+        let moved = physics::collide(old_box, delta, step, base.on_ground, &lookup);
+        let off = [delta[0] - moved[0], delta[2] - moved[2]];
+        let wrong = off[0] * off[0] + off[1] * off[1] > VEHICLE_MOVED_WRONGLY;
+        let shrink = |bounds| physics::inflate(bounds, [-VEHICLE_SHRINK; 3]);
+        let new_box = physics::offset(old_box, delta);
+        (wrong && physics::no_collision(shrink(old_box), &lookup))
+            || physics::colliders(shrink(new_box), &lookup)
+                .into_iter()
+                .any(|shape| !physics::intersects(shape, shrink(old_box)))
+    }
+
     /// The driver's client moved the vehicle: it goes there if that is in
     /// a loaded chunk, else the driver is put back.
     fn drive(
@@ -371,6 +417,7 @@ impl RegionActor {
             || (to != from
                 && !self.columns.contains_key(&to)
                 && !self.border.halo.contains_key(&to))
+            || self.vehicle_move_refused(&tracked, position)
         {
             let base = tracked.entity.base();
             driver.send(PlayerEvent::EntityPackets {
@@ -380,6 +427,10 @@ impl RegionActor {
                     yaw: base.yaw,
                     pitch: base.pitch,
                 })]),
+            });
+            driver.send(PlayerEvent::VehicleMotion {
+                vehicle,
+                motion: VehicleMotion::Corrected(base.position),
             });
             self.ents.entities.insert(vehicle, tracked);
             return;
@@ -394,6 +445,10 @@ impl RegionActor {
                     yaw,
                     pitch,
                 })]),
+            });
+            driver.send(PlayerEvent::VehicleMotion {
+                vehicle,
+                motion: VehicleMotion::Corrected(position),
             });
         }
         let to = ChunkPos::of_position(position);
