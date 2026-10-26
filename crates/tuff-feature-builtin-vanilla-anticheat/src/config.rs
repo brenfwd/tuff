@@ -11,6 +11,7 @@ use crate::violations::Limits;
 
 pub const ENABLED: &str = "tuff.anticheat.enabled";
 pub const EXEMPT_OPERATORS: &str = "tuff.anticheat.exemptOperators";
+pub const KICK_OPERATORS: &str = "tuff.anticheat.kickOperators";
 pub const EXEMPT_CREATIVE: &str = "tuff.anticheat.exemptCreative";
 pub const EXEMPT_SPECTATORS: &str = "tuff.anticheat.exemptSpectators";
 pub const ALERT: &str = "tuff.anticheat.alert";
@@ -77,6 +78,11 @@ pub fn keys() -> Vec<Key> {
             EXEMPT_OPERATORS,
             Value::Bool(true),
             "Skip the action checks for operators",
+        ),
+        Key::new(
+            KICK_OPERATORS,
+            Value::Bool(false),
+            "Let the anti-cheat kick operators it checks (exemptOperators off); off, an operator's kicks are only logged as would-kick and the rest (counting, alerts, setbacks) applies as usual",
         ),
         Key::new(
             EXEMPT_CREATIVE,
@@ -194,6 +200,7 @@ struct PerCheck {
 pub struct Settings {
     pub enabled: bool,
     pub exempt_operators: bool,
+    pub kick_operators: bool,
     pub exempt_creative: bool,
     pub exempt_spectators: bool,
     pub alert: bool,
@@ -230,6 +237,7 @@ impl Settings {
         Settings {
             enabled: store.get_bool(ENABLED).unwrap_or(true),
             exempt_operators: store.get_bool(EXEMPT_OPERATORS).unwrap_or(true),
+            kick_operators: store.get_bool(KICK_OPERATORS).unwrap_or(false),
             exempt_creative: store.get_bool(EXEMPT_CREATIVE).unwrap_or(false),
             exempt_spectators: store.get_bool(EXEMPT_SPECTATORS).unwrap_or(false),
             alert: store.get_bool(ALERT).unwrap_or(true),
