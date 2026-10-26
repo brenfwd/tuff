@@ -897,7 +897,7 @@ fn handle(
                 let _ = sink.send(sample);
             }
         }
-    } else if id == C::OpenScreen.id() {
+    } else if id == C::OpenScreen.id() || id == C::MountScreenOpen.id() {
         state.window = Some(r.read_var_int()?);
         state.windows_opened += 1;
     } else if id == C::ContainerClose.id() {

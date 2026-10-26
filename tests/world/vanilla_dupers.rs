@@ -4,7 +4,7 @@
 //! console. Opt-in: skipped unless `TUFF_VANILLA_TESTS=1` and
 //! `TUFF_ACCEPT_MOJANG_EULA=1`, so it never runs in `cargo t`.
 
-use super::dupe_designs::{COUNT_BOX, DESIGNS, Design, ORIGIN, Part};
+use super::dupe_designs::{COUNT_BOX, DESIGNS, Design, ORIGIN, Part, Slabs};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -123,13 +123,25 @@ impl Vanilla {
     }
 
     fn step(&mut self, ticks: u32) {
+        assert!(self.try_step(ticks), "the server never stepped");
+    }
+
+    fn try_step(&mut self, ticks: u32) -> bool {
         let before = self.game_time();
         self.run(&format!("tick step {ticks}"));
-        let limit = Instant::now() + Duration::from_secs(60);
+        let limit = Instant::now() + Duration::from_secs(12);
+        let mut retry = Instant::now() + Duration::from_secs(3);
         while self.game_time() < before + u64::from(ticks) {
-            assert!(Instant::now() < limit, "the server never stepped");
+            if Instant::now() > limit {
+                return false;
+            }
+            if Instant::now() > retry && self.game_time() == before {
+                self.run(&format!("tick step {ticks}"));
+                retry = Instant::now() + Duration::from_secs(3);
+            }
             std::thread::sleep(Duration::from_millis(50));
         }
+        true
     }
 
     fn place(&mut self, (dx, dy, dz, state): (i32, i32, i32, &str)) {
@@ -164,7 +176,7 @@ impl Vanilla {
         if primed > 0 {
             counts.insert("primed_tnt".to_owned(), primed);
         }
-        let (lo, hi) = COUNT_BOX;
+        let (lo, hi) = design.area;
         let o = ORIGIN;
         let (a, b) = (
             (o.0 + lo.0, o.1 + lo.1, o.2 + lo.2),
@@ -234,6 +246,41 @@ impl Vanilla {
             if cloned_count(&text) > 0 {
                 counts.insert(kind.to_owned(), cloned_count(&text));
             }
+            if let Some(axis) = design.slabs {
+                let (lo, hi) = design.area;
+                let (from, to) = match axis {
+                    Slabs::X => (lo.0, hi.0),
+                    Slabs::Z => (lo.2, hi.2),
+                };
+                for offset in from..=to {
+                    let (mut sa, mut sb) = (a, b);
+                    match axis {
+                        Slabs::X => {
+                            sa.0 = ORIGIN.0 + offset;
+                            sb.0 = sa.0;
+                        }
+                        Slabs::Z => {
+                            sa.2 = ORIGIN.2 + offset;
+                            sb.2 = sa.2;
+                        }
+                    }
+                    let text = self.run(&format!(
+                        "clone {} {} {} {} {} {} {} {} {} filtered {kind}",
+                        sa.0,
+                        sa.1,
+                        sa.2,
+                        sb.0,
+                        sb.1,
+                        sb.2,
+                        sa.0,
+                        sa.1 + 20,
+                        sa.2 + aside
+                    ));
+                    if cloned_count(&text) > 0 {
+                        counts.insert(format!("{kind}@{offset}"), cloned_count(&text));
+                    }
+                }
+            }
             if design.end {
                 let text = self.run(&format!(
                     "execute in minecraft:the_end run clone 94 44 -8 106 56 8 94 44 {} filtered {kind}",
@@ -263,7 +310,7 @@ impl Vanilla {
         }
         self.run("tick freeze");
         self.step(2);
-        let (lo, hi) = COUNT_BOX;
+        let (lo, hi) = design.area;
         let o = ORIGIN;
         self.run(&format!(
             "fill {} {} {} {} {} {} minecraft:air",
@@ -382,6 +429,8 @@ fn vanilla_script_layout() {
         let mut probes = Vec::new();
         let mut scans: Vec<(Vec<i32>, String)> = Vec::new();
         let mut end = false;
+        let mut slabs = None;
+        let mut area = COUNT_BOX;
         let leak = |s: &str| -> &'static str { Box::leak(s.to_owned().into_boxed_str()) };
         for line in chunk
             .lines()
@@ -392,6 +441,16 @@ fn vanilla_script_layout() {
             match w.next().unwrap() {
                 "kinds" => kinds = w.next().unwrap().split(',').map(leak).collect(),
                 "end" => end = true,
+                "slabs" => {
+                    slabs = Some(match w.next().unwrap() {
+                        "x" => Slabs::X,
+                        _ => Slabs::Z,
+                    })
+                }
+                "area" => {
+                    let c: Vec<i32> = (0..6).map(|_| w.next().unwrap().parse().unwrap()).collect();
+                    area = ((c[0], c[1], c[2]), (c[3], c[4], c[5]));
+                }
                 "scan" => {
                     let c: Vec<i32> = (0..4).map(|_| w.next().unwrap().parse().unwrap()).collect();
                     scans.push((c, w.next().unwrap().to_owned()));
@@ -421,6 +480,8 @@ fn vanilla_script_layout() {
             end,
             kinds: Box::leak(kinds.into_boxed_slice()),
             vanilla: &[],
+            slabs,
+            area,
         };
         let mut vanilla = Vanilla::start();
         let (built, after) = vanilla.run_design(&design);
