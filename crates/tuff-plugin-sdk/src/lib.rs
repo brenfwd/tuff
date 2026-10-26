@@ -831,7 +831,8 @@ pub fn glide_entities(moves: &[Glide<'_>]) -> Result<(), WorldError> {
 }
 
 /// The state of each loaded non-player entity (uuid as 32 hex digits), in
-/// order; none for one that is not loaded.
+/// order; none for one that is not loaded. Unavailable when that cannot be
+/// established right now, which is not the same as not loaded.
 pub fn entity_states(uuids: &[&str]) -> Result<Vec<Option<host::EntityState>>, WorldError> {
     let uuids = uuids
         .iter()

@@ -16,6 +16,7 @@ pub(crate) struct Recording {
     gone_owners: Vec<String>,
     pub(crate) carried: Vec<crate::hands::Carried>,
     pub(crate) uses: Vec<&'static str>,
+    lookups: std::collections::VecDeque<Lookup>,
 }
 
 impl Host for Recording {
@@ -58,6 +59,10 @@ impl Host for Recording {
 
     fn inventory(&mut self, _: Body) -> Vec<crate::hands::Carried> {
         self.carried.clone()
+    }
+
+    fn target(&mut self, _: Body, _: &str) -> Lookup {
+        self.lookups.pop_front().unwrap_or(Lookup::Gone)
     }
 
     fn use_held(&mut self, _: Body) {
@@ -407,4 +412,49 @@ fn a_full_bot_does_not_eat() {
         bots.tick(&mut host);
     }
     assert!(host.uses.is_empty());
+}
+
+fn alive_target() -> Lookup {
+    Lookup::Found(crate::combat::Target {
+        pos: Vec3 {
+            x: 1.5,
+            y: 64.0,
+            z: 0.5,
+        },
+        alive: true,
+        width: 0.6,
+        height: 1.95,
+    })
+}
+
+#[test]
+fn an_unknown_target_lookup_keeps_the_fight_going_and_gone_ends_it() {
+    let mut host = host_with(&["a"]);
+    let mut bots = Bots::default();
+    let id = bots
+        .spawn(&mut host, "a", spec("One", RespawnPolicy::Owner))
+        .unwrap();
+    let attack = Process::Attack(AttackSpec {
+        target: "zombie".into(),
+        until: AttackUntil::Death,
+        retreat_health: 0.0,
+    });
+    bots.set_process("a", id, attack.clone()).unwrap();
+    host.lookups = [
+        alive_target(),
+        Lookup::Unknown,
+        Lookup::Unknown,
+        alive_target(),
+    ]
+    .into();
+    for _ in 0..4 {
+        bots.tick(&mut host);
+        assert_eq!(bots.state("a", id).unwrap().process, attack);
+    }
+    bots.tick(&mut host);
+    assert_eq!(bots.state("a", id).unwrap().process, Process::Idle);
+    assert_eq!(
+        events_of(&host, id),
+        vec![Event::Spawned, Event::ProcessDone]
+    );
 }
