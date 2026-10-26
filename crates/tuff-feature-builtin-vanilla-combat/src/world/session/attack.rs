@@ -143,7 +143,7 @@ impl CombatExt for PlayerSession {
                 None => return,
             },
         };
-        if part.is_none() && distance_sq(self.eye(), position) > ATTACK_REACH * ATTACK_REACH {
+        if part.is_none() && !self.within_entity_reach(victim, position, self.attack_range()) {
             return;
         }
         if handle.is_none() && tuff_core::world::entity_in_tag(victim, "redirectable_projectile") {
@@ -570,10 +570,10 @@ impl CombatExt for PlayerSession {
             return;
         }
         let riding = self.ride.riding.is_some() || self.ride.boarding_cooldown > 0;
-        let Some((_, chunk, position)) = self.view.entities.visible_entity(target) else {
+        let Some((kind, chunk, position)) = self.view.entities.visible_entity(target) else {
             return;
         };
-        if distance_sq(self.eye(), position) > (ATTACK_REACH + 3.0).powi(2) {
+        if !self.within_entity_reach(kind, position, self.entity_interaction_range()) {
             return;
         }
         let Some(region) = self.region(chunk.region()).await else {

@@ -75,6 +75,19 @@ impl ChunkMirror {
         })
     }
 
+    /// Whether a block meeting `area` (grown by one block) was changed
+    /// within the last `ticks` ticks.
+    pub fn changed_within(&self, area: Aabb, ticks: u64) -> bool {
+        let lo = |v: f64| v.floor() as i32 - 1;
+        let hi = |v: f64| v.floor() as i32 + 1;
+        self.recent.iter().any(|(at, pos)| {
+            self.clock.saturating_sub(*at) <= ticks
+                && (lo(area[0])..=hi(area[3])).contains(&pos.x)
+                && (lo(area[1])..=hi(area[4])).contains(&pos.y)
+                && (lo(area[2])..=hi(area[5])).contains(&pos.z)
+        })
+    }
+
     /// Records a block the client placed ahead of the server's answer; the
     /// answer, when it comes, replaces it either way.
     pub fn predict(&mut self, pos: BlockPos, state: BlockState) {

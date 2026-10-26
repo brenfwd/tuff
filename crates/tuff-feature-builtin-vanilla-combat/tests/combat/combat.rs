@@ -2555,13 +2555,13 @@ async fn elytra_flight_starts_only_while_falling_and_wears_the_elytra_every_twen
     }
     assert!(flier.is_gliding(), "still flying after 40 ticks");
 
-    flier.handle_packet(move_to([0.5, 60.0, 0.5], true)).await;
+    travel_to_y(&mut flier, 60.0, true).await;
     assert!(!flier.is_gliding(), "landing stops the glide");
     assert_eq!(flier.health(), 20.0, "no fall damage while gliding");
 
     let mut faller = session(&world, 4);
     faller.stand_at([0.5, 100.0, 0.5], false);
-    faller.handle_packet(move_to([0.5, 60.0, 0.5], true)).await;
+    travel_to_y(&mut faller, 60.0, true).await;
     faller
         .handle_event(PlayerEvent::Surroundings {
             dimension: faller.dimension_id(),
@@ -3023,7 +3023,7 @@ async fn landing_on_hay_softens_the_fall_and_a_cobweb_cancels_it() {
     let health_after_landing = async |id: i32, event: PlayerEvent| {
         let mut faller = session(&world, id);
         faller.stand_at([0.5, 163.0, 0.5], false);
-        faller.handle_packet(move_to([0.5, 150.0, 0.5], true)).await;
+        travel_to_y(&mut faller, 150.0, true).await;
         let PlayerEvent::Surroundings {
             dimension,
             in_water,
@@ -3644,6 +3644,18 @@ fn contains(frames: &[bytes::Bytes], needle: &[u8]) -> bool {
     })
 }
 
+async fn travel_to_y(session: &mut PlayerSession, y: f64, on_ground: bool) {
+    let [x, from, z] = session.pose.position;
+    let steps = ((y - from).abs() / 8.0).ceil().max(1.0) as i32;
+    for step in 1..=steps {
+        let at = from + (y - from) * f64::from(step) / f64::from(steps);
+        session
+            .handle_packet(move_to([x, at, z], on_ground && step == steps))
+            .await;
+        session.handle_packet(Serverbound::ClientTickEnd).await;
+    }
+}
+
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn dying_of_a_long_fall_says_it_was_an_accident() {
@@ -3651,7 +3663,7 @@ async fn dying_of_a_long_fall_says_it_was_an_accident() {
     let world = TestWorld::start(dir.path());
     let (mut faller, mut outbound) = session_with_outbound(&world, 7);
     faller.stand_at([0.5, 200.0, 0.5], false);
-    faller.handle_packet(move_to([0.5, 150.0, 0.5], true)).await;
+    travel_to_y(&mut faller, 150.0, true).await;
     let dimension = faller.dimension_id();
     faller
         .handle_event(landing_on(1000, dimension, Block::Stone))
@@ -3679,7 +3691,7 @@ async fn landing_on_powder_snow_from_a_height_plays_the_fall_sound() {
     ] {
         let mut faller = session(&world, id);
         faller.stand_at([0.5, from, 0.5], false);
-        faller.handle_packet(move_to([0.5, 150.0, 0.5], true)).await;
+        travel_to_y(&mut faller, 150.0, true).await;
         let dimension = faller.dimension_id();
         faller
             .handle_event(landing_on(1000, dimension, Block::PowderSnow))

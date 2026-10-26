@@ -216,13 +216,13 @@ async fn boatfly_off_the_water_is_refused_and_paddling_on_it_is_not() {
 
 /// Puts the walker on a real boat summoned at `at` with `nbt`, and
 /// returns the boat's id.
-async fn board(w: &mut Walker, world: &TestWorld, nbt: Compound, at: [f64; 3]) -> i32 {
+pub(super) async fn board(w: &mut Walker, world: &TestWorld, nbt: Compound, at: [f64; 3]) -> i32 {
     board_kind(w, world, EntityType::OakBoat, nbt, at).await
 }
 
 /// Puts the walker on a real `kind` summoned at `at` with `nbt`, and
 /// returns its id.
-async fn board_kind(
+pub(super) async fn board_kind(
     w: &mut Walker,
     world: &TestWorld,
     kind: EntityType,
@@ -449,7 +449,7 @@ async fn a_boat_without_gravity_hovers_unrefused() {
     world.shutdown().await;
 }
 
-fn setbacks(w: &mut Walker) -> usize {
+pub(super) fn setbacks(w: &mut Walker) -> usize {
     let back = tuff_vanilla_data::packet::play::Clientbound::MoveVehicle.id();
     let mut setbacks = 0;
     while let Ok(frame) = w.frames.try_recv() {
@@ -458,13 +458,13 @@ fn setbacks(w: &mut Walker) -> usize {
     setbacks
 }
 
-fn vehicle_at(w: &Walker) -> [f64; 3] {
+pub(super) fn vehicle_at(w: &Walker) -> [f64; 3] {
     w.session.ride.riding.as_ref().expect("riding").position
 }
 
 /// Sends one Move Vehicle per session tick to each position and returns
 /// the moves the server refused (their index in `to`).
-async fn drive_to(w: &mut Walker, to: &[[f64; 3]]) -> Vec<usize> {
+pub(super) async fn drive_to(w: &mut Walker, to: &[[f64; 3]]) -> Vec<usize> {
     let mut refused = Vec::new();
     for (index, position) in to.iter().copied().enumerate() {
         if w.session.disconnected {
@@ -493,7 +493,7 @@ async fn drive_to(w: &mut Walker, to: &[[f64; 3]]) -> Vec<usize> {
 
 /// A client honouring a setback: it answers with the position it was
 /// put back to.
-async fn take_setback(w: &mut Walker) {
+pub(super) async fn take_setback(w: &mut Walker) {
     let at = vehicle_at(w);
     w.session
         .handle_packet(Serverbound::MoveVehicle {
@@ -507,7 +507,7 @@ async fn take_setback(w: &mut Walker) {
 
 /// The positions of `steps` moves east from `from`, each the given
 /// distance.
-fn east(from: [f64; 3], steps: impl IntoIterator<Item = f64>) -> Vec<[f64; 3]> {
+pub(super) fn east(from: [f64; 3], steps: impl IntoIterator<Item = f64>) -> Vec<[f64; 3]> {
     let mut at = from;
     steps
         .into_iter()
@@ -520,7 +520,7 @@ fn east(from: [f64; 3], steps: impl IntoIterator<Item = f64>) -> Vec<[f64; 3]> {
 
 /// A boat paddled forward from `speed` for `ticks` on a surface keeping
 /// `friction` of its speed each tick.
-fn paddled(speed: f64, friction: f64, ticks: usize) -> Vec<f64> {
+pub(super) fn paddled(speed: f64, friction: f64, ticks: usize) -> Vec<f64> {
     let mut v = speed;
     (0..ticks)
         .map(|_| {
@@ -532,7 +532,7 @@ fn paddled(speed: f64, friction: f64, ticks: usize) -> Vec<f64> {
 
 /// A floor of `floor` blocks at y 100 from 20 blocks west of the walker
 /// to 20 east, five wide, with `top` on top of it.
-async fn track(w: &mut Walker, world: &TestWorld, floor: Block, top: Option<Block>) {
+pub(super) async fn track(w: &mut Walker, world: &TestWorld, floor: Block, top: Option<Block>) {
     let (x, z) = (w.x as i32, w.z as i32);
     let mut blocks = Vec::new();
     for dx in -21..=21 {

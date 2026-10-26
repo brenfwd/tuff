@@ -301,6 +301,7 @@ impl PlayerSession {
             Some(region)
                 if !self.is_dead()
                     && (held.is_some() || interact)
+                    && self.sync.pending_teleport.is_none()
                     && distance_sq(self.eye(), target.center()) <= REACH * REACH
                     && !self.under_spawn_protection(target)
                     && self.dimension().block_within_border(target) =>

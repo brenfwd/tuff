@@ -131,6 +131,7 @@ mod minecart_containers;
 mod mining;
 mod mob_spears;
 mod movable_block_entities;
+mod move_baseline;
 mod nether;
 mod no_save;
 mod optional_features;
