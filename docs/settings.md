@@ -159,6 +159,12 @@ tuff keys sit next to a vanilla entry and cover something different:
 | `tuff.resourcePacks.enabled`, `tuff.customContent.prompt` | `resource-pack*` | Plugin-registered and generated packs, not the single vanilla pack |
 | `tuff.anticheat.*` | `player_movement_check`, `elytra_movement_check` | The rules switch vanilla's checks; these tune tuff's own |
 
+`tuff.anticheat.exemptOperators` (default `true`) skips the anti-cheat for
+operators; with it `false` they are checked like anyone, and
+`tuff.anticheat.kickOperators` (default `false`) decides whether that can
+kick them: off, their violations are counted, logged, alerted and set back
+but a kick is only logged as "would kick".
+
 Fill and clone limits come from the `max_block_modifications` game rule.
 
 ## Dimensions

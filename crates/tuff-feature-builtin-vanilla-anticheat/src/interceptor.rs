@@ -853,7 +853,18 @@ impl ActionInterceptor {
         } else {
             ladder.add(weight, session.tick, limits)
         };
-        let counts = weight > 0.0 || step == Step::Kick;
+        let spared = step == Step::Kick
+            && !settings.kick_operators
+            && session.mode.permission > PermissionLevel::All;
+        if spared {
+            tuff_core::log::warn!(
+                "[anticheat] would kick operator {}: {}",
+                session.profile.name,
+                check
+            );
+        }
+        let step = if spared { Step::Setback } else { step };
+        let counts = weight > 0.0 || step == Step::Kick || spared;
         let logged = settings.log_only(check);
         if counts && let Some(board) = session.shared.services.get::<Board>() {
             let ladder = player.ladder(check);

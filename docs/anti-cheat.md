@@ -11,7 +11,8 @@ kick limit is kicked only when `tuff.anticheat.kickThreshold` is above 0.
 |-----|---------|--------|
 | `tuff.anticheat.enabled` | `true` | Run the checks |
 | `tuff.anticheat.enforce` | `false` | `false`: checks run, count and alert but never set back or kick. `true` enables setbacks (and kicks with `kickThreshold`) |
-| `tuff.anticheat.exemptOperators` | `true` | Skip operators |
+| `tuff.anticheat.exemptOperators` | `true` | Skip the checks for operators entirely; `false` checks them (see `kickOperators`) |
+| `tuff.anticheat.kickOperators` | `false` | With `exemptOperators` off, operators are checked, counted, alerted and set back like anyone, but never kicked; the kick is logged as "would kick". `true` kicks them too |
 | `tuff.anticheat.exemptCreative` | `false` | Skip players in creative mode |
 | `tuff.anticheat.exemptSpectators` | `false` | Skip spectators |
 | `tuff.anticheat.alert` | `true` | Log violations, setbacks and kicks to the console |
