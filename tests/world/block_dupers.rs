@@ -898,6 +898,8 @@ mod designs {
                 };
                 if id != "primed_tnt"
                     && !id.contains('@')
+                    && !id.ends_with("_head")
+                    && !id.ends_with("moving_piston")
                     && *n > built.get(source).copied().unwrap_or(0)
                 {
                     report.push(format!(
