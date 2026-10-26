@@ -356,6 +356,11 @@ pub trait RedstoneLevel: Reader {
     /// The piston's moves all started: a block lifted but never moved goes
     /// back to its drops.
     fn settle_pushed(&mut self) {}
+    /// Whether a stale piston retraction may remove an unbreakable block
+    /// (`tuff.blocks.permanentBlockBreaking`).
+    fn permanent_block_breaking(&self) -> bool {
+        true
+    }
     /// Whether a piston may move the block entity block `state` at `pos`
     /// toward `direction`, taking its block entity along.
     fn carries_block_entity(&self, _state: BlockState, _pos: BlockPos, _direction: Facing) -> bool {

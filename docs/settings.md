@@ -226,6 +226,7 @@ that way.
 | `tuff.items.conservationChecks` | `true` | Check item moves in release builds and refuse, audit and quarantine on a violation |
 | `tuff.items.conservationKick` | `true` | Disconnect a player involved in a refused item operation |
 | `tuff.blocks.tntDuplication` | `true` | Keep vanilla's TNT duplication: a TNT block a piston lifts can still light where it stood, once, making one extra primed TNT |
+| `tuff.blocks.permanentBlockBreaking` | `true` | Keep vanilla's permanent block breaking: a piston retraction that outlived its piston (a headless piston, or one replaced in the same tick) still removes the unbreakable block (bedrock, End portal frame, command block, ...) in front of it. Off, such a retraction leaves unbreakable blocks standing |
 | `tuff.blocks.carpetRailDuplication` | `true` | Keep vanilla's carpet and rail duplication: a carpet or rail a piston lifts can still pop where it stood, once, making one extra drop |
 | `tuff.blocks.gravityBlockPortalDuplication` | `true` | Keep vanilla's gravity block duplication through End portals (takes effect with falling blocks owning their block) |
 

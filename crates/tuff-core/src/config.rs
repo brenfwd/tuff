@@ -532,6 +532,7 @@ pub const REFUSE_DUPLICATE_LOGIN: &str = "tuff.refuseDuplicateLogin";
 pub const ITEMS_CONSERVATION_CHECKS: &str = "tuff.items.conservationChecks";
 pub const ITEMS_CONSERVATION_KICK: &str = "tuff.items.conservationKick";
 pub const BLOCKS_TNT_DUPLICATION: &str = "tuff.blocks.tntDuplication";
+pub const BLOCKS_PERMANENT_BLOCK_BREAKING: &str = "tuff.blocks.permanentBlockBreaking";
 pub const BLOCKS_CARPET_RAIL_DUPLICATION: &str = "tuff.blocks.carpetRailDuplication";
 pub const BLOCKS_GRAVITY_PORTAL_DUPLICATION: &str = "tuff.blocks.gravityBlockPortalDuplication";
 fn core_keys() -> Vec<Key> {
@@ -545,6 +546,11 @@ fn core_keys() -> Vec<Key> {
             BLOCKS_TNT_DUPLICATION,
             Value::Bool(true),
             "Keep vanilla's TNT duplication: TNT a piston moves can also light the copy left behind, once, through the one named door that makes the extra primed TNT",
+        ),
+        Key::new(
+            BLOCKS_PERMANENT_BLOCK_BREAKING,
+            Value::Bool(true),
+            "Keep vanilla's permanent block breaking: a piston retraction that outlived its piston can still remove the unbreakable block (bedrock, End portal frame, command block) in front of the piston",
         ),
         Key::new(
             BLOCKS_CARPET_RAIL_DUPLICATION,

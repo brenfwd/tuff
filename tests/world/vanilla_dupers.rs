@@ -316,7 +316,7 @@ pub fn built_counts(design: &Design) -> Counts {
         design
             .trigger
             .iter()
-            .filter(|part| part.3.starts_with("@fall:")),
+            .filter(|part| part.3.starts_with("@fall:") || part.3.starts_with("minecraft:")),
     ) {
         let id = state
             .trim_start_matches("@fall:")
