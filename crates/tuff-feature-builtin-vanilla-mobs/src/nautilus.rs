@@ -668,10 +668,6 @@ impl Species for Nautilus {
         animal_experience(rng)
     }
 
-    fn remove_when_far_away(&self) -> bool {
-        false
-    }
-
     fn custom_persistence(&self, core: &MobCore) -> bool {
         tamed(core)
     }
@@ -857,10 +853,6 @@ impl Species for ZombieNautilus {
 
     fn experience(&self, core: &MobCore, rng: &mut StdRng) -> i32 {
         core.xp_reward + core.equipment.experience_bonus(rng)
-    }
-
-    fn remove_when_far_away(&self) -> bool {
-        false
     }
 
     fn custom_persistence(&self, core: &MobCore) -> bool {

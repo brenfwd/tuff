@@ -59,6 +59,10 @@ impl Species for PolarBear {
         Self::default()
     }
 
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
+        false
+    }
+
     fn configure(core: &mut MobCore) {
         core.make_animal();
         let mut goals = GoalSelector::default();

@@ -514,8 +514,8 @@ impl Species for Axolotl {
         1 + rng.gen_range(0..3)
     }
 
-    fn remove_when_far_away(&self) -> bool {
-        !self.from_bucket
+    fn remove_when_far_away(&self, core: &MobCore) -> bool {
+        !self.from_bucket && core.base.custom_name.is_none()
     }
 
     fn custom_persistence(&self, _core: &MobCore) -> bool {

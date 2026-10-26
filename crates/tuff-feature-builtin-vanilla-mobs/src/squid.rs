@@ -270,7 +270,7 @@ impl Species for Squid {
         }
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         true
     }
 }
@@ -353,7 +353,7 @@ impl Species for GlowSquid {
         }
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         true
     }
 }

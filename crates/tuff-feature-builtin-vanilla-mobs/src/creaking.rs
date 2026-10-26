@@ -538,10 +538,6 @@ impl Species for Creaking {
             volume: 1.0,
         }
     }
-
-    fn remove_when_far_away(&self) -> bool {
-        false
-    }
 }
 
 /// Registers the creaking's loader. It has no natural spawn rule: only a

@@ -258,7 +258,7 @@ impl Species for IronGolem {
         Some(HandEffect::Consume(1))
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 
@@ -939,7 +939,7 @@ impl Species for SnowGolem {
         }
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }
@@ -1311,7 +1311,7 @@ impl Species for CopperGolem {
         !immune_to_fall(core, damage)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }

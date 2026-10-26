@@ -26,6 +26,7 @@ mod creaking_heart;
 mod creepers;
 mod crowd;
 mod death_effects;
+mod despawn;
 mod drowned;
 mod golems;
 mod guardian;

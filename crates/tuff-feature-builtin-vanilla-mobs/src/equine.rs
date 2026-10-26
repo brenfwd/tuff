@@ -1025,6 +1025,13 @@ const ZOMBIE_HORSE: Profile = Profile {
 /// from its `equine` field, its `PROFILE` and its `columns()`.
 macro_rules! equine_species {
     () => {
+        $crate::equine::equine_species!(despawns);
+
+        fn remove_when_far_away(&self, _core: &$crate::MobCore) -> bool {
+            false
+        }
+    };
+    (despawns) => {
         fn metadata(&self, core: &MobCore) -> Vec<(u8, MetadataValue)> {
             let mut data = vec![(
                 $crate::equine::FLAGS,

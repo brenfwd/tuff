@@ -265,8 +265,8 @@ macro_rules! schooling_fish {
                 )
             }
 
-            fn remove_when_far_away(&self) -> bool {
-                !self.parts.from_bucket
+            fn remove_when_far_away(&self, core: &MobCore) -> bool {
+                !self.parts.from_bucket && core.base.custom_name.is_none()
             }
 
             fn custom_persistence(&self, _core: &MobCore) -> bool {
@@ -434,8 +434,8 @@ impl Species for Salmon {
         outcome
     }
 
-    fn remove_when_far_away(&self) -> bool {
-        !self.parts.from_bucket
+    fn remove_when_far_away(&self, core: &MobCore) -> bool {
+        !self.parts.from_bucket && core.base.custom_name.is_none()
     }
 
     fn custom_persistence(&self, _core: &MobCore) -> bool {
@@ -686,8 +686,8 @@ impl Species for Pufferfish {
         )
     }
 
-    fn remove_when_far_away(&self) -> bool {
-        !self.parts.from_bucket
+    fn remove_when_far_away(&self, core: &MobCore) -> bool {
+        !self.parts.from_bucket && core.base.custom_name.is_none()
     }
 
     fn custom_persistence(&self, _core: &MobCore) -> bool {
@@ -904,8 +904,8 @@ impl Species for TropicalFish {
         )
     }
 
-    fn remove_when_far_away(&self) -> bool {
-        !self.parts.from_bucket
+    fn remove_when_far_away(&self, core: &MobCore) -> bool {
+        !self.parts.from_bucket && core.base.custom_name.is_none()
     }
 
     fn custom_persistence(&self, _core: &MobCore) -> bool {

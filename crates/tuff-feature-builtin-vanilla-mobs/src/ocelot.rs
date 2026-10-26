@@ -23,6 +23,8 @@ use tuff_nbt::Compound;
 
 /// Broadcast the same way a tameable animal's taming roll is (smoke on
 /// failure, hearts on success), but ocelots use their own event ids.
+/// Wild cats and ocelots only despawn once this many ticks old.
+pub const WILD_DESPAWN_AGE: u64 = 2400;
 const TRUST_FAILED: i8 = 40;
 const TRUST_SUCCEEDED: i8 = 41;
 const TRUST_CHANCE: f64 = 1.0 / 3.0;
@@ -189,8 +191,8 @@ impl Species for Ocelot {
         1 + rng.gen_range(0..3)
     }
 
-    fn remove_when_far_away(&self) -> bool {
-        !self.trusting
+    fn remove_when_far_away(&self, core: &MobCore) -> bool {
+        !self.trusting && core.tick_count > WILD_DESPAWN_AGE
     }
 }
 
@@ -260,7 +262,7 @@ mod tests {
             }
             assert!(trusted, "1/3 chance should succeed within 50 attempts");
             assert!(core.goals.find_mut::<AvoidPlayer>().unwrap().is_disabled());
-            assert!(!ocelot.remove_when_far_away());
+            assert!(!ocelot.remove_when_far_away(core));
         });
     }
 }

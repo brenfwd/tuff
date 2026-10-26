@@ -149,7 +149,7 @@ impl Species for ZombieHorse {
         }
     }
 
-    equine_species!();
+    equine_species!(despawns);
 
     fn tick(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         self.equine.tick(core, cx);
