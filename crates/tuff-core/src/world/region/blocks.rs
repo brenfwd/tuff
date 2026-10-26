@@ -1268,9 +1268,17 @@ impl RegionActor {
             context.item.bucket(),
             Some(tuff_vanilla_data::item::Bucket::Solid { .. })
         );
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "block placement takes the stack the player placed from (place)"
+        )]
         let paid = (!solid_bucket_item)
             .then(|| place.offer.take_placing())
             .flatten();
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "block placement writes the block through the item placement door (place)"
+        )]
         self.place_from_item(at, state, paid);
         self.apply_placed_item(at, &place);
         self.edit_placed_sign(at, &place.player);
@@ -1321,11 +1329,19 @@ impl RegionActor {
     /// keep back to the player first.
     pub(crate) fn answer_place(&mut self, place: &Place, outcome: ActionOutcome) {
         match &outcome {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "answer_place takes the stack offered for a placement"
+            )]
             ActionOutcome::Placed { .. } => {
                 if let Some(paid) = place.offer.take_placing() {
                     paid.burn(tuff_item::item::BurnReason::Consumed);
                 }
             }
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "answer_place takes the stack offered for a placement"
+            )]
             ActionOutcome::Used {
                 effect: crate::world::messages::HandEffect::Emptied(result),
                 ..

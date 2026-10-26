@@ -17,4 +17,9 @@ disallowed-methods = [
     { path = "tuff_core::world::stored_entity::StoredEntity::from_storage", reason = 'an entity read from a save; annotate with #[expect(clippy::disallowed_methods, reason = "<why>")]' },
     { path = "tuff_core::world::stored_entity::StoredEntity::taken", reason = 'the saved form of a removed entity; annotate with #[expect(clippy::disallowed_methods, reason = "<why>")]' },
     { path = "tuff_core::world::entity_claim::EntityUuids::claim", reason = 'claims an entity UUID; annotate with #[expect(clippy::disallowed_methods, reason = "<why>")]' },
+    { path = "tuff_core::world::region::RegionActor::place_from_item", reason = 'places a block from an item; route through the placement flow or annotate with #[expect(clippy::disallowed_methods, reason = "<why>")]' },
+    { path = "tuff_core::world::region::RegionActor::place_item_block", reason = 'places a block from an item; route through the placement flow or annotate' },
+    { path = "tuff_core::world::messages::action::PlaceOffer::take_placing", reason = 'takes the stack a placement consumes; annotate with #[expect(clippy::disallowed_methods, reason = "<why>")]' },
+    { path = "tuff_core::world::region_api::RegionWorld::place_item_block", reason = 'places a block from an item; route through place_from_click or annotate' },
+    { path = "tuff_core::world::region_api::RegionWorld::place_from_click", reason = 'the single door for item clicks that place blocks; annotate with #[expect(clippy::disallowed_methods, reason = "<why>")]' },
 ]

@@ -125,7 +125,10 @@ impl History {
     /// The log as text, oldest entry first; nothing beyond "item" outside
     /// debug builds.
     pub fn report(&self) -> String {
-        #[cfg_attr(not(debug_assertions), allow(unused_mut))]
+        #[cfg_attr(
+            not(debug_assertions),
+            expect(unused_mut, reason = "only debug builds record the trail")
+        )]
         let mut out = String::from("item");
         #[cfg(debug_assertions)]
         {

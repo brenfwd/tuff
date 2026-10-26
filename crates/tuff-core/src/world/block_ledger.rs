@@ -265,7 +265,6 @@ pub struct Trail {
 impl Trail {
     #[track_caller]
     fn begin(what: fmt::Arguments<'_>) -> Self {
-        #[cfg_attr(not(debug_assertions), allow(unused_mut))]
         let mut trail = Self::default();
         #[cfg(debug_assertions)]
         {
@@ -285,7 +284,10 @@ impl Trail {
     }
 
     fn report(&self) -> String {
-        #[cfg_attr(not(debug_assertions), allow(unused_mut))]
+        #[cfg_attr(
+            not(debug_assertions),
+            expect(unused_mut, reason = "only debug builds record the trail")
+        )]
         let mut out = String::from("block");
         #[cfg(debug_assertions)]
         {

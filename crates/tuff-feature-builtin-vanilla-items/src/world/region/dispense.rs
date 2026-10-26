@@ -410,6 +410,10 @@ fn place_shulker_box(
     let replaceable = world.block(target).is_some_and(|s| s.is_replaceable());
     let state = block.default_state().with_facing(face);
     match state {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "dispenser places a shulker box through the item placement door (place_shulker_box)"
+        )]
         Some(state) if replaceable && world.place_item_block(target, state, stack) => {
             DispenseOutcome::Dispensed
         }
