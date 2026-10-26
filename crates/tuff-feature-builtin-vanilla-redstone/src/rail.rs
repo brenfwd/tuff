@@ -66,6 +66,9 @@ fn supports_rigid(level: &dyn Reader, pos: BlockPos) -> bool {
 
 /// `supports_rigid`, where a block still landing in a piston's moving cell
 /// holds a rail as its own face would.
+// Parity: a rail pushed together with the block under it keeps standing on
+// it (observed on the vanilla differential harness); a rail that lands first
+// must not pop. A block still mid-move does not support it.
 fn supports_landing(level: &dyn RedstoneLevel, pos: BlockPos) -> bool {
     supports_rigid(level, pos)
         || (level.block(pos).block() == Block::MovingPiston
