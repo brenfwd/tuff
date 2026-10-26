@@ -475,6 +475,7 @@ impl Species for Wither {
                     if cx.shared.rule_bool("global_sound_events") {
                         let _ = cx.shared.coordinator.try_send(
                             tuff_core::world::messages::CoordinatorMessage::GlobalLevelEvent {
+                                dimension: cx.dimension,
                                 event:
                                     tuff_core::protocol::play::level_event::SOUND_WITHER_BOSS_SPAWN,
                                 pos: position,

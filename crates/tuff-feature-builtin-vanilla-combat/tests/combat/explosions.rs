@@ -76,6 +76,7 @@ async fn lit_tnt_falls_counts_down_and_blows_up_stone_but_not_obsidian() {
     let world = TestWorld::start(dir.path());
     let region = world.region(chunk.region()).await;
     subscribe(&region, &player, &mut events, &[chunk]).await;
+    present(&region, &player, [8.0, f64::from(SKY) + 1.0, 8.0]).await;
     let tnt = BlockPos::new(8, SKY + 1, 8);
     let obsidian = BlockPos::new(10, SKY + 1, 8);
     let mut blocks = platform((5, 5), (11, 11), SKY);
@@ -167,6 +168,7 @@ async fn explosions_prime_nearby_tnt_with_a_short_fuse() {
     let world = TestWorld::start(dir.path());
     let region = world.region(chunk.region()).await;
     subscribe(&region, &player, &mut events, &[chunk]).await;
+    present(&region, &player, [8.0, f64::from(SKY) + 1.0, 8.0]).await;
     let first = BlockPos::new(8, SKY + 1, 8);
     let second = BlockPos::new(10, SKY + 1, 8);
     let mut blocks = platform((4, 4), (12, 12), SKY);
@@ -249,6 +251,7 @@ async fn beds_explode_in_the_nether_and_set_spawn_by_day_in_the_overworld() {
 
     let nether = world.region_in(THE_NETHER, chunk.region()).await;
     subscribe(&nether, &player, &mut events, &[chunk]).await;
+    present(&nether, &player, [8.0, 80.0, 8.0]).await;
     let foot = BlockPos::new(8, 60, 8);
     let mut blocks = platform((4, 4), (12, 12), 59);
     blocks.extend(bed(foot));
@@ -612,6 +615,7 @@ async fn respawn_anchors_charge_with_glowstone_and_grow_brighter() {
     let chunk = ChunkPos::new(0, 0);
     let region = world.region(chunk.region()).await;
     subscribe(&region, &player, &mut events, &[chunk]).await;
+    present(&region, &player, [8.0, 80.0, 8.0]).await;
     let pos = BlockPos::new(8, 70, 8);
     place_blocks(&world, &region, [(pos, anchor(0))]).await;
 
@@ -676,6 +680,7 @@ async fn respawn_anchors_set_the_spawn_in_the_nether_and_explode_elsewhere() {
 
     let nether = world.region_in(THE_NETHER, chunk.region()).await;
     subscribe(&nether, &player, &mut events, &[chunk]).await;
+    present(&nether, &player, [8.0, 70.0, 8.0]).await;
     let pos = BlockPos::new(8, 70, 8);
     let mut blocks = platform((6, 6), (10, 10), 69);
     blocks.push((pos, anchor(2)));
@@ -748,6 +753,7 @@ async fn respawn_anchors_set_the_spawn_in_the_nether_and_explode_elsewhere() {
 
     let overworld = world.region(chunk.region()).await;
     subscribe(&overworld, &player, &mut events, &[chunk]).await;
+    present(&overworld, &player, [8.0, 70.0, 8.0]).await;
     let elsewhere = BlockPos::new(2, 70, 2);
     let mut oblocks = platform((6, 6), (10, 10), 69);
     oblocks.extend(platform((0, 0), (4, 4), 69));

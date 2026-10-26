@@ -431,8 +431,25 @@ impl RegionActor {
         });
     }
 
+    /// Where a viewer of this region is: from its presence here, else from
+    /// the shared player index (spectators included). `None` when neither knows.
+    pub(super) fn viewer_position(
+        &self,
+        id: PlayerId,
+        index: &crate::world::nearby::PlayerIndex,
+    ) -> Option<[f64; 3]> {
+        self.ents.presence.get(&id).map(|p| p.position).or_else(|| {
+            index
+                .near(self.dimension, self.pos)
+                .iter()
+                .find(|p| p.handle.id == id)
+                .map(|p| p.position)
+                .or_else(|| index.spectator_position(self.dimension, id))
+        })
+    }
+
     /// Like `send_chunk_packets`, but skips viewers whose known position is
-    /// farther than `range` from `center`.
+    /// farther than `range` from `center` or unknown.
     pub(super) fn send_near(
         &self,
         center: [f64; 3],
@@ -443,13 +460,10 @@ impl RegionActor {
         let chunk = ChunkPos::of_position(center);
         let dimension = self.dimension;
         let limit = range * range;
+        let index = self.shared.players.borrow().clone();
         let in_range = |id: &PlayerId| {
-            self.ents.presence.get(id).is_none_or(|p| {
-                let d = [
-                    p.position[0] - center[0],
-                    p.position[1] - center[1],
-                    p.position[2] - center[2],
-                ];
+            self.viewer_position(*id, &index).is_some_and(|p| {
+                let d = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
                 d[0] * d[0] + d[1] * d[1] + d[2] * d[2] <= limit
             })
         };

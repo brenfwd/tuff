@@ -132,6 +132,7 @@ async fn burning_world() -> (
     let region = world.region(chunk.region()).await;
     let (player, mut events) = PlayerHandle::new(1000);
     view_around(&world, &player, &mut events, chunk).await;
+    present(&region, &player, [8.0, f64::from(SKY) + 1.0, 8.0]).await;
     std::mem::forget(player);
     (dir, world, region, events)
 }

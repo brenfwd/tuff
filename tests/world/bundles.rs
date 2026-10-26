@@ -52,6 +52,7 @@ async fn clicking_fills_a_bundle_and_only_the_others_hear_it() {
     subscribe(&region, &viewer, &mut events, &[chunk]).await;
 
     let (mut player, mut own) = session_with_outbound(&world, 1);
+    present(&region, &viewer, player.pose.position).await;
     player
         .inventory_mut()
         .set_slot(Inventory::hotbar_slot(0), Some(bundle_of(&[])));

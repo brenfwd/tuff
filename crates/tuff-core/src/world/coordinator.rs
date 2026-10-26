@@ -653,7 +653,14 @@ impl Coordinator {
             (state.alive && state.game_mode == crate::protocol::play::GameMode::Spectator)
                 .then_some((state.dimension, state.position))
         });
-        let index = crate::world::nearby::PlayerIndex::build(players).with_spectators(spectators);
+        let spectator_ids = self.players.iter().filter_map(|(id, online)| {
+            let state = online.state.as_ref()?;
+            (state.alive && state.game_mode == crate::protocol::play::GameMode::Spectator)
+                .then_some((*id, state.dimension, state.position))
+        });
+        let index = crate::world::nearby::PlayerIndex::build(players)
+            .with_spectators(spectators)
+            .with_spectator_positions(spectator_ids);
         self.players_index.send_replace(Arc::new(index));
     }
 
@@ -834,31 +841,18 @@ impl Coordinator {
                 self.save_config(ConfigRequest::Icon(png));
                 let _ = reply.send(Ok(()));
             }
-            CoordinatorMessage::GlobalLevelEvent { event, pos, data } => {
-                let center = pos.center();
+            CoordinatorMessage::GlobalLevelEvent {
+                dimension,
+                event,
+                pos,
+                data,
+            } => {
                 for online in self.players.values() {
                     let Some(state) = online.state.as_ref().filter(|_| online.entry.is_some())
                     else {
                         continue;
                     };
-                    let from = state.position;
-                    let delta = [
-                        center[0] - from[0],
-                        center[1] - from[1],
-                        center[2] - from[2],
-                    ];
-                    let distance =
-                        (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
-                    let at = if distance > 32.0 {
-                        let scale = 32.0 / distance;
-                        tuff_world_model::BlockPos::new(
-                            (from[0] + delta[0] * scale).floor() as i32,
-                            (from[1] + delta[1] * scale).floor() as i32,
-                            (from[2] + delta[2] * scale).floor() as i32,
-                        )
-                    } else {
-                        pos
-                    };
+                    let at = global_event_position(dimension, pos, state.dimension, state.position);
                     let _ = online.outbound.send(framed(&play::LevelEvent {
                         event,
                         position: at,
@@ -1469,6 +1463,8 @@ mod disk_space_tests {
 }
 
 mod access;
+mod global_events;
+use global_events::global_event_position;
 mod config;
 mod idle;
 mod inventory_edits;

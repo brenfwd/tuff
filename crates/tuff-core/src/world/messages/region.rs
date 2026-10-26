@@ -426,6 +426,14 @@ pub enum RegionRequest {
         packets: Packets,
         except: Option<PlayerId>,
     },
+    /// Packets about something at `center` for the viewers of its chunk
+    /// within `range` of it, except `except`.
+    BroadcastNear {
+        center: [f64; 3],
+        range: f64,
+        packets: Packets,
+        except: Option<PlayerId>,
+    },
     /// A click on an open block container: applied if every `expected`
     /// matches, answered with [`PlayerEvent::Transaction`]. `pool` holds
     /// what the player's side gave up; the slots put what they lose into

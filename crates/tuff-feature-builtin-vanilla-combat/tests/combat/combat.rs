@@ -2766,6 +2766,7 @@ async fn eating_completes_with_exactly_one_completion_chew() {
     subscribe(&region, &viewer, &mut events, &[chunk]).await;
 
     let mut player = session(&world, 1);
+    present(&region, &viewer, player.pose.position).await;
     player.make_hungry();
     player.inventory_mut().set_slot(
         Inventory::hotbar_slot(0),
@@ -3671,6 +3672,7 @@ async fn landing_on_powder_snow_from_a_height_plays_the_fall_sound() {
     let region = world.region(pos.region()).await;
     let (probe, mut events) = PlayerHandle::new(100);
     subscribe(&region, &probe, &mut events, &[pos]).await;
+    present(&region, &probe, [8.0, 158.0, 8.0]).await;
     for (id, from, sound) in [
         (8, 156.0, SoundEvent::EntityGenericSmallFall),
         (9, 160.0, SoundEvent::EntityGenericBigFall),

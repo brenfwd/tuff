@@ -319,9 +319,10 @@ impl RegionActor {
         let chunk = ChunkPos::of_position(explosion.center);
         let dimension = self.dimension;
         let center = explosion.center;
+        let index = self.shared.players.borrow().clone();
         self.fanout_chunk(chunk, None, |viewer| {
-            let seen = self.ents.presence.get(&viewer.id).is_none_or(|p| {
-                crate::world::distance_sq(p.position, center) < EXPLOSION_VIEW_DISTANCE.powi(2)
+            let seen = self.viewer_position(viewer.id, &index).is_some_and(|p| {
+                crate::world::distance_sq(p, center) < EXPLOSION_VIEW_DISTANCE.powi(2)
             });
             let packet = seen.then(|| {
                 framed(&play::Explode {

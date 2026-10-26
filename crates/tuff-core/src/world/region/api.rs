@@ -501,10 +501,19 @@ impl RegionWorld for RegionActor {
     }
 
     fn broadcast_global_level_event(&mut self, event: i32, pos: BlockPos, data: i32) {
-        let _ = self
-            .shared
-            .coordinator
-            .try_send(crate::world::CoordinatorMessage::GlobalLevelEvent { event, pos, data });
+        if !self.shared.rule_bool("global_sound_events") {
+            RegionActor::level_event(self, event, pos, data, false);
+            return;
+        }
+        let _ =
+            self.shared
+                .coordinator
+                .try_send(crate::world::CoordinatorMessage::GlobalLevelEvent {
+                    dimension: self.dimension,
+                    event,
+                    pos,
+                    data,
+                });
     }
 
     fn set_block_anywhere(&mut self, pos: BlockPos, state: BlockState) {

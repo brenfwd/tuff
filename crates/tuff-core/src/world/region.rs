@@ -855,6 +855,12 @@ impl RegionActor {
                     })
                 }
             },
+            RegionRequest::BroadcastNear {
+                center,
+                range,
+                packets,
+                except,
+            } => self.send_near(center, range, except, packets),
             RegionRequest::ContainerTransaction {
                 player,
                 window_id,
