@@ -709,7 +709,7 @@ impl PlayerSession {
     }
 
     pub async fn on_action_result(&mut self, sequence: i32, outcome: ActionOutcome) {
-        let spent = self.settle_payment(sequence, &outcome).await;
+        self.answered(sequence);
         match outcome {
             ActionOutcome::Broken { tool_damage, state } => {
                 if !self.mode.abilities.instabuild {
@@ -738,21 +738,12 @@ impl PlayerSession {
                 if let Some(placement) = placement {
                     self.used_on_block(off_hand, item, &placement);
                 }
-                let held = self
+                let damageable = self
                     .inventory
                     .hand(off_hand)
-                    .filter(|s| s.item() == item)
-                    .map(|s| s.max_damage().is_some());
-                match held {
-                    Some(true) => self.hurt_hand(off_hand, 1).await,
-                    Some(false)
-                        if !self.mode.abilities.instabuild
-                            && !spent
-                            && !self.places_a_block_from_the_hand(item) =>
-                    {
-                        self.inventory.consume_from_hand(off_hand, 1);
-                    }
-                    _ => {}
+                    .is_some_and(|s| s.item() == item && s.max_damage().is_some());
+                if damageable {
+                    self.hurt_hand(off_hand, 1).await;
                 }
                 self.send_inventory();
                 let swing = packets([framed(&play::SwingAnimation::whack(
@@ -786,11 +777,16 @@ impl PlayerSession {
                         filled.any(),
                     ));
                 }
-                let emptied_by_region = matches!(effect, HandEffect::Spent(_))
-                    || matches!(effect, HandEffect::Emptied(_))
-                        && self.places_a_block_from_the_hand(item);
-                if !emptied_by_region
-                    && !spent
+                let costly = matches!(
+                    effect,
+                    HandEffect::Consume(_)
+                        | HandEffect::Emptied(_)
+                        | HandEffect::Exchange(_)
+                        | HandEffect::ExchangeStack(_)
+                        | HandEffect::Split(_)
+                );
+                if !matches!(effect, HandEffect::Spent(_))
+                    && (!costly || self.mode.abilities.instabuild)
                     && self
                         .inventory
                         .hand(off_hand)

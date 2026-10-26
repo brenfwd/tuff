@@ -166,4 +166,7 @@ pub struct BoatPlace {
     pub name: Option<tuff_nbt::Tag>,
     pub sequence: i32,
     pub off_hand: bool,
+    /// The one boat this use is paid with, moved out of the hand with the
+    /// request: spent when the boat is placed, handed back when not.
+    pub pay: super::action::BucketPay,
 }

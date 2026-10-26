@@ -323,6 +323,7 @@ async fn boat_items_place_boats_on_water() {
             name: None,
             sequence: 3,
             off_hand: false,
+            pay: Default::default(),
         }))
         .await;
     let outcome = expect(&mut events, |event| match event {
@@ -386,6 +387,7 @@ async fn a_boat_item_is_refused_while_the_eye_is_inside_another_boat() {
             name: None,
             sequence: 4,
             off_hand: false,
+            pay: Default::default(),
         }))
         .await;
     let outcome = expect(&mut events, |event| match event {
