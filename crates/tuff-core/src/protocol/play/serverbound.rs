@@ -1046,6 +1046,11 @@ impl Serverbound {
                 w.write_var_int(ServerId::ContainerClose.id());
                 w.write_var_int(*window);
             }
+            Self::ContainerButtonClick { window_id, button } => {
+                w.write_var_int(ServerId::ContainerButtonClick.id());
+                w.write_var_int(*window_id);
+                w.write_var_int(*button);
+            }
             Self::PlayerAction {
                 status,
                 position,

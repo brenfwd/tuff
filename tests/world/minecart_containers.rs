@@ -452,3 +452,71 @@ async fn opening_a_chest_minecart_is_heard_by_a_sculk_sensor() {
     assert!(heard, "the sensor heard the cart open");
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_region_refuses_a_cart_click_from_a_window_that_was_closed() {
+    use crate::world::messages::EntitySlotChange;
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let chunk = ChunkPos::new(0, 0);
+    let region = world.region(chunk.region()).await;
+    let (player, mut events) = PlayerHandle::new(100);
+    subscribe(&region, &player, &mut events, &[chunk]).await;
+    place_blocks(&world, &region, pen(2, 13)).await;
+    let gold = ItemStack::mint(Item::GoldIngot, 7, MintReason::Test);
+    summon(
+        &region,
+        EntityType::ChestMinecart,
+        items_nbt(&[(0, gold.test_copy())]),
+        [6.5, SKY as f64 + 1.0, 6.5],
+    )
+    .await;
+    let cart = mobs(&region, EntityType::ChestMinecart).await[0].id;
+    open_cart(&region, &player, &mut events, cart).await;
+
+    region
+        .request(RegionRequest::CloseEntityContainer {
+            player: player.id,
+            entity: cart,
+        })
+        .await;
+    for change in [
+        EntitySlotChange {
+            slot: 0,
+            expected: snap(Some(gold.test_copy())),
+            new: None,
+        },
+        EntitySlotChange {
+            slot: 1,
+            expected: None,
+            new: snap(Some(gold.test_copy())),
+        },
+    ] {
+        let changes = vec![change];
+        let pool = entity_pool_for(&changes);
+        let given = pool.iter().map(ItemStack::count).sum::<u8>();
+        region
+            .request(RegionRequest::EntityTransaction {
+                player: player.clone(),
+                window_id: 1,
+                entity: cart,
+                changes,
+                pool,
+            })
+            .await;
+        let (accepted, pool) = expect(&mut events, |event| match event {
+            PlayerEvent::EntityTransaction { accepted, pool, .. } => Some((accepted, pool)),
+            _ => None,
+        })
+        .await;
+        assert!(!accepted, "a closed window cannot change the cart");
+        assert_eq!(pool.iter().map(ItemStack::count).sum::<u8>(), given);
+        for stack in pool {
+            stack.burn(tuff_item::item::BurnReason::Test);
+        }
+    }
+    let data = entity_data(&region, cart).await;
+    assert_eq!(data.get_list("Items").map(<[_]>::len), Some(1));
+    world.shutdown().await;
+}
