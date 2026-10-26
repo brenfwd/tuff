@@ -38,6 +38,7 @@ enum Kind {
     Dropper,
     Minecart,
     ChestBoat,
+    Donkey,
 }
 
 impl Kind {
@@ -54,7 +55,7 @@ impl Kind {
             Kind::Loom => "loom",
             Kind::Barrel => "barrel",
             Kind::Dropper => "dropper",
-            Kind::Minecart | Kind::ChestBoat => return None,
+            Kind::Minecart | Kind::ChestBoat | Kind::Donkey => return None,
         })
     }
 
@@ -69,6 +70,7 @@ impl Kind {
         match self {
             Kind::Minecart => Some(("chest_minecart", EntityType::ChestMinecart)),
             Kind::ChestBoat => Some(("oak_chest_boat", EntityType::OakChestBoat)),
+            Kind::Donkey => Some(("donkey", EntityType::Donkey)),
             _ => None,
         }
     }
@@ -78,6 +80,7 @@ impl Kind {
     fn layout(self) -> (i16, i16) {
         let container = match self {
             Kind::Chest | Kind::Shulker | Kind::Barrel | Kind::Minecart | Kind::ChestBoat => 27,
+            Kind::Donkey => 17,
             Kind::Dropper => 9,
             Kind::Hopper => 5,
             Kind::Furnace | Kind::Anvil | Kind::Grindstone => 3,
@@ -85,6 +88,11 @@ impl Kind {
             Kind::Smithing | Kind::Loom => 4,
         };
         (container, container + 27)
+    }
+
+    /// The first window slot that holds a given item.
+    fn first_item_slot(self) -> i16 {
+        if matches!(self, Kind::Donkey) { 2 } else { 0 }
     }
 
     /// Window slots the diamonds in the hotbar are put into, for the
@@ -108,6 +116,7 @@ enum Event {
     Disconnect,
     SecondPlayer,
     Piston,
+    Carried,
 }
 
 async fn start() -> TestServer {
@@ -277,6 +286,7 @@ impl Rig {
             "kill @e[type=item]".to_owned(),
             "kill @e[type=chest_minecart]".to_owned(),
             "kill @e[type=oak_chest_boat]".to_owned(),
+            "kill @e[type=donkey]".to_owned(),
             "clear Opener".to_owned(),
             "clear Taker".to_owned(),
             format!("setblock {x} {y} {z} air"),
@@ -308,8 +318,10 @@ impl Rig {
                 }
             }
         } else if let Some((name, _)) = kind.entity() {
+            let at = if matches!(kind, Kind::Donkey) { x - 3 } else { x };
             let said = self.say(&format!(
-                "summon {name} {x}.5 {y} {z}.5 {{Items:[{{Slot:0b,id:\"minecraft:{ITEM}\",count:{SLOT_ZERO}}},{{Slot:1b,id:\"minecraft:{ITEM}\",count:{SLOT_ONE}}}]}}"
+                "summon {name} {}.5 {y} {z}.5 {{Owner:[I;1,2,3,4],Tame:1b,ChestedHorse:1b,Items:[{{Slot:0b,id:\"minecraft:{ITEM}\",count:{SLOT_ZERO}}},{{Slot:1b,id:\"minecraft:{ITEM}\",count:{SLOT_ONE}}}]}}",
+                at
             ))
             .await;
             let _ = said;
@@ -503,7 +515,8 @@ async fn scenario(kind: Kind, event: Event) {
     let mut taker = None;
     match event {
         Event::Live => {
-            rig.bot().send(click(rig.bot(), window, 0, 0, 1));
+            rig.bot()
+                .send(click(rig.bot(), window, kind.first_item_slot(), 0, 1));
             rig.settle().await;
         }
         Event::Closed => {
@@ -514,8 +527,8 @@ async fn scenario(kind: Kind, event: Event) {
             if kind.block().is_some() {
                 rig.say(&format!("setblock {x} {y} {z} air destroy")).await;
             } else {
-                rig.say("kill @e[type=chest_minecart]").await;
-                rig.say("kill @e[type=oak_chest_boat]").await;
+                let name = kind.entity().expect("an entity container").0;
+                rig.say(&format!("kill @e[type={name}]")).await;
             }
         }
         Event::Away => {
@@ -553,6 +566,10 @@ async fn scenario(kind: Kind, event: Event) {
             taker = Some((bot, theirs));
             players = vec!["Opener", "Taker"];
         }
+        Event::Carried => {
+            rig.say("tp @e[type=donkey] 1.5 150 30.5").await;
+            rig.settle().await;
+        }
         Event::Piston => {
             for line in [
                 format!("setblock {} {y} {z} piston[facing=west]", x + 1),
@@ -566,7 +583,7 @@ async fn scenario(kind: Kind, event: Event) {
         || (matches!(event, Event::Piston) && (!kind.station() || matches!(kind, Kind::Anvil)));
     if matches!(
         event,
-        Event::Break | Event::Piston | Event::Away | Event::Nether
+        Event::Break | Event::Piston | Event::Away | Event::Nether | Event::Carried
     ) {
         let watcher = rig.bot();
         let shut = tokio::time::timeout(
@@ -653,6 +670,14 @@ scenarios! {
     minecart_left_far_behind: Kind::Minecart, Event::Away;
     chest_boat_killed_while_open: Kind::ChestBoat, Event::Break;
     chest_disconnected_while_open: Kind::Chest, Event::Disconnect;
+    donkey_clicks_while_open: Kind::Donkey, Event::Live;
+    donkey_closed_properly: Kind::Donkey, Event::Closed;
+    donkey_killed_while_open: Kind::Donkey, Event::Break;
+    donkey_left_far_behind: Kind::Donkey, Event::Away;
+    donkey_left_for_the_nether: Kind::Donkey, Event::Nether;
+    donkey_led_far_away: Kind::Donkey, Event::Carried;
+    donkey_disconnected_while_open: Kind::Donkey, Event::Disconnect;
+    donkey_taken_by_a_second_player: Kind::Donkey, Event::SecondPlayer;
 }
 
 struct Station {
