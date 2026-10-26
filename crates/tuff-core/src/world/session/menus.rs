@@ -187,8 +187,10 @@ impl PlayerSession {
                     height,
                 );
                 if menu.container[0] != result {
-                    menu.container[0] = result;
+                    menu::show_preview(&mut menu.container[0], result);
                     self.send_menu_slot(0);
+                } else if let Some(result) = result {
+                    result.burn(BurnReason::Preview);
                 }
             }
             Some(Station::Stonecutter {
@@ -205,7 +207,11 @@ impl PlayerSession {
                         .map(|item| self.shared.recipes().stonecutter_options(item))
                         .unwrap_or_default();
                     *selected = None;
-                    let cleared = menu.container[stonecutter::RESULT].take().is_some();
+                    let old = menu.container[stonecutter::RESULT].take();
+                    let cleared = old.is_some();
+                    if let Some(old) = old {
+                        old.burn(BurnReason::Preview);
+                    }
                     self.send_menu_data(0, -1);
                     if cleared {
                         self.send_menu_slot(stonecutter::RESULT);
@@ -217,8 +223,10 @@ impl PlayerSession {
                     menu::merchant_sell_item(&menu.container, &view.offers, *hint);
                 *active = offer;
                 if menu.container[merchant::RESULT] != result {
-                    menu.container[merchant::RESULT] = result;
+                    menu::show_preview(&mut menu.container[merchant::RESULT], result);
                     self.send_menu_slot(merchant::RESULT);
+                } else if let Some(result) = result {
+                    result.burn(BurnReason::Preview);
                 }
             }
             Some(Station::Enchantment {
@@ -245,7 +253,11 @@ impl PlayerSession {
                 let has_error = filled && result.is_none();
                 let error_changed = *error != has_error;
                 *error = has_error;
-                menu.container[smithing::RESULT] = result;
+                if changed {
+                    menu::show_preview(&mut menu.container[smithing::RESULT], result);
+                } else if let Some(result) = result {
+                    result.burn(BurnReason::Preview);
+                }
                 if changed {
                     self.send_menu_slot(smithing::RESULT);
                 }
@@ -516,7 +528,7 @@ impl PlayerSession {
                 return;
             };
             *selected = button;
-            menu.container[loom::RESULT] = match (
+            let woven = match (
                 menu.container[loom::BANNER].as_ref(),
                 menu.container[loom::DYE].as_ref(),
             ) {
@@ -527,6 +539,7 @@ impl PlayerSession {
                 }
                 _ => None,
             };
+            menu::show_preview(&mut menu.container[loom::RESULT], woven);
             self.send_menu_slot(loom::RESULT);
             self.send_menu_data(0, button as i16);
             return;
@@ -544,11 +557,12 @@ impl PlayerSession {
             return;
         }
         *selected = Some(index);
-        menu.container[stonecutter::RESULT] = self
+        let cut = self
             .shared
             .recipes()
             .stonecutter_recipe(options[index])
             .map(|(_, result)| result);
+        menu::show_preview(&mut menu.container[stonecutter::RESULT], cut);
         self.send_menu_slot(stonecutter::RESULT);
         self.send_menu_data(0, button as i16);
     }

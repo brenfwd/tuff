@@ -654,3 +654,94 @@ scenarios! {
     chest_boat_killed_while_open: Kind::ChestBoat, Event::Break;
     chest_disconnected_while_open: Kind::Chest, Event::Disconnect;
 }
+
+struct Station {
+    block: &'static str,
+    container: i16,
+    gives: &'static [(&'static str, &'static str)],
+    inputs: &'static [i16],
+    buttons: &'static [i32],
+    withdraw: i16,
+}
+
+/// Fills a station with items that make a result, changes the result
+/// (buttons, taking an input away) and closes: nothing may be lost.
+async fn result_replaced(station: Station) {
+    let mut rig = Rig::new().await;
+    let [x, y, z] = CONTAINER;
+    for (n, (_, stack)) in station.gives.iter().enumerate() {
+        rig.say(&format!("item replace entity Opener hotbar.{n} with {stack}"))
+            .await;
+    }
+    rig.say(&format!("setblock {x} {y} {z} {}", station.block))
+        .await;
+    rig.settle().await;
+    let window = open(rig.bot(), Kind::Crafting).await;
+    let hotbar = station.container + 27;
+    for (n, slot) in station.inputs.iter().enumerate() {
+        rig.bot()
+            .send(click(rig.bot(), window, hotbar + n as i16, 0, 0));
+        rig.bot().send(click(rig.bot(), window, *slot, 0, 0));
+    }
+    for button in station.buttons {
+        rig.bot().send(Serverbound::ContainerButtonClick {
+            window_id: window,
+            button: *button,
+        });
+        rig.settle().await;
+    }
+    rig.bot()
+        .send(click(rig.bot(), window, station.withdraw, 0, 0));
+    rig.bot().send(click(rig.bot(), window, hotbar + 8, 0, 0));
+    rig.settle().await;
+    rig.bot().send(Serverbound::ContainerClose(window));
+    rig.settle().await;
+    let lost = LossScope::current().expect("scoped by the watchdog").lost();
+    assert_eq!(lost, 0, "{}: items were lost", station.block);
+    rig.server.handle.shutdown().await.unwrap();
+    rig.server.task.await.unwrap().unwrap();
+}
+
+macro_rules! result_scenarios {
+    ($($name:ident: $station:expr;)*) => {$(
+        #[tuff_core::watchdog]
+        #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+        async fn $name() {
+            result_replaced($station).await;
+        }
+    )*};
+}
+
+result_scenarios! {
+    crafting_result_dropped_with_its_input: Station {
+        block: "crafting_table", container: 10,
+        gives: &[("oak_log", "oak_log 1")], inputs: &[1], buttons: &[], withdraw: 1,
+    };
+    stonecutter_result_dropped_with_its_input: Station {
+        block: "stonecutter", container: 2,
+        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0], withdraw: 0,
+    };
+    stonecutter_result_replaced_by_another_choice: Station {
+        block: "stonecutter", container: 2,
+        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0, 1], withdraw: 0,
+    };
+    smithing_result_dropped_with_its_addition: Station {
+        block: "smithing_table", container: 4,
+        gives: &[
+            ("t", "netherite_upgrade_smithing_template 1"),
+            ("p", "diamond_pickaxe 1"),
+            ("i", "netherite_ingot 1"),
+        ],
+        inputs: &[0, 1, 2], buttons: &[], withdraw: 2,
+    };
+    loom_result_replaced_by_another_pattern: Station {
+        block: "loom", container: 4,
+        gives: &[("b", "white_banner 1"), ("d", "red_dye 1")],
+        inputs: &[0, 1], buttons: &[0, 1], withdraw: 1,
+    };
+    grindstone_result_dropped_with_its_input: Station {
+        block: "grindstone", container: 3,
+        gives: &[("s", "iron_sword[enchantments={\"minecraft:sharpness\":3}] 1")],
+        inputs: &[0], buttons: &[], withdraw: 0,
+    };
+}
