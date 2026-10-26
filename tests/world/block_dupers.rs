@@ -674,19 +674,49 @@ async fn sand_landing_in_an_end_portal_comes_through_once_with_the_setting_off()
 
 mod designs {
     use super::*;
-    use crate::dupe_designs::{COUNT_BOX, DESIGNS, Design, ORIGIN};
+    use crate::dupe_designs::{DESIGNS, Design, ORIGIN, Slabs};
 
     impl Bench {
         async fn design_tally(&self, design: &Design) -> Tally {
-            let (lo, hi) = COUNT_BOX;
+            let (lo, hi) = design.area;
             let positions: Vec<BlockPos> = (lo.0..=hi.0)
                 .flat_map(|x| (lo.1..=hi.1).map(move |y| (x, y)))
                 .flat_map(|(x, y)| (lo.2..=hi.2).map(move |z| (x, y, z)))
                 .map(|(x, y, z)| BlockPos::new(ORIGIN.0 + x, ORIGIN.1 + y, ORIGIN.2 + z))
                 .collect();
             let mut tally = Tally::new();
-            self.count_blocks(positions, &mut tally).await;
+            if design.slabs.is_none() {
+                self.count_blocks(positions.clone(), &mut tally).await;
+            }
             self.count_drops(ORIGIN.0, &mut tally).await;
+            if let Some(axis) = design.slabs {
+                let BlockOpResult::Copied(found) = self
+                    .blocks(
+                        positions[0],
+                        BlockOp::Copy {
+                            positions: positions.clone(),
+                        },
+                    )
+                    .await
+                else {
+                    panic!("copy failed");
+                };
+                for (pos, entry) in positions.iter().zip(found) {
+                    let Some((state, _)) = entry else {
+                        continue;
+                    };
+                    let name = state.block().name();
+                    if name == "minecraft:air" || !design.kinds.contains(&name) {
+                        continue;
+                    }
+                    let offset = match axis {
+                        Slabs::X => pos.x - ORIGIN.0,
+                        Slabs::Z => pos.z - ORIGIN.2,
+                    };
+                    *tally.entry(format!("{name}@{offset}")).or_default() += 1;
+                    *tally.entry(name.to_owned()).or_default() += 1;
+                }
+            }
             let primed = self.primed_tnt().await;
             if primed > 0 {
                 let tnt = tally.entry("minecraft:tnt".to_owned()).or_default();
@@ -694,7 +724,11 @@ mod designs {
                 tally.insert("primed_tnt".to_owned(), primed);
             }
             tally.retain(|id, n| {
-                *n > 0 && (id == "primed_tnt" || design.kinds.contains(&id.as_str()))
+                *n > 0
+                    && (id == "primed_tnt"
+                        || design
+                            .kinds
+                            .contains(&id.split('@').next().unwrap_or_default()))
             });
             tally
         }
@@ -857,7 +891,17 @@ mod designs {
                     .or_default() += n;
             }
             for (id, n) in &summed {
-                if id != "primed_tnt" && *n > built.get(id).copied().unwrap_or(0) {
+                let source = if id == "minecraft:redstone" {
+                    "minecraft:redstone_wire"
+                } else {
+                    id.as_str()
+                };
+                if id != "primed_tnt"
+                    && !id.contains('@')
+                    && !id.ends_with("_head")
+                    && !id.ends_with("moving_piston")
+                    && *n > built.get(source).copied().unwrap_or(0)
+                {
                     report.push(format!(
                         "{} off: {off:?} exceeds the build {built:?}",
                         design.name

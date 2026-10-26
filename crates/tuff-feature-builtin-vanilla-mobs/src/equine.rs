@@ -1065,6 +1065,10 @@ macro_rules! equine_species {
             $crate::equine::drive_input(input)
         }
 
+        fn remove_when_far_away(&self) -> bool {
+            false
+        }
+
         fn hops_when_ridden(&self) -> bool {
             false
         }

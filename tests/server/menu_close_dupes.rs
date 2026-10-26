@@ -38,6 +38,7 @@ enum Kind {
     Dropper,
     Minecart,
     ChestBoat,
+    Donkey,
 }
 
 impl Kind {
@@ -54,7 +55,7 @@ impl Kind {
             Kind::Loom => "loom",
             Kind::Barrel => "barrel",
             Kind::Dropper => "dropper",
-            Kind::Minecart | Kind::ChestBoat => return None,
+            Kind::Minecart | Kind::ChestBoat | Kind::Donkey => return None,
         })
     }
 
@@ -69,6 +70,7 @@ impl Kind {
         match self {
             Kind::Minecart => Some(("chest_minecart", EntityType::ChestMinecart)),
             Kind::ChestBoat => Some(("oak_chest_boat", EntityType::OakChestBoat)),
+            Kind::Donkey => Some(("donkey", EntityType::Donkey)),
             _ => None,
         }
     }
@@ -78,6 +80,7 @@ impl Kind {
     fn layout(self) -> (i16, i16) {
         let container = match self {
             Kind::Chest | Kind::Shulker | Kind::Barrel | Kind::Minecart | Kind::ChestBoat => 27,
+            Kind::Donkey => 17,
             Kind::Dropper => 9,
             Kind::Hopper => 5,
             Kind::Furnace | Kind::Anvil | Kind::Grindstone => 3,
@@ -85,6 +88,11 @@ impl Kind {
             Kind::Smithing | Kind::Loom => 4,
         };
         (container, container + 27)
+    }
+
+    /// The first window slot that holds a given item.
+    fn first_item_slot(self) -> i16 {
+        if matches!(self, Kind::Donkey) { 2 } else { 0 }
     }
 
     /// Window slots the diamonds in the hotbar are put into, for the
@@ -108,6 +116,8 @@ enum Event {
     Disconnect,
     SecondPlayer,
     Piston,
+    Carried,
+    Unloaded,
 }
 
 async fn start() -> TestServer {
@@ -277,6 +287,7 @@ impl Rig {
             "kill @e[type=item]".to_owned(),
             "kill @e[type=chest_minecart]".to_owned(),
             "kill @e[type=oak_chest_boat]".to_owned(),
+            "kill @e[type=donkey]".to_owned(),
             "clear Opener".to_owned(),
             "clear Taker".to_owned(),
             format!("setblock {x} {y} {z} air"),
@@ -308,8 +319,14 @@ impl Rig {
                 }
             }
         } else if let Some((name, _)) = kind.entity() {
+            let at = if matches!(kind, Kind::Donkey) {
+                x - 3
+            } else {
+                x
+            };
             let said = self.say(&format!(
-                "summon {name} {x}.5 {y} {z}.5 {{Items:[{{Slot:0b,id:\"minecraft:{ITEM}\",count:{SLOT_ZERO}}},{{Slot:1b,id:\"minecraft:{ITEM}\",count:{SLOT_ONE}}}]}}"
+                "summon {name} {}.5 {y} {z}.5 {{Owner:[I;1,2,3,4],Tame:1b,ChestedHorse:1b,Items:[{{Slot:0b,id:\"minecraft:{ITEM}\",count:{SLOT_ZERO}}},{{Slot:1b,id:\"minecraft:{ITEM}\",count:{SLOT_ONE}}}]}}",
+                at
             ))
             .await;
             let _ = said;
@@ -491,6 +508,16 @@ fn stale_clicks(bot: &Bot, window: i32, kind: Kind) {
     bot.send(click(bot, window, -999, 0, 0));
 }
 
+async fn game_time(rig: &Rig) -> i64 {
+    rig.say("time query gametime")
+        .await
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>()
+        .parse()
+        .unwrap_or(0)
+}
+
 async fn scenario(kind: Kind, event: Event) {
     let mut rig = Rig::new().await;
     rig.reset(kind).await;
@@ -503,7 +530,8 @@ async fn scenario(kind: Kind, event: Event) {
     let mut taker = None;
     match event {
         Event::Live => {
-            rig.bot().send(click(rig.bot(), window, 0, 0, 1));
+            rig.bot()
+                .send(click(rig.bot(), window, kind.first_item_slot(), 0, 1));
             rig.settle().await;
         }
         Event::Closed => {
@@ -514,8 +542,8 @@ async fn scenario(kind: Kind, event: Event) {
             if kind.block().is_some() {
                 rig.say(&format!("setblock {x} {y} {z} air destroy")).await;
             } else {
-                rig.say("kill @e[type=chest_minecart]").await;
-                rig.say("kill @e[type=oak_chest_boat]").await;
+                let name = kind.entity().expect("an entity container").0;
+                rig.say(&format!("kill @e[type={name}]")).await;
             }
         }
         Event::Away => {
@@ -553,6 +581,26 @@ async fn scenario(kind: Kind, event: Event) {
             taker = Some((bot, theirs));
             players = vec!["Opener", "Taker"];
         }
+        Event::Unloaded => {
+            rig.say("tp Opener 1500.5 150 1500.5").await;
+            let before = game_time(&rig).await;
+            rig.say("tick sprint 400").await;
+            until("the sprint is over", || async {
+                game_time(&rig).await >= before + 400
+            })
+            .await;
+            rig.settle().await;
+            until("the chunk is unloaded", || async {
+                !rig.say("execute if loaded 4 150 0")
+                    .await
+                    .contains("Test passed")
+            })
+            .await;
+        }
+        Event::Carried => {
+            rig.say("tp @e[type=donkey] 1.5 150 30.5").await;
+            rig.settle().await;
+        }
         Event::Piston => {
             for line in [
                 format!("setblock {} {y} {z} piston[facing=west]", x + 1),
@@ -566,7 +614,12 @@ async fn scenario(kind: Kind, event: Event) {
         || (matches!(event, Event::Piston) && (!kind.station() || matches!(kind, Kind::Anvil)));
     if matches!(
         event,
-        Event::Break | Event::Piston | Event::Away | Event::Nether
+        Event::Break
+            | Event::Piston
+            | Event::Away
+            | Event::Nether
+            | Event::Carried
+            | Event::Unloaded
     ) {
         let watcher = rig.bot();
         let shut = tokio::time::timeout(
@@ -588,7 +641,7 @@ async fn scenario(kind: Kind, event: Event) {
         stale_clicks(bot, *theirs, kind);
     }
     match event {
-        Event::Away | Event::Nether => {
+        Event::Away | Event::Nether | Event::Unloaded => {
             rig.say("execute in minecraft:overworld run tp Opener 0.5 150 0.5")
                 .await;
         }
@@ -653,4 +706,109 @@ scenarios! {
     minecart_left_far_behind: Kind::Minecart, Event::Away;
     chest_boat_killed_while_open: Kind::ChestBoat, Event::Break;
     chest_disconnected_while_open: Kind::Chest, Event::Disconnect;
+    chest_unloaded_while_open: Kind::Chest, Event::Unloaded;
+    furnace_unloaded_while_open: Kind::Furnace, Event::Unloaded;
+    minecart_unloaded_while_open: Kind::Minecart, Event::Unloaded;
+    donkey_unloaded_while_open: Kind::Donkey, Event::Unloaded;
+    donkey_clicks_while_open: Kind::Donkey, Event::Live;
+    donkey_closed_properly: Kind::Donkey, Event::Closed;
+    donkey_killed_while_open: Kind::Donkey, Event::Break;
+    donkey_left_far_behind: Kind::Donkey, Event::Away;
+    donkey_left_for_the_nether: Kind::Donkey, Event::Nether;
+    donkey_led_far_away: Kind::Donkey, Event::Carried;
+    donkey_disconnected_while_open: Kind::Donkey, Event::Disconnect;
+    donkey_taken_by_a_second_player: Kind::Donkey, Event::SecondPlayer;
+}
+
+struct Station {
+    block: &'static str,
+    container: i16,
+    gives: &'static [(&'static str, &'static str)],
+    inputs: &'static [i16],
+    buttons: &'static [i32],
+    withdraw: i16,
+}
+
+/// Fills a station with items that make a result, changes the result
+/// (buttons, taking an input away) and closes: nothing may be lost.
+async fn result_replaced(station: Station) {
+    let rig = Rig::new().await;
+    let [x, y, z] = CONTAINER;
+    for (n, (_, stack)) in station.gives.iter().enumerate() {
+        rig.say(&format!(
+            "item replace entity Opener hotbar.{n} with {stack}"
+        ))
+        .await;
+    }
+    rig.say(&format!("setblock {x} {y} {z} {}", station.block))
+        .await;
+    rig.settle().await;
+    let window = open(rig.bot(), Kind::Crafting).await;
+    let hotbar = station.container + 27;
+    for (n, slot) in station.inputs.iter().enumerate() {
+        rig.bot()
+            .send(click(rig.bot(), window, hotbar + n as i16, 0, 0));
+        rig.bot().send(click(rig.bot(), window, *slot, 0, 0));
+    }
+    for button in station.buttons {
+        rig.bot().send(Serverbound::ContainerButtonClick {
+            window_id: window,
+            button: *button,
+        });
+        rig.settle().await;
+    }
+    rig.bot()
+        .send(click(rig.bot(), window, station.withdraw, 0, 0));
+    rig.bot().send(click(rig.bot(), window, hotbar + 8, 0, 0));
+    rig.settle().await;
+    rig.bot().send(Serverbound::ContainerClose(window));
+    rig.settle().await;
+    let lost = LossScope::current().expect("scoped by the watchdog").lost();
+    assert_eq!(lost, 0, "{}: items were lost", station.block);
+    rig.server.handle.shutdown().await.unwrap();
+    rig.server.task.await.unwrap().unwrap();
+}
+
+macro_rules! result_scenarios {
+    ($($name:ident: $station:expr;)*) => {$(
+        #[tuff_core::watchdog]
+        #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+        async fn $name() {
+            result_replaced($station).await;
+        }
+    )*};
+}
+
+result_scenarios! {
+    crafting_result_dropped_with_its_input: Station {
+        block: "crafting_table", container: 10,
+        gives: &[("oak_log", "oak_log 1")], inputs: &[1], buttons: &[], withdraw: 1,
+    };
+    stonecutter_result_dropped_with_its_input: Station {
+        block: "stonecutter", container: 2,
+        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0], withdraw: 0,
+    };
+    stonecutter_result_replaced_by_another_choice: Station {
+        block: "stonecutter", container: 2,
+        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0, 1], withdraw: 0,
+    };
+    smithing_result_dropped_with_its_addition: Station {
+        block: "smithing_table", container: 4,
+        gives: &[
+            ("t", "netherite_upgrade_smithing_template 1"),
+            ("p", "diamond_pickaxe 1"),
+            ("i", "netherite_ingot 1"),
+        ],
+        inputs: &[0, 1, 2], buttons: &[], withdraw: 2,
+    };
+    loom_result_replaced_by_another_pattern: Station {
+        block: "loom", container: 4,
+        gives: &[("b", "white_banner 1"), ("d", "red_dye 1")],
+        inputs: &[0, 1], buttons: &[0, 1], withdraw: 1,
+    };
+    grindstone_result_dropped_with_its_input: Station {
+        block: "grindstone", container: 3,
+        gives: &[("s", "iron_sword[enchantments={\"minecraft:sharpness\":3}] 1")],
+        inputs: &[0], buttons: &[], withdraw: 0,
+    };
 }

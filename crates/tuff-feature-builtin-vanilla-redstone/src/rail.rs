@@ -64,6 +64,21 @@ fn supports_rigid(level: &dyn Reader, pos: BlockPos) -> bool {
     level.block(pos).is_face_sturdy(Facing::Up, Support::Rigid)
 }
 
+/// `supports_rigid`, where a block still landing in a piston's moving cell
+/// holds a rail as its own face would.
+// Parity: a rail pushed together with the block under it keeps standing on
+// it (observed on the vanilla differential harness); a rail that lands first
+// must not pop. A block still mid-move does not support it.
+fn supports_landing(level: &dyn RedstoneLevel, pos: BlockPos) -> bool {
+    supports_rigid(level, pos)
+        || (level.block(pos).block() == Block::MovingPiston
+            && level.moving_block(pos).is_some_and(|moving| {
+                !moving.source
+                    && moving.progress >= 1.0
+                    && moving.moved.is_face_sturdy(Facing::Up, Support::Rigid)
+            }))
+}
+
 const NORTH: u8 = 1;
 const SOUTH: u8 = 2;
 const WEST: u8 = 4;
@@ -350,8 +365,8 @@ fn update_placed(level: &mut dyn RedstoneLevel, pos: BlockPos, state: BlockState
 
 /// Whether the rail has lost what holds it: the block below, or the
 /// block a slope leans on.
-fn unsupported(level: &dyn Reader, pos: BlockPos, shape: Shape) -> bool {
-    if !supports_rigid(level, below(pos)) {
+fn unsupported(level: &dyn RedstoneLevel, pos: BlockPos, shape: Shape) -> bool {
+    if !supports_landing(level, below(pos)) {
         return true;
     }
     let leans_on = match shape {
@@ -609,7 +624,7 @@ impl BlockBehavior for PoweredRail {
 impl SignalBehavior for PoweredRail {}
 
 fn check_pressed(level: &mut dyn RedstoneLevel, pos: BlockPos, state: BlockState) {
-    if !supports_rigid(level, below(pos)) || level.block(pos).block() != state.block() {
+    if !supports_landing(level, below(pos)) || level.block(pos).block() != state.block() {
         return;
     }
     let area = [
