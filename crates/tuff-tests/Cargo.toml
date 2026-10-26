@@ -13,6 +13,9 @@ autobenches = false
 # the server through the `tuff-dylib` shared library instead of each carrying a
 # static copy; the files stay under the repository's tests/ directory.
 
+[lints]
+workspace = true
+
 [[test]]
 name = "server"
 path = "../../tests/server/main.rs"

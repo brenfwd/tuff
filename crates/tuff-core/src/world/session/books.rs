@@ -133,6 +133,10 @@ impl PlayerSession {
                 let Some(old) = self.inventory_mut().slot_mut(window).take() else {
                     return;
                 };
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "item turning into another (edit_book)"
+                )]
                 let mut signed =
                     ItemStack::mint(Item::WrittenBook, old.count(), MintReason::Transform);
                 old.burn(BurnReason::Transform);

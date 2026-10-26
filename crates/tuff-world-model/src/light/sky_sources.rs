@@ -120,7 +120,10 @@ impl SkyLightSources {
         self.update_edge(chunk, index, lowest, y, state, y - 1, below)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn update_edge(
         &mut self,
         chunk: &Chunk,

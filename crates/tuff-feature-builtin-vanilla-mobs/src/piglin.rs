@@ -1004,11 +1004,13 @@ impl Species for Piglin {
             core.set_baby(true);
         }
         if let Some(tuff_nbt::Tag::List(list)) = nbt.remove("Inventory") {
-            core.piglin.inventory = list
+            #[expect(clippy::disallowed_methods, reason = "saved stack")]
+            let minted = list
                 .iter()
                 .filter_map(|tag| ItemStack::from_storage(tag.as_compound()?))
                 .take(INVENTORY_SLOTS)
                 .collect();
+            core.piglin.inventory = minted;
         }
     }
 
@@ -1205,6 +1207,7 @@ impl Species for Piglin {
                 } else {
                     Item::GoldenSword
                 };
+                #[expect(clippy::disallowed_methods, reason = "mob equipment")]
                 core.equipment.set(
                     EquipmentSlot::Mainhand,
                     Some(ItemStack::mint(weapon, 1, MintReason::Spawn)),
@@ -1219,6 +1222,7 @@ impl Species for Piglin {
                 (EquipmentSlot::Feet, Item::GoldenBoots),
             ] {
                 if cx.rng.r#gen::<f32>() < ARMOR_CHANCE {
+                    #[expect(clippy::disallowed_methods, reason = "mob equipment")]
                     core.equipment
                         .set(slot, Some(ItemStack::mint(item, 1, MintReason::Spawn)));
                 }
@@ -1381,6 +1385,7 @@ impl Species for PiglinBrute {
             pos: super::physics::block_pos(core.base.position),
             radius: BRUTE_HOME_RADIUS,
         });
+        #[expect(clippy::disallowed_methods, reason = "mob equipment")]
         core.equipment.set(
             EquipmentSlot::Mainhand,
             Some(ItemStack::mint(Item::GoldenAxe, 1, MintReason::Spawn)),

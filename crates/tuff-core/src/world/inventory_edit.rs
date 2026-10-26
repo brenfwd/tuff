@@ -69,6 +69,7 @@ fn give(inventory: &mut Inventory, one: &ItemPicture, count: u32) -> bool {
     }
     let chunk = u32::from(one.max_stack_size().max(1));
     let mut remaining = count;
+    #[expect(clippy::disallowed_methods, reason = "command-granted stack (give)")]
     while remaining > 0 {
         let part = remaining.min(chunk);
         remaining -= part;

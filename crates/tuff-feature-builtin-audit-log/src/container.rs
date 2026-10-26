@@ -189,6 +189,7 @@ pub fn apply(items: &mut [Option<ItemStack>], undo: &Undo) -> i64 {
                 left -= moved;
                 match &mut items[slot] {
                     Some(stack) => stack.grow(moved as u8, MintReason::Command),
+                    #[expect(clippy::disallowed_methods, reason = "command-granted stack (apply)")]
                     empty => {
                         *empty = Some(ItemStack::mint_like(
                             &undo.stack,

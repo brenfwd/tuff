@@ -186,6 +186,10 @@ fn skeleton(
     let mob = skeleton.downcast_mut::<Mob<Skeleton>>()?;
     mob.core.persistence_required = true;
     if mob.core.equipment.get(EquipmentSlot::Head).is_none() {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (skeleton)"
+        )]
         mob.core.equipment.set(
             EquipmentSlot::Head,
             Some(ItemStack::mint(Item::IronHelmet, 1, MintReason::Spawn)),

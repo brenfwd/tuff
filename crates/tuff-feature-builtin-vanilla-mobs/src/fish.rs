@@ -137,6 +137,10 @@ pub(crate) fn bucket_interact(
     }
     let bucket_item = Item::of_bucket(kind)?;
     let nbt = capture(core, extra);
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (bucket_interact)"
+    )]
     let mut result = ItemStack::mint(bucket_item, 1, MintReason::Spawn);
     result
         .components

@@ -516,14 +516,26 @@ impl RegionWorld for RegionActor {
     }
 
     fn place_from_click(&mut self, place: &Place, pos: BlockPos, state: BlockState) -> bool {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item click takes the offered stack for the placement (place_from_click)"
+        )]
         let paid = place.offer.take_placing();
         if paid.is_none() && !place.offer.creative {
             return false;
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "place_from_click is the single placement door for item clicks"
+        )]
         RegionActor::place_from_item(self, pos, state, paid);
         true
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "trait method forwards to the placement door on the region actor"
+    )]
     fn place_item_block(
         &mut self,
         pos: BlockPos,

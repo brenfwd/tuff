@@ -1,3 +1,11 @@
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod projectile;
 pub mod world;
 

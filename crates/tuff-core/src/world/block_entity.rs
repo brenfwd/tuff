@@ -712,7 +712,12 @@ pub fn decode_items(entries: &[tuff_nbt::Tag], size: usize) -> Vec<Option<ItemSt
         }
         let mut stack = entry.clone();
         stack.remove("Slot");
-        items[slot as usize] = ItemStack::from_storage(&stack);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "decoding a saved stack (decode_items)"
+        )]
+        let decoded = ItemStack::from_storage(&stack);
+        items[slot as usize] = decoded;
     }
     items
 }

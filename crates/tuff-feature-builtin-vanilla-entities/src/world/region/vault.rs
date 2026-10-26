@@ -138,6 +138,7 @@ fn stack_in(nbt: &Compound, key: &str) -> Option<tuff_item::item::ItemPicture> {
 }
 
 impl Vault {
+    #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (read)")]
     fn read(nbt: &Compound) -> Self {
         let empty = Compound::new();
         let config = nbt.get_compound("config").unwrap_or(&empty);

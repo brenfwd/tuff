@@ -158,6 +158,10 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
                     )],
                 ));
             };
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "block that is in no world, for /loot mine (drops)"
+            )]
             let mined =
                 || tuff_core::world::block_ledger::BrokenBlock::simulated(state, data.clone());
             let items = if tool.count() == 0 {
@@ -178,6 +182,7 @@ async fn drops(ctx: &mut Context<'_>, source: &str) -> Result<Drops, CommandErro
     }
 }
 
+#[expect(clippy::disallowed_methods, reason = "loot table output (mint)")]
 fn mint<M: Mode>(template: &ItemStack<M>) -> ItemStack {
     ItemStack::mint_like(template, template.count(), MintReason::Loot)
 }

@@ -246,7 +246,7 @@ macro_rules! tuple {
         }
 
         impl<$($name: ToValue),+> ToValue for ($($name,)+) {
-            #[allow(non_snake_case)]
+            #[expect(non_snake_case, reason = "name mirrors the generated interface")]
             fn to_value(&self) -> Value<'_> {
                 let ($($name,)+) = self;
                 Value::Record(vec![$($name.to_value()),+])

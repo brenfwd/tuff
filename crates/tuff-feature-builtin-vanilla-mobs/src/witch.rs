@@ -112,6 +112,10 @@ impl Goal for ThrowPotion {
 
 /// A splash potion of `potion` as a fresh item stack.
 fn splash_stack(potion: Potion) -> ItemStack {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (splash_stack)"
+    )]
     let mut stack = ItemStack::mint(Item::SplashPotion, 1, MintReason::Spawn);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(potion),
@@ -297,6 +301,10 @@ impl Witch {
     }
 
     fn start_drinking(&mut self, core: &mut MobCore, potion: Potion, cx: &mut TickContext) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (start_drinking)"
+        )]
         let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Spawn);
         stack.components.potion_contents = Some(Box::new(PotionContents {
             potion: Some(potion),

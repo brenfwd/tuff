@@ -1151,7 +1151,10 @@ fn island_peak(island_x: i64, island_z: i64, reach_x: f32, reach_z: f32) -> f32 
     (100.0 - distance * falloff).clamp(ISLAND_FLOOR, 80.0)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 pub(super) fn interpolated_volume(
     ctx: &mut Context,
     out: &mut [f32],
@@ -1204,7 +1207,10 @@ pub(super) fn interpolated_volume(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 fn interpolate_blocks(
     ctx: &mut Context,
     out: &mut [f32],

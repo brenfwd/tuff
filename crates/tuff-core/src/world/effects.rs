@@ -496,7 +496,10 @@ fn instant_harm(effect: MobEffect, amplifier: u8, scale: f64, inverted: bool) ->
 /// Queues what `effects` (non-instant ones already sized) and `instant`
 /// ones at `scale` do to a target: the damage as a hurt, the rest as a
 /// potion hit for players.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "independent inputs of one operation; a parameter struct would be built once"
+)]
 pub fn apply_potion(
     target: i32,
     player: bool,

@@ -65,7 +65,10 @@ pub struct Context {
 impl Context {
     /// A click on `clicked` filling that same position, before any rules
     /// decide where the block really goes.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub fn at_clicked(
         clicked: BlockPos,
         face: Facing,

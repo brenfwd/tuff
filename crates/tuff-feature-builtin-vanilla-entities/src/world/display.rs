@@ -301,6 +301,10 @@ pub fn synced_values(kind: EntityType, nbt: &Compound) -> Vec<(u8, MetadataValue
             MetadataValue::BlockState(block_state(nbt.get("block_state")).id()),
         )),
         EntityType::ItemDisplay => {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "decoding a saved stack (synced_values)"
+            )]
             let stack = nbt.get_compound("item").and_then(ItemStack::from_storage);
             values.push((
                 SUBTYPE,

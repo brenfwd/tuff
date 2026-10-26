@@ -252,6 +252,10 @@ impl Axolotl {
 
     /// Breeding with (or growing up on) a tropical fish bucket, which
     /// leaves an empty water bucket.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "feeding an axolotl swaps the fish bucket for an empty bucket (feed)"
+    )]
     fn feed(
         &mut self,
         core: &mut MobCore,

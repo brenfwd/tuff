@@ -29,7 +29,10 @@ use tuff_item::item::{Hurt, ItemStack};
 use tuff_vanilla_common::combat;
 use tuff_world_model::BlockPos;
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "crate-internal trait whose futures are awaited in place"
+)]
 pub trait CombatExt {
     async fn attack(&mut self, target: PlayerId);
     /// A spear's stab, from the client's Stab player action: the held
@@ -578,6 +581,10 @@ impl CombatExt for PlayerSession {
         };
         let creative = self.mode.abilities.instabuild;
         let slot = self.inventory.hand_slot(off_hand);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "creative inventory, pick-block or creative copy (interact)"
+        )]
         let hand = if creative {
             self.inventory.hand(off_hand).map(|stack| {
                 ItemStack::mint_like(stack, stack.count(), tuff_item::item::MintReason::Creative)

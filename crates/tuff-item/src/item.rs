@@ -281,7 +281,7 @@ impl<M: Mode, N: Mode> PartialEq<ComponentPatch<N>> for ComponentPatch<M> {
 impl<M: Mode> ComponentPatch<M> {
     /// This patch with every value cloned and each nested stack copied
     /// through `nested`, or left out without it.
-    #[allow(clippy::clone_on_copy)] // every value is copied the same way
+    #[expect(clippy::clone_on_copy, reason = "every value is copied the same way")]
     fn copy_nested<N: Mode, F: FnMut(&ItemStack<M>) -> ItemStack<N>>(
         &self,
         mut nested: Option<F>,
@@ -936,9 +936,17 @@ impl<M: Mode> ItemStack<M> {
 
     /// What using up one of this stack leaves behind: its own
     /// `use_remainder` component, else the item's default unless removed.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item left over after use (use_remainder)"
+    )]
     pub fn use_remainder(&self) -> Option<ItemStack> {
         const ID: &str = "minecraft:use_remainder";
         if let Some(Tag::Compound(nbt)) = self.components.other.get(ID) {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "item left over after use (use_remainder)"
+            )]
             return ItemStack::mint_from_nbt(nbt, MintReason::Remainder);
         }
         if self.components.is_removed(ID) {

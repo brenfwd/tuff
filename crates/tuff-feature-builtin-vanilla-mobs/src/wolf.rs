@@ -92,6 +92,10 @@ fn armor_tier<M: tuff_item::item::Mode>(stack: Option<&ItemStack<M>>) -> usize {
 fn scute_particles(core: &MobCore, cx: &mut TickContext) {
     use tuff_core::protocol::codec::WriteExt;
     let mut options = tuff_wire::PacketWriter::new();
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item a mob spawns, wears or throws (scute_particles)"
+    )]
     options.write_item_template(
         ItemStack::mint(
             tuff_vanilla_data::Item::ArmadilloScute,

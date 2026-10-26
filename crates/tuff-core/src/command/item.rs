@@ -28,6 +28,10 @@ impl ItemInput {
         }
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "/item and /give style stack built from a parsed item argument (stack)"
+    )]
     pub fn stack(&self, count: u8) -> ItemStack {
         ItemStack::mint_with(self.item, count, &self.components, MintReason::Command)
     }

@@ -54,6 +54,7 @@ fn merged(input: &ItemStack, additional: &ItemStack) -> Option<ItemStack> {
         }
         count = 2;
     }
+    #[expect(clippy::disallowed_methods, reason = "crafting-style result (merged)")]
     let mut result = ItemStack::mint_like(input, count, MintReason::Crafting);
     if result.is_damageable() {
         result.components.max_damage = Some(durability);
@@ -91,6 +92,7 @@ pub fn compute(input: Option<&ItemStack>, additional: Option<&ItemStack>) -> Opt
     }
     match (input, additional) {
         (Some(input), Some(additional)) => merged(input, additional),
+        #[expect(clippy::disallowed_methods, reason = "crafting-style result (compute)")]
         (Some(only), None) | (None, Some(only)) => holds_enchantments(only).then(|| {
             without_non_curses(ItemStack::mint_like(
                 only,

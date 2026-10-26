@@ -6,6 +6,11 @@
 //! burns its contents, a part split off gets its own minted copy of them,
 //! and a stack merged away or emptied takes its copy with it.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "the ledger's own doors are built on each other"
+)]
+
 use std::fmt;
 use std::sync::LazyLock;
 

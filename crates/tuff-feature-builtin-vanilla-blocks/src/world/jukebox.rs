@@ -127,6 +127,10 @@ pub fn replace<W: RegionWorld + ?Sized>(
     let Some(nbt) = world.raw_block_entity_mut(pos) else {
         return refuse(record);
     };
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "decoding a saved stack (replace)"
+    )]
     if let Some(old) = nbt
         .remove(RECORD)
         .and_then(|old| old.as_compound().and_then(ItemStack::from_storage))
@@ -164,6 +168,7 @@ pub fn take<W: RegionWorld + ?Sized>(world: &mut W, pos: BlockPos) -> Option<Ite
     let state = jukebox_at(world, pos)?;
     let nbt = world.raw_block_entity_mut(pos)?;
     let record = nbt.remove(RECORD)?;
+    #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (take)")]
     let record = record.as_compound().and_then(ItemStack::from_storage);
     let was_playing = nbt.remove(TICKS).is_some();
     set_has_record(world, pos, state, false);

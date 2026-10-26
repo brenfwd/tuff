@@ -34,9 +34,17 @@ fn consume_fuel(items: &mut [Option<ItemStack>], drops: &mut Vec<ItemStack>) {
     fuel.shrink(1, BurnReason::Consumed);
     let empty = fuel.count() == 0;
     match remainder {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item left over after use (consume_fuel)"
+        )]
         Some((item, count)) if empty => {
             items[furnace::FUEL] = Some(ItemStack::mint(item, count, MintReason::Remainder))
         }
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item left over after use (consume_fuel)"
+        )]
         Some((item, count)) => drops.push(ItemStack::mint(item, count, MintReason::Remainder)),
         None if empty => items[furnace::FUEL] = None,
         None => {}
@@ -45,6 +53,7 @@ fn consume_fuel(items: &mut [Option<ItemStack>], drops: &mut Vec<ItemStack>) {
 
 fn burn(items: &mut [Option<ItemStack>], result: &ItemPicture) {
     match &mut items[furnace::RESULT] {
+        #[expect(clippy::disallowed_methods, reason = "furnace output (burn)")]
         None => {
             items[furnace::RESULT] = Some(ItemStack::mint_like(
                 result,
@@ -62,7 +71,9 @@ fn burn(items: &mut [Option<ItemStack>], result: &ItemPicture) {
             .as_ref()
             .is_some_and(|fuel| fuel.item() == Item::Bucket)
     {
-        items[furnace::FUEL] = Some(ItemStack::mint(Item::WaterBucket, 1, MintReason::Remainder));
+        #[expect(clippy::disallowed_methods, reason = "item left over after use (burn)")]
+        let minted = Some(ItemStack::mint(Item::WaterBucket, 1, MintReason::Remainder));
+        items[furnace::FUEL] = minted;
     }
     let input = items[furnace::INPUT]
         .as_mut()

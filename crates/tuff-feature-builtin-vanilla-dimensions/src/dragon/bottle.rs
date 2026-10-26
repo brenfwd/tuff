@@ -100,6 +100,10 @@ async fn fill_from_water(session: &mut PlayerSession, off_hand: bool, region: &R
 }
 
 fn water_bottle() -> ItemStack {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "item turning into another (water_bottle)"
+    )]
     let mut stack = ItemStack::mint(Item::Potion, 1, MintReason::Transform);
     stack.components.potion_contents = Some(Box::new(PotionContents {
         potion: Some(Potion::Water),

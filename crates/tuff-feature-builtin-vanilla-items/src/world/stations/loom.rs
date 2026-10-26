@@ -8,6 +8,7 @@ use tuff_item::item::{ItemStack, MintReason};
 /// One banner with `pattern` added in the dye's color.
 pub fn weave(banner: &ItemStack, dye: &ItemStack, pattern: &str) -> Option<ItemStack> {
     let color = dye.item().dye()?;
+    #[expect(clippy::disallowed_methods, reason = "crafting-style result (weave)")]
     let mut result = ItemStack::mint_like(banner, 1, MintReason::Crafting);
     result
         .components

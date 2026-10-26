@@ -40,7 +40,6 @@ impl BoundingBox {
 
     /// The box of a piece `width` wide, `height` tall and `depth` deep whose
     /// foot is at `foot`, extending toward `direction`, offset by `off`.
-    #[allow(clippy::too_many_arguments)]
     pub fn orient(
         foot: BlockPos,
         off: [i32; 3],

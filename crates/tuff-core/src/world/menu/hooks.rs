@@ -282,6 +282,10 @@ pub fn merchant_sell_item(
         offer = trading::recipe_for(offers, b, a, hint);
     }
     match offer.filter(|i| !offers[*i].is_out_of_stock()) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "preview stand-in stack for a slot or click, burned as Preview (merchant_sell_item)"
+        )]
         Some(index) => {
             let sell = &offers[index].sell;
             (

@@ -196,6 +196,7 @@ pub trait Interact: RegionWorld + Rest {
             off_hand: place.off_hand,
         };
         let inserted = place.held.and_then(|item| {
+            #[expect(clippy::disallowed_methods, reason = "saved stack")]
             let stored = self
                 .raw_block_entity(pos)?
                 .get_compound("item")
@@ -445,6 +446,10 @@ pub trait Interact: RegionWorld + Rest {
 
     /// An item used on a cauldron: buckets and bottles fill and empty it,
     /// and water washes banners, dyed shulker boxes and dyed armor.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "cauldron results replace the held item"
+    )]
     fn use_cauldron(&mut self, place: &Place, state: BlockState) -> Option<ActionOutcome> {
         use tuff_vanilla_data::registry::CustomStat;
         let item = place.held?;
@@ -689,6 +694,7 @@ pub trait Interact: RegionWorld + Rest {
             (Some(_), Some(_)) | (None, None) => interacted,
             (Some(content), None) => {
                 if let Some(item) = content.item() {
+                    #[expect(clippy::disallowed_methods, reason = "block yields item")]
                     place.player.send(PlayerEvent::ItemGranted {
                         stack: ItemStack::mint(item, 1, MintReason::Growth),
                         picked_up: false,
@@ -878,6 +884,7 @@ pub trait Interact: RegionWorld + Rest {
             self.play_sound(SoundEvent::ItemLodestoneCompassLock, pos, 1.0, 1.0, None);
             let tracker =
                 LodestoneTracker::locked(&self.dimension_info().key, [pos.x, pos.y, pos.z]);
+            #[expect(clippy::disallowed_methods, reason = "item transformed")]
             let mut locked =
                 ItemStack::mint_with(Item::Compass, 1, &place.components, MintReason::Transform);
             locked
@@ -1162,6 +1169,7 @@ pub trait Interact: RegionWorld + Rest {
             (Some((slot, paid)), HandEffect::Emptied(result) | HandEffect::Exchange(result)) => {
                 let filled = (request.fluid.is_none() && !releases_mob).then_some(result);
                 paid.burn(tuff_item::item::BurnReason::Transform);
+                #[expect(clippy::disallowed_methods, reason = "item transformed")]
                 request.player.send(PlayerEvent::HandReturned {
                     slot,
                     stack: tuff_item::item::ItemStack::mint(
@@ -1400,98 +1408,9 @@ pub trait Interact: RegionWorld + Rest {
 impl<T: RegionWorld + ?Sized> Interact for T {}
 
 mod helpers;
+mod hooks;
 mod rest;
 pub use helpers::locate_eye_request;
 use helpers::{potted_block_for, potted_content};
+pub use hooks::InteractionHooks;
 pub use rest::Rest;
-
-/// Vanilla block and item interactions as region hooks.
-pub struct InteractionHooks;
-
-impl tuff_core::world::region_api::RegionHooks for InteractionHooks {
-    fn use_block(
-        &self,
-        world: &mut dyn RegionWorld,
-        place: &Place,
-        state: BlockState,
-    ) -> Option<ActionOutcome> {
-        Interact::use_block(world, place, state)
-    }
-
-    fn use_item_on(
-        &self,
-        world: &mut dyn RegionWorld,
-        place: &Place,
-        state: BlockState,
-    ) -> Option<ActionOutcome> {
-        if place.held == Some(Item::Brush) {
-            return Some(ActionOutcome::StartUsing {
-                off_hand: place.off_hand,
-                item: Item::Brush,
-                ticks: tuff_vanilla_common::brushable::BRUSH_USE_TICKS,
-            });
-        }
-        Interact::use_tool_on(world, place, state)
-    }
-
-    fn attack_block(&self, world: &mut dyn RegionWorld, pos: BlockPos, state: BlockState) {
-        if state.block() == Block::DragonEgg {
-            Interact::teleport_dragon_egg(world, pos, state);
-        }
-    }
-
-    fn play_note(&self, world: &mut dyn RegionWorld, pos: BlockPos) {
-        Rest::play_note(world, pos);
-    }
-
-    fn use_door(&self, world: &mut dyn RegionWorld, pos: BlockPos, open: bool) {
-        Rest::use_door(world, pos, open);
-    }
-
-    fn occupy_bed(&self, world: &mut dyn RegionWorld, pos: BlockPos, occupied: bool) {
-        Rest::occupy_bed(world, pos, occupied);
-    }
-
-    fn leave_bed(
-        &self,
-        world: &mut dyn RegionWorld,
-        player: &PlayerHandle,
-        pos: BlockPos,
-        yaw: f32,
-    ) {
-        Rest::leave_bed(world, player.clone(), pos, yaw);
-    }
-
-    fn respawn_point(
-        &self,
-        world: &mut dyn RegionWorld,
-        query: &tuff_core::world::region_api::RespawnQuery,
-    ) -> Option<Option<RespawnSpot>> {
-        Some(Rest::respawn_point(
-            world,
-            query.pos,
-            query.yaw,
-            query.pitch,
-            query.forced,
-            query.consume,
-        ))
-    }
-
-    fn dispense(
-        &self,
-        world: &mut dyn RegionWorld,
-        pos: BlockPos,
-        facing: Facing,
-        _origin: [f64; 3],
-        stack: &tuff_core::world::region_api::Fired,
-    ) -> Option<tuff_core::world::region_api::DispenseOutcome> {
-        super::dispense::dispense(world, pos, facing, stack)
-    }
-
-    fn use_bucket(&self, world: &mut dyn RegionWorld, request: &BucketUse) {
-        if request.item.spawns_entity().is_some() {
-            return;
-        }
-        Interact::use_bucket(world, request.clone());
-    }
-}

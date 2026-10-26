@@ -231,6 +231,10 @@ impl Cushion {
     }
 
     fn stack(&self) -> ItemStack {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity drops or fires an item outside loot tables (stack)"
+        )]
         let mut stack = ItemStack::mint(item_of(self.color), 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base

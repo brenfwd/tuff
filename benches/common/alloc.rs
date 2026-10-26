@@ -7,7 +7,7 @@
 //! that many bytes allocated) with their frame-pointer call stacks, so a
 //! report can say where the live heap is held.
 
-#![allow(dead_code)]
+#![expect(dead_code, reason = "helpers used by only some targets")]
 
 use std::alloc::{GlobalAlloc, Layout};
 use std::cell::Cell;

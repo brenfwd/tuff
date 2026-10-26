@@ -377,6 +377,10 @@ pub fn apply(
 
 fn pop_self(level: &mut dyn GrowthLevel, pos: BlockPos, state: BlockState) {
     if let Some(item) = state.block().item() {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "block yields an item outside loot tables (pop_self)"
+        )]
         level.drop_item(
             pos,
             tuff_item::item::ItemStack::mint(item, 1, tuff_item::item::MintReason::Growth),

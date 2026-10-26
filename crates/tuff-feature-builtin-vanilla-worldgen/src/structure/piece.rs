@@ -170,7 +170,10 @@ pub trait Framed {
 
     /// Places a loot chest turned away from its walls, unless one is
     /// already there.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn create_chest(
         &self,
         level: &mut Region,
@@ -199,7 +202,10 @@ pub trait Framed {
     }
 
     /// A box whose blocks `select` picks, told whether each is on the edge.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn generate_box_with(
         &self,
         level: &mut Region,
@@ -242,7 +248,6 @@ pub trait Framed {
 
     /// Places a loot dispenser facing `facing` (in piece coordinates),
     /// unless one is already there.
-    #[allow(clippy::too_many_arguments)]
     fn create_dispenser(
         &self,
         level: &mut Region,
@@ -271,7 +276,10 @@ pub trait Framed {
         true
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn generate_box(
         &self,
         level: &mut Region,
@@ -296,7 +304,10 @@ pub trait Framed {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn generate_maybe_box(
         &self,
         level: &mut Region,
@@ -330,7 +341,10 @@ pub trait Framed {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn maybe_generate_block(
         &self,
         level: &mut Region,
@@ -347,7 +361,6 @@ pub trait Framed {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn generate_upper_half_sphere(
         &self,
         level: &mut Region,

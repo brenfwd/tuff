@@ -1020,7 +1020,6 @@ impl StrongholdPiece {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn five_crossing(
         &self,
         p: &mut Place,

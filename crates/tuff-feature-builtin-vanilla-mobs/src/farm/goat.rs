@@ -33,6 +33,10 @@ impl Goat {
         }
         let instruments = horn_instruments(self.screaming);
         let name = instruments[cx.rng.gen_range(0..instruments.len())];
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "item a mob spawns, wears or throws (drop_horn)"
+        )]
         let mut stack = ItemStack::mint(Item::GoatHorn, 1, MintReason::Spawn);
         stack.components.other.insert("minecraft:instrument", name);
         let [x, y, z] = core.base.position;

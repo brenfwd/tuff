@@ -788,6 +788,10 @@ impl Species for Villager {
             take(nbt, "LastGossipDecay", tuff_core::world::entity::number).map_or(0, |v| v as i64);
         self.restocks_today =
             take(nbt, "RestocksToday", tuff_core::world::entity::number).map_or(0, |v| v as i32);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "decoding a saved villager inventory (load)"
+        )]
         if let Some(items) = take(nbt, "Inventory", |t| t.as_list().map(<[Tag]>::to_vec)) {
             for item in items {
                 if let Some(stack) = item.as_compound().and_then(ItemStack::from_storage)

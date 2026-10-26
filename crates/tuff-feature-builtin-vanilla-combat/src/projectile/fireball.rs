@@ -225,7 +225,6 @@ impl RegionEntity for SmallFireball {
 /// One tick of a fireball's flight: it speeds up along its heading (less
 /// in water), moves, and reports what it hit, if anything. `None` when it
 /// left the loaded world and should go.
-#[allow(clippy::type_complexity)]
 fn fly(
     base: &mut EntityBase,
     owner: &mut Owner,

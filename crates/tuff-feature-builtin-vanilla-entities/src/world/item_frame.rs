@@ -282,6 +282,10 @@ impl ItemFrame {
     }
 
     fn frame_stack(&self) -> ItemStack {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity drops or fires an item outside loot tables (frame_stack)"
+        )]
         let mut stack = ItemStack::mint(frame_item(self.base.kind), 1, MintReason::EntityDrop);
         if let Some(name) = self
             .base
@@ -430,10 +434,12 @@ pub fn load(base: EntityBase, nbt: &mut Compound) -> Option<Box<dyn RegionEntity
         no_gravity: true,
         ..rest
     };
-    frame.item = take(nbt, "Item", |tag| {
+    #[expect(clippy::disallowed_methods, reason = "decoding a saved stack (load)")]
+    let minted = take(nbt, "Item", |tag| {
         ItemStack::from_storage(tag.as_compound()?)
     })
     .filter(|stack| stack.count() > 0);
+    frame.item = minted;
     frame.rotation = take_number(nbt, "ItemRotation").map_or(0, |v| (v as i64).rem_euclid(8) as u8);
     frame.drop_chance = take_number(nbt, "ItemDropChance").map_or(1.0, |v| v as f32);
     frame.fixed = take_bool(nbt, "Fixed").unwrap_or(false);

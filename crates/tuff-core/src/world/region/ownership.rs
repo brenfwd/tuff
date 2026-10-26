@@ -73,6 +73,10 @@ impl RegionActor {
             Taken::Standing(state, block_entity) => BrokenBlock::claimed(state, block_entity, why),
             Taken::Held(held) => held.into_broken(None),
             Taken::Moving(base) => BrokenBlock::claimed(base, None, why),
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "vanilla duplication glitch (claim_flagged)"
+            )]
             Taken::Ghost(state) => {
                 block_ledger::duplicate(VanillaDupe::CarpetRail, &self.shared.config, state)?
             }

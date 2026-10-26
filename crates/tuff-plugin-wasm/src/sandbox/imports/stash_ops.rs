@@ -36,6 +36,10 @@ impl State {
             let mut made = Vec::new();
             while left > 0 {
                 let part = left.min(limit);
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "plugin item grant (host_stash_mint)"
+                )]
                 made.push(ItemStack::mint_like(
                     &template,
                     part as u8,

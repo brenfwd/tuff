@@ -6,6 +6,9 @@ description = "Loadable SQLite extension with tuff's NBT query functions and vie
 
 # Its own workspace: the extension needs rusqlite's `loadable_extension`
 # feature, which must not unify with the server's statically bundled SQLite.
+[lints]
+workspace = true
+
 [workspace]
 
 [lib]

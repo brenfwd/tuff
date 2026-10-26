@@ -69,7 +69,11 @@ pub mod bindings {
 extern crate self as tuff_plugin_sdk;
 
 #[cfg(test)]
-#[allow(dead_code)] // generated fixture; tests use only part of it
+#[expect(dead_code, reason = "generated fixture; tests use only part of it")]
+#[expect(
+    clippy::allow_attributes_without_reason,
+    reason = "generated fixture carries its own allow attributes"
+)]
 #[rustfmt::skip]
 mod iface_fixture;
 #[cfg(test)]

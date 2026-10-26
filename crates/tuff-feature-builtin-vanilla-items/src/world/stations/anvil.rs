@@ -60,6 +60,7 @@ pub fn compute(
     let Some(input) = input else {
         return AnvilOutcome::NOTHING;
     };
+    #[expect(clippy::disallowed_methods, reason = "crafting-style result (compute)")]
     let mut result = ItemStack::mint_like(input, input.count(), MintReason::Crafting);
     let registry = enchantment::current();
     let mut enchantments = crafting_enchantments(&registry, &result);

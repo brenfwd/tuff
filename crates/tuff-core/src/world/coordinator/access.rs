@@ -426,7 +426,10 @@ impl Coordinator {
         removed
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     fn admit(
         &mut self,
         profile: GameProfile,

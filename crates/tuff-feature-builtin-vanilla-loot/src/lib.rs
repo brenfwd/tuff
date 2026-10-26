@@ -1,5 +1,13 @@
 //! The vanilla loot tables: block drops, container loot and entity drops.
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub use tuff_core::world::exploration;
 pub use tuff_item::item::enchanting;
 mod loot;

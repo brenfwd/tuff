@@ -99,6 +99,10 @@ impl MobCore {
         weapon: Option<&ItemStack<N>>,
         velocity: [f64; 3],
     ) -> ArrowShot {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity drops or fires an item outside loot tables (arrow_from)"
+        )]
         let mut item = ItemStack::mint_like(projectile, 1, MintReason::EntityDrop);
         let free = item.components.remove_other(ranged::INTANGIBLE).is_some();
         let mut arrow = ArrowShot::new(item, velocity);
@@ -174,12 +178,20 @@ impl MobCore {
                 continue;
             }
             if uses == 0 {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "entity drops or fires an item outside loot tables (load_crossbow)"
+                )]
                 let free = ItemStack::mint_like(&ammo, 1, MintReason::EntityDrop);
                 drawn.push(ranged::intangible(free));
             } else {
                 left -= uses;
                 let taken = match held {
                     Some(held) => self.equipment.take_some(held, uses),
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "entity drops or fires an item outside loot tables (load_crossbow)"
+                    )]
                     None => Some(ItemStack::mint_like(&ammo, uses, MintReason::EntityDrop)),
                 };
                 drawn.extend(taken);
@@ -683,6 +695,10 @@ impl TridentAttack {
     }
 
     fn throw(&self, mob: &MobCore, target: &TargetView, cx: &mut TickContext) {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "entity drops or fires an item outside loot tables (throw)"
+        )]
         let stack = mob
             .equipment
             .main_hand()

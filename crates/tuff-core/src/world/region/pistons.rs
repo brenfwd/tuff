@@ -228,6 +228,10 @@ impl RegionActor {
                 self.sim.redstone.moving_order.push(pos);
             }
             if !moving.source && !self.sim.redstone.has_held(pos) {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "held block loaded from a save (load_moving_blocks)"
+                )]
                 let _ = self
                     .sim
                     .redstone
@@ -349,7 +353,10 @@ impl RegionActor {
     /// moved, so it lands on the same tick as the piston's own blocks. When
     /// the block there is not the one the piston saw, the one really there
     /// travels on in its place.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "independent inputs of one operation; a parameter struct would be built once"
+    )]
     pub(super) fn receive_piston_set(
         &mut self,
         pos: BlockPos,

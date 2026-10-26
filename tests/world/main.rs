@@ -4,7 +4,15 @@
 //! resolve paths as if they were submodules of core's `world`, so core,
 //! its `world` module and the test-support helpers are re-exported here.
 
-#![allow(unused_imports, hidden_glob_reexports)]
+#![expect(
+    unused_imports,
+    hidden_glob_reexports,
+    reason = "test modules share one glob prelude"
+)]
+#![expect(
+    clippy::disallowed_methods,
+    reason = "test code is exempt from the door gate"
+)]
 
 extern crate tuff_dylib;
 

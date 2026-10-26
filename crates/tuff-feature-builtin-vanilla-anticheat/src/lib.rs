@@ -8,6 +8,14 @@
 //! violations with `/anticheat`, and other features subscribe to them on
 //! the world's [`service::Board`].
 
+#![cfg_attr(
+    test,
+    expect(
+        clippy::disallowed_methods,
+        reason = "test code is exempt from the door gate"
+    )
+)]
+
 pub mod anchor;
 pub mod checks;
 pub mod clock;
