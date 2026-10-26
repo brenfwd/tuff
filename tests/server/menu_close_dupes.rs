@@ -242,6 +242,7 @@ impl Rig {
             .wait_for(|state| state.teleports > teleports)
             .await
             .unwrap();
+        opener.wait_loaded(2).await.unwrap();
         until("the floor is filled", || async {
             say(&server, "fill -10 149 -10 10 149 10 stone")
                 .await
