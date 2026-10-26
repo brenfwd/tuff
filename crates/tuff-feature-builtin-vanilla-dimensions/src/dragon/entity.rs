@@ -1410,6 +1410,7 @@ impl EnderDragon {
             if cx.shared.rule_bool("global_sound_events") {
                 let _ = cx.shared.coordinator.try_send(
                     tuff_core::world::messages::CoordinatorMessage::GlobalLevelEvent {
+                        dimension: cx.dimension,
                         event: play::level_event::SOUND_DRAGON_DEATH,
                         pos: self.block_pos(),
                         data: 0,

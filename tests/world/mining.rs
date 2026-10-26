@@ -257,6 +257,7 @@ async fn destroy_progress_reaches_the_breaker_and_ends_at_air() {
     let world = TestWorld::start(dir.path());
     let region = world.region(pos.region()).await;
     subscribe(&region, &breaker, &mut events, &[pos]).await;
+    present(&region, &breaker, [8.0, 80.0, 8.0]).await;
     region
         .request(destroy_tick(
             &breaker,
@@ -626,6 +627,7 @@ async fn breaking_a_fire_block_plays_the_extinguish_sound() {
     let world = TestWorld::start(dir.path());
     let region = world.region(pos.region()).await;
     subscribe(&region, &player, &mut events, &[pos]).await;
+    present(&region, &player, [8.0, 80.0, 8.0]).await;
     place_blocks(&world, &region, [(fire, Block::Fire.default_state())]).await;
 
     region

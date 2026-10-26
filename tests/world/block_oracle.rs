@@ -8,9 +8,7 @@ use tuff_vanilla_data::packet::play::Clientbound;
 
 const STONE: tuff_vanilla_data::BlockState = tuff_vanilla_data::Block::Stone.default_state();
 
-async fn pump(w: &mut Walker) -> usize {
-    let single = Clientbound::BlockUpdate.id();
-    let section = Clientbound::SectionBlocksUpdate.id();
+async fn pump_ids(w: &mut Walker) -> Vec<i32> {
     let wait = std::time::Duration::from_millis(300);
     while let Ok(Some(event)) = tokio::time::timeout(wait, w.session.conn.events.recv()).await {
         w.session.on_event(event).await;
@@ -18,12 +16,20 @@ async fn pump(w: &mut Walker) -> usize {
     while let Ok(event) = w.events.try_recv() {
         w.session.on_event(event).await;
     }
-    let mut updates = 0;
+    let mut ids = Vec::new();
     while let Ok(frame) = w.frames.try_recv() {
-        let id = framed_payload(&frame).read_var_int().unwrap();
-        updates += usize::from(id == single || id == section);
+        ids.push(framed_payload(&frame).read_var_int().unwrap());
     }
-    updates
+    ids
+}
+
+async fn pump(w: &mut Walker) -> usize {
+    let single = Clientbound::BlockUpdate.id();
+    let section = Clientbound::SectionBlocksUpdate.id();
+    let ids = pump_ids(w).await;
+    ids.iter()
+        .filter(|id| **id == single || **id == section)
+        .count()
 }
 
 async fn watched_stone(world: &TestWorld, w: &mut Walker, at: BlockPos) {
@@ -136,4 +142,43 @@ async fn corrections_do_not_reveal_enclosed_hidden_blocks() {
         .await;
     assert_eq!(pump(&mut w).await, 0, "the enclosed ore is not");
     world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn player_sounds_reach_only_viewers_in_range_of_the_source() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let mut w = walker(&world, 1, ChunkPos::new(40, 40)).await;
+    let region = world.region(RegionPos::new(1, 1)).await;
+    let key = (w.session.dimension, RegionPos::new(1, 1));
+    w.session.view.regions.insert(key, region.clone());
+    let (far, mut far_events) = PlayerHandle::new(901);
+    subscribe(&region, &far, &mut far_events, &[ChunkPos::new(40, 40)]).await;
+    w.session.run_tick().await;
+    world.ticks(2).await;
+    while far_events.try_recv().is_ok() {}
+    let position = w.session.pose.position;
+    w.session
+        .sound_at(
+            tuff_vanilla_data::registry::SoundEvent::EntityPlayerBurp,
+            position,
+        )
+        .await;
+    assert_eq!(
+        pump_sounds(&mut w).await,
+        1,
+        "the source's own client hears it"
+    );
+    let mut heard_by_far = 0;
+    while let Ok(event) = far_events.try_recv() {
+        heard_by_far += usize::from(matches!(event, PlayerEvent::ChunkPackets { .. }));
+    }
+    assert_eq!(heard_by_far, 0, "a viewer with no known position does not");
+    world.shutdown().await;
+}
+
+async fn pump_sounds(w: &mut Walker) -> usize {
+    let sound = Clientbound::Sound.id();
+    pump_ids(w).await.iter().filter(|id| **id == sound).count()
 }

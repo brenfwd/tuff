@@ -673,9 +673,9 @@ impl PlayerSession {
         let chunk = self.chunk();
         if let Some(region) = self.region(chunk.region()).await {
             region
-                .request(RegionRequest::Broadcast {
-                    chunk,
-                    entity: None,
+                .request(RegionRequest::BroadcastNear {
+                    center: self.pose.position,
+                    range: broadcast_range(&packets),
                     packets,
                     except,
                 })
@@ -743,4 +743,34 @@ impl PlayerSession {
         })
         .await;
     }
+}
+
+/// How far from its source a packet of a session broadcast carries: a
+/// sound by its volume, particles and level events by their fixed ranges.
+fn broadcast_range(packets: &Packets) -> f64 {
+    use crate::world::region_api::{LEVEL_EVENT_RANGE, PARTICLE_RANGE, SOUND_RANGE};
+    use tuff_vanilla_data::packet::play::Clientbound;
+    let frame_range = |frame: &bytes::Bytes| -> f64 {
+        let mut r = tuff_wire::PacketReader::new(frame.clone());
+        let uncompressed = r.read_var_int().is_ok() && r.read_var_int().ok() == Some(0);
+        let id = r.read_var_int().ok().filter(|_| uncompressed);
+        match id {
+            Some(id) if id == Clientbound::Sound.id() => {
+                let volume = (|| {
+                    r.read_var_int().ok()?;
+                    r.read_var_int().ok()?;
+                    for _ in 0..3 {
+                        r.read_int().ok()?;
+                    }
+                    r.read_float().ok()
+                })();
+                volume.map_or(LEVEL_EVENT_RANGE, |volume| {
+                    SOUND_RANGE * f64::from(volume.max(1.0))
+                })
+            }
+            Some(id) if id == Clientbound::LevelParticles.id() => PARTICLE_RANGE,
+            _ => LEVEL_EVENT_RANGE,
+        }
+    };
+    packets.iter().map(frame_range).fold(0.0, f64::max)
 }

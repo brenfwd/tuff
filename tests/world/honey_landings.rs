@@ -49,6 +49,7 @@ async fn bench() -> (
     let region = world.region(chunk.region()).await;
     let (viewer, mut events) = PlayerHandle::new(200);
     view_around(&world, &viewer, &mut events, chunk).await;
+    present(&region, &viewer, [4.5, f64::from(SKY), 4.5]).await;
     place_blocks(
         &world,
         &region,

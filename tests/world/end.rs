@@ -127,6 +127,7 @@ async fn end_crystals_are_placed_on_obsidian_and_explode_when_hit() {
     let world = TestWorld::start(dir.path());
     let region = world.region(RegionPos::new(0, 0)).await;
     subscribe(&region, &player, &mut events, &[ChunkPos::new(0, 0)]).await;
+    present(&region, &player, [14.5, 150.0, 14.5]).await;
     let base = BlockPos::new(8, 150, 8);
     place_blocks(
         &world,

@@ -1078,6 +1078,11 @@ pub fn update(player: &PlayerHandle, seq: u64, position: [f64; 3]) -> RegionRequ
     })
 }
 
+/// Publishes `viewer`'s position to `region`, as a session does each tick.
+pub async fn present(region: &RegionHandle, viewer: &PlayerHandle, position: [f64; 3]) {
+    region.request(update(viewer, 1, position)).await;
+}
+
 /// Decodes a framed Block Update packet.
 pub fn decode_block_update(
     frame: &bytes::Bytes,
