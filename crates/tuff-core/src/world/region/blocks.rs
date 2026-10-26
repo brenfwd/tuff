@@ -1326,43 +1326,61 @@ impl RegionActor {
     }
 
     /// Answers a block click, handing the stacks it offered and did not
-    /// keep back to the player first.
-    pub(crate) fn answer_place(&mut self, place: &Place, outcome: ActionOutcome) {
-        match &outcome {
-            #[expect(
-                clippy::disallowed_methods,
-                reason = "answer_place takes the stack offered for a placement"
-            )]
-            ActionOutcome::Placed { .. } => {
-                if let Some(paid) = place.offer.take_placing() {
-                    paid.burn(tuff_item::item::BurnReason::Consumed);
+    /// keep back to the player first. The item the click paid with is spent
+    /// when the outcome costs it, else it goes back with the other stacks.
+    pub(crate) fn answer_place(&mut self, place: &Place, mut outcome: ActionOutcome) {
+        use crate::world::messages::HandEffect;
+        use tuff_item::item::{BurnReason, ItemStack, MintReason};
+        if let Some((_, paid)) = place.offer.take_payment() {
+            match &mut outcome {
+                ActionOutcome::Placed { .. } => paid.burn(BurnReason::Consumed),
+                ActionOutcome::Used { effect, .. } => {
+                    let costs = std::mem::replace(effect, HandEffect::Spent(None));
+                    let result = match costs {
+                        HandEffect::Consume(1) => {
+                            paid.burn(BurnReason::Consumed);
+                            None
+                        }
+                        HandEffect::Consume(count) => {
+                            paid.burn(BurnReason::Consumed);
+                            *effect = HandEffect::Consume(count.saturating_sub(1));
+                            None
+                        }
+                        HandEffect::Emptied(item) => {
+                            paid.burn(BurnReason::Transform);
+                            #[expect(
+                                clippy::disallowed_methods,
+                                reason = "item turning into another (answer_place)"
+                            )]
+                            let result = ItemStack::mint(item, 1, MintReason::Transform);
+                            Some(result)
+                        }
+                        HandEffect::Exchange(item) => {
+                            paid.burn(BurnReason::Transform);
+                            *effect = HandEffect::Spent(Some(item));
+                            #[expect(
+                                clippy::disallowed_methods,
+                                reason = "item turning into another (answer_place)"
+                            )]
+                            let result = ItemStack::mint(item, 1, MintReason::Transform);
+                            Some(result)
+                        }
+                        HandEffect::ExchangeStack(result) | HandEffect::Split(result) => {
+                            paid.burn(BurnReason::Transform);
+                            Some(*result)
+                        }
+                        other => {
+                            *effect = other;
+                            place.offer.give(place.hand_slot, paid);
+                            None
+                        }
+                    };
+                    if let Some(result) = result {
+                        place.offer.give(place.hand_slot, result);
+                    }
                 }
+                _ => place.offer.give(place.hand_slot, paid),
             }
-            #[expect(
-                clippy::disallowed_methods,
-                reason = "answer_place takes the stack offered for a placement"
-            )]
-            ActionOutcome::Used {
-                effect: crate::world::messages::HandEffect::Emptied(result),
-                ..
-            } => {
-                if let Some(paid) = place.offer.take_placing() {
-                    paid.burn(tuff_item::item::BurnReason::Transform);
-                    #[expect(
-                        clippy::disallowed_methods,
-                        reason = "item turning into another (answer_place)"
-                    )]
-                    place.offer.give(
-                        place.hand_slot,
-                        tuff_item::item::ItemStack::mint(
-                            *result,
-                            1,
-                            tuff_item::item::MintReason::Transform,
-                        ),
-                    );
-                }
-            }
-            _ => {}
         }
         self.return_offer(place);
         place.player.send(PlayerEvent::ActionResult {

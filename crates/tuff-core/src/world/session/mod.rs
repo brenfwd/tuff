@@ -43,8 +43,8 @@ mod move_check;
 pub use move_check::ENTITY_REACH_TOLERANCE;
 mod net;
 pub use net::TickThrottler;
+mod click_costs;
 mod packets;
-mod paid_entities;
 mod persist;
 mod place_offer;
 mod pose;
@@ -344,6 +344,10 @@ pub struct Pending {
     pub resend: bool,
     /// A merchant screen's offers before the trade.
     pub merchant: Option<Vec<MerchantOffer>>,
+    /// A trade's payment, taken out of its places when the click was made.
+    pub pool: Vec<ItemStack>,
+    /// What a trade makes on the merchant's agreement.
+    pub made: Option<crate::world::menu::settle::Balance>,
 }
 
 /// A transaction over both regions of a split double chest, waiting for
@@ -1185,6 +1189,10 @@ impl PlayerSession {
         client_roots.mark_unchanged();
         while !self.disconnected {
             self.settle_save_barrier().await;
+            if let Some(packet) = self.next_held_use() {
+                self.on_packet(packet).await;
+                continue;
+            }
             if let Some(next) = self.next_deferred() {
                 match next {
                     menus::Deferred::Packet(packet) => self.on_packet(packet).await,
@@ -1227,11 +1235,8 @@ impl PlayerSession {
     pub async fn leave(&mut self) {
         self.progress.stats.award_custom(CustomStat::LeaveGame, 1);
         self.disconnected = true;
-        self.return_payments().await;
         self.close_menu(false).await;
-        if let Some(menu) = self.menus.menu.as_mut() {
-            menu.pending = None;
-        }
+        self.abandon_pending().await;
         self.finish_menu_close().await;
         for stack in self.inventory.close() {
             self.throw_item(stack).await;

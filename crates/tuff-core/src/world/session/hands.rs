@@ -305,7 +305,9 @@ impl PlayerSession {
                     off_hand, target, face, cursor, sequence, held, item, interact,
                 );
                 place.offer = self.place_offer(&region, off_hand, target, held).await;
-                self.hold_payment(off_hand, sequence);
+                if place.offer.pays() {
+                    self.expect_answer(sequence);
+                }
                 self.send_place(&region, RegionRequest::Place(place)).await;
             }
             _ => {
@@ -455,16 +457,13 @@ impl PlayerSession {
             return false;
         };
         let slot = self.inventory.hand_slot(off_hand);
-        let pay = if !self.mode.abilities.instabuild && !egg {
+        let pay = if !self.mode.abilities.instabuild {
             ItemStack::take_from(self.inventory.slot_mut(slot), 1)
                 .map(|one| crate::world::messages::BucketPay::new(slot, one))
                 .unwrap_or_default()
         } else {
             Default::default()
         };
-        if egg {
-            self.hold_payment(off_hand, sequence);
-        }
         region
             .request(RegionRequest::UseBucket(BucketUse {
                 player: self.conn.handle.clone(),

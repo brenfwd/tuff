@@ -159,6 +159,12 @@ tuff keys sit next to a vanilla entry and cover something different:
 | `tuff.resourcePacks.enabled`, `tuff.customContent.prompt` | `resource-pack*` | Plugin-registered and generated packs, not the single vanilla pack |
 | `tuff.anticheat.*` | `player_movement_check`, `elytra_movement_check` | The rules switch vanilla's checks; these tune tuff's own |
 
+`tuff.anticheat.exemptOperators` (default `true`) skips the anti-cheat for
+operators; with it `false` they are checked like anyone, and
+`tuff.anticheat.kickOperators` (default `false`) decides whether that can
+kick them: off, their violations are counted, logged, alerted and set back
+but a kick is only logged as "would kick".
+
 Fill and clone limits come from the `max_block_modifications` game rule.
 
 ## Dimensions
@@ -226,6 +232,7 @@ that way.
 | `tuff.items.conservationChecks` | `true` | Check item moves in release builds and refuse, audit and quarantine on a violation |
 | `tuff.items.conservationKick` | `true` | Disconnect a player involved in a refused item operation |
 | `tuff.blocks.tntDuplication` | `true` | Keep vanilla's TNT duplication: a TNT block a piston lifts can still light where it stood, once, making one extra primed TNT |
+| `tuff.blocks.permanentBlockBreaking` | `true` | Keep vanilla's permanent block breaking: a piston retraction that outlived its piston (a headless piston, or one replaced in the same tick) still removes the unbreakable block (bedrock, End portal frame, command block, ...) in front of it. Off, such a retraction leaves unbreakable blocks standing |
 | `tuff.blocks.carpetRailDuplication` | `true` | Keep vanilla's carpet and rail duplication: a carpet or rail a piston lifts can still pop where it stood, once, making one extra drop |
 | `tuff.blocks.gravityBlockPortalDuplication` | `true` | Keep vanilla's gravity block duplication through End portals (takes effect with falling blocks owning their block) |
 

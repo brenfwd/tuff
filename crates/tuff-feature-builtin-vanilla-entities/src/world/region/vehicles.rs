@@ -198,6 +198,7 @@ fn improved(world: &dyn RegionWorld) -> bool {
 /// hits, facing the player's way, if it fits there.
 fn place_boat(world: &mut dyn RegionWorld, request: &BoatPlace) {
     let reject = |world: &dyn RegionWorld, at: &[BlockPos]| {
+        request.pay.refund(&request.player);
         request.player.send(PlayerEvent::ActionResult {
             sequence: request.sequence,
             outcome: ActionOutcome::Rejected(world.corrections(at)),
@@ -271,12 +272,20 @@ fn place_boat(world: &mut dyn RegionWorld, request: &BoatPlace) {
         return reject(world, &[hit.pos]);
     }
     world.add_entity(Box::new(placed));
+    let paid = request.pay.take().is_some_and(|(_, paid)| {
+        paid.burn(tuff_item::item::BurnReason::Consumed);
+        true
+    });
     request.player.send(PlayerEvent::ActionResult {
         sequence: request.sequence,
         outcome: ActionOutcome::Used {
             off_hand: request.off_hand,
             item: request.item,
-            effect: HandEffect::Consume(1),
+            effect: if paid {
+                HandEffect::Spent(None)
+            } else {
+                HandEffect::Consume(1)
+            },
         },
     });
 }

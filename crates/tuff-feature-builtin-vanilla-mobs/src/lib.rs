@@ -725,6 +725,11 @@ impl tuff_core::world::region_api::RegionHooks for MobRegionHooks {
             .is_some_and(|hit| {
                 world::region::spawning::spawn_from_egg(world, kind, hit.pos, false, &components)
             });
+        if spawned {
+            request.pay.spend();
+        } else {
+            request.pay.refund(&request.player);
+        }
         let outcome = if spawned {
             ActionOutcome::Placed {
                 off_hand: request.off_hand,

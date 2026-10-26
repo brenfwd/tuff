@@ -9,6 +9,9 @@ impl PlayerSession {
             self.defer(menus::Deferred::Packet(packet));
             return;
         }
+        let Some(packet) = self.hold_use(packet) else {
+            return;
+        };
         if self.over_rate_limit() {
             return;
         }

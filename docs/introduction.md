@@ -9,8 +9,7 @@ development guidelines.
 ## Release notes: v0.1.0-alpha.1
 
 The first public alpha is a drop-in survival server for 26.3 with
-sandboxed WASM plugins. The tag is not cut yet; this is the support
-statement it will ship with:
+sandboxed WASM plugins, released on 2026-10-21. Its support statement:
 
 - tuff publishes no prebuilt binaries. You build the server on your own
   machine (see "Installing"), because the build downloads Mojang's server

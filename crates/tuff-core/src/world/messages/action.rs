@@ -175,6 +175,24 @@ impl BucketPay {
     pub fn take(&self) -> Option<(usize, ItemStack)> {
         self.0.lock().ok()?.take()
     }
+
+    /// Spends the item that paid for a use that worked.
+    pub fn spend(&self) {
+        if let Some((_, paid)) = self.take() {
+            paid.burn(tuff_item::item::BurnReason::Consumed);
+        }
+    }
+
+    /// Hands the item back to `player` after a use that did not work.
+    pub fn refund(&self, player: &PlayerHandle) {
+        if let Some((slot, stack)) = self.take() {
+            player.send(super::PlayerEvent::HandReturned {
+                slot,
+                stack,
+                creative: false,
+            });
+        }
+    }
 }
 
 /// One tick of a survival break, `ticks` after it started.
@@ -222,6 +240,10 @@ pub struct PlaceOffer {
     /// The one item a block placement pays with, moved out of the hand
     /// with the click: spent when the click places, else handed back.
     placing: std::cell::RefCell<Option<(usize, ItemStack)>>,
+    /// The one item an item use pays with when it is not a block
+    /// placement (an entity spawned, a bucket emptied, a key turned):
+    /// spent when the use costs the item, else handed back.
+    costing: std::cell::RefCell<Option<(usize, ItemStack)>>,
     /// The player has infinite materials: a block keeping one item of the
     /// hand keeps a creative copy and the hand keeps its stack.
     pub creative: bool,
@@ -232,12 +254,15 @@ pub struct PlaceOffer {
 impl Clone for PlaceOffer {
     fn clone(&self) -> Self {
         debug_assert!(
-            self.stacks.borrow().is_empty() && self.placing.borrow().is_none(),
+            self.stacks.borrow().is_empty()
+                && self.placing.borrow().is_none()
+                && self.costing.borrow().is_none(),
             "copied a block click that offers stacks"
         );
         Self {
             stacks: std::cell::RefCell::default(),
             placing: std::cell::RefCell::default(),
+            costing: std::cell::RefCell::default(),
             creative: self.creative,
         }
     }
@@ -248,6 +273,7 @@ impl PlaceOffer {
         Self {
             stacks: std::cell::RefCell::new(stacks),
             placing: std::cell::RefCell::default(),
+            costing: std::cell::RefCell::default(),
             creative,
         }
     }
@@ -257,6 +283,28 @@ impl PlaceOffer {
         let offer = Self::new(creative, Vec::new());
         *offer.placing.borrow_mut() = Some((slot, stack));
         offer
+    }
+
+    /// An offer whose click is paid for with `stack` from `slot` if the
+    /// click costs the item (see [`Self::take_payment`]).
+    pub fn costing(creative: bool, slot: usize, stack: ItemStack) -> Self {
+        let offer = Self::new(creative, Vec::new());
+        *offer.costing.borrow_mut() = Some((slot, stack));
+        offer
+    }
+
+    /// Whether the click carries an item it may spend.
+    pub fn pays(&self) -> bool {
+        self.placing.borrow().is_some() || self.costing.borrow().is_some()
+    }
+
+    /// Takes the item that pays for whatever the click did, to spend it or
+    /// hand it back.
+    pub fn take_payment(&self) -> Option<(usize, ItemStack)> {
+        self.placing
+            .borrow_mut()
+            .take()
+            .or_else(|| self.costing.borrow_mut().take())
     }
 
     /// Takes the item that pays for the placement, to spend it.
@@ -338,6 +386,7 @@ impl PlaceOffer {
     pub fn into_stacks(self) -> Vec<(usize, ItemStack)> {
         let mut stacks = self.stacks.into_inner();
         stacks.extend(self.placing.into_inner());
+        stacks.extend(self.costing.into_inner());
         stacks
     }
 
@@ -345,6 +394,7 @@ impl PlaceOffer {
     pub fn drain(&self) -> Vec<(usize, ItemStack)> {
         let mut stacks = std::mem::take(&mut *self.stacks.borrow_mut());
         stacks.extend(self.placing.borrow_mut().take());
+        stacks.extend(self.costing.borrow_mut().take());
         stacks
     }
 }

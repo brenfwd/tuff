@@ -19,6 +19,7 @@ impl PlayerSession {
         let (RegionRequest::Place(place) | RegionRequest::PlaceOnWater(place)) = *refused else {
             return;
         };
+        self.answered(place.sequence);
         for (slot, stack) in place.offer.into_stacks() {
             if let Some(leftover) = self.inventory.put_back(slot, stack) {
                 let at = self.pose.position;
@@ -81,6 +82,16 @@ impl PlayerSession {
             && let Some(one) = ItemStack::take_from(self.inventory.slot_mut(slot), 1)
         {
             return PlaceOffer::paying(creative, slot, one);
+        }
+        if stacks.is_empty()
+            && !creative
+            && self
+                .inventory
+                .hand(off_hand)
+                .is_some_and(|held| held.max_damage().is_none())
+            && let Some(one) = ItemStack::take_from(self.inventory.slot_mut(slot), 1)
+        {
+            return PlaceOffer::costing(creative, slot, one);
         }
         PlaceOffer::new(creative, stacks)
     }

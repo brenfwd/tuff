@@ -287,6 +287,13 @@ impl RedstoneLevel for RegionActor {
         }
     }
 
+    fn permanent_block_breaking(&self) -> bool {
+        self.shared
+            .config
+            .get_bool(crate::config::BLOCKS_PERMANENT_BLOCK_BREAKING)
+            .unwrap_or(true)
+    }
+
     fn lift_pushed(&mut self, from: &[BlockPos]) {
         self.lift_ahead(from);
     }

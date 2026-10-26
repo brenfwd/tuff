@@ -311,7 +311,15 @@ impl PlayerSession {
 
     fn nothing_around(&self, area: [f64; 6]) -> bool {
         let mirror = &self.view.mirror;
-        !mirror.touches_unknown(area)
+        let surroundings = [
+            area[0] - 1.0,
+            area[1] - 1.0,
+            area[2] - 1.0,
+            area[3] + 1.0,
+            area[4] + 1.0,
+            area[5] + 1.0,
+        ];
+        !mirror.touches_unknown(surroundings)
             && (area[0].floor() as i32..=area[3].floor() as i32).all(|bx| {
                 (area[1].floor() as i32..=area[4].floor() as i32).all(|by| {
                     (area[2].floor() as i32..=area[5].floor() as i32).all(|bz| {

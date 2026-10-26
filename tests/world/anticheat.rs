@@ -38,7 +38,7 @@ async fn non_finite_movement_kicks_a_player_but_not_an_operator() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_operator_exemption_can_be_switched_off() {
+async fn a_checked_operator_is_flagged_and_alerted_but_not_kicked_by_default() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     world
@@ -47,8 +47,57 @@ async fn the_operator_exemption_can_be_switched_off() {
         .set_text("tuff.anticheat.exemptOperators", "false")
         .unwrap();
     let (mut op, _out) = session_with_outbound(&world, 1);
-    op.handle_packet(nan_move()).await;
+    for _ in 0..30 {
+        op.handle_packet(creative_set()).await;
+    }
+    assert!(!op.disconnected);
+    let alerts = operator_alerts(&world).await;
+    assert!(!alerts.is_empty(), "{alerts:?}");
+    assert!(alerts.iter().all(|a| !a.contains("kicked")), "{alerts:?}");
+
+    let (mut player, _out) = session_with_outbound(&world, 2);
+    player.mode.permission = PermissionLevel::All;
+    for _ in 0..30 {
+        player.handle_packet(creative_set()).await;
+    }
+    assert!(
+        player.disconnected,
+        "the same violations kick a non-operator"
+    );
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_checked_operator_is_kicked_when_kick_operators_is_on() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    for (key, value) in [("exemptOperators", "false"), ("kickOperators", "true")] {
+        world
+            .shared
+            .config
+            .set_text(&format!("tuff.anticheat.{key}"), value)
+            .unwrap();
+    }
+    let (mut op, _out) = session_with_outbound(&world, 1);
+    for _ in 0..30 {
+        op.handle_packet(creative_set()).await;
+    }
     assert!(op.disconnected);
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_exempt_operator_is_never_checked() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let (mut op, _out) = session_with_outbound(&world, 1);
+    for _ in 0..30 {
+        op.handle_packet(creative_set()).await;
+    }
+    assert!(!op.disconnected);
+    assert!(operator_alerts(&world).await.is_empty());
     world.shutdown().await;
 }
 
