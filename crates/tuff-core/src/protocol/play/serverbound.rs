@@ -933,6 +933,18 @@ impl Serverbound {
                 w.write_var_int(ServerId::Attack.id());
                 w.write_var_int(*entity);
             }
+            Self::Interact {
+                entity,
+                off_hand,
+                location,
+                sneaking,
+            } => {
+                w.write_var_int(ServerId::Interact.id());
+                w.write_var_int(*entity);
+                w.write_var_int(i32::from(*off_hand));
+                w.write_lp_vec3(*location);
+                w.write_bool(*sneaking);
+            }
             Self::Punch => w.write_var_int(ServerId::Punch.id()),
             Self::CustomClickAction(action) => {
                 w.write_var_int(ServerId::CustomClickAction.id());
@@ -1008,6 +1020,28 @@ impl Serverbound {
                 w.write_var_int(ServerId::ClientCommand.id());
                 w.write_var_int(*action);
             }
+            Self::ContainerClick {
+                window_id,
+                state_id,
+                slot,
+                button,
+                mode,
+                changed,
+                carried,
+            } => {
+                w.write_var_int(ServerId::ContainerClick.id());
+                w.write_var_int(*window_id);
+                w.write_var_int(*state_id);
+                w.write_short(*slot);
+                w.write_byte(*button);
+                w.write_var_int(*mode);
+                w.write_var_int(changed.len() as i32);
+                for (slot, view) in changed {
+                    w.write_short(*slot);
+                    write_hashed_slot(&mut w, view.as_ref());
+                }
+                write_hashed_slot(&mut w, carried.as_ref());
+            }
             Self::ContainerClose(window) => {
                 w.write_var_int(ServerId::ContainerClose.id());
                 w.write_var_int(*window);
@@ -1075,6 +1109,22 @@ impl Serverbound {
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn write_hashed_slot(w: &mut PacketWriter, slot: Option<&HashedSlot>) {
+    w.write_bool(slot.is_some());
+    let Some(slot) = slot else { return };
+    w.write_var_int(slot.item as i32);
+    w.write_var_int(slot.count);
+    w.write_var_int(slot.added.len() as i32);
+    for (kind, hash) in &slot.added {
+        w.write_var_int(*kind as i32);
+        w.write_int(*hash);
+    }
+    w.write_var_int(slot.removed.len() as i32);
+    for kind in &slot.removed {
+        w.write_var_int(*kind as i32);
+    }
 }
 
 #[cfg(test)]

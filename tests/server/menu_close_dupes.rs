@@ -1,0 +1,656 @@
+//! A client that opens a menu and never sends the close packet (a hacked
+//! client's "close without packet") keeps clicking the stale window after
+//! its container was broken, left behind, pushed away or emptied by someone
+//! else. Every diamond given stays somewhere: nothing is made, nothing lost.
+
+use crate::common;
+
+use common::{TempDir, TestServer};
+use std::time::Duration;
+use tuff::Server;
+use tuff_bot::{Bot, BotConfig};
+use tuff_core::protocol::play::Serverbound;
+use tuff_item::item::conservation::LossScope;
+use tuff_vanilla_data::packet::play::Clientbound as Id;
+use tuff_vanilla_data::registry::EntityType;
+use tuff_wire::PacketReader;
+use tuff_world_model::{BlockPos, Face};
+
+const ITEM: &str = "diamond";
+const HOTBAR_DIAMONDS: i64 = 3;
+const SLOT_ZERO: i64 = 5;
+const SLOT_ONE: i64 = 7;
+const GIVEN: i64 = HOTBAR_DIAMONDS + SLOT_ZERO + SLOT_ONE;
+const CONTAINER: [i32; 3] = [4, 150, 0];
+
+#[derive(Clone, Copy, Debug)]
+enum Kind {
+    Chest,
+    Shulker,
+    Hopper,
+    Furnace,
+    Crafting,
+    Anvil,
+    Smithing,
+    Grindstone,
+    Loom,
+    Barrel,
+    Dropper,
+    Minecart,
+    ChestBoat,
+}
+
+impl Kind {
+    fn block(self) -> Option<&'static str> {
+        Some(match self {
+            Kind::Chest => "chest",
+            Kind::Shulker => "shulker_box",
+            Kind::Hopper => "hopper",
+            Kind::Furnace => "furnace",
+            Kind::Crafting => "crafting_table",
+            Kind::Anvil => "anvil",
+            Kind::Smithing => "smithing_table",
+            Kind::Grindstone => "grindstone",
+            Kind::Loom => "loom",
+            Kind::Barrel => "barrel",
+            Kind::Dropper => "dropper",
+            Kind::Minecart | Kind::ChestBoat => return None,
+        })
+    }
+
+    fn station(self) -> bool {
+        matches!(
+            self,
+            Kind::Crafting | Kind::Anvil | Kind::Smithing | Kind::Grindstone | Kind::Loom
+        )
+    }
+
+    fn entity(self) -> Option<(&'static str, EntityType)> {
+        match self {
+            Kind::Minecart => Some(("chest_minecart", EntityType::ChestMinecart)),
+            Kind::ChestBoat => Some(("oak_chest_boat", EntityType::OakChestBoat)),
+            _ => None,
+        }
+    }
+
+    /// Slots of the container part of the window, and the window slot of
+    /// the first hotbar slot.
+    fn layout(self) -> (i16, i16) {
+        let container = match self {
+            Kind::Chest | Kind::Shulker | Kind::Barrel | Kind::Minecart | Kind::ChestBoat => 27,
+            Kind::Dropper => 9,
+            Kind::Hopper => 5,
+            Kind::Furnace | Kind::Anvil | Kind::Grindstone => 3,
+            Kind::Crafting => 10,
+            Kind::Smithing | Kind::Loom => 4,
+        };
+        (container, container + 27)
+    }
+
+    /// Window slots the diamonds in the hotbar are put into, for the
+    /// stations whose inputs the client fills.
+    fn inputs(self) -> [i16; 2] {
+        match self {
+            Kind::Crafting => [1, 2],
+            Kind::Anvil | Kind::Grindstone | Kind::Loom => [0, 1],
+            _ => [1, 2],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Event {
+    Live,
+    Closed,
+    Break,
+    Away,
+    Nether,
+    Disconnect,
+    SecondPlayer,
+    Piston,
+}
+
+async fn start() -> TestServer {
+    let instance = TempDir::new();
+    let mut features = tuff::vanilla_features::all();
+    features.retain(|feature| !feature.id().contains("anticheat"));
+    let server = Server::builder()
+        .features(features)
+        .instance_dir(instance.path().to_path_buf())
+        .binds(vec!["127.0.0.1:0".into()])
+        .online_mode(false)
+        .whitelist(false)
+        .view_distance(2)
+        .seed(1)
+        .build();
+    let handle = server.handle();
+    let task = tokio::spawn(server.run());
+    let addr = handle.local_addrs().await.unwrap()[0];
+    TestServer {
+        handle,
+        addr,
+        task,
+        _instance: instance,
+    }
+}
+
+async fn say(server: &TestServer, line: &str) -> String {
+    server
+        .handle
+        .run_command(line)
+        .await
+        .unwrap()
+        .iter()
+        .map(|c| c.plain())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+async fn until<F: std::future::Future<Output = bool>>(what: &str, mut check: impl FnMut() -> F) {
+    tokio::time::timeout(Duration::from_secs(60), async {
+        while !check().await {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting until {what}"));
+}
+
+/// Diamonds in the stacks of an NBT dump: every compound with the item's
+/// id holds its own `count` (one when absent).
+fn stacks_of(text: &str, item: &str) -> i64 {
+    let needle = format!("id: \"minecraft:{item}\"");
+    let bytes = text.as_bytes();
+    let mut total = 0;
+    let mut from = 0;
+    while let Some(found) = text[from..].find(&needle) {
+        let at = from + found;
+        from = at + needle.len();
+        let mut depth = 0;
+        let mut start = None;
+        for i in (0..at).rev() {
+            match bytes[i] {
+                b'}' => depth += 1,
+                b'{' if depth == 0 => {
+                    start = Some(i);
+                    break;
+                }
+                b'{' => depth -= 1,
+                _ => {}
+            }
+        }
+        let Some(start) = start else { continue };
+        let mut depth = 0;
+        let mut end = bytes.len();
+        for (i, byte) in bytes.iter().enumerate().skip(start) {
+            match byte {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = i;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let body = &text[start + 1..end];
+        let mut depth = 0;
+        let mut count = 1;
+        for (i, byte) in body.bytes().enumerate() {
+            match byte {
+                b'{' | b'[' => depth += 1,
+                b'}' | b']' => depth -= 1,
+                _ if depth == 0 && body[i..].starts_with("count: ") => {
+                    let digits: String = body[i + 7..]
+                        .chars()
+                        .take_while(char::is_ascii_digit)
+                        .collect();
+                    count = digits.parse().unwrap_or(1);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        total += count;
+    }
+    total
+}
+
+fn carried(said: &str) -> i64 {
+    said.strip_prefix("Found ")
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|count| count.parse().ok())
+        .unwrap_or(0)
+}
+
+struct Rig {
+    server: TestServer,
+    opener: Option<Bot>,
+    /// Item entities already swept up by earlier censuses.
+    swept: i64,
+}
+
+impl Rig {
+    async fn new() -> Self {
+        let server = start().await;
+        let opener = join(&server, "Opener").await;
+        let teleports = opener.state().teleports;
+        say(&server, "tp Opener 0.5 150 0.5").await;
+        opener
+            .wait_for(|state| state.teleports > teleports)
+            .await
+            .unwrap();
+        opener.wait_loaded(2).await.unwrap();
+        until("the floor is filled", || async {
+            say(&server, "fill -10 149 -10 10 149 10 stone")
+                .await
+                .contains("Successfully")
+        })
+        .await;
+        for line in [
+            "fill -10 150 -10 10 160 10 air replace air",
+            "gamemode survival Opener",
+            "gamerule natural_health_regeneration false",
+        ] {
+            say(&server, line).await;
+        }
+        Rig {
+            server,
+            opener: Some(opener),
+            swept: 0,
+        }
+    }
+
+    fn bot(&self) -> &Bot {
+        self.opener.as_ref().unwrap()
+    }
+
+    async fn say(&self, line: &str) -> String {
+        say(&self.server, line).await
+    }
+
+    async fn reset(&mut self, kind: Kind) {
+        let [x, y, z] = CONTAINER;
+        for line in [
+            "kill @e[type=item]".to_owned(),
+            "kill @e[type=chest_minecart]".to_owned(),
+            "kill @e[type=oak_chest_boat]".to_owned(),
+            "clear Opener".to_owned(),
+            "clear Taker".to_owned(),
+            format!("setblock {x} {y} {z} air"),
+            format!("setblock {} {y} {z} air", x + 1),
+            format!("setblock {} {y} {z} air", x + 2),
+            format!("setblock {} {y} {z} air", x + 3),
+            "tp Opener 0.5 150 0.5".to_owned(),
+        ] {
+            self.say(&line).await;
+        }
+        self.swept = 0;
+        self.settle().await;
+        let hotbar = format!("item replace entity Opener hotbar.0 with {ITEM} {HOTBAR_DIAMONDS}");
+        self.say(&hotbar).await;
+        if let Some(block) = kind.block() {
+            self.say(&format!("setblock {x} {y} {z} {block}")).await;
+            if kind.station() {
+                self.say(&format!(
+                    "item replace entity Opener hotbar.1 with {ITEM} {}",
+                    SLOT_ZERO + SLOT_ONE
+                ))
+                .await;
+            } else {
+                for (slot, count) in [(0, SLOT_ZERO), (1, SLOT_ONE)] {
+                    let line = format!(
+                        "item replace block {x} {y} {z} container.{slot} with {ITEM} {count}"
+                    );
+                    self.say(&line).await;
+                }
+            }
+        } else if let Some((name, _)) = kind.entity() {
+            let said = self.say(&format!(
+                "summon {name} {x}.5 {y} {z}.5 {{Items:[{{Slot:0b,id:\"minecraft:{ITEM}\",count:{SLOT_ZERO}}},{{Slot:1b,id:\"minecraft:{ITEM}\",count:{SLOT_ONE}}}]}}"
+            ))
+            .await;
+            let _ = said;
+        }
+    }
+
+    async fn settle(&self) {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    /// Every diamond anywhere: inventories, container blocks, container
+    /// entities and the item entities lying about (swept as they are read).
+    async fn total(&mut self, kind: Kind, players: &[&str]) -> i64 {
+        let mut total = 0;
+        for player in players {
+            total += carried(&self.say(&format!("clear {player} {ITEM} 0")).await);
+        }
+        let [x, y, z] = CONTAINER;
+        if kind.block().is_some() {
+            total += stacks_of(
+                &self.say(&format!("data get block {x} {y} {z}")).await,
+                ITEM,
+            );
+        }
+        if let Some((name, _)) = kind.entity() {
+            total += stacks_of(
+                &self
+                    .say(&format!("data get entity @e[type={name},limit=1]"))
+                    .await,
+                ITEM,
+            );
+        }
+        for _ in 0..200 {
+            let dump = self.say("data get entity @e[type=item,limit=1] Item").await;
+            if dump.contains("No entity was found") {
+                break;
+            }
+            self.swept += stacks_of(&dump, ITEM);
+            self.say("kill @e[type=item,limit=1]").await;
+        }
+        total + self.swept
+    }
+
+    async fn stable_total(&mut self, kind: Kind, players: &[&str]) -> i64 {
+        let mut last = -1;
+        for _ in 0..20 {
+            self.settle().await;
+            let now = self.total(kind, players).await;
+            if now == last {
+                return now;
+            }
+            last = now;
+        }
+        last
+    }
+}
+
+async fn join(server: &TestServer, name: &str) -> Bot {
+    let bot = Bot::connect(
+        server.addr,
+        BotConfig {
+            view_distance: 2,
+            keep: vec![Id::ContainerSetContent.id(), Id::ContainerSetSlot.id()],
+            ..BotConfig::new(name)
+        },
+    )
+    .await
+    .unwrap();
+    bot.wait_for(|state| state.chunks > 0).await.unwrap();
+    bot
+}
+
+fn pos() -> BlockPos {
+    BlockPos::new(CONTAINER[0], CONTAINER[1], CONTAINER[2])
+}
+
+async fn open(bot: &Bot, kind: Kind) -> i32 {
+    let before = bot.state().windows_opened;
+    if let Some((_, entity)) = kind.entity() {
+        let id = loop {
+            let found = bot
+                .state()
+                .entities
+                .iter()
+                .find(|(_, seen)| seen.kind == Some(entity))
+                .map(|(id, _)| *id);
+            if let Some(id) = found {
+                break id;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        };
+        bot.send(Serverbound::Interact {
+            entity: id,
+            off_hand: false,
+            location: [0.0; 3],
+            sneaking: true,
+        });
+    } else {
+        bot.send(Serverbound::UseItemOn {
+            hand: 0,
+            position: pos(),
+            face: Face::Up,
+            cursor: [0.5; 3],
+            sequence: 1,
+        });
+    }
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        bot.wait_for(|state| state.windows_opened > before && state.window.is_some()),
+    )
+    .await
+    .unwrap_or_else(|_| panic!("{kind:?} did not open for {}", bot.name()))
+    .unwrap();
+    bot.state().window.unwrap()
+}
+
+/// The state id the server last sent for the window, as a client tracks it.
+fn state_id(bot: &Bot, window: i32) -> i32 {
+    bot.with_state(|state| {
+        state
+            .kept_order
+            .iter()
+            .rev()
+            .find_map(|(_, body)| {
+                let mut r = PacketReader::new(body.clone());
+                (r.read_var_int().ok()? == window)
+                    .then(|| r.read_var_int().ok())
+                    .flatten()
+            })
+            .unwrap_or(0)
+    })
+}
+
+fn click(bot: &Bot, window_id: i32, slot: i16, button: i8, mode: i32) -> Serverbound {
+    Serverbound::ContainerClick {
+        window_id,
+        state_id: state_id(bot, window_id),
+        slot,
+        button,
+        mode,
+        changed: Vec::new(),
+        carried: None,
+    }
+}
+
+/// Fills the first two inputs of a station from the hotbar, as a client
+/// does: pick the stack up, put it down.
+fn fill_station(bot: &Bot, window: i32, kind: Kind) {
+    let (_, hotbar) = kind.layout();
+    let [first, second] = kind.inputs();
+    bot.send(click(bot, window, hotbar, 0, 0));
+    bot.send(click(bot, window, first, 0, 0));
+    bot.send(click(bot, window, hotbar + 1, 0, 0));
+    bot.send(click(bot, window, second, 0, 0));
+}
+
+/// What a client that never closed the window sends afterwards.
+fn stale_clicks(bot: &Bot, window: i32, kind: Kind) {
+    let (container, hotbar) = kind.layout();
+    for slot in [0, 1, 2, container - 1] {
+        for (button, mode) in [
+            (0, 0),
+            (1, 0),
+            (0, 1),
+            (0, 2),
+            (1, 2),
+            (0, 4),
+            (1, 4),
+            (0, 6),
+        ] {
+            bot.send(click(bot, window, slot, button, mode));
+        }
+    }
+    for slot in [hotbar, hotbar + 1, container] {
+        for (button, mode) in [(0, 0), (0, 1), (0, 4), (1, 4)] {
+            bot.send(click(bot, window, slot, button, mode));
+        }
+    }
+    bot.send(click(bot, window, -999, 0, 0));
+}
+
+async fn scenario(kind: Kind, event: Event) {
+    let mut rig = Rig::new().await;
+    rig.reset(kind).await;
+    let mut players = vec!["Opener"];
+    let window = open(rig.bot(), kind).await;
+    if kind.station() {
+        fill_station(rig.bot(), window, kind);
+    }
+    let [x, y, z] = CONTAINER;
+    let mut taker = None;
+    match event {
+        Event::Live => {
+            rig.bot().send(click(rig.bot(), window, 0, 0, 1));
+            rig.settle().await;
+        }
+        Event::Closed => {
+            rig.bot().send(Serverbound::ContainerClose(window));
+            rig.settle().await;
+        }
+        Event::Break => {
+            if kind.block().is_some() {
+                rig.say(&format!("setblock {x} {y} {z} air destroy")).await;
+            } else {
+                rig.say("kill @e[type=chest_minecart]").await;
+                rig.say("kill @e[type=oak_chest_boat]").await;
+            }
+        }
+        Event::Away => {
+            rig.say("tp Opener 1500.5 150 1500.5").await;
+            rig.settle().await;
+        }
+        Event::Nether => {
+            rig.say("execute in minecraft:the_nether run tp Opener 0.5 100 0.5")
+                .await;
+            rig.settle().await;
+        }
+        Event::Disconnect => {
+            let old = rig.opener.take().unwrap();
+            drop(old);
+            until("the player has left", || async {
+                rig.say("data get entity Opener Health")
+                    .await
+                    .contains("No entity")
+            })
+            .await;
+            rig.opener = Some(join(&rig.server, "Opener").await);
+            rig.say("gamemode survival Opener").await;
+        }
+        Event::SecondPlayer => {
+            let bot = join(&rig.server, "Taker").await;
+            rig.say("gamemode survival Taker").await;
+            rig.say("tp Taker 1.5 150 1.5").await;
+            rig.settle().await;
+            let theirs = open(&bot, kind).await;
+            let (container, _) = kind.layout();
+            for slot in 0..container.min(3) {
+                bot.send(click(&bot, theirs, slot, 0, 1));
+            }
+            rig.settle().await;
+            taker = Some((bot, theirs));
+            players = vec!["Opener", "Taker"];
+        }
+        Event::Piston => {
+            for line in [
+                format!("setblock {} {y} {z} piston[facing=west]", x + 1),
+                format!("setblock {} {y} {z} redstone_block", x + 2),
+            ] {
+                rig.say(&line).await;
+            }
+        }
+    }
+    let stays = matches!(event, Event::Live | Event::Closed | Event::SecondPlayer)
+        || (matches!(event, Event::Piston) && (!kind.station() || matches!(kind, Kind::Anvil)));
+    if matches!(
+        event,
+        Event::Break | Event::Piston | Event::Away | Event::Nether
+    ) {
+        let watcher = rig.bot();
+        let shut = tokio::time::timeout(
+            Duration::from_secs(10),
+            watcher.wait_for(|state| state.window.is_none()),
+        )
+        .await
+        .is_ok();
+        assert_eq!(
+            shut, !stays,
+            "{kind:?} / {event:?}: the server closes the window"
+        );
+    }
+    if !matches!(event, Event::Live) {
+        stale_clicks(rig.bot(), window, kind);
+    }
+    rig.settle().await;
+    if let Some((bot, theirs)) = &taker {
+        stale_clicks(bot, *theirs, kind);
+    }
+    match event {
+        Event::Away | Event::Nether => {
+            rig.say("execute in minecraft:overworld run tp Opener 0.5 150 0.5")
+                .await;
+        }
+        _ => {}
+    }
+    if matches!(event, Event::Live) && !kind.station() {
+        rig.settle().await;
+        let held = carried(&rig.say("clear Opener diamond 0").await);
+        assert!(held > HOTBAR_DIAMONDS, "{kind:?}: the clicks moved nothing");
+    }
+    rig.bot().send(Serverbound::ContainerClose(window));
+    rig.bot().send(Serverbound::ContainerClose(0));
+    if let Some((bot, theirs)) = &taker {
+        bot.send(Serverbound::ContainerClose(*theirs));
+        bot.send(Serverbound::ContainerClose(0));
+    }
+    let total = rig.stable_total(kind, &players).await;
+    assert_eq!(
+        total, GIVEN,
+        "{kind:?} / {event:?}: {GIVEN} diamonds were given"
+    );
+    let lost = LossScope::current().expect("scoped by the watchdog").lost();
+    assert_eq!(lost, 0, "{kind:?} / {event:?}: items were lost");
+    rig.server.handle.shutdown().await.unwrap();
+    rig.server.task.await.unwrap().unwrap();
+}
+
+macro_rules! scenarios {
+    ($($name:ident: $kind:expr, $event:expr;)*) => {$(
+        #[tuff_core::watchdog]
+        #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+        async fn $name() {
+            scenario($kind, $event).await;
+        }
+    )*};
+}
+
+scenarios! {
+    chest_clicks_while_open: Kind::Chest, Event::Live;
+    minecart_clicks_while_open: Kind::Minecart, Event::Live;
+    chest_closed_properly: Kind::Chest, Event::Closed;
+    anvil_closed_properly: Kind::Anvil, Event::Closed;
+    chest_broken_while_open: Kind::Chest, Event::Break;
+    chest_left_far_behind: Kind::Chest, Event::Away;
+    chest_left_for_the_nether: Kind::Chest, Event::Nether;
+    chest_taken_by_a_second_player: Kind::Chest, Event::SecondPlayer;
+    chest_beside_a_piston: Kind::Chest, Event::Piston;
+    shulker_broken_while_open: Kind::Shulker, Event::Break;
+    shulker_taken_by_a_second_player: Kind::Shulker, Event::SecondPlayer;
+    hopper_broken_while_open: Kind::Hopper, Event::Break;
+    furnace_broken_while_open: Kind::Furnace, Event::Break;
+    crafting_table_broken_while_open: Kind::Crafting, Event::Break;
+    crafting_table_pushed_while_open: Kind::Crafting, Event::Piston;
+    anvil_broken_while_open: Kind::Anvil, Event::Break;
+    anvil_pushed_while_open: Kind::Anvil, Event::Piston;
+    smithing_table_broken_while_open: Kind::Smithing, Event::Break;
+    grindstone_broken_while_open: Kind::Grindstone, Event::Break;
+    loom_broken_while_open: Kind::Loom, Event::Break;
+    barrel_broken_while_open: Kind::Barrel, Event::Break;
+    dropper_broken_while_open: Kind::Dropper, Event::Break;
+    minecart_killed_while_open: Kind::Minecart, Event::Break;
+    minecart_left_far_behind: Kind::Minecart, Event::Away;
+    chest_boat_killed_while_open: Kind::ChestBoat, Event::Break;
+    chest_disconnected_while_open: Kind::Chest, Event::Disconnect;
+}
