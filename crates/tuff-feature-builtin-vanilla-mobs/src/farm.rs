@@ -180,7 +180,7 @@ impl Species for Cow {
         animal_experience(rng)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }
@@ -435,7 +435,7 @@ impl Species for Mooshroom {
         animal_experience(rng)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }
@@ -654,7 +654,7 @@ impl Species for Pig {
         animal_experience(rng)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }
@@ -877,7 +877,7 @@ impl Species for Sheep {
         animal_experience(rng)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }
@@ -1034,7 +1034,7 @@ impl Species for Chicken {
         }
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         self.jockey
     }
 
@@ -1306,7 +1306,7 @@ impl Species for Rabbit {
         animal_experience(rng)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }

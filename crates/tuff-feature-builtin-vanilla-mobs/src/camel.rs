@@ -396,7 +396,7 @@ impl<const HUSK: bool> Species for Camel<HUSK> {
         1 + rng.gen_range(0..3)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         HUSK
     }
 }
@@ -483,7 +483,7 @@ mod tests {
             CamelHusk::configure(core);
             let mut husk = CamelHusk::default();
             assert!(core.age.is_none() && core.love.is_none());
-            assert!(!husk.can_fall_in_love(core) && husk.remove_when_far_away());
+            assert!(!husk.can_fall_in_love(core) && husk.remove_when_far_away(core));
             assert!(husk.is_food(&ItemStack::mint(Item::RabbitFoot, 1, MintReason::Test)));
             assert!(!husk.is_food(&ItemStack::mint(Item::Cactus, 1, MintReason::Test)));
             assert_eq!(
@@ -508,7 +508,7 @@ mod tests {
             assert!(core.persistence_required);
 
             let camel = Camel::<false>::default();
-            assert!(camel.can_fall_in_love(core) && !camel.remove_when_far_away());
+            assert!(camel.can_fall_in_love(core) && !camel.remove_when_far_away(core));
             assert!(camel.is_food(&ItemStack::mint(Item::Cactus, 1, MintReason::Test)));
         });
     }

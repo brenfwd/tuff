@@ -1087,6 +1087,10 @@ impl<S: Species> Mob<S> {
             return true;
         }
         let despawnable = !self.is_persistent();
+        if !despawnable {
+            self.core.no_action_time = 0;
+            return false;
+        }
         let nearest = cx
             .players
             .iter()

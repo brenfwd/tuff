@@ -197,7 +197,7 @@ impl Species for Bat {
         true
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         true
     }
 }

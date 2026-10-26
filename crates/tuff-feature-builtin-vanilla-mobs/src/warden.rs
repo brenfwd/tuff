@@ -1060,7 +1060,7 @@ impl Species for Warden {
         self.digging_or_emerging() || self.roaring.is_some() || self.sniffing.is_some()
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 

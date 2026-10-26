@@ -746,6 +746,10 @@ impl Species for TraderLlama {
         false
     }
 
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
+        false
+    }
+
     fn seats(&self, core: &MobCore) -> usize {
         if self.1.with_trader {
             return 0;

@@ -228,7 +228,7 @@ impl Species for Goat {
         animal_experience(rng)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }

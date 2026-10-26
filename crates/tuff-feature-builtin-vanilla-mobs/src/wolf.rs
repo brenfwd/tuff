@@ -452,7 +452,7 @@ impl Species for Wolf {
         1 + rng.gen_range(0..3)
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         false
     }
 }

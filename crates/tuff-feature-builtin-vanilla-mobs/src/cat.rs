@@ -625,8 +625,9 @@ impl Species for Cat {
         1 + rng.gen_range(0..3)
     }
 
-    fn remove_when_far_away(&self) -> bool {
-        false
+    fn remove_when_far_away(&self, core: &MobCore) -> bool {
+        !core.tame.as_ref().is_some_and(|t| t.is_tamed())
+            && core.tick_count > super::ocelot::WILD_DESPAWN_AGE
     }
 }
 

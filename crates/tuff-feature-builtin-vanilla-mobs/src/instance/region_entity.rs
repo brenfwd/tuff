@@ -630,10 +630,7 @@ impl<S: Species> RegionEntity for Mob<S> {
     }
 
     fn is_persistent(&self) -> bool {
-        self.core.persistence_required
-            || self.core.leash.is_some()
-            || !self.species.remove_when_far_away()
-            || self.core.raider.as_ref().is_some_and(|r| r.raid.is_some())
+        self.persistence_required() || !self.species.remove_when_far_away(&self.core)
     }
 
     fn persistence_required(&self) -> bool {

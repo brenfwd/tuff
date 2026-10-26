@@ -157,6 +157,10 @@ impl Species for Strider {
         Self::default()
     }
 
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
+        false
+    }
+
     fn configure(core: &mut MobCore) {
         core.make_animal();
         core.set_path_malus(tuff_vanilla_data::entity::PathType::Water, -1.0);

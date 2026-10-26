@@ -359,7 +359,7 @@ pub trait Species: Sized + Send + Debug + 'static {
         None
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         true
     }
 

@@ -309,7 +309,7 @@ impl Species for ZombieVillager {
         cx.effects.push(Effect::Spawn(Box::new(child)));
     }
 
-    fn remove_when_far_away(&self) -> bool {
+    fn remove_when_far_away(&self, _core: &MobCore) -> bool {
         self.conversion.is_none() && self.xp == 0
     }
 }
