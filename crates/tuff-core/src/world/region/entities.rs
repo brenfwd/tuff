@@ -1178,6 +1178,7 @@ impl RegionActor {
         let packet = packets([framed(&play::SetEquipment {
             entity_id: tracked.id(),
             items: &items,
+            obfuscate: false,
         })]);
         let (id, chunk) = (tracked.id(), tracked.chunk());
         self.send_to_viewers(&[chunk], || PlayerEvent::EntityPackets {

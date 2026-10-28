@@ -214,7 +214,10 @@ impl PlayerSession {
         }
         values.push((
             metadata::HEALTH,
-            MetadataValue::Float(self.body.health.value),
+            MetadataValue::Float(crate::world::hide_details::shown_health(
+                &self.shared.config,
+                self.body.health.value,
+            )),
         ));
         if self.body.stuck_arrows.count > 0 {
             values.push((
@@ -249,6 +252,7 @@ impl PlayerSession {
                             self.inventory.equipped(slot).map(ItemStack::any),
                         )
                     }),
+                    obfuscate: crate::world::hide_details::hide_items(&self.shared.config),
                 }),
                 framed(&play::RotateHead {
                     entity_id: self.id,
@@ -472,6 +476,7 @@ impl PlayerSession {
             update.push(framed(&play::SetEquipment {
                 entity_id: self.id,
                 items: &items,
+                obfuscate: crate::world::hide_details::hide_items(&self.shared.config),
             }));
             let spectator = self.mode.game_mode == GameMode::Spectator;
             let sounds: Vec<SoundEvent> = EQUIPMENT_SLOTS

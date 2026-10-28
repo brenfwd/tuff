@@ -113,6 +113,7 @@ mod glide_wall;
 mod goat_horn;
 mod growth;
 mod hardcore;
+mod hide_player_details;
 mod honey_landings;
 mod insert_item;
 mod interactions;
