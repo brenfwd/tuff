@@ -426,6 +426,14 @@ impl GrowthLevel for RegionActor {
         self.shared.rule_int(name)
     }
 
+    fn config_int(&self, name: &str, default: i64) -> i64 {
+        self.shared.config.get_int(name).unwrap_or(default)
+    }
+
+    fn config_bool(&self, name: &str, default: bool) -> bool {
+        self.shared.config.get_bool(name).unwrap_or(default)
+    }
+
     fn dimension(&self) -> &'static tuff_vanilla_data::dimension_type::DimensionType {
         RegionActor::dimension(self).kind
     }

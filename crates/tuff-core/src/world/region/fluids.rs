@@ -19,7 +19,7 @@ use crate::protocol::play;
 use crate::world::fluid_api::{FluidWorld, Settings};
 use crate::world::messages::BlockUpdate;
 use crate::world::region_api::BlockCause;
-use crate::world::ticks::{self, ChunkTicks, MAX_PER_TICK, Scheduled};
+use crate::world::ticks::{self, ChunkTicks, Scheduled};
 use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 use tuff_world_model::chunk::ChunkShape;
@@ -157,7 +157,9 @@ impl RegionActor {
         &mut self,
         list: impl Fn(&mut super::Column) -> &mut ChunkTicks<T>,
         ready: &[ChunkPos],
+        limit_key: &str,
     ) -> Vec<Scheduled<T>> {
+        let limit = ticks::limit_from(&self.shared.config, limit_key);
         let ready: HashSet<&ChunkPos> = ready.iter().collect();
         let mut columns: Vec<(&ChunkPos, &mut super::Column)> = self
             .columns
@@ -169,7 +171,7 @@ impl RegionActor {
             .into_iter()
             .map(|(_, column)| list(column))
             .collect();
-        ticks::drain(&mut chunks, self.sched.tick, MAX_PER_TICK)
+        ticks::drain(&mut chunks, self.sched.tick, limit)
     }
 
     /// Runs the block ticks that are due, in chunks whose neighbours are
@@ -180,7 +182,11 @@ impl RegionActor {
         if ready.is_empty() {
             return;
         }
-        let due = self.due_ticks(|column| &mut column.block_ticks, &ready);
+        let due = self.due_ticks(
+            |column| &mut column.block_ticks,
+            &ready,
+            ticks::MAX_BLOCK_PER_TICK_KEY,
+        );
         self.sim.begin_tick_batch(&due);
         self.sim.redstone.handling_tick = true;
         for tick in due {
@@ -198,7 +204,12 @@ impl RegionActor {
         if ready.is_empty() {
             return;
         }
-        for tick in self.due_ticks(|column| &mut column.fluid_ticks, &ready) {
+        let due = self.due_ticks(
+            |column| &mut column.fluid_ticks,
+            &ready,
+            ticks::MAX_FLUID_PER_TICK_KEY,
+        );
+        for tick in due {
             let fluids = self.shared.fluid_behaviors.clone();
             let cause = fluid_cause(tick.kind);
             self.with_cause(cause, |region| fluids.tick(region, tick.pos, tick.kind));

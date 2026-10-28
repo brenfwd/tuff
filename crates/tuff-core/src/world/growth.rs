@@ -62,6 +62,9 @@ pub trait GrowthLevel {
     fn trail_particle(&mut self, from: [f64; 3], target: [f64; 3], color: i32, duration: i32);
     fn rule_bool(&self, name: &str) -> bool;
     fn rule_int(&self, name: &str) -> i32;
+    /// A server config integer, `default` when unset.
+    fn config_int(&self, name: &str, default: i64) -> i64;
+    fn config_bool(&self, name: &str, default: bool) -> bool;
     /// The dimension's infiniburn block tag and whether water evaporates.
     fn dimension(&self) -> &'static tuff_vanilla_data::dimension_type::DimensionType;
     fn water_evaporates(&self) -> bool;
@@ -243,6 +246,34 @@ pub fn random_block_pos(rand_value: &mut i32, x: i32, y: i32, z: i32, y_mask: i3
         y + (value >> 16 & y_mask),
         z + (value >> 8 & 15),
     )
+}
+
+pub const FREEZING_KEY: &str = "tuff.world.freezing.enabled";
+pub const FIRE_DELAY_MIN_KEY: &str = "tuff.world.fireTickDelay.min";
+pub const FIRE_DELAY_MAX_KEY: &str = "tuff.world.fireTickDelay.max";
+
+pub fn config_keys() -> Vec<crate::config::Key> {
+    use crate::config::{Key, Value};
+    let delay = |name: &str, default: i64, what: &str| {
+        Key::new(
+            name,
+            Value::Int(default),
+            &format!("{what} number of ticks until a fire ticks again"),
+        )
+        .validated(|value| match value {
+            Value::Int(n) if (1..=1_000_000).contains(n) => Ok(()),
+            _ => Err("must be between 1 and 1000000".to_owned()),
+        })
+    };
+    vec![
+        Key::new(
+            FREEZING_KEY,
+            Value::Bool(true),
+            "Whether precipitation freezes water into ice and piles snow layers",
+        ),
+        delay(FIRE_DELAY_MIN_KEY, 30, "Least"),
+        delay(FIRE_DELAY_MAX_KEY, 39, "Most"),
+    ]
 }
 
 #[cfg(test)]

@@ -19,6 +19,39 @@ type TickKey = (u64, i32, i64);
 /// per-level bound.
 pub const MAX_PER_TICK: usize = 65536;
 
+pub const MAX_BLOCK_PER_TICK_KEY: &str = "tuff.world.scheduledTicks.maxBlockPerTick";
+pub const MAX_FLUID_PER_TICK_KEY: &str = "tuff.world.scheduledTicks.maxFluidPerTick";
+
+pub fn config_keys() -> Vec<crate::config::Key> {
+    use crate::config::{Key, Value};
+    [
+        (MAX_BLOCK_PER_TICK_KEY, "block"),
+        (MAX_FLUID_PER_TICK_KEY, "fluid"),
+    ]
+    .into_iter()
+    .map(|(name, what)| {
+        Key::new(
+            name,
+            Value::Int(MAX_PER_TICK as i64),
+            &format!(
+                "Most scheduled {what} ticks one dimension runs per game tick; the excess waits for later ticks"
+            ),
+        )
+        .validated(|value| match value {
+            Value::Int(n) if *n >= 1 => Ok(()),
+            _ => Err("must be at least 1".to_owned()),
+        })
+    })
+    .collect()
+}
+
+/// The per-tick cap read from `config`, falling back to [`MAX_PER_TICK`].
+pub fn limit_from(config: &crate::config::ConfigStore, key: &str) -> usize {
+    config
+        .get_int(key)
+        .map_or(MAX_PER_TICK, |n| n.max(1) as usize)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Scheduled<T> {
     pub pos: BlockPos,
@@ -270,6 +303,29 @@ mod tests {
         assert_eq!(rest.iter().map(|t| t.pos.x).collect::<Vec<_>>(), vec![0]);
         assert!(!a.is_pending(BlockPos::new(0, 64, 0), 0));
         assert!(b.is_pending(BlockPos::new(3, 64, 0), 0));
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_lowered_limit_spreads_the_excess_over_later_ticks_in_order() {
+        let mut a = ChunkTicks::default();
+        for x in 0..5 {
+            a.schedule(tick(x, 0, 5, i64::from(x)));
+        }
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            let due = drain(&mut [&mut a], 5, 2);
+            assert!(due.len() <= 2);
+            seen.extend(due.iter().map(|t| t.pos.x));
+        }
+        assert_eq!(seen, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn limit_defaults_and_follows_config() {
+        let config = crate::config::ConfigStore::default();
+        assert_eq!(limit_from(&config, MAX_BLOCK_PER_TICK_KEY), MAX_PER_TICK);
     }
 
     #[tuff_core::watchdog]
