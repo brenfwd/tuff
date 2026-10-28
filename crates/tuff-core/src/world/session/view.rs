@@ -22,6 +22,8 @@ pub struct ChunkView {
     /// Regions of the current dimension that know where this player is.
     pub presence: HashSet<RegionPos>,
     pub entities: EntityView,
+    /// Wanted chunks were held back by the per-player budget.
+    pub starved: bool,
 }
 
 impl Default for ChunkView {
@@ -42,6 +44,7 @@ impl Default for ChunkView {
             regions: HashMap::new(),
             presence: HashSet::new(),
             entities: EntityView::default(),
+            starved: false,
         }
     }
 }
@@ -281,8 +284,28 @@ impl PlayerSession {
         needed.extend(ring.iter().map(|c| c.region()));
         needed.extend(regions_near(self.pose.position, PRESENCE_MARGIN));
 
+        let budget = match peek {
+            true => 0,
+            false => self.shared.live.chunk_budget() as usize,
+        };
+        let pending = self
+            .view
+            .subscribed
+            .iter()
+            .filter(|c| wanted_set.contains(c) && !self.view.sent.contains(c))
+            .count();
+        let fresh = budget_window(center, &wanted, &self.view.subscribed, budget, pending);
+        self.view.starved = budget > 0
+            && wanted.len()
+                > self
+                    .view
+                    .subscribed
+                    .iter()
+                    .filter(|c| wanted_set.contains(c))
+                    .count()
+                    + fresh.len();
         let mut added: Vec<(RegionPos, Vec<ChunkPos>)> = Vec::new();
-        for chunk in wanted.iter().filter(|c| !self.view.subscribed.contains(c)) {
+        for chunk in fresh.iter() {
             match added.iter_mut().find(|(r, _)| *r == chunk.region()) {
                 Some((_, chunks)) => chunks.push(*chunk),
                 None => added.push((chunk.region(), vec![*chunk])),
@@ -397,6 +420,23 @@ impl PlayerSession {
         self.send_all(out);
     }
 
+    /// Tops the budget window up once enough of it has been delivered.
+    pub async fn refill_view(&mut self) {
+        if !self.view.starved {
+            return;
+        }
+        let budget = self.shared.live.chunk_budget() as usize;
+        let pending = self
+            .view
+            .subscribed
+            .iter()
+            .filter(|c| !self.view.sent.contains(c))
+            .count();
+        if budget == 0 || pending <= budget / 2 {
+            self.update_view().await;
+        }
+    }
+
     /// What this client has been sent of the world.
     pub fn client_world(&self) -> &mirror::ChunkMirror {
         &self.view.mirror
@@ -408,5 +448,91 @@ impl PlayerSession {
 
     pub fn predict_client_block(&mut self, pos: BlockPos, state: tuff_vanilla_data::BlockState) {
         self.view.mirror.predict(pos, state);
+    }
+}
+
+/// The nearest wanted chunks not yet subscribed that fit in what is left of
+/// the per-player budget of undelivered chunks (0 means no limit).
+pub fn budget_window(
+    center: ChunkPos,
+    wanted: &[ChunkPos],
+    subscribed: &HashSet<ChunkPos>,
+    budget: usize,
+    pending: usize,
+) -> Vec<ChunkPos> {
+    let mut fresh: Vec<ChunkPos> = wanted
+        .iter()
+        .filter(|c| !subscribed.contains(c))
+        .copied()
+        .collect();
+    if budget == 0 {
+        return fresh;
+    }
+    let room = budget.saturating_sub(pending);
+    let distance = |c: &ChunkPos| {
+        let (dx, dz) = ((c.x - center.x) as i64, (c.z - center.z) as i64);
+        dx * dx + dz * dz
+    };
+    if fresh.len() > room {
+        fresh.sort_by_key(distance);
+        fresh.truncate(room);
+    }
+    fresh
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    fn square(r: i32) -> Vec<ChunkPos> {
+        (-r..=r)
+            .flat_map(|x| (-r..=r).map(move |z| ChunkPos::new(x, z)))
+            .collect()
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn view_budget_takes_the_nearest_first() {
+        let center = ChunkPos::new(0, 0);
+        let got = budget_window(center, &square(5), &HashSet::new(), 9, 0);
+        assert_eq!(got.len(), 9);
+        assert!(got.iter().all(|c| c.x.abs() <= 1 && c.z.abs() <= 1));
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn view_budget_never_exceeds_the_room_left() {
+        let center = ChunkPos::new(0, 0);
+        let got = budget_window(center, &square(5), &HashSet::new(), 10, 7);
+        assert_eq!(got.len(), 3);
+        assert!(budget_window(center, &square(5), &HashSet::new(), 10, 12).is_empty());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn view_budget_refills_as_chunks_are_delivered() {
+        let center = ChunkPos::new(0, 0);
+        let wanted = square(4);
+        let mut subscribed = HashSet::new();
+        let mut sent = 0;
+        let mut rounds = 0;
+        while subscribed.len() < wanted.len() {
+            let pending = subscribed.len() - sent;
+            let fresh = budget_window(center, &wanted, &subscribed, 16, pending);
+            assert!(pending + fresh.len() <= 16);
+            assert!(!fresh.is_empty() || pending > 0);
+            subscribed.extend(fresh);
+            sent = (sent + 5).min(subscribed.len());
+            rounds += 1;
+            assert!(rounds < 100);
+        }
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn view_budget_zero_is_unlimited() {
+        let center = ChunkPos::new(0, 0);
+        let got = budget_window(center, &square(5), &HashSet::new(), 0, 500);
+        assert_eq!(got.len(), 121);
     }
 }

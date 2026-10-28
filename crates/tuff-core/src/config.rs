@@ -675,6 +675,7 @@ fn core_keys() -> Vec<Key> {
     .chain(crate::world::dimension::config_keys())
     .chain(crate::world::entity_caps::config_keys())
     .chain(crate::world::generator::config_keys())
+    .chain(crate::world::live::config_keys())
     .collect()
 }
 

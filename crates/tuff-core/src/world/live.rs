@@ -10,6 +10,23 @@ use tokio::sync::watch;
 use super::{DEFAULT_VIEW_DISTANCE, NetworkSettings, SimulationSettings};
 use crate::protocol::play::GameMode;
 
+pub const CHUNK_BUDGET_KEY: &str = "tuff.world.chunkBudgetPerPlayer";
+pub const DEFAULT_CHUNK_BUDGET: u32 = 64;
+
+pub fn config_keys() -> Vec<crate::config::Key> {
+    vec![
+        crate::config::Key::new(
+            CHUNK_BUDGET_KEY,
+            crate::config::Value::Int(i64::from(DEFAULT_CHUNK_BUDGET)),
+            "Most chunks one player may have requested from the world but not yet received, nearest first, refilled as chunks arrive so a fast traveller cannot flood generation (0 is unlimited; applies on restart)",
+        )
+        .validated(|v| match v {
+            crate::config::Value::Int(n) if (0..=1_000_000).contains(n) => Ok(()),
+            _ => Err("must be 0 or more".to_owned()),
+        }),
+    ]
+}
+
 /// The live part of the server settings, shared by every actor.
 pub struct LiveSettings {
     view_distance: AtomicI32,
@@ -19,6 +36,7 @@ pub struct LiveSettings {
     broadcast_range_percent: AtomicI32,
     max_chained_neighbor_updates: AtomicI32,
     default_game_mode: AtomicI32,
+    chunk_budget: AtomicU32,
     network: watch::Sender<Arc<NetworkSettings>>,
 }
 
@@ -65,6 +83,7 @@ impl LiveSettings {
                 crate::world::redstone::MAX_CHAINED_UPDATES as i32,
             ),
             default_game_mode: AtomicI32::new(default_game_mode.id()),
+            chunk_budget: AtomicU32::new(DEFAULT_CHUNK_BUDGET),
             network: watch::Sender::new(Arc::new(network)),
         }
     }
@@ -108,6 +127,15 @@ impl LiveSettings {
     /// The connection policy now; joins in progress keep the one they read.
     pub fn network(&self) -> Arc<NetworkSettings> {
         self.network.borrow().clone()
+    }
+
+    /// Most chunks one player may have requested but not yet received (0 is unlimited).
+    pub fn chunk_budget(&self) -> u32 {
+        self.chunk_budget.load(Relaxed)
+    }
+
+    pub fn set_chunk_budget(&self, chunks: u32) {
+        self.chunk_budget.store(chunks, Relaxed);
     }
 
     pub fn set_view_distance(&self, chunks: i32) {

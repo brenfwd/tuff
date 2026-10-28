@@ -1429,6 +1429,7 @@ impl PlayerSession {
         self.resend_reloaded_data();
         self.tick_advancements().await;
         self.send_chunk_batch();
+        self.refill_view().await;
         self.report_state().await;
         self.publish_selector_data();
     }
