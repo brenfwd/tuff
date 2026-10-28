@@ -39,6 +39,7 @@ enum Kind {
     Minecart,
     ChestBoat,
     Donkey,
+    Villager,
 }
 
 impl Kind {
@@ -55,7 +56,7 @@ impl Kind {
             Kind::Loom => "loom",
             Kind::Barrel => "barrel",
             Kind::Dropper => "dropper",
-            Kind::Minecart | Kind::ChestBoat | Kind::Donkey => return None,
+            Kind::Minecart | Kind::ChestBoat | Kind::Donkey | Kind::Villager => return None,
         })
     }
 
@@ -71,6 +72,7 @@ impl Kind {
             Kind::Minecart => Some(("chest_minecart", EntityType::ChestMinecart)),
             Kind::ChestBoat => Some(("oak_chest_boat", EntityType::OakChestBoat)),
             Kind::Donkey => Some(("donkey", EntityType::Donkey)),
+            Kind::Villager => Some(("villager", EntityType::Villager)),
             _ => None,
         }
     }
@@ -83,7 +85,7 @@ impl Kind {
             Kind::Donkey => 17,
             Kind::Dropper => 9,
             Kind::Hopper => 5,
-            Kind::Furnace | Kind::Anvil | Kind::Grindstone => 3,
+            Kind::Furnace | Kind::Anvil | Kind::Grindstone | Kind::Villager => 3,
             Kind::Crafting => 10,
             Kind::Smithing | Kind::Loom => 4,
         };
@@ -118,6 +120,7 @@ enum Event {
     Piston,
     Carried,
     Unloaded,
+    RiddenAway,
 }
 
 async fn start() -> TestServer {
@@ -288,6 +291,7 @@ impl Rig {
             "kill @e[type=chest_minecart]".to_owned(),
             "kill @e[type=oak_chest_boat]".to_owned(),
             "kill @e[type=donkey]".to_owned(),
+            "kill @e[type=villager]".to_owned(),
             "clear Opener".to_owned(),
             "clear Taker".to_owned(),
             format!("setblock {x} {y} {z} air"),
@@ -318,6 +322,17 @@ impl Rig {
                     self.say(&line).await;
                 }
             }
+        } else if matches!(kind, Kind::Villager) {
+            self.say(&format!(
+                "item replace entity Opener hotbar.1 with {ITEM} {}",
+                SLOT_ZERO + SLOT_ONE
+            ))
+            .await;
+            self.say(&format!(
+                "summon villager {}.5 {y} {z}.5 {{NoAI:1b,VillagerData:{{profession:\"minecraft:farmer\",level:1,type:\"minecraft:plains\"}},Offers:{{Recipes:[{{buy:{{id:\"minecraft:{ITEM}\",count:{SLOT_ZERO}}},sell:{{id:\"minecraft:emerald\",count:1}},maxUses:99}},{{buy:{{id:\"minecraft:{ITEM}\",count:{SLOT_ONE}}},sell:{{id:\"minecraft:gold_ingot\",count:1}},maxUses:99}}]}}}}",
+                x - 3
+            ))
+            .await;
         } else if let Some((name, _)) = kind.entity() {
             let at = if matches!(kind, Kind::Donkey) {
                 x - 3
@@ -351,7 +366,7 @@ impl Rig {
                 ITEM,
             );
         }
-        if let Some((name, _)) = kind.entity() {
+        if let Some((name, _)) = kind.entity().filter(|_| !matches!(kind, Kind::Villager)) {
             total += stacks_of(
                 &self
                     .say(&format!("data get entity @e[type={name},limit=1]"))
@@ -422,7 +437,7 @@ async fn open(bot: &Bot, kind: Kind) -> i32 {
             entity: id,
             off_hand: false,
             location: [0.0; 3],
-            sneaking: true,
+            sneaking: !matches!(kind, Kind::Villager),
         });
     } else {
         bot.send(Serverbound::UseItemOn {
@@ -439,6 +454,36 @@ async fn open(bot: &Bot, kind: Kind) -> i32 {
     )
     .await
     .unwrap_or_else(|_| panic!("{kind:?} did not open for {}", bot.name()))
+    .unwrap();
+    bot.state().window.unwrap()
+}
+
+/// Mounts the donkey and opens its inventory with the inventory key, as a
+/// riding client does.
+async fn open_ridden(rig: &Rig) -> i32 {
+    let bot = rig.bot();
+    until("the donkey is seen", || async {
+        bot.state()
+            .entities
+            .values()
+            .any(|seen| seen.kind == Some(EntityType::Donkey))
+    })
+    .await;
+    rig.say("ride Opener mount @e[type=donkey,limit=1]").await;
+    until("the player rides the donkey", || async {
+        rig.say("execute as Opener on vehicle if entity @s[type=donkey]")
+            .await
+            .contains("passed")
+    })
+    .await;
+    let before = bot.state().windows_opened;
+    bot.send(Serverbound::PlayerCommand(5));
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        bot.wait_for(|state| state.windows_opened > before && state.window.is_some()),
+    )
+    .await
+    .expect("the ridden donkey's inventory opens")
     .unwrap();
     bot.state().window.unwrap()
 }
@@ -522,9 +567,17 @@ async fn scenario(kind: Kind, event: Event) {
     let mut rig = Rig::new().await;
     rig.reset(kind).await;
     let mut players = vec!["Opener"];
-    let window = open(rig.bot(), kind).await;
+    let window = if matches!(event, Event::RiddenAway) {
+        open_ridden(&rig).await
+    } else {
+        open(rig.bot(), kind).await
+    };
     if kind.station() {
         fill_station(rig.bot(), window, kind);
+    }
+    if matches!(kind, Kind::Villager) {
+        rig.bot().send(Serverbound::SelectTrade(0));
+        rig.settle().await;
     }
     let [x, y, z] = CONTAINER;
     let mut taker = None;
@@ -601,6 +654,19 @@ async fn scenario(kind: Kind, event: Event) {
             rig.say("tp @e[type=donkey] 1.5 150 30.5").await;
             rig.settle().await;
         }
+        Event::RiddenAway => {
+            rig.bot().send(Serverbound::PlayerInput(0x20));
+            rig.settle().await;
+            rig.bot().send(Serverbound::PlayerInput(0));
+            until("the player has dismounted", || async {
+                !rig.say("execute as Opener on vehicle if entity @s[type=donkey]")
+                    .await
+                    .contains("passed")
+            })
+            .await;
+            rig.say("tp Opener 64.5 150 0.5").await;
+            rig.settle().await;
+        }
         Event::Piston => {
             for line in [
                 format!("setblock {} {y} {z} piston[facing=west]", x + 1),
@@ -620,6 +686,7 @@ async fn scenario(kind: Kind, event: Event) {
             | Event::Nether
             | Event::Carried
             | Event::Unloaded
+            | Event::RiddenAway
     ) {
         let watcher = rig.bot();
         let shut = tokio::time::timeout(
@@ -641,7 +708,7 @@ async fn scenario(kind: Kind, event: Event) {
         stale_clicks(bot, *theirs, kind);
     }
     match event {
-        Event::Away | Event::Nether | Event::Unloaded => {
+        Event::Away | Event::Nether | Event::Unloaded | Event::RiddenAway => {
             rig.say("execute in minecraft:overworld run tp Opener 0.5 150 0.5")
                 .await;
         }
@@ -718,6 +785,42 @@ scenarios! {
     donkey_led_far_away: Kind::Donkey, Event::Carried;
     donkey_disconnected_while_open: Kind::Donkey, Event::Disconnect;
     donkey_taken_by_a_second_player: Kind::Donkey, Event::SecondPlayer;
+    donkey_ridden_then_dismounted_away: Kind::Donkey, Event::RiddenAway;
+    villager_killed_while_trading: Kind::Villager, Event::Break;
+}
+
+/// Picks a trade, picks another one (the result is replaced), takes one
+/// result and closes: only the trade taken changes the counts.
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn merchant_result_replaced_by_another_trade() {
+    let mut rig = Rig::new().await;
+    rig.reset(Kind::Villager).await;
+    let window = open(rig.bot(), Kind::Villager).await;
+    let (_, hotbar) = Kind::Villager.layout();
+    for trade in [0, 1, 0, 1] {
+        rig.bot().send(Serverbound::SelectTrade(trade));
+        rig.settle().await;
+    }
+    rig.bot().send(click(rig.bot(), window, 2, 0, 0));
+    rig.settle().await;
+    rig.bot().send(click(rig.bot(), window, hotbar + 8, 0, 0));
+    rig.settle().await;
+    rig.bot().send(Serverbound::ContainerClose(window));
+    let total = rig.stable_total(Kind::Villager, &["Opener"]).await;
+    assert_eq!(
+        total,
+        GIVEN - SLOT_ONE,
+        "one trade paid {SLOT_ONE} diamonds"
+    );
+    for (item, made) in [("gold_ingot", 1), ("emerald", 0)] {
+        let held = carried(&rig.say(&format!("clear Opener {item} 0")).await);
+        assert_eq!(held, made, "{item} made by the trades");
+    }
+    let lost = LossScope::current().expect("scoped by the watchdog").lost();
+    assert_eq!(lost, 0, "merchant: items were lost");
+    rig.server.handle.shutdown().await.unwrap();
+    rig.server.task.await.unwrap().unwrap();
 }
 
 struct Station {
@@ -727,6 +830,8 @@ struct Station {
     inputs: &'static [i16],
     buttons: &'static [i32],
     withdraw: i16,
+    /// The first given item is an empty map, used first to draw one.
+    draws_map: bool,
 }
 
 /// Fills a station with items that make a result, changes the result
@@ -738,6 +843,16 @@ async fn result_replaced(station: Station) {
         rig.say(&format!(
             "item replace entity Opener hotbar.{n} with {stack}"
         ))
+        .await;
+    }
+    if station.draws_map {
+        rig.bot().send(Serverbound::UseItem {
+            off_hand: false,
+            sequence: 2,
+        });
+        until("the map is drawn", || async {
+            carried(&rig.say("clear Opener filled_map 0").await) == 1
+        })
         .await;
     }
     rig.say(&format!("setblock {x} {y} {z} {}", station.block))
@@ -782,15 +897,15 @@ macro_rules! result_scenarios {
 result_scenarios! {
     crafting_result_dropped_with_its_input: Station {
         block: "crafting_table", container: 10,
-        gives: &[("oak_log", "oak_log 1")], inputs: &[1], buttons: &[], withdraw: 1,
+        gives: &[("oak_log", "oak_log 1")], inputs: &[1], buttons: &[], withdraw: 1, draws_map: false,
     };
     stonecutter_result_dropped_with_its_input: Station {
         block: "stonecutter", container: 2,
-        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0], withdraw: 0,
+        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0], withdraw: 0, draws_map: false,
     };
     stonecutter_result_replaced_by_another_choice: Station {
         block: "stonecutter", container: 2,
-        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0, 1], withdraw: 0,
+        gives: &[("stone", "stone 1")], inputs: &[0], buttons: &[0, 1], withdraw: 0, draws_map: false,
     };
     smithing_result_dropped_with_its_addition: Station {
         block: "smithing_table", container: 4,
@@ -799,16 +914,21 @@ result_scenarios! {
             ("p", "diamond_pickaxe 1"),
             ("i", "netherite_ingot 1"),
         ],
-        inputs: &[0, 1, 2], buttons: &[], withdraw: 2,
+        inputs: &[0, 1, 2], buttons: &[], withdraw: 2, draws_map: false,
     };
     loom_result_replaced_by_another_pattern: Station {
         block: "loom", container: 4,
         gives: &[("b", "white_banner 1"), ("d", "red_dye 1")],
-        inputs: &[0, 1], buttons: &[0, 1], withdraw: 1,
+        inputs: &[0, 1], buttons: &[0, 1], withdraw: 1, draws_map: false,
     };
     grindstone_result_dropped_with_its_input: Station {
         block: "grindstone", container: 3,
         gives: &[("s", "iron_sword[enchantments={\"minecraft:sharpness\":3}] 1")],
-        inputs: &[0], buttons: &[], withdraw: 0,
+        inputs: &[0], buttons: &[], withdraw: 0, draws_map: false,
+    };
+    cartography_result_replaced_by_another_input: Station {
+        block: "cartography_table", container: 3,
+        gives: &[("m", "map 1"), ("p", "paper 1"), ("g", "glass_pane 1")],
+        inputs: &[0, 1, 1], buttons: &[], withdraw: 1, draws_map: true,
     };
 }

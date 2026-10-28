@@ -995,8 +995,9 @@ impl PlayerSession {
             MenuBacking::Station(_) | MenuBacking::Merchant(_) => {
                 let result = menu.kind.result_slot();
                 for (slot, stack) in menu.container.iter_mut().enumerate() {
-                    if result != Some(slot) {
-                        returned.extend(stack.take());
+                    match stack.take() {
+                        Some(shown) if result == Some(slot) => shown.burn(BurnReason::Preview),
+                        taken => returned.extend(taken),
                     }
                 }
             }

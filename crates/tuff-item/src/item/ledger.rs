@@ -954,6 +954,13 @@ mod tests {
         shulker
     }
 
+    #[cfg(not(debug_assertions))]
+    #[tuff_core::watchdog]
+    #[test]
+    fn per_operation_counters_are_nothing_in_release_builds() {
+        assert_eq!(std::mem::size_of::<conservation::OpCounter>(), 0);
+    }
+
     #[tuff_core::watchdog]
     #[test]
     fn counted_stacks_save_as_their_nbt() {

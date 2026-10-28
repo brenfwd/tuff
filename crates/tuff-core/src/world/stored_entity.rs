@@ -186,6 +186,18 @@ mod tests {
         assert_eq!(diff.lost, 0);
     }
 
+    #[cfg(not(debug_assertions))]
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_stored_entity_is_its_data_claim_and_spent_flag_in_release_builds() {
+        use std::mem::size_of;
+        assert_eq!(size_of::<OpCounter>(), 0);
+        assert_eq!(
+            size_of::<StoredEntity>(),
+            size_of::<(Compound, Option<EntityClaim>, bool)>()
+        );
+    }
+
     #[cfg(debug_assertions)]
     #[tuff_core::watchdog]
     #[test]
