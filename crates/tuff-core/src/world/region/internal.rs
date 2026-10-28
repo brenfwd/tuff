@@ -60,6 +60,7 @@ impl RegionActor {
                         self.anti_xray_halo_changed(pos, &old, &chunk);
                     }
                     None => {
+                        self.anti_xray_halo_arrived(pos, &chunk);
                         self.border.neighbourhood_cache = None;
                         self.border.halo_pending.insert(pos, self.sched.server_tick);
                         self.light.light_ops.push(LightOp::Add {

@@ -52,6 +52,7 @@ fn build(shared: &Shared, dimension: DimensionId) -> Option<Arc<Plan>> {
 pub(super) struct EncodeJob {
     plan: Arc<Plan>,
     around: [Option<Chunk>; 4],
+    closed: [bool; 4],
     cache: Box<Cache>,
 }
 
@@ -64,7 +65,14 @@ impl EncodeJob {
         block_entities: &mut Vec<(BlockPos, u32, Compound)>,
     ) -> (Arc<Chunk>, Box<Cache>) {
         let _span = tuff_timings::span!("anti_xray.obfuscate");
-        let (sent, _) = anti_xray::obfuscate(chunk, pos, &self.around, &self.plan, &mut self.cache);
+        let (sent, _) = anti_xray::obfuscate_closed(
+            chunk,
+            pos,
+            &self.around,
+            self.closed,
+            &self.plan,
+            &mut self.cache,
+        );
         block_entities
             .retain(|(at, _, _)| sent.get(at.x, at.y, at.z) == chunk.get(at.x, at.y, at.z));
         (Arc::new(sent), self.cache)
@@ -119,6 +127,10 @@ impl RegionActor {
                 .or_else(|| self.border.halo.get(&at))
                 .cloned()
         });
+        let closed = AROUND.map(|(dx, dz)| {
+            let at = ChunkPos::new(pos.x + dx, pos.z + dz);
+            !self.pos.contains(at) && !self.border.halo.contains_key(&at)
+        });
         let cache = self
             .columns
             .get_mut(&pos)
@@ -127,6 +139,7 @@ impl RegionActor {
         Some(EncodeJob {
             plan,
             around,
+            closed,
             cache,
         })
     }
@@ -184,6 +197,36 @@ impl RegionActor {
     pub(super) fn anti_xray_mining(&mut self, pos: BlockPos) {
         if self.chunk_io.anti_xray.plan.is_some() {
             self.reveal(pos, false);
+        }
+    }
+
+    /// A neighbouring region's border chunk arrived: the strip of ours
+    /// that was encoded without it is sent as it is where it now opens.
+    pub(super) fn anti_xray_halo_arrived(&mut self, pos: ChunkPos, new: &Chunk) {
+        if self.chunk_io.anti_xray.plan.is_none() {
+            return;
+        }
+        for (dx, dz) in AROUND {
+            let Some(column) = self.columns.get_mut(&ChunkPos::new(pos.x + dx, pos.z + dz)) else {
+                continue;
+            };
+            column.xray_cache = None;
+            column.version += 1;
+            column.packet = None;
+        }
+        let shape = new.shape();
+        for y in shape.min_y..shape.max_y() {
+            for i in 0..16 {
+                for (x, z, ox, oz) in [(0, i, -1, 0), (15, i, 1, 0), (i, 0, 0, -1), (i, 15, 0, 1)] {
+                    if anti_xray::occludes(new.get(x, y, z)) {
+                        continue;
+                    }
+                    let across = BlockPos::new(pos.x * 16 + x + ox, y, pos.z * 16 + z + oz);
+                    if self.columns.contains_key(&ChunkPos::of_block(across)) {
+                        self.reveal(BlockPos::new(pos.x * 16 + x, y, pos.z * 16 + z), true);
+                    }
+                }
+            }
         }
     }
 
