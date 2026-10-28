@@ -128,7 +128,8 @@ if ! command -v bun >/dev/null 2>&1 && [ -z "${BUN:-}" ]; then
 fi
 
 if [ -n "$JOBS" ]; then export CARGO_BUILD_JOBS=$JOBS; fi
-OUT=$ROOT/target/$PROFILE
+TARGET_DIR=${CARGO_TARGET_DIR:-$ROOT/target}
+OUT=$TARGET_DIR/$PROFILE
 if [ -n "$TARGET" ] && [ "$TARGET" != "$HOST" ]; then
     step "cross-building for $TARGET ($PROFILE)"
     if ! command -v zig >/dev/null 2>&1; then
@@ -141,7 +142,7 @@ if [ -n "$TARGET" ] && [ "$TARGET" != "$HOST" ]; then
         run cargo install --locked cargo-zigbuild
     fi
     run cargo zigbuild --profile "$PROFILE" --locked --target "$TARGET" --bin tuff
-    OUT=$ROOT/target/$TARGET/$PROFILE
+    OUT=$TARGET_DIR/$TARGET/$PROFILE
 else
     step "building ($PROFILE)"
     run cargo build --profile "$PROFILE" --locked --bin tuff
@@ -153,6 +154,6 @@ run install -m 755 "$OUT/tuff" "$PREFIX/tuff"
 
 if [ "$CLEAN" = 1 ]; then
     step "removing target/"
-    run rm -rf "$ROOT/target"
+    run rm -rf "$TARGET_DIR"
 fi
 step "done: run $PREFIX/tuff"
