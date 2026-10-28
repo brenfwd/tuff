@@ -88,6 +88,35 @@ impl State {
         })())
     }
 
+    pub(in crate::sandbox) fn host_spawn_custom_entity(
+        &mut self,
+        dimension: &str,
+        id: &str,
+        pos: Vec3,
+        yaw: f32,
+    ) -> value::Result<Result<Uuid, WorldError>> {
+        if !self.group_granted(Kind::WorldWrite) {
+            return Ok(Err(WorldError::NotGranted));
+        }
+        Ok((|| {
+            let (env, dimension) = self.dimension(dimension)?;
+            let at = [pos.x, pos.y, pos.z];
+            if at.iter().any(|v| !v.is_finite()) || !yaw.is_finite() {
+                return Err(WorldError::OutsideWorld);
+            }
+            let uuid_value: u128 = rand::random();
+            let nbt = crate::entities::custom_nbt(&env.shared.custom, id, at, yaw, uuid_value)
+                .ok_or(WorldError::InvalidState)?;
+            self.queue_entity_op(EntityOp::Spawn {
+                dimension,
+                nbt,
+                position: at,
+                fresh: false,
+            })?;
+            Ok(uuid(uuid_value))
+        })())
+    }
+
     pub(in crate::sandbox) fn host_remove_entity(
         &mut self,
         entity: Uuid,

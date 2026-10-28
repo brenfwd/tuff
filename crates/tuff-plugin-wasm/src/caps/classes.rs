@@ -65,6 +65,7 @@ pub const HOST_CALL_GROUPS: &[(&str, Option<Kind>)] = &[
     ("teleport-player", Some(Kind::PlayerWrite)),
     ("teleport-entity", Some(Kind::WorldWrite)),
     ("spawn-entity", Some(Kind::WorldWrite)),
+    ("spawn-custom-entity", Some(Kind::WorldWrite)),
     ("remove-entity", Some(Kind::WorldWrite)),
     ("entity-data", None),
     ("entity-merge", Some(Kind::WorldWrite)),

@@ -1781,6 +1781,10 @@ typedef struct tuff_plugin_types_entity_interact_t {
   tuff_plugin_types_uuid_t   entity;
   // Its type, like `minecraft:villager`.
   plugin_string_t   kind;
+  // The custom entity id when the target is a custom entity or one
+  // of its interaction parts (then `entity` and `kind` are the
+  // owner's).
+  plugin_option_string_t   custom;
   // Whether a filter cancelled the vanilla interaction.
   bool   cancelled;
 } tuff_plugin_types_entity_interact_t;
@@ -1809,6 +1813,10 @@ typedef struct tuff_plugin_types_player_attack_t {
   tuff_plugin_types_uuid_t   victim;
   // The victim's type, like `minecraft:zombie`.
   plugin_string_t   kind;
+  // The custom entity id when the victim is a custom entity or one
+  // of its interaction parts (then `victim` and `kind` are the
+  // owner's).
+  plugin_option_string_t   custom;
   // Whether a filter cancelled the attack.
   bool   cancelled;
 } tuff_plugin_types_player_attack_t;
@@ -2925,6 +2933,9 @@ extern bool tuff_plugin_host_teleport_entity(tuff_plugin_host_uuid_t *entity, pl
 // the entity is set up like a newly spawned mob. An unknown kind or
 // bad SNBT is invalid-state.
 extern bool tuff_plugin_host_spawn_entity(plugin_string_t *dimension, plugin_string_t *kind, tuff_plugin_host_vec3_t *pos, plugin_string_t *maybe_snbt, tuff_plugin_host_uuid_t *ret, tuff_plugin_host_world_error_t *err);
+// Spawns a registered custom entity (its stand-in with its parts) and
+// returns the stand-in's uuid. Unknown ids fail with `invalid-state`.
+extern bool tuff_plugin_host_spawn_custom_entity(plugin_string_t *dimension, plugin_string_t *id, tuff_plugin_host_vec3_t *pos, float yaw, tuff_plugin_host_uuid_t *ret, tuff_plugin_host_world_error_t *err);
 // Queues removing a non-player entity in a loaded region without
 // death effects or drops; one that is gone then is skipped.
 extern bool tuff_plugin_host_remove_entity(tuff_plugin_host_uuid_t *entity, tuff_plugin_host_world_error_t *err);

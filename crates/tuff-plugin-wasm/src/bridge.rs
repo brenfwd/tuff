@@ -307,6 +307,18 @@ pub(crate) fn entity_of(world: &dyn RegionWorld, entity: &dyn RegionEntity) -> E
     }
 }
 
+/// The entity a hit or use on `id` is reported for, its tags and its custom
+/// id: an interaction part resolves to the custom entity it rides.
+pub(crate) fn target_of(
+    world: &dyn RegionWorld,
+    id: i32,
+) -> Option<(Entity, Vec<String>, Option<String>)> {
+    let owner = world.entity(tuff_core::custom::entities::reported_entity(world, id))?;
+    let tags = owner.entity.base().tags.clone();
+    let custom = tuff_core::custom::entity_id(&tags).map(str::to_owned);
+    Some((entity_of(world, &*owner.entity), tags, custom))
+}
+
 /// Spawns, deaths and damage of non-player entities, from every region.
 pub struct Entities;
 

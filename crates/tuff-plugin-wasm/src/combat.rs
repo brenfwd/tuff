@@ -16,7 +16,7 @@ use tuff_vanilla_data::damage_type::DamageType;
 use tuff_vanilla_data::registry::EntityType;
 use tuff_world_model::pos::ChunkPos;
 
-use crate::bridge::{entity_of, player};
+use crate::bridge::{player, target_of};
 use crate::host::WasmHost;
 use crate::portal::qualified;
 use crate::sandbox::{uuid, uuid_of};
@@ -257,7 +257,7 @@ async fn attack(session: &mut PlayerSession, target: i32) -> Verdict {
     if filters.is_empty() && !reporting {
         return Verdict::Allow;
     }
-    let (kind, at, uuid, tags) =
+    let (kind, at, uuid, tags, custom) =
         if let Some((at, handle)) = session.view.entities.visible_player(target) {
             let region = ChunkPos::of_position(at).region();
             let index = session.shared.players.borrow().clone();
@@ -268,35 +268,33 @@ async fn attack(session: &mut PlayerSession, target: i32) -> Verdict {
             else {
                 return Verdict::Allow;
             };
-            (EntityType::Player, at, uuid(victim.uuid), Vec::new())
+            (
+                EntityType::Player.name().to_owned(),
+                at,
+                uuid(victim.uuid),
+                Vec::new(),
+                None,
+            )
         } else {
-            let Some((kind, chunk, at)) = session.view.entities.visible_entity(target) else {
+            let Some((_, chunk, at)) = session.view.entities.visible_entity(target) else {
                 return Verdict::Allow;
             };
             let Some(region) = session.region(chunk.region()).await else {
                 return Verdict::Allow;
             };
-            let Some(Some((entity, tags))) = region
-                .ask(move |world| {
-                    world.entity(target).map(|tracked| {
-                        (
-                            entity_of(&*world, &*tracked.entity),
-                            tracked.entity.base().tags.clone(),
-                        )
-                    })
-                })
-                .await
+            let Some(Some((entity, tags, custom))) =
+                region.ask(move |world| target_of(&*world, target)).await
             else {
                 return Verdict::Allow;
             };
-            (kind, at, entity.uuid, tags)
+            (entity.kind, at, entity.uuid, tags, custom)
         };
     let held = session.inventory.slots()[Inventory::hotbar_slot(session.inventory.selected())]
         .as_ref()
         .map(|stack| stack.item().name());
     let dimension = session.shared.dimensions.get(session.dimension).key.clone();
     let hit = Attack {
-        kind: kind.name(),
+        kind: &kind,
         tags: &tags,
         held,
         attacker: session.profile.id,
@@ -310,7 +308,8 @@ async fn attack(session: &mut PlayerSession, target: i32) -> Verdict {
             Event::PlayerAttack(PlayerAttack {
                 player: who.to_wit(),
                 victim: uuid,
-                kind: kind.name().to_owned(),
+                kind,
+                custom,
                 cancelled,
             }),
             Some(who),

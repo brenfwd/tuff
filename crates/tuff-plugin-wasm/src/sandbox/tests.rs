@@ -1407,7 +1407,7 @@ fn every_host_call_is_classified_gated_or_open() {
             .filter(|(_, group)| *group == Some(kind))
             .count()
     };
-    assert_eq!(gated(crate::caps::Kind::WorldWrite), 11);
+    assert_eq!(gated(crate::caps::Kind::WorldWrite), 12);
     assert_eq!(gated(crate::caps::Kind::CrossPlugin), 2);
     assert_eq!(gated(crate::caps::Kind::Panel), 3);
 }
@@ -1462,9 +1462,35 @@ fn ungranted_groups_close_their_host_calls() {
             ),
             Ok(Err(WorldError::NotGranted))
         );
+        assert_eq!(
+            state.host_spawn_custom_entity(
+                "overworld",
+                "ex:golem",
+                Vec3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0
+                },
+                0.0
+            ),
+            Ok(Err(WorldError::NotGranted))
+        );
     }
     let mut state = closed_state();
     grant_groups(&mut state, &["world-write"]);
+    assert_eq!(
+        state.host_spawn_custom_entity(
+            "overworld",
+            "ex:golem",
+            Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0
+            },
+            0.0
+        ),
+        Ok(Err(WorldError::UnknownDimension))
+    );
     assert_eq!(
         state.host_kill_player(player),
         Ok(Err(WorldError::NotGranted))

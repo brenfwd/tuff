@@ -165,6 +165,17 @@ class World {
         return spawn_with(kind, at, &snbt);
     }
 
+    // Spawns the registered custom entity `id`, facing `yaw`.
+    WorldOutcome<EntityRef> spawn_custom(Str id, Vec3 at, float yaw) const {
+        raw::tuff_plugin_host_world_error_t e = {};
+        Str dim = key_.view();
+        Uuid out = {0, 0};
+        if (!raw::tuff_plugin_host_spawn_custom_entity(&dim, &id, &at, yaw, &out, &e)) {
+            return WorldOutcome<EntityRef>(detail::world_error(e));
+        }
+        return WorldOutcome<EntityRef>(EntityRef{out});
+    }
+
   private:
     WorldOutcome<Unit> set(BlockPos at, Str state, raw::tuff_plugin_host_set_flags_t flags) const {
         raw::tuff_plugin_host_world_error_t e = {};

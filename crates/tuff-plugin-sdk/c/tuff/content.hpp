@@ -98,6 +98,12 @@ class AssetDecl {
     raw::tuff_plugin_types_asset_decl_t d_;
 };
 
+// A composed part of a custom entity: an entity type and its SNBT data.
+struct Part {
+    Str kind;
+    Str data;
+};
+
 // Everything declare_content adds.
 class Content {
   public:
@@ -112,6 +118,19 @@ class Content {
         raw::tuff_plugin_types_entity_decl_t e{};
         detail::put_str(e.id, id);
         detail::put_str(e.stand_in, stand_in);
+        push(out_->entities.ptr, out_->entities.len, e);
+    }
+    // Like entity(id, stand_in) with `count` composed parts.
+    void entity(Str id, Str stand_in, const Part *parts, size_t count) {
+        raw::tuff_plugin_types_entity_decl_t e{};
+        detail::put_str(e.id, id);
+        detail::put_str(e.stand_in, stand_in);
+        for (size_t i = 0; i < count; ++i) {
+            raw::tuff_plugin_types_part_decl_t p{};
+            detail::put_str(p.kind, parts[i].kind);
+            detail::put_str(p.data, parts[i].data);
+            push(e.parts.ptr, e.parts.len, p);
+        }
         push(out_->entities.ptr, out_->entities.len, e);
     }
     // A crafting recipe as data pack JSON.

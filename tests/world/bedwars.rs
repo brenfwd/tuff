@@ -324,6 +324,7 @@ async fn a_game_is_queued_built_played_decided_and_reset() {
             player: carrying.to_wit(),
             entity: uuid(500),
             kind: "minecraft:villager".into(),
+            custom: None,
             cancelled: true,
         }),
         &carrying,

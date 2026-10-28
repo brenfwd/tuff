@@ -310,10 +310,46 @@ pub async fn data(shared: Arc<Shared>, uuid: u128) -> Option<Compound> {
 }
 
 /// The saved form for a new entity of `kind` with a fresh uuid.
+/// The saved stand-in and parts of custom entity `id` with `uuid` set.
+pub fn custom_nbt(
+    content: &tuff_core::custom::CustomContent,
+    id: &str,
+    position: [f64; 3],
+    yaw: f32,
+    uuid: u128,
+) -> Option<Compound> {
+    let mut nbt = content.spawn_entity_nbt(id, position, yaw)?;
+    nbt.insert("UUID", Tag::uuid(uuid));
+    Some(nbt)
+}
+
 pub fn fresh_nbt(kind: &str, data: Option<Compound>, uuid: u128) -> (Compound, bool) {
     let fresh = data.is_none();
     let mut nbt = data.unwrap_or_default();
     nbt.insert("id", Tag::String(kind.to_owned()));
     nbt.insert("UUID", Tag::uuid(uuid));
     (nbt, fresh)
+}
+
+#[cfg(test)]
+mod custom_entity_tests {
+    use super::*;
+    use tuff_core::custom::{CustomEntityDef, Definitions};
+    use tuff_vanilla_data::registry::EntityType;
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn custom_entity_spawn_tags_the_stand_in_with_the_uuid() {
+        let mut defs = Definitions::default();
+        defs.register_entity(
+            "ex",
+            CustomEntityDef::new("ex:golem", EntityType::IronGolem),
+        )
+        .unwrap();
+        let content = defs.resolve().unwrap();
+        let nbt = custom_nbt(&content, "ex:golem", [1.0, 2.0, 3.0], 0.0, 7).unwrap();
+        assert_eq!(nbt.get_str("id"), Some("minecraft:iron_golem"));
+        assert!(nbt.get("UUID").is_some());
+        assert!(custom_nbt(&content, "ex:none", [0.0; 3], 0.0, 7).is_none());
+    }
 }

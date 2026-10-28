@@ -120,3 +120,117 @@ async fn the_parts_go_away_with_a_dead_custom_entity() {
     }
     world.shutdown().await;
 }
+
+async fn spawn_golem(world: &TestWorld, region: &RegionHandle, at: [f64; 3]) {
+    let mut nbt = world
+        .shared
+        .custom
+        .spawn_entity_nbt(GOLEM, at, 0.0)
+        .expect("registered");
+    nbt.insert("NoAI", true);
+    let (reply, summoned) = oneshot::channel();
+    region
+        .request(RegionRequest::Summon {
+            nbt,
+            position: at,
+            fresh: false,
+            reply,
+        })
+        .await;
+    assert!(summoned.await.unwrap());
+    world.ticks(3).await;
+}
+
+async fn ids_of(region: &RegionHandle, kinds: [EntityType; 2]) -> (i32, i32) {
+    region
+        .ask(move |world| {
+            let first = world.entity_ids_of(&kinds[..1])[0];
+            let second = world.entity_ids_of(&kinds[1..])[0];
+            (first, second)
+        })
+        .await
+        .expect("region answers")
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn attacking_the_interaction_part_reports_the_owner() {
+    let dir = TestDir::new();
+    let world = TestWorld::start_with_features(dir.path(), vec![Box::new(Golems)]);
+    let pos = ChunkPos::new(0, 0);
+    let region = world.region(pos.region()).await;
+    let _watcher = watch(&region, pos).await;
+    spawn_golem(&world, &region, [8.5, 100.0, 8.5]).await;
+    let (golem, part) = ids_of(&region, [EntityType::IronGolem, EntityType::Interaction]).await;
+    let (reported, other) = region
+        .ask(move |world| {
+            (
+                tuff_core::custom::entities::reported_entity(world, part),
+                tuff_core::custom::entities::reported_entity(world, golem),
+            )
+        })
+        .await
+        .unwrap();
+    assert_eq!(reported, golem);
+    assert_eq!(other, golem);
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn parts_of_plain_vehicles_are_not_redirected() {
+    let dir = TestDir::new();
+    let world = TestWorld::start_with_features(dir.path(), vec![Box::new(Golems)]);
+    let pos = ChunkPos::new(0, 0);
+    let region = world.region(pos.region()).await;
+    let _watcher = watch(&region, pos).await;
+    spawn_golem(&world, &region, [8.5, 100.0, 8.5]).await;
+    let (golem, part) = ids_of(&region, [EntityType::IronGolem, EntityType::Interaction]).await;
+    let display = region
+        .ask(|world| world.entity_ids_of(&[EntityType::ItemDisplay])[0])
+        .await
+        .unwrap();
+    let reported = region
+        .ask(move |world| tuff_core::custom::entities::reported_entity(world, display))
+        .await
+        .unwrap();
+    assert_eq!(reported, display);
+    assert_ne!(part, golem);
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_custom_entity_with_parts_survives_save_and_reload() {
+    let dir = TestDir::new();
+    let pos = ChunkPos::new(0, 0);
+    {
+        let world = TestWorld::start_with_features(dir.path(), vec![Box::new(Golems)]);
+        let region = world.region(pos.region()).await;
+        let _watcher = watch(&region, pos).await;
+        spawn_golem(&world, &region, [8.5, 100.0, 8.5]).await;
+        world.shutdown().await;
+    }
+    let world = TestWorld::start_with_features(dir.path(), vec![Box::new(Golems)]);
+    let region = world.region(pos.region()).await;
+    let _watcher = watch(&region, pos).await;
+    world.ticks(3).await;
+    let (reply, answer) = oneshot::channel();
+    region.request(RegionRequest::Entities { reply }).await;
+    let all = answer.await.unwrap();
+    let golem = all
+        .iter()
+        .find(|e| e.kind == EntityType::IronGolem)
+        .expect("the stand-in");
+    assert_eq!(entity_id(&golem.tags), Some(GOLEM));
+    for kind in [EntityType::ItemDisplay, EntityType::Interaction] {
+        assert_eq!(all.iter().filter(|e| e.kind == kind).count(), 1);
+    }
+    let (golem_id, part) = ids_of(&region, [EntityType::IronGolem, EntityType::Interaction]).await;
+    let reported = region
+        .ask(move |world| tuff_core::custom::entities::reported_entity(world, part))
+        .await
+        .unwrap();
+    assert_eq!(reported, golem_id);
+    world.shutdown().await;
+}

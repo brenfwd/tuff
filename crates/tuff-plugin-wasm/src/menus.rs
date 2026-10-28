@@ -24,7 +24,7 @@ use tuff_item::item::{AnyItem, ItemPicture, ItemSnapshot, ItemStack};
 use tuff_nbt::{Compound, Tag};
 
 use crate::abi;
-use crate::bridge::{entity_of, player};
+use crate::bridge::{player, target_of};
 use crate::host::WasmHost;
 use crate::wit::bindings::types::{
     EntityInteract, Event, EventKinds, MenuClick, MenuClickKind, MenuClose, MenuItem,
@@ -569,16 +569,8 @@ async fn interact(session: &mut PlayerSession, target: i32, off_hand: bool) -> V
     let Some(region) = session.region(chunk.region()).await else {
         return Verdict::Allow;
     };
-    let Some(Some((entity, tags))) = region
-        .ask(move |world| {
-            world.entity(target).map(|tracked| {
-                (
-                    entity_of(&*world, &*tracked.entity),
-                    tracked.entity.base().tags.clone(),
-                )
-            })
-        })
-        .await
+    let Some(Some((entity, tags, custom))) =
+        region.ask(move |world| target_of(&*world, target)).await
     else {
         return Verdict::Allow;
     };
@@ -592,6 +584,7 @@ async fn interact(session: &mut PlayerSession, target: i32, off_hand: bool) -> V
                 player: who.to_wit(),
                 entity: entity.uuid,
                 kind: entity.kind,
+                custom,
                 cancelled,
             }),
             Some(who),
