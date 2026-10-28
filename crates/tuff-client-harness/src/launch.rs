@@ -116,7 +116,14 @@ pub fn build_hook(java: &Path, classpath: &[PathBuf], cache: &Path) -> Result<Pa
         .arg(std::env::join_paths(classpath).context("join classpath")?)
         .arg(HOOK_SOURCE)
         .output()
-        .with_context(|| format!("run {}", javac.display()))?;
+        .with_context(|| format!("run {}", javac.display()));
+    let out = match out {
+        Ok(out) => out,
+        Err(e) => {
+            let _ = fs::remove_dir_all(&tmp);
+            return Err(e);
+        }
+    };
     if !out.status.success() {
         let _ = fs::remove_dir_all(&tmp);
         anyhow::bail!("javac failed: {}", String::from_utf8_lossy(&out.stderr));
