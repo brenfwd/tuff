@@ -9,7 +9,11 @@
 #
 # Usage: TUFF_ACCEPT_MOJANG_EULA=1 scripts/vanilla-parity-run.sh SCRIPT [OUT_DIR]
 #   SCRIPT: console commands, one per line; `sleep N` pauses N seconds, `#`
-#           starts a comment. `stop` is sent at the end.
+#           starts a comment. `stop` is sent at the end. Player-bound triggers
+#           (/raid, /debugpath) are written `execute as @p at @p run ...`: the
+#           unattended vanilla console has no player, so `@p` selects nothing
+#           and the line is a no-op there, while the tuff replay rewrites `@p`
+#           to its attached bot, so those triggers run on the tuff side only.
 # Env: WORLD=<dir> world to copy in (default: fresh world from SEED),
 #      SEED, VANILLA_FLAGS="NAME ..." extra MC_DEBUG_<NAME> flags, STAGES="surface
 #      carvers structures features ore_veins blending fluid_generation" worldgen
@@ -17,7 +21,9 @@
 #      matching tuff.worldgen.debug.disable* config keys to
 #      OUT_DIR/tuff-stage-config.txt for the tuff side), TIMEOUT (default 300), VANILLA_CACHE_DIR,
 #      VANILLA_JAVA, TUFF_SIDE=1 also replays SCRIPT against an in-process tuff
-#      (tests/server/parity_run.rs) to write OUT_DIR/tuff-events.txt.
+#      (tests/server/parity_run.rs) to write OUT_DIR/tuff-events.txt and the
+#      forceloaded chunk set to OUT_DIR/tuff-tickets.txt (diffed as a set
+#      against vanilla's forced-ticket log lines).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -82,5 +88,7 @@ if [[ -n "${TUFF_SIDE:-}" ]]; then
 fi
 
 if [[ -f "$out/tuff-events.txt" ]]; then
-    cargo run -q -p tuff-bot --bin parity-diff -- "$out/events.txt" "$out/tuff-events.txt" || true
+    diff_args=("$out/events.txt" "$out/tuff-events.txt")
+    if [[ -f "$out/tuff-tickets.txt" ]]; then diff_args+=("$out/tuff-tickets.txt"); fi
+    cargo run -q -p tuff-bot --bin parity-diff -- "${diff_args[@]}" || true
 fi

@@ -5,3 +5,7 @@ setblock 0 100 0 minecraft:stone
 setblock 0 100 0 minecraft:air destroy
 debugmobspawning minecraft:zombie
 sleep 5
+# Player-bound: no-op on the unattended vanilla console, runs as the bot on tuff.
+execute as @p at @p run debugpath
+execute as @p at @p run raid test 1
+sleep 3

@@ -4,6 +4,7 @@
 //! bot attached and writes `tuff-events.txt` for `parity-diff`.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::common;
@@ -11,6 +12,8 @@ use crate::common;
 use common::TempDir;
 use tuff::Server;
 use tuff_bot::{Bot, BotConfig, parity};
+use tuff_storage::backend::WorldBackend;
+use tuff_storage::chunk_tickets::ChunkTickets;
 
 fn script_steps(text: &str) -> Vec<Step> {
     text.lines()
@@ -25,6 +28,14 @@ fn script_steps(text: &str) -> Vec<Step> {
             }
         })
         .collect()
+}
+
+fn bind_player(command: &str) -> String {
+    if command.starts_with("execute ") {
+        command.replace("@p", "Parity")
+    } else {
+        command.to_owned()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,6 +64,11 @@ fn script_text_parses_into_steps_and_overrides() {
         ]
     );
     assert_eq!(
+        bind_player("execute as @p at @p run raid test 1"),
+        "execute as Parity at Parity run raid test 1"
+    );
+    assert_eq!(bind_player("say @p"), "say @p");
+    assert_eq!(
         stage_overrides("tuff.worldgen.debug.disableSurface=true\n"),
         [("tuff.worldgen.debug.disableSurface".into(), "true".into())]
     );
@@ -77,6 +93,9 @@ async fn replay_parity_script_and_write_tuff_events() {
         .unwrap_or(1);
 
     let instance = TempDir::new();
+    let backend = Arc::new(
+        tuff_storage::sqlite::SqliteBackend::open(instance.path().join("world.mcserver")).unwrap(),
+    );
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())
@@ -85,6 +104,7 @@ async fn replay_parity_script_and_write_tuff_events() {
         .whitelist(false)
         .view_distance(2)
         .seed(seed)
+        .storage(backend.clone())
         .config_overrides(overrides)
         .build();
     let handle = server.handle();
@@ -105,13 +125,27 @@ async fn replay_parity_script_and_write_tuff_events() {
         match step {
             Step::Sleep(secs) => tokio::time::sleep(Duration::from_secs_f64(secs)).await,
             Step::Command(command) => {
-                handle.run_command(&command).await.unwrap();
+                let reply = handle.run_command(bind_player(&command)).await.unwrap();
+                println!("{command} -> {reply:?}");
             }
         }
     }
     tokio::time::sleep(Duration::from_secs(1)).await;
     let events = bot.with_state(|state| parity::normalize_kept(&state.kept_order));
     std::fs::write(out.join("tuff-events.txt"), events.join("\n") + "\n").unwrap();
+
+    handle.run_command("save-all flush").await.unwrap();
+    let forced = ChunkTickets::load(backend.documents(), "minecraft:overworld")
+        .expect("saved chunk tickets")
+        .forced
+        .iter()
+        .map(|p| (p.x, p.z))
+        .collect::<Vec<_>>();
+    std::fs::write(
+        out.join("tuff-tickets.txt"),
+        parity::normalize_tickets(&forced).join("\n") + "\n",
+    )
+    .unwrap();
 
     drop(bot);
     handle.shutdown().await.unwrap();
