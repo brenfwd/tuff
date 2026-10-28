@@ -718,3 +718,69 @@ async fn parity_tnt_knockback_repeated() {
     rig.verdict("tnt_knockback").await;
     rig.finish("tnt_knockback.csv").await;
 }
+
+#[tuff_core::watchdog]
+#[ignore = "launches a real vanilla client against a vanilla server (scripts/vanilla-parity-run.sh)"]
+#[tokio::test(flavor = "multi_thread")]
+async fn vanilla_side() {
+    if !enabled() {
+        return;
+    }
+    let Ok(addr) = std::env::var("PARITY_SERVER_ADDR") else {
+        eprintln!("skipped: set PARITY_SERVER_ADDR (host:port of the vanilla server)");
+        return;
+    };
+    let user = std::env::var("PARITY_USERNAME").unwrap_or_else(|_| "Parity".into());
+    let sentinel = std::path::PathBuf::from(
+        std::env::var("PARITY_SENTINEL")
+            .expect("PARITY_SENTINEL: file whose existence ends the run"),
+    );
+    let ready = std::env::var("PARITY_READY")
+        .ok()
+        .map(std::path::PathBuf::from);
+    let platform = Platform::current();
+    let cache = cache_dir();
+    let files = tokio::task::spawn_blocking({
+        let platform = platform.clone();
+        let cache = cache.clone();
+        move || {
+            ensure_client(
+                &HttpSource::new()?,
+                &cache,
+                tuff_vanilla_data::version::NAME,
+                AssetProfile::from_env()?,
+                &platform,
+            )
+        }
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    let java = resolve_java(&cache, &files.meta.java_version.component).unwrap();
+    let run = RunDir::create(&default_run_base(), "vanilla-side").unwrap();
+    let client = launch(
+        &LaunchSpec {
+            java: &java,
+            files: &files,
+            run: &run,
+            username: &user,
+            address: &addr,
+            platform: &platform,
+            hook_args: &[],
+            hook_dir: None,
+        },
+        "vanilla-side",
+        default_lock_path(),
+    )
+    .await
+    .unwrap();
+    until(&client, "join", |s| s.connected && s.screen == "none").await;
+    if let Some(ready) = ready {
+        std::fs::write(ready, b"joined").unwrap();
+    }
+    let deadline = Instant::now() + Duration::from_secs(900);
+    while !sentinel.exists() && Instant::now() < deadline && !client.has_exited().await {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    client.shutdown().await;
+}
