@@ -102,7 +102,7 @@ impl Default for NetworkSettings {
             allow_flight: false,
             log_ips: true,
             idle_timeout: None,
-            rate_limit: 0,
+            rate_limit: 400,
             pre_login_max_connections: 512,
             pre_login_max_per_ip: 8,
             pre_login_timeout: std::time::Duration::from_secs(30),

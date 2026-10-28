@@ -1144,6 +1144,26 @@ fn write_hashed_slot(w: &mut PacketWriter, slot: Option<&HashedSlot>) {
 mod tests {
     use super::*;
 
+    fn sign_update(line: &str) -> Bytes {
+        let mut w = PacketWriter::new();
+        w.write_var_int(ServerId::SignUpdate.id());
+        w.write_long(0);
+        w.write_bool(true);
+        for _ in 0..4 {
+            w.write_string(line);
+        }
+        w.into_bytes()
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn sign_lines_are_bounded_in_utf16_units() {
+        assert!(Serverbound::decode(sign_update(&"a".repeat(384))).is_ok());
+        assert!(Serverbound::decode(sign_update(&"a".repeat(385))).is_err());
+        assert!(Serverbound::decode(sign_update(&"\u{1F600}".repeat(192))).is_ok());
+        assert!(Serverbound::decode(sign_update(&"\u{1F600}".repeat(193))).is_err());
+    }
+
     fn signed_command(signatures: &[(&str, usize)], trailing: usize) -> Bytes {
         let mut w = PacketWriter::new();
         w.write_var_int(ServerId::ChatCommandSigned.id());

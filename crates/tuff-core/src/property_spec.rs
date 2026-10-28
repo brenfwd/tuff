@@ -237,7 +237,7 @@ pub const PROPERTIES: &[Property] = &[
     prop("prevent-proxy-connections", BOOL, "false", LIVE),
     prop("pvp", BOOL, "true", LIVE),
     prop("query.port", U16, "25565", QUERY),
-    prop("rate-limit", ANY, "0", LIVE),
+    prop("rate-limit", ANY, "400", LIVE),
     secret(prop("rcon.password", TEXT, "", RCON)),
     prop("rcon.port", U16, "25575", RCON),
     prop(

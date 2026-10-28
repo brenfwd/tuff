@@ -654,6 +654,72 @@ impl PlayerSession {
         }
     }
 
+    /// Takes back a tool a block click wore by `wear` points while it was
+    /// with the region: wears that stack, not whatever the hand holds now.
+    pub async fn return_worn_tool(&mut self, slot: usize, mut stack: ItemStack, wear: u32) {
+        let item = stack.item();
+        let mut before = tuff_item::item::ItemSnapshot::of(&stack);
+        let damage_before = before.damage();
+        let outcome = if self.is_dead() || self.mode.abilities.instabuild {
+            Hurt::Unchanged
+        } else {
+            stack.hurt(wear, &mut self.rng)
+        };
+        match outcome {
+            Hurt::Unchanged => {}
+            Hurt::Damaged => {
+                let now = tuff_item::item::ItemSnapshot::of(&stack);
+                let delta = damage_before as i32 - now.damage() as i32;
+                self.fire(
+                    crate::world::advancement::trigger::Event::ItemDurabilityChanged {
+                        item: now.any(),
+                        delta,
+                    },
+                );
+            }
+            Hurt::Broken => {
+                let max = before.max_damage().unwrap_or(damage_before);
+                before.edit_components(|components| components.damage = Some(max));
+                let delta = damage_before as i32 - max as i32;
+                self.fire(
+                    crate::world::advancement::trigger::Event::ItemDurabilityChanged {
+                        item: before.any(),
+                        delta,
+                    },
+                );
+                self.item_action_hooks(
+                    super::hooks::ItemAction::Broken,
+                    tuff_item::item::ItemPicture::new(item, 1).any(),
+                );
+                self.progress
+                    .stats
+                    .award(Stat::item(StatType::Broken, item), 1);
+                let event = packets([framed(&play::EntityEvent {
+                    entity_id: self.id,
+                    status: if slot == Inventory::OFFHAND_SLOT {
+                        play::entity_event::OFF_HAND_BREAK
+                    } else {
+                        play::entity_event::MAIN_HAND_BREAK
+                    },
+                })]);
+                self.broadcast_entity(event, true).await;
+            }
+        }
+        if !stack.is_empty() {
+            let leftover = if self.is_dead() {
+                Some(stack)
+            } else {
+                self.inventory.put_back(slot, stack)
+            };
+            if let Some(leftover) = leftover {
+                let at = self.pose.position;
+                self.spawn_item(leftover, at, [0.0; 3], player::THROWN_PICKUP_DELAY)
+                    .await;
+            }
+        }
+        self.send_inventory();
+    }
+
     /// Hurts this player through the registered damage rules, or with no
     /// rules by taking `amount` off the health.
     pub async fn hurt(&mut self, source: DamageSource, amount: f32) -> HurtResult {

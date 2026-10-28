@@ -382,6 +382,15 @@ impl Bot {
         self.tasks[1].abort();
     }
 
+    /// Sends everything queued, then closes the connection.
+    pub async fn close(&mut self) {
+        self.tasks[1].abort();
+        let (closed, _) = mpsc::unbounded_channel();
+        drop(std::mem::replace(&mut self.out, closed));
+        let _ = (&mut self.tasks[1]).await;
+        let _ = (&mut self.tasks[0]).await;
+    }
+
     pub fn name(&self) -> &str {
         &self.config.name
     }

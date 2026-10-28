@@ -85,15 +85,24 @@ impl PlayerSession {
         }
         if stacks.is_empty()
             && !creative
-            && self
-                .inventory
-                .hand(off_hand)
-                .is_some_and(|held| held.max_damage().is_none())
-            && let Some(one) = ItemStack::take_from(self.inventory.slot_mut(slot), 1)
+            && let Some(paying) = self.inventory.hand(off_hand)
         {
-            return PlaceOffer::costing(creative, slot, one);
+            let count = if self.is_vault_key(block, held) {
+                paying.count()
+            } else {
+                1
+            };
+            if let Some(taken) = ItemStack::take_from(self.inventory.slot_mut(slot), count) {
+                return PlaceOffer::costing(creative, slot, taken);
+            }
         }
         PlaceOffer::new(creative, stacks)
+    }
+
+    /// Whether `held` clicked on `block` is a key a vault may take several of.
+    fn is_vault_key(&self, block: Option<BlockState>, held: Item) -> bool {
+        matches!(held, Item::TrialKey | Item::OminousTrialKey)
+            && block.is_some_and(|state| state.block() == Block::Vault)
     }
 
     /// Whether the hand holds a custom item that places blocks from its
