@@ -37,6 +37,38 @@ pub const ENABLED_KEYS: [(&str, &str); 3] = [
     (THE_NETHER, "tuff.world.dimensions.nether.enabled"),
     (THE_END, "tuff.world.dimensions.end.enabled"),
 ];
+/// The settings that make players above a height take void damage, by
+/// vanilla dimension key: (height, amount).
+const CEILING_KEYS: [(&str, &str, &str); 3] = [
+    (
+        OVERWORLD,
+        "tuff.world.dimensions.overworld.ceilingDamage.height",
+        "tuff.world.dimensions.overworld.ceilingDamage.amount",
+    ),
+    (
+        THE_NETHER,
+        "tuff.world.dimensions.nether.ceilingDamage.height",
+        "tuff.world.dimensions.nether.ceilingDamage.amount",
+    ),
+    (
+        THE_END,
+        "tuff.world.dimensions.end.ceilingDamage.height",
+        "tuff.world.dimensions.end.ceilingDamage.amount",
+    ),
+];
+pub const CEILING_DEFAULT_AMOUNT: i64 = 4;
+
+/// The height at or above which survival players in `key` are hurt and the
+/// damage per hurt tick, or None when the ceiling is off.
+pub fn ceiling_damage(settings: &crate::config::ConfigStore, key: &str) -> Option<(f64, f32)> {
+    let (_, height, amount) = CEILING_KEYS
+        .iter()
+        .find(|(dimension, ..)| *dimension == key)?;
+    let height = settings.get_int(height).filter(|height| *height > 0)?;
+    let amount = settings.get_int(amount).unwrap_or(CEILING_DEFAULT_AMOUNT);
+    Some((height as f64, amount as f32))
+}
+
 /// The operator's spawn dimension, over any feature's claim.
 pub const SPAWN_DIMENSION_KEY: &str = "tuff.world.spawnDimension";
 
@@ -54,6 +86,34 @@ pub fn config_keys() -> Vec<crate::config::Key> {
             )
         })
         .collect();
+    for (dimension, height, amount) in CEILING_KEYS {
+        keys.push(
+            Key::new(
+                height,
+                Value::Int(0),
+                &format!(
+                    "Players in {dimension} at or above this y take void damage while in survival or adventure; 0 is off (for example 128 for a nether roof)"
+                ),
+            )
+            .validated(|value| match value {
+                Value::Int(n) if *n >= 0 => Ok(()),
+                _ => Err("must be 0 or a height".to_owned()),
+            }),
+        );
+        keys.push(
+            Key::new(
+                amount,
+                Value::Int(CEILING_DEFAULT_AMOUNT),
+                &format!(
+                    "Health points of damage per hurt tick above the {dimension} ceiling height"
+                ),
+            )
+            .validated(|value| match value {
+                Value::Int(n) if *n >= 1 => Ok(()),
+                _ => Err("must be at least 1".to_owned()),
+            }),
+        );
+    }
     keys.push(
         Key::new(
             SPAWN_DIMENSION_KEY,
@@ -712,6 +772,20 @@ mod tests {
         writers[overworld.id.index()].send_replace(Border::fixed([0.0, 0.0], 10.0));
         assert!(!overworld.contains_block(BlockPos::new(49, 0, -50)));
         assert_eq!(overworld.border().size(), 10.0);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn ceiling_damage_keys_default_to_off_per_dimension() {
+        use crate::config::Value;
+        let keys = config_keys();
+        for dimension in ["overworld", "nether", "end"] {
+            let height = format!("tuff.world.dimensions.{dimension}.ceilingDamage.height");
+            let amount = format!("tuff.world.dimensions.{dimension}.ceilingDamage.amount");
+            let find = |name: &str| keys.iter().find(|key| key.name == name).unwrap();
+            assert_eq!(find(&height).default, Value::Int(0));
+            assert_eq!(find(&amount).default, Value::Int(CEILING_DEFAULT_AMOUNT));
+        }
     }
 
     struct Claims(Vec<(&'static str, bool)>);
