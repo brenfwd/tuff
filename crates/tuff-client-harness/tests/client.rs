@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 
 use std::sync::{Arc, Mutex};
 
+use tuff_client_harness::corpus::Variation;
+
 use tuff::feature::{Feature, LoadContext};
 use tuff::world::Shared;
 use tuff::world::custom_dimension::{BiomeDefinition, DimensionDefinition, DimensionProvider};
@@ -116,6 +118,46 @@ async fn until(
         );
         tokio::time::sleep(Duration::from_millis(30)).await;
     }
+}
+
+/// Teleports the client and waits until it stands at the target, so a
+/// lagging client (latency proxy, slow rendering) cannot carry the previous
+/// lane into the next recording. Respawns a client that died in a lane.
+async fn arrive(
+    server: &ServerHandle,
+    client: &ClientHandle,
+    username: &str,
+    at: [f64; 3],
+    yaw: f32,
+    pitch: f32,
+) {
+    let [x, y, z] = at;
+    let there = |s: &ClientState| {
+        s.screen == "none"
+            && s.position.is_some_and(|p| {
+                (p[0] - x).abs() < 0.05 && (p[2] - z).abs() < 0.05 && p[1] <= y + 0.5
+            })
+    };
+    for _ in 0..5 {
+        if client.state().await.is_ok_and(|s| s.screen != "none") {
+            let _ = client.request(Command::Respawn).await;
+            tokio::time::sleep(Duration::from_millis(1500)).await;
+        }
+        server_says(server, &format!("tp {username} {x} {y} {z} {yaw} {pitch}")).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if client.state().await.is_ok_and(|s| there(&s)) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+    panic!(
+        "client never reached {at:?}: {:?}\n{}",
+        client.state().await.ok().map(|s| (s.screen, s.position)),
+        client.log_tail()
+    );
 }
 
 async fn server_says(handle: &ServerHandle, command: &str) -> String {
@@ -1058,6 +1100,21 @@ struct Lane {
 }
 
 async fn drive(client: &ClientHandle, lane: &Lane) {
+    drive_with(client, lane, &[], false).await;
+}
+
+/// With `by_client_tick`, `lane.ticks` counts client ticks rather than
+/// samples, so a slow client (software rendering under Xvfb) still drives
+/// each lane for the same game time.
+async fn drive_with(
+    client: &ClientHandle,
+    lane: &Lane,
+    toggles: &[Toggle],
+    by_client_tick: bool,
+) -> bool {
+    let mut alive = true;
+    let toggled = |t: u32, &(_, period, on, phase): &Toggle| (t + phase) % period < on;
+    let mut held: Vec<bool> = toggles.iter().map(|_| false).collect();
     for key in lane.keys {
         client
             .request(Command::Key {
@@ -1067,10 +1124,26 @@ async fn drive(client: &ClientHandle, lane: &Lane) {
             .await
             .unwrap();
     }
-    let first = client.state().await.unwrap();
-    let mut last = first.position.unwrap();
-    let mut last_tick = first.tick.unwrap_or(0);
-    for _ in 0..lane.ticks {
+    let initial = client.state().await.unwrap();
+    let first = initial.position.unwrap();
+    let mut last = first;
+    let mut last_tick = initial.tick.unwrap_or(0);
+    let start_tick = last_tick;
+    let mut t = 0;
+    while t < lane.ticks {
+        for (toggle, held) in toggles.iter().zip(held.iter_mut()) {
+            let down = toggled(t, toggle);
+            if down != *held {
+                *held = down;
+                client
+                    .request(Command::Key {
+                        name: toggle.0.into(),
+                        down,
+                    })
+                    .await
+                    .unwrap();
+            }
+        }
         client.request(Command::WaitTicks(1)).await.unwrap();
         let st = client.state().await.unwrap();
         let now = st.position.unwrap();
@@ -1079,7 +1152,7 @@ async fn drive(client: &ClientHandle, lane: &Lane) {
         let dx = now[0] - last[0];
         let horizontal = (dx * dx + (now[2] - last[2]).powi(2)).sqrt();
         assert!(
-            horizontal < 0.5 * elapsed + 0.8,
+            by_client_tick || horizontal < 0.5 * elapsed + 0.8,
             "lane {}: moved {horizontal} in one sample (setback?) {last:?} -> {now:?}\n{}",
             lane.name,
             client.log_tail()
@@ -1090,17 +1163,28 @@ async fn drive(client: &ClientHandle, lane: &Lane) {
             lane.name,
             client.log_tail()
         );
+        if by_client_tick && st.screen != "none" {
+            alive = false;
+            break;
+        }
         last = now;
+        t = if by_client_tick && st.tick.is_some() {
+            (last_tick - start_tick) as u32
+        } else {
+            t + 1
+        };
     }
-    for key in lane.keys {
+    let released = toggles.iter().map(|t| t.0);
+    for key in lane.keys.iter().copied().chain(released) {
         client
             .request(Command::Key {
-                name: (*key).into(),
+                name: key.into(),
                 down: false,
             })
             .await
             .unwrap();
     }
+    alive
 }
 
 #[tuff_core::watchdog]
@@ -2115,6 +2199,7 @@ struct CorpusLane {
     name: &'static str,
     keys: &'static [&'static str],
     ticks: u32,
+    toggles: &'static [Toggle],
     start_dy: i32,
     fills: &'static [([i32; 3], [i32; 3], &'static str)],
 }
@@ -2124,6 +2209,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "walk",
         keys: &["forward"],
         ticks: 80,
+        toggles: &[],
         start_dy: 1,
         fills: &[([-3, 0, 0], [40, 0, 0], "minecraft:stone")],
     },
@@ -2131,20 +2217,27 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "sprint_jump",
         keys: &["forward", "sprint", "jump"],
         ticks: 100,
+        toggles: &[],
         start_dy: 1,
         fills: &[([-3, 0, 0], [40, 0, 0], "minecraft:stone")],
     },
     CorpusLane {
         name: "strafe_back",
-        keys: &["back", "left"],
+        keys: &["back"],
         ticks: 60,
+        toggles: &[("left", 16, 8, 0), ("right", 16, 8, 8)],
         start_dy: 1,
-        fills: &[([-3, 0, 0], [40, 0, 0], "minecraft:stone")],
+        fills: &[
+            ([-30, 0, -1], [40, 0, 1], "minecraft:stone"),
+            ([-30, 1, -2], [40, 2, -2], "minecraft:glass"),
+            ([-30, 1, 2], [40, 2, 2], "minecraft:glass"),
+        ],
     },
     CorpusLane {
         name: "sneak",
         keys: &["forward", "sneak"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[([-3, 0, 0], [40, 0, 0], "minecraft:stone")],
     },
@@ -2152,6 +2245,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "stairs",
         keys: &["forward", "sprint"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2171,6 +2265,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "slabs",
         keys: &["forward"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2181,6 +2276,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "ice",
         keys: &["forward", "sprint"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2191,6 +2287,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "soul_sand",
         keys: &["forward", "sprint"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2201,16 +2298,19 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "swim",
         keys: &["forward", "sprint", "jump"],
         ticks: 80,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
-            ([3, 1, 0], [25, 3, 0], "minecraft:water"),
+            ([2, -3, -1], [26, 0, 1], "minecraft:stone"),
+            ([3, -2, 0], [25, 0, 0], "minecraft:water"),
         ],
     },
     CorpusLane {
         name: "ladder",
         keys: &["forward"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2222,6 +2322,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "slime",
         keys: &["forward", "sprint", "jump"],
         ticks: 80,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2232,6 +2333,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "honey",
         keys: &["forward", "sprint", "jump"],
         ticks: 80,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2242,6 +2344,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "cobweb",
         keys: &["forward", "sprint"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2252,6 +2355,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "sneak_edge",
         keys: &["forward", "sneak"],
         ticks: 80,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2262,6 +2366,7 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "powder_snow",
         keys: &["forward"],
         ticks: 60,
+        toggles: &[],
         start_dy: 1,
         fills: &[
             ([-3, 0, 0], [40, 0, 0], "minecraft:stone"),
@@ -2272,10 +2377,71 @@ const CORPUS_LANES: &[CorpusLane] = &[
         name: "hay_fall",
         keys: &[],
         ticks: 60,
+        toggles: &[],
         start_dy: 12,
         fills: &[([0, 0, 0], [0, 0, 0], "minecraft:hay_block")],
     },
+    CorpusLane {
+        name: "combat_wtap",
+        keys: &["sprint"],
+        ticks: 100,
+        toggles: &[("forward", 12, 9, 0)],
+        start_dy: 1,
+        fills: &[([-3, 0, -2], [40, 0, 2], "minecraft:stone")],
+    },
+    CorpusLane {
+        name: "combat_strafe",
+        keys: &["forward", "sprint"],
+        ticks: 100,
+        toggles: &[("left", 16, 8, 0), ("right", 16, 8, 8)],
+        start_dy: 1,
+        fills: &[
+            ([-3, 0, -1], [40, 0, 1], "minecraft:stone"),
+            ([-3, 1, -2], [40, 2, -2], "minecraft:glass"),
+            ([-3, 1, 2], [40, 2, 2], "minecraft:glass"),
+        ],
+    },
+    CorpusLane {
+        name: "combat_crit_jump",
+        keys: &["forward"],
+        ticks: 100,
+        toggles: &[("jump", 14, 2, 0)],
+        start_dy: 1,
+        fills: &[([-3, 0, -2], [40, 0, 2], "minecraft:stone")],
+    },
+    CorpusLane {
+        name: "combat_sprint_jump_strafe",
+        keys: &["forward", "sprint", "jump"],
+        ticks: 80,
+        toggles: &[("left", 16, 8, 0), ("right", 16, 8, 8)],
+        start_dy: 1,
+        fills: &[
+            ([-3, 0, -1], [40, 0, 1], "minecraft:stone"),
+            ([-3, 1, -2], [40, 2, -2], "minecraft:glass"),
+            ([-3, 1, 2], [40, 2, 2], "minecraft:glass"),
+        ],
+    },
+    CorpusLane {
+        name: "combat_kite",
+        keys: &[],
+        ticks: 100,
+        toggles: &[
+            ("forward", 20, 12, 0),
+            ("back", 20, 6, 8),
+            ("left", 16, 8, 0),
+            ("right", 16, 8, 8),
+        ],
+        start_dy: 1,
+        fills: &[
+            ([-3, 0, -1], [40, 0, 1], "minecraft:stone"),
+            ([-3, 1, -2], [40, 2, -2], "minecraft:glass"),
+            ([-3, 1, 2], [40, 2, 2], "minecraft:glass"),
+        ],
+    },
 ];
+
+/// A key held while `(tick + phase) % period < on`.
+type Toggle = (&'static str, u32, u32, u32);
 
 #[tuff_core::watchdog]
 fn corpus_rtt_ms() -> u64 {
@@ -2285,12 +2451,30 @@ fn corpus_rtt_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn corpus_file(stem: &str, rtt: u64) -> String {
-    if rtt == 0 {
-        format!("{stem}.txt")
-    } else {
-        format!("{stem}_rtt{rtt}.txt")
-    }
+fn corpus_env(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
+/// Lanes the live check flagged are kept out of the fixtures and saved here
+/// for triage.
+fn corpus_flagged_dir() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/corpus-flagged")
+}
+
+fn save_flagged(file: &str, lane: &str) {
+    let dir = corpus_flagged_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    use std::io::Write as _;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(file))
+        .unwrap()
+        .write_all(lane.as_bytes())
+        .unwrap();
 }
 
 #[tuff_core::watchdog]
@@ -2362,27 +2546,47 @@ async fn real_client_record_movement_corpus() {
     let (x0, fy, z0) = (px.floor() as i32, py.floor() as i32 + 40, pz.floor() as i32);
     let out_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/world/fixtures");
+    let seed = corpus_env("TUFF_CORPUS_SEED", 0);
+    let rounds = corpus_env("TUFF_CORPUS_ROUNDS", 1) as u32;
+    let file = tuff_client_harness::corpus::file_name("movement_corpus", rtt, seed);
     let mut text = String::new();
-    for (i, spec) in CORPUS_LANES.iter().enumerate() {
+    let mut flagged = Vec::new();
+    let plan = (0..rounds).flat_map(|round| {
+        let mut v = Variation::new(seed, round);
+        let order = v.order(CORPUS_LANES.len());
+        order
+            .into_iter()
+            .map(move |i| {
+                let spec = &CORPUS_LANES[i];
+                let ticks = v.ticks(spec.ticks, 20);
+                let (dx, dz) = (v.offset(0.25), v.offset(0.1));
+                let yaw = -90.0 + v.offset(0.4) as f32;
+                (i, spec, ticks, dx, dz, yaw)
+            })
+            .collect::<Vec<_>>()
+    });
+    for (i, spec, ticks, dx, dz, yaw) in plan {
         let z = z0 + 5 * i as i32;
         let at = |p: [i32; 3]| (x0 + p[0], fy + p[1], z + p[2]);
-        let (ax, ay, az) = at([-3, 1, 0]);
+        let (ax, ay, az) = at([-30, -3, -2]);
         server_says(
             s,
             &format!(
-                "fill {ax} {ay} {az} {} {} {az} minecraft:air",
+                "fill {ax} {ay} {az} {} {} {} minecraft:air",
                 x0 + 40,
-                fy + 12
+                fy + 12,
+                z + 2
             ),
         )
         .await;
+        let spawn = [
+            f64::from(x0) + 0.5 + dx,
+            f64::from(fy + spec.start_dy),
+            f64::from(z) + 0.5 + dz,
+        ];
         let mut lane = Recorded {
             name: spec.name.to_owned(),
-            spawn: Some([
-                f64::from(x0) + 0.5,
-                f64::from(fy + spec.start_dy),
-                f64::from(z) + 0.5,
-            ]),
+            spawn: Some(spawn),
             ..Recorded::default()
         };
         for (from, to, block) in spec.fills {
@@ -2395,31 +2599,25 @@ async fn real_client_record_movement_corpus() {
                 state: (*block).to_owned(),
             });
         }
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-        server_says(
-            s,
-            &format!("tp {username} {x0}.5 {} {z}.5 -90 0", fy + spec.start_dy),
-        )
-        .await;
-        tokio::time::sleep(Duration::from_millis(800)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        arrive(s, &client, username, spawn, yaw, 0.0).await;
         client
-            .request(Command::Look {
-                yaw: -90.0,
-                pitch: 0.0,
-            })
+            .request(Command::Look { yaw, pitch: 0.0 })
             .await
             .unwrap();
         client.request(Command::WaitTicks(5)).await.unwrap();
         let started = server_says(s, &format!("tuff tracing {username} start")).await;
         let path = started.rsplit_once(": ").unwrap().1.trim().to_owned();
-        drive(
+        let alive = drive_with(
             &client,
             &Lane {
                 name: spec.name,
                 keys: spec.keys,
-                ticks: spec.ticks,
+                ticks,
                 forward_only: false,
             },
+            spec.toggles,
+            true,
         )
         .await;
         client.request(Command::WaitTicks(10)).await.unwrap();
@@ -2437,17 +2635,23 @@ async fn real_client_record_movement_corpus() {
                 lane.packets.push(packet);
             }
         }
+        let _ = std::fs::remove_file(&path);
+        let rendered = lane.render([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
-        assert!(
-            report.contains("no anti-cheat violations"),
-            "{}: {report}",
-            spec.name
-        );
-        text.push_str(&lane.render([f64::from(x0), f64::from(fy), f64::from(z)]));
+        if alive && report.contains("no anti-cheat violations") {
+            text.push_str(&rendered);
+            std::fs::write(out_dir.join(&file), &text).unwrap();
+        } else {
+            save_flagged(&file, &rendered);
+            let note = format!("{} (alive {alive}): {report}", spec.name);
+            eprintln!("CORPUS FLAGGED {file} {note}");
+            flagged.push(note);
+            let _ = s.run_command(&format!("anticheat reset {username}")).await;
+        }
     }
-    std::fs::write(out_dir.join(corpus_file("movement_corpus", rtt)), text).unwrap();
     client.quit().await;
     let _ = std::fs::remove_dir_all(&run.root);
+    assert!(flagged.is_empty(), "lanes flagged: {flagged:#?}");
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -2592,9 +2796,22 @@ async fn real_client_record_special_movement_corpus() {
     let (x0, fy, z0) = (px.floor() as i32, py.floor() as i32 + 40, pz.floor() as i32);
     let out_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/world/fixtures");
+    let seed = corpus_env("TUFF_CORPUS_SEED", 0);
+    let rounds = corpus_env("TUFF_CORPUS_ROUNDS", 1) as u32;
+    let file = tuff_client_harness::corpus::file_name("movement_corpus_special", rtt, seed);
     let mut text = String::new();
     let mut notes = Vec::new();
-    for (i, spec) in SPECIAL_LANES.iter().enumerate() {
+    let plan: Vec<_> = (0..rounds)
+        .flat_map(|round| {
+            let mut v = Variation::new(seed, round);
+            v.order(SPECIAL_LANES.len())
+                .into_iter()
+                .map(|i| (i, v.ticks(80, 20), v.ticks(120, 20)))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    for (i, ride_ticks, bridge_ticks) in plan {
+        let spec = &SPECIAL_LANES[i];
         let z = z0 + 5 * i as i32;
         let at = |p: [i32; 3]| (x0 + p[0], fy + p[1], z + p[2]);
         let (ax, ay, az) = at([-3, -1, -2]);
@@ -2658,16 +2875,20 @@ async fn real_client_record_special_movement_corpus() {
             }
             _ => {}
         }
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-        server_says(
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        arrive(
             s,
-            &format!(
-                "tp {username} {x0}.5 {} {z}.5 {yaw} {pitch}",
-                fy + spec.start_dy
-            ),
+            &client,
+            username,
+            [
+                f64::from(x0) + 0.5,
+                f64::from(fy + spec.start_dy),
+                f64::from(z) + 0.5,
+            ],
+            yaw,
+            pitch,
         )
         .await;
-        tokio::time::sleep(Duration::from_millis(800)).await;
         client.request(Command::Look { yaw, pitch }).await.unwrap();
         client.request(Command::Hotbar(1)).await.unwrap();
         match spec.kind {
@@ -2731,7 +2952,10 @@ async fn real_client_record_special_movement_corpus() {
                 if horse {
                     key("sprint", true).await.unwrap();
                 }
-                client.request(Command::WaitTicks(80)).await.unwrap();
+                client
+                    .request(Command::WaitTicks(ride_ticks))
+                    .await
+                    .unwrap();
                 key("forward", false).await.unwrap();
                 if horse {
                     key("sprint", false).await.unwrap();
@@ -2745,14 +2969,21 @@ async fn real_client_record_special_movement_corpus() {
                 if jump {
                     key("jump", true).await.unwrap();
                 }
-                for t in 0..120u32 {
+                let start = client.state().await.unwrap().tick.unwrap_or(0);
+                let (mut t, mut next_use) = (0, 0);
+                while t < bridge_ticks {
                     if pulse {
                         key("sneak", t % 3 != 0).await.unwrap();
                     }
                     client.request(Command::WaitTicks(1)).await.unwrap();
-                    if t % 4 == 0 {
+                    if t >= next_use {
                         client.request(Command::Use).await.unwrap();
+                        next_use = t + 2;
                     }
+                    t = match client.state().await.unwrap().tick {
+                        Some(now) => (now - start) as u32,
+                        None => t + 1,
+                    };
                 }
                 for k in ["back", "sneak", "jump"] {
                     key(k, false).await.unwrap();
@@ -2774,19 +3005,23 @@ async fn real_client_record_special_movement_corpus() {
                 lane.packets.push(packet);
             }
         }
+        let _ = std::fs::remove_file(&path);
+        let rendered = lane.render([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
-        if !report.contains("no anti-cheat violations") {
-            notes.push(format!("{}: {report}", spec.name));
+        let alive = client.state().await.is_ok_and(|st| st.screen == "none");
+        if alive && report.contains("no anti-cheat violations") {
+            text.push_str(&rendered);
+            std::fs::write(out_dir.join(&file), &text).unwrap();
+        } else {
+            save_flagged(&file, &rendered);
+            let note = format!("{} (alive {alive}): {report}", spec.name);
+            eprintln!("CORPUS FLAGGED {file} {note}");
+            notes.push(note);
+            let _ = s.run_command(&format!("anticheat reset {username}")).await;
         }
-        text.push_str(&lane.render([f64::from(x0), f64::from(fy), f64::from(z)]));
         let _ = server_says(s, &format!("ride {username} dismount")).await;
         server_says(s, "kill @e[type=!player]").await;
     }
-    std::fs::write(
-        out_dir.join(corpus_file("movement_corpus_special", rtt)),
-        text,
-    )
-    .unwrap();
     client.quit().await;
     let _ = std::fs::remove_dir_all(&run.root);
     assert!(notes.is_empty(), "lanes flagged: {notes:#?}");
