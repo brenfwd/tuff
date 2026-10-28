@@ -930,3 +930,40 @@ fn a_candle_stays_on_update_while_a_torch_pops() {
     let torch = Block::Torch.default_state();
     assert_eq!(update_shape(torch, pos, Facing::Down, AIR, &level), AIR);
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn a_candle_needs_center_support_to_be_placed() {
+    let pos = BlockPos::new(0, GROUND + 1, 0);
+    let below = BlockPos::new(0, GROUND, 0);
+    let candle = Block::Candle.default_state();
+    let survives = |support: BlockState| {
+        let mut world = World::new(Block::Air);
+        world.set(below, support);
+        can_survive(candle, pos, &|p| world.get(p))
+    };
+    let slab = |half: &str| {
+        Block::StoneSlab
+            .default_state()
+            .with("type", half)
+            .unwrap_or_else(|| panic!("slab type {half}"))
+    };
+    assert!(!survives(AIR));
+    assert!(survives(Block::Stone.default_state()));
+    assert!(survives(Block::OakFence.default_state()));
+    assert!(!survives(slab("bottom")));
+    assert!(survives(slab("top")));
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn a_coloured_candle_also_stays_on_update() {
+    let world = World::new(Block::Air);
+    let pos = BlockPos::new(0, GROUND + 1, 0);
+    let level = |p: BlockPos| world.get(p);
+    for block in [Block::RedCandle, Block::WhiteCandle, Block::BlackCandle] {
+        let candle = block.default_state();
+        assert!(!can_survive(candle, pos, &level));
+        assert_eq!(update_shape(candle, pos, Facing::Down, AIR, &level), candle);
+    }
+}

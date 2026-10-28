@@ -267,3 +267,45 @@ async fn a_candle_stays_when_its_support_is_removed() {
     assert_eq!(items(&b.region).await, 0);
     b.world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_candle_cannot_be_placed_without_center_support() {
+    let dir = TestDir::new();
+    let mut b = bench(dir.path()).await;
+    place_blocks(
+        &b.world,
+        &b.region,
+        [
+            (
+                at(4, 0, 4),
+                Block::StoneSlab
+                    .default_state()
+                    .with("type", "bottom")
+                    .unwrap(),
+            ),
+            (at(8, 0, 8), Block::Stone.default_state()),
+        ],
+    )
+    .await;
+
+    let refused = place(&b.player, at(4, 0, 4), Item::RedCandle, 1);
+    b.region.request(RegionRequest::Place(refused)).await;
+    assert!(matches!(
+        outcome(&mut b.events, 1).await,
+        ActionOutcome::Rejected(_)
+    ));
+    assert_eq!(state(&b.region, at(4, 1, 4)).await.block(), Block::Air);
+
+    let accepted = place(&b.player, at(8, 0, 8), Item::RedCandle, 2);
+    b.region.request(RegionRequest::Place(accepted)).await;
+    assert!(matches!(
+        outcome(&mut b.events, 2).await,
+        ActionOutcome::Placed { .. }
+    ));
+    assert_eq!(
+        state(&b.region, at(8, 1, 8)).await.block(),
+        Block::RedCandle
+    );
+    b.world.shutdown().await;
+}
