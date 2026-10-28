@@ -15,7 +15,7 @@ use tuff_vanilla_data::BlockState;
 
 use super::feedback::Messages;
 use super::targets::{self, Target};
-use super::{Context, Executor, executor_future, players, text, world};
+use super::{Context, Executor, executor_future, text, world};
 
 const MAX_ITERATIONS: u32 = 10_000;
 
@@ -290,7 +290,7 @@ impl Executor for SpreadPlayers {
                         player_spots.insert(player.id, teleport);
                     }
                     Target::Entity(_) => {
-                        players::teleport_entities(ctx, &[target], &teleport).await;
+                        super::entity_teleport::teleport_entities(ctx, &[target], &teleport).await;
                     }
                 }
                 average += spots

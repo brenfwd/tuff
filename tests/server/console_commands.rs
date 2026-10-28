@@ -942,3 +942,38 @@ async fn rotate_and_swing_reach_mobs() {
     let still = run(&server, &format!("swing {item}")).await;
     assert_eq!(key(&still[0]), "commands.swing.failed.notliving");
 }
+
+#[tuff_core::watchdog]
+#[tokio::test]
+async fn console_teleports_a_mob_into_an_unloaded_region() {
+    let (_, session_url) = MockSessionServer::start().await;
+    let server = start_server("127.0.0.1:0", &session_url).await;
+
+    run(&server, "forceload add 0 0 20 20").await;
+    let ready = run(&server, "setblock 5 300 5 minecraft:glass").await;
+    assert_eq!(key(&ready[0]), "commands.setblock.success");
+    let pig = run(&server, "summon pig 5 310 5 {NoAI:1b,NoGravity:1b}").await;
+    assert_eq!(key(&pig[0]), "commands.summon.success");
+
+    let moved = run(
+        &server,
+        "tp @e[type=pig,x=5,y=310,z=5,distance=..1] 3000.5 310 3000.5",
+    )
+    .await;
+    assert_eq!(key(&moved[0]), "commands.teleport.success.location.single");
+    let there = run(
+        &server,
+        "execute if entity @e[type=pig,x=3000.5,y=310,z=3000.5,distance=..2]",
+    )
+    .await;
+    assert_eq!(key(&there[0]), "commands.execute.conditional.pass_count");
+    let left = run(
+        &server,
+        "execute if entity @e[type=pig,x=5,y=310,z=5,distance=..2]",
+    )
+    .await;
+    assert_eq!(key(&left[0]), "commands.execute.conditional.fail");
+
+    server.handle.shutdown().await.unwrap();
+    server.task.await.unwrap().unwrap();
+}

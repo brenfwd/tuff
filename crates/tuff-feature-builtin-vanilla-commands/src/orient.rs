@@ -59,7 +59,7 @@ impl Executor for Rotate {
                     .await;
                 }
                 Target::Entity(_) => {
-                    super::players::teleport_entities(ctx, &[&target], &teleport).await;
+                    super::entity_teleport::teleport_entities(ctx, &[&target], &teleport).await;
                 }
             }
             let message =

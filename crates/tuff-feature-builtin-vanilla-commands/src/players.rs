@@ -14,14 +14,13 @@ use tuff_core::command::{CommandError, java_float, java_format_f};
 use tuff_core::world::effects::ActiveEffect;
 use tuff_core::world::messages::{
     CoordinatorMessage, Directive, DirectiveReply, EffectCommand, EnchantAnswer, LookAt,
-    ManagerMessage, PlayerSnapshot, ProfileQuery, RegionRequest, Teleport, TitleAction,
+    ManagerMessage, PlayerSnapshot, ProfileQuery, Teleport, TitleAction,
 };
 use tuff_item::text::TextComponent;
-use tuff_nbt::{Compound, Tag};
 use tuff_storage::admin::format_uuid;
 use tuff_world_model::BlockPos;
-use tuff_world_model::pos::ChunkPos;
 
+use super::entity_teleport::teleport_entities;
 use super::feedback::Messages;
 use super::targets::{self, Target, resolve_message};
 use super::{Context, Executor, executor_future, text};
@@ -305,91 +304,6 @@ impl Executor for Kill {
             Ok(1)
         })
     }
-}
-
-/// `/tp` on entities other than players: their owning region is not known
-/// here, so this broadcasts to every running region (like `/kill` does for
-/// entities) and lets each pick out the ids it owns. Entities bound for
-/// another dimension are taken out of their region and summoned from
-/// their saved form at the destination. Returns how many actually moved.
-pub(crate) async fn teleport_entities(
-    ctx: &mut Context<'_>,
-    targets: &[&Target],
-    teleport: &Teleport,
-) -> usize {
-    if targets.is_empty() {
-        return 0;
-    }
-    let (staying, leaving): (Vec<&Target>, Vec<&Target>) = targets
-        .iter()
-        .partition(|t| t.dimension() == teleport.dimension);
-    let staying: Vec<i32> = staying.iter().map(|t| t.id()).collect();
-    let leaving: Vec<i32> = leaving.iter().map(|t| t.id()).collect();
-    let (reply, regions) = tokio::sync::oneshot::channel();
-    let _ = ctx
-        .shared()
-        .manager
-        .send(ManagerMessage::Regions { reply })
-        .await;
-    let mut moved = 0;
-    let mut taken = Vec::new();
-    for region in regions.await.unwrap_or_default() {
-        if !staying.is_empty() {
-            let (ids, teleport) = (staying.clone(), teleport.clone());
-            moved += region
-                .ask(move |world| {
-                    ids.into_iter()
-                        .filter(|id| world.teleport_entity(*id, &teleport))
-                        .count()
-                })
-                .await
-                .unwrap_or(0);
-        }
-        if !leaving.is_empty() {
-            let (ids, teleport) = (leaving.clone(), teleport.clone());
-            taken.extend(
-                region
-                    .ask(move |world| {
-                        ids.into_iter()
-                            .filter_map(|id| world.take_teleported_entity(id, &teleport))
-                            .collect::<Vec<_>>()
-                    })
-                    .await
-                    .unwrap_or_default(),
-            );
-        }
-    }
-    for nbt in taken {
-        if arrive(ctx, teleport, nbt).await {
-            moved += 1;
-        }
-    }
-    moved
-}
-
-/// Summons an entity taken for a cross-dimension `/tp` at its new place.
-async fn arrive(ctx: &mut Context<'_>, teleport: &Teleport, nbt: Compound) -> bool {
-    let position = match nbt.get("Pos") {
-        Some(Tag::List(pos)) => match pos.as_slice() {
-            [Tag::Double(x), Tag::Double(y), Tag::Double(z)] => [*x, *y, *z],
-            _ => teleport.position,
-        },
-        _ => teleport.position,
-    };
-    let region_pos = ChunkPos::of_position(position).region();
-    let Some(region) = ctx.actor.region(teleport.dimension, region_pos).await else {
-        return false;
-    };
-    let (reply, summoned) = tokio::sync::oneshot::channel();
-    region
-        .request(RegionRequest::Summon {
-            nbt,
-            position,
-            fresh: false,
-            reply,
-        })
-        .await
-        && summoned.await.unwrap_or(false)
 }
 
 pub struct TeleportCommand;
