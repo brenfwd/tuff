@@ -39,6 +39,45 @@ pub fn vanilla_tickets(text: &str) -> Vec<String> {
     text.lines().filter_map(vanilla_ticket).collect()
 }
 
+/// Vanilla's forceloaded chunks as sorted, deduplicated `ticket x z` lines.
+/// Only ticket lines naming a forced type count; other ticket kinds (player
+/// loading, portals) have no tuff-side capture.
+pub fn vanilla_forced_tickets(text: &str) -> Vec<String> {
+    let forced: Vec<&str> = text
+        .lines()
+        .filter(|l| l.to_ascii_lowercase().contains("forced"))
+        .collect();
+    let mut out: Vec<String> = forced.into_iter().filter_map(vanilla_ticket).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Tuff's forceloaded chunks as sorted, deduplicated `ticket x z` lines.
+pub fn normalize_tickets(chunks: &[(i32, i32)]) -> Vec<String> {
+    let mut out: Vec<String> = chunks
+        .iter()
+        .map(|(x, z)| format!("ticket {x} {z}"))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Set difference of two ticket line lists; order is not a contract.
+pub fn diff_tickets(vanilla: &[String], tuff: &[String]) -> Vec<String> {
+    let only = |a: &[String], b: &[String], who: &str| {
+        a.iter()
+            .filter(|l| !b.contains(l))
+            .map(|l| format!("{l}: only in {who}"))
+            .collect::<Vec<_>>()
+    };
+    let mut out = only(vanilla, tuff, "vanilla");
+    out.extend(only(tuff, vanilla, "tuff"));
+    out.sort();
+    out
+}
+
 fn vanilla_event(line: &str) -> Option<String> {
     let msg = line.split_once("]: ").map_or(line, |(_, m)| m);
     let msg = msg
@@ -138,5 +177,28 @@ mod tests {
         assert!(diff(&a, &b).is_empty());
         let c = s(&["block_ack 1", "chunk_send 0 0", "chunk_send 1 0"]);
         assert_eq!(diff(&a, &c).len(), 3);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn tickets_normalize_sorted_and_deduped() {
+        assert_eq!(
+            normalize_tickets(&[(2, -1), (0, 0), (2, -1)]),
+            ["ticket 0 0", "ticket 2 -1"]
+        );
+        let log = "DEBUG ATI [2, -1] Ticket[forced]\nDEBUG ATI [2, -1] Ticket[forced]\nDEBUG ATI [5, 5] Ticket[player]\nDEBUG ATI [0, 0] Ticket[minecraft:forced]";
+        assert_eq!(vanilla_forced_tickets(log), ["ticket 0 0", "ticket 2 -1"]);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn ticket_diff_is_order_insensitive_and_names_the_side() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let a = s(&["ticket 0 0", "ticket 1 1"]);
+        assert!(diff_tickets(&a, &s(&["ticket 1 1", "ticket 0 0"])).is_empty());
+        assert_eq!(
+            diff_tickets(&a, &s(&["ticket 1 1", "ticket 3 3"])),
+            ["ticket 0 0: only in vanilla", "ticket 3 3: only in tuff"]
+        );
     }
 }
