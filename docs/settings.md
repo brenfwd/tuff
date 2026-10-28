@@ -269,6 +269,15 @@ many overlapping entities one mob pushes against per tick, keeping the
 nearest. It is never applied below `max_entity_cramming`, so cramming
 still triggers whatever the setting.
 
+## Map item frames
+
+`tuff.maps.frameReportInterval` (default `10`, range 1 to 1200) is how
+many ticks pass between a framed map refreshing its cursors for nearby
+players. Raise it on servers with walls of maps to cut the per-viewer
+update cost; cursors then lag by up to that many ticks. A viewer stays
+subscribed for twice the interval (at least 20 ticks), so a wall does not
+flicker between refreshes.
+
 ## Item conservation and save safety
 
 Item stacks are move-only: a stack moves between players, containers,

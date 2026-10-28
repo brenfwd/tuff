@@ -25,7 +25,31 @@ use tuff_nbt::{Compound, Tag};
 use tuff_world_model::BlockPos;
 
 const CHECK_INTERVAL: u32 = 100;
-const MAP_REPORT_TICKS: u64 = 10;
+pub const FRAME_REPORT_KEY: &str = "tuff.maps.frameReportInterval";
+const DEFAULT_REPORT_TICKS: i64 = 10;
+const MAX_REPORT_TICKS: i64 = 1200;
+
+pub fn config_keys() -> Vec<tuff_core::config::Key> {
+    use tuff_core::config::{Key, Value};
+    vec![
+        Key::new(
+            FRAME_REPORT_KEY,
+            Value::Int(DEFAULT_REPORT_TICKS),
+            "Ticks between a framed map refreshing its cursors for nearby players",
+        )
+        .validated(|value| match value {
+            Value::Int(n) if (1..=MAX_REPORT_TICKS).contains(n) => Ok(()),
+            _ => Err("must be between 1 and 1200".to_owned()),
+        }),
+    ]
+}
+
+fn frame_report_ticks(config: &tuff_core::config::ConfigStore) -> u64 {
+    config
+        .get_int(FRAME_REPORT_KEY)
+        .unwrap_or(DEFAULT_REPORT_TICKS)
+        .clamp(1, MAX_REPORT_TICKS) as u64
+}
 const DEPTH: f64 = 0.0625;
 const WIDTH: f64 = 0.75;
 const MAP_WIDTH: f64 = 1.0;
@@ -635,7 +659,10 @@ impl RegionEntity for ItemFrame {
                 return Tick::Discard;
             }
         }
-        if cx.tick.is_multiple_of(MAP_REPORT_TICKS) {
+        if cx
+            .tick
+            .is_multiple_of(frame_report_ticks(&cx.shared.config))
+        {
             self.report_map(cx);
         }
         self.since_check += 1;
@@ -827,5 +854,39 @@ mod tests {
             });
             assert!(matches!(frame.tick(cx), Tick::Discard));
         });
+    }
+}
+
+#[cfg(test)]
+mod report_tests {
+    use super::*;
+
+    fn store() -> tuff_core::config::ConfigStore {
+        let config = tuff_core::config::ConfigStore::default();
+        for key in config_keys() {
+            config.register(key).unwrap();
+        }
+        config
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn the_report_interval_defaults_to_ten_and_follows_the_setting() {
+        let config = store();
+        assert_eq!(frame_report_ticks(&config), 10);
+        config
+            .set(FRAME_REPORT_KEY, tuff_core::config::Value::Int(40))
+            .unwrap();
+        assert_eq!(frame_report_ticks(&config), 40);
+        assert!(
+            config
+                .set(FRAME_REPORT_KEY, tuff_core::config::Value::Int(0))
+                .is_err()
+        );
+        assert!(
+            config
+                .set(FRAME_REPORT_KEY, tuff_core::config::Value::Int(1201))
+                .is_err()
+        );
     }
 }
