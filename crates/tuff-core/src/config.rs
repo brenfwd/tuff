@@ -673,6 +673,7 @@ fn core_keys() -> Vec<Key> {
     .chain(crate::storage::backup::config_keys())
     .chain(crate::world::pregen::config_keys())
     .chain(crate::world::dimension::config_keys())
+    .chain(crate::world::entity_caps::config_keys())
     .chain(crate::world::generator::config_keys())
     .collect()
 }

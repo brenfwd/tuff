@@ -998,6 +998,13 @@ impl RegionActor {
                 .save_journal()
                 .map(|journal| journal.ticket_now()),
         };
+        if self
+            .columns
+            .get(&pos)
+            .is_some_and(|column| column.entities_dirty && column.entities_persist)
+        {
+            self.enforce_entity_caps(pos);
+        }
         let entities = self
             .columns
             .get(&pos)
@@ -1257,6 +1264,16 @@ fn prepare_chunk(
             log::error!("entities in chunk {pos:?} are unreadable and will not be saved: {err}");
             (Vec::new(), false)
         }
+    };
+    let saved = {
+        let (kept, dropped) =
+            crate::world::entity_caps::EntityCaps::from_config(&shared.config).trim_saved(saved);
+        for (id, kept, dropped) in dropped {
+            log::warn!(
+                "chunk {pos:?} saved too many {id} entities: kept {kept}, dropped {dropped}"
+            );
+        }
+        kept
     };
     let (entities, raw_entities) = shared
         .entity_types
