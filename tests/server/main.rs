@@ -63,6 +63,7 @@ mod network_ids;
 mod no_println;
 mod no_save;
 mod no_serve;
+mod operator_commands;
 mod outbound_bytes;
 mod packet_replay;
 mod packet_tracing;

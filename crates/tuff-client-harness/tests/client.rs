@@ -81,6 +81,7 @@ async fn start_server(bind: &str, name: &str) -> Running {
         .instance_dir(instance.clone())
         .binds(vec![bind.into()])
         .online_mode(false)
+        .config_overrides(vec![("tuff.offlineOps".into(), "true".into())])
         .whitelist(false)
         .view_distance(4)
         .seed(1)
