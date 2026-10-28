@@ -7,7 +7,7 @@
 
 use super::*;
 use crate::bot::{
-    self, Bot, Difficulty, Role, Seen, Shot, View, block_center, block_of, dist,
+    self, Bot, Difficulty, Role, Seen, Shot, Stock, View, block_center, block_of, dist,
 };
 use crate::shop::{self, Offer};
 use tuff_bots_api::control::{self, BotId};
@@ -43,8 +43,22 @@ pub enum SpawnFailure {
 }
 
 const COLORS: [&str; 16] = [
-    "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray",
-    "cyan", "purple", "blue", "brown", "green", "red", "black",
+    "white",
+    "orange",
+    "magenta",
+    "light_blue",
+    "yellow",
+    "lime",
+    "pink",
+    "gray",
+    "light_gray",
+    "cyan",
+    "purple",
+    "blue",
+    "brown",
+    "green",
+    "red",
+    "black",
 ];
 
 /// What a bot may build bridges with and dig through: the blocks players
@@ -350,6 +364,9 @@ impl Game {
             return;
         }
         let carried = host.carried();
+        if let Some(bot) = self.bot_by_id_mut(id) {
+            bot.stock = Stock::from_carried(&carried);
+        }
         let Some(offer) = next_buy(&carried) else {
             if let Some(bot) = self.bot_by_id_mut(id) {
                 bot.saving = false;
@@ -562,8 +579,10 @@ impl Game {
                         y: at[1],
                         z: at[2],
                     };
-                    self.bot_calls
-                        .push(BotCall::Process(handle, control::Process::Break(vec![block])));
+                    self.bot_calls.push(BotCall::Process(
+                        handle,
+                        control::Process::Break(vec![block]),
+                    ));
                     bot.heading = None;
                     bot.fighting = None;
                     bot.sent_at = now;
