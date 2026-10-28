@@ -248,27 +248,6 @@ pub fn random_block_pos(rand_value: &mut i32, x: i32, y: i32, z: i32, y_mask: i3
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tuff_core::watchdog]
-    #[test]
-    fn skipping_matches_drawing_one_at_a_time() {
-        for start in [0, 1, -7, i32::MAX, i32::MIN, 123_456_789] {
-            let mut value = start;
-            for draws in 0..200u64 {
-                assert_eq!(
-                    skip_random_block_pos(start, draws),
-                    value,
-                    "{start} {draws}"
-                );
-                random_block_pos(&mut value, 0, 0, 0, 15);
-            }
-        }
-    }
-}
-
 pub const FREEZING_KEY: &str = "tuff.world.freezing.enabled";
 pub const FIRE_DELAY_MIN_KEY: &str = "tuff.world.fireTickDelay.min";
 pub const FIRE_DELAY_MAX_KEY: &str = "tuff.world.fireTickDelay.max";
@@ -295,4 +274,25 @@ pub fn config_keys() -> Vec<crate::config::Key> {
         delay(FIRE_DELAY_MIN_KEY, 30, "Least"),
         delay(FIRE_DELAY_MAX_KEY, 39, "Most"),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn skipping_matches_drawing_one_at_a_time() {
+        for start in [0, 1, -7, i32::MAX, i32::MIN, 123_456_789] {
+            let mut value = start;
+            for draws in 0..200u64 {
+                assert_eq!(
+                    skip_random_block_pos(start, draws),
+                    value,
+                    "{start} {draws}"
+                );
+                random_block_pos(&mut value, 0, 0, 0, 15);
+            }
+        }
+    }
 }
