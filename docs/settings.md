@@ -174,6 +174,12 @@ Fill and clone limits come from the `max_block_modifications` game rule.
 next start: it is not loaded, ticked or sent to clients, portals into it
 do nothing, and its saved data stays for when it is switched back on.
 
+`tuff.world.dimensions.<overworld|nether|end>.ceilingDamage.height` (default
+`0`, off) hurts survival and adventure players at or above that y with void
+damage, for example `128` to stop nether roof travel; creative and spectator
+players are exempt. `.ceilingDamage.amount` (default `4`) is the health
+points taken per hurt tick. Both apply live.
+
 `tuff.world.spawnDimension` names the dimension new players spawn in and
 respawns fall back to (plugin dimensions allowed). When it is empty, the
 first plugin that claims one (`spawn_dimension` in its manifest) picks it,
