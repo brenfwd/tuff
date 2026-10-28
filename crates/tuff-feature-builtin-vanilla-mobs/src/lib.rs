@@ -33,6 +33,7 @@ pub mod creeper;
 pub mod crowd;
 pub mod death_effects;
 pub mod debugmobspawning_command;
+pub mod despawn;
 pub mod dolphin;
 pub mod door;
 pub mod drowned;
@@ -377,6 +378,7 @@ impl tuff_core::feature::Feature for MobsFeature {
                 .config_keys
                 .extend(world::region::spawning::cap_keys());
             cx.registries().config_keys.extend(crowd::config_keys());
+            cx.registries().config_keys.extend(despawn::config_keys());
             cx.registries()
                 .region_hooks
                 .push(std::sync::Arc::new(MobRegionHooks));

@@ -48,10 +48,11 @@ impl RegionActor {
         if !orb.merge_due() {
             return;
         }
+        let radius = self.despawn_settings().orb_merge;
         let mut reach = tracked.entity.bounds();
         for axis in 0..3 {
-            reach[axis] -= experience::MERGE_DISTANCE;
-            reach[axis + 3] += experience::MERGE_DISTANCE;
+            reach[axis] -= radius;
+            reach[axis + 3] += radius;
         }
         let (id, value) = (tracked.entity.base().id, orb.value());
         let merged: Vec<i32> = self

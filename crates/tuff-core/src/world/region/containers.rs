@@ -2,6 +2,7 @@
 //! campfires), their menus, locks, loot tables and viewer bookkeeping.
 //! Called from region.rs's dispatch and from the block edit pipeline.
 
+use crate::world::despawn_settings::DespawnSettings;
 use tuff_item::item::ItemSnapshot;
 
 use rand::rngs::StdRng;
@@ -298,7 +299,7 @@ impl RegionActor {
         let id = self.shared.next_entity_id();
         let uuid = self.rng.r#gen();
         let mut item = ItemEntity::new(id, uuid, stack, position, velocity, pickup_delay);
-        item.set_extended_lifetime();
+        item.set_extended_lifetime(&DespawnSettings::from_config(&self.shared.config));
         self.spawn_entity(item);
     }
 

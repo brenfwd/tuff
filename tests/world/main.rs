@@ -84,6 +84,7 @@ mod custom_items;
 mod datapacks;
 mod debug_feeds;
 mod decorations;
+mod despawn_settings;
 mod dimension_settings;
 mod dupe_designs;
 mod enchanting_table;

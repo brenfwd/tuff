@@ -4,7 +4,7 @@ use rand::Rng;
 use tuff_core::protocol::play::{MetadataValue, metadata};
 use tuff_core::world::contact::{Immersion, immersion};
 use tuff_core::world::entity::{EntityBase, RegionEntity, Tick, TickContext, take, take_number};
-use tuff_core::world::experience::{LIFETIME, MERGE_GROUPS, MERGE_SCAN_PERIOD, Orb, intersects};
+use tuff_core::world::experience::{MERGE_GROUPS, MERGE_SCAN_PERIOD, Orb, intersects};
 use tuff_core::world::items::blocks_items;
 use tuff_core::world::{PLAYER_HALF_WIDTH, PLAYER_HEIGHT, distance_sq};
 use tuff_nbt::Compound;
@@ -341,7 +341,12 @@ impl RegionEntity for ExperienceOrb {
         if tuff_core::world::block_contact::pricked_by_cactus(self, block) {
             return Tick::Discard;
         }
-        if self.age >= LIFETIME {
+        if self.age
+            >= tuff_core::world::despawn_settings::DespawnSettings::from_config(
+                &context.shared.config,
+            )
+            .orb_age
+        {
             Tick::Discard
         } else {
             Tick::Alive

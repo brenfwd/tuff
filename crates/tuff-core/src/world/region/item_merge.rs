@@ -53,10 +53,11 @@ impl RegionActor {
         if self.quarantined() {
             return;
         }
-        let Some(item) = self.item(id).filter(|item| item.mergeable()) else {
+        let settings = self.despawn_settings();
+        let Some(item) = self.item(id).filter(|item| item.mergeable(&settings)) else {
             return;
         };
-        let reach = item.merge_reach();
+        let reach = item.merge_reach(&settings);
         let (stack, owner) = (
             ItemSnapshot::of(&item.stack),
             item.base.extra.get("Owner").cloned(),
@@ -142,13 +143,14 @@ impl RegionActor {
                 reach,
             } => {
                 let owner = owner.as_ref();
+                let settings = self.despawn_settings();
                 let mut candidates: Vec<i32> = self
                     .ents
                     .entities
                     .values()
                     .filter_map(|tracked| tracked.entity.downcast_ref::<ItemEntity>())
                     .filter(|other| {
-                        other.mergeable()
+                        other.mergeable(&settings)
                             && self.pos.contains(other.base.chunk())
                             && experience::intersects(other.bounds(), reach)
                             && owner == other.base.extra.get("Owner")
@@ -186,9 +188,10 @@ impl RegionActor {
                 target,
                 room,
             } => {
+                let settings = self.despawn_settings();
                 let Some(own) = self
                     .item(item)
-                    .filter(|own| own.mergeable() && own.stack.count() == count)
+                    .filter(|own| own.mergeable(&settings) && own.stack.count() == count)
                 else {
                     return;
                 };
