@@ -1064,6 +1064,7 @@ impl PlayerSession {
         self.send_abilities();
         self.send(&play::SetHeldSlot(self.inventory.selected() as i32));
         self.send_permission_level();
+        self.report_state().await;
         let (written, announced) = oneshot::channel();
         self.coordinator(CoordinatorMessage::Spawned {
             player: self.id,

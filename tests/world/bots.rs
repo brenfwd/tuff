@@ -891,6 +891,13 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
         .await;
     let op = tuff_core::world::fake::derive_uuid("bots", "Op", tuff_core::world::fake::Model::Wide);
     run.eventually(|| async {
+        run.server("execute if entity @a[name=Op,x=2,y=149,z=0,distance=..3]")
+            .await
+            .contains("passed")
+            .then_some(())
+    })
+    .await;
+    run.eventually(|| async {
         run.op(op, "bots spawn Mate")
             .await
             .contains("Spawned Mate")
