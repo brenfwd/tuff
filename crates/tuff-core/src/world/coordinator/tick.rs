@@ -1,10 +1,18 @@
 use super::*;
+use crate::world::stall;
 
 impl Coordinator {
     /// Ticks, then either records the tick at once or, in lockstep, holds
     /// the clock until every barrier member has finished it. Returns when
     /// the next tick is due (see [`next_due`]).
     pub(super) fn start_tick(&mut self, due: tokio::time::Instant) -> tokio::time::Instant {
+        self.beat.begin(stall::Phase::StartTick);
+        let next = self.start_tick_inner(due);
+        self.beat.end();
+        next
+    }
+
+    fn start_tick_inner(&mut self, due: tokio::time::Instant) -> tokio::time::Instant {
         let started = tokio::time::Instant::now();
         if let Some(ticks) = super::overloaded_by(
             due,
@@ -72,6 +80,12 @@ impl Coordinator {
     /// A tick while frozen: the game holds still, but players, the
     /// player index, sleeping and saving go on as they do in the game.
     pub(super) fn frozen_tick(&mut self) {
+        self.beat.begin(stall::Phase::FrozenTick);
+        self.frozen_tick_inner();
+        self.beat.end();
+    }
+
+    fn frozen_tick_inner(&mut self) {
         let _span = tuff_timings::span!("coordinator.tick");
         self.server_ticks.send_modify(|tick| *tick += 1);
         self.count_empty_tick();

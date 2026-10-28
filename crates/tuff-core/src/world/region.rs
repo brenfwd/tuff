@@ -463,7 +463,23 @@ impl RegionActor {
         actor.sim.fluid_settings = actor.current_fluid_settings();
         actor.light.sky_darken = crate::world::sky_darken(&actor.shared, actor.dimension());
         actor.sim.rand_value = actor.rng.r#gen();
+        actor.sched.beat = Some(crate::world::stall::Beat::register(format!(
+            "region {:?} at {},{}",
+            dimension, pos.x, pos.z
+        )));
         actor
+    }
+
+    fn beat_begin(&self, phase: crate::world::stall::Phase) {
+        if let Some(beat) = &self.sched.beat {
+            beat.begin(phase);
+        }
+    }
+
+    fn beat_end(&self) {
+        if let Some(beat) = &self.sched.beat {
+            beat.end();
+        }
     }
 
     fn current_enchantments(&self) -> Arc<tuff_item::enchantment::EnchantmentData> {
@@ -492,13 +508,25 @@ impl RegionActor {
                     Some(tags) => tuff_datapack::tags::refresh(&tags),
                     None => self.datapacks = None,
                 },
-                Some(result) = self.sched.jobs.recv() => self.on_job(result),
+                Some(result) = self.sched.jobs.recv() => {
+                    self.beat_begin(crate::world::stall::Phase::Job);
+                    self.on_job(result);
+                    self.beat_end();
+                }
                 message = self.internal.recv(), if self.sched.internal_open => match message {
-                    Some(message) => self.on_internal(message),
+                    Some(message) => {
+                        self.beat_begin(crate::world::stall::Phase::Internal);
+                        self.on_internal(message);
+                        self.beat_end();
+                    }
                     None => self.sched.internal_open = false,
                 },
                 request = self.requests.recv(), if self.sched.requests_open => match request {
-                    Some(request) => self.on_request(request),
+                    Some(request) => {
+                        self.beat_begin(crate::world::stall::Phase::Request);
+                        self.on_request(request);
+                        self.beat_end();
+                    }
                     None => self.sched.requests_open = false,
                 },
                 changed = self.sched.server_ticks.changed(), if self.sched.closing.is_none() => {
@@ -508,6 +536,11 @@ impl RegionActor {
                         self.sched.server_tick = *self.sched.server_ticks.borrow_and_update();
                         let game = self.sched.clock.has_changed().unwrap_or(false);
                         let tick = *self.sched.clock.borrow_and_update();
+                        self.beat_begin(if game {
+                            crate::world::stall::Phase::Tick
+                        } else {
+                            crate::world::stall::Phase::FrozenTick
+                        });
                         self.drain_before_tick();
                         let started = std::time::Instant::now();
                         if self.sched.closing.is_none() {
@@ -518,6 +551,7 @@ impl RegionActor {
                             }
                         }
                         let busy = started.elapsed();
+                        self.beat_end();
                         if game && let Some(member) = &self.sched.tick_member {
                             member.finished(tick);
                         }
