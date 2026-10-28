@@ -707,3 +707,52 @@ async fn chunks_players_watch_count_their_inhabited_time_and_save_it() {
     let root = stored_chunk(dir.path(), center, false).expect("chunk saved");
     assert!(root.get_long("InhabitedTime").unwrap_or(0) >= 20);
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_lowered_block_tick_cap_spreads_a_burst_over_later_ticks() {
+    const CAP: usize = 3;
+    const COUNT: usize = 12;
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    world
+        .shared
+        .config
+        .set_text(
+            "tuff.world.scheduledTicks.maxBlockPerTick",
+            &CAP.to_string(),
+        )
+        .unwrap();
+    let (player, mut events) = PlayerHandle::new(1000);
+    let center = ChunkPos::new(5, 5);
+    view_around(&world, &player, &mut events, center).await;
+    let region = world.region(center.region()).await;
+    world.ticks(5).await;
+
+    let y = FLOOR_Y + 20;
+    let row: Vec<BlockPos> = (0..COUNT as i32)
+        .map(|i| BlockPos::new(82 + i, y, 86))
+        .collect();
+    let sand = Block::Sand.default_state();
+    set_blocks(&region, row.iter().map(|pos| (*pos, sand)).collect()).await;
+
+    let mut previous = COUNT;
+    let mut fell_in_one_tick = 0;
+    let mut ticks_taken = 0;
+    while previous > 0 && ticks_taken < 60 {
+        world.ticks(1).await;
+        ticks_taken += 1;
+        let left = count_blocks(&region, &row, Block::Sand).await;
+        fell_in_one_tick = fell_in_one_tick.max(previous - left);
+        previous = left;
+    }
+    assert_eq!(previous, 0, "every queued sand block started falling");
+    assert!(
+        fell_in_one_tick <= CAP,
+        "{fell_in_one_tick} ticks ran in one game tick, over the cap {CAP}"
+    );
+    assert!(
+        ticks_taken >= COUNT / CAP,
+        "the burst finished in {ticks_taken} ticks, faster than the cap allows"
+    );
+}
