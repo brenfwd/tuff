@@ -1,3 +1,16 @@
 # name rtt_ms styles ticks   (20 ticks per second; target 10 h = 720000 ticks, 3 rtt profiles)
+# files: movement_corpus[_special][_rtt<ms>][_s<seed>].txt; seed > 0 varies lane order, ticks and start offsets
 movement_corpus.txt 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs 2116
+movement_corpus_rtt100_s1.txt 100 walk,sprint,sneak,swim,ladder,honey,cobweb,ice,stairs,combat 1637
+movement_corpus_rtt100_s4.txt 100 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 8397
+movement_corpus_rtt250_s2.txt 250 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 8488
+movement_corpus_rtt250_s5.txt 250 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 6514
+movement_corpus_s3.txt 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 8658
+movement_corpus_s6.txt 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 7094
 movement_corpus_special.txt 0 elytra,boat,horse,bridge 841
+movement_corpus_special_rtt100_s1.txt 100 elytra,boat,horse 2661
+movement_corpus_special_rtt100_s7.txt 100 elytra,boat,horse 1116
+movement_corpus_special_rtt250_s2.txt 250 elytra,boat,horse 1887
+movement_corpus_special_rtt250_s5.txt 250 elytra,boat,horse 1068
+movement_corpus_special_s3.txt 0 elytra,boat,horse 2800
+movement_corpus_special_s6.txt 0 elytra,boat,horse 1907

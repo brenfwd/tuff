@@ -155,11 +155,23 @@ fn corpus_files() -> Vec<String> {
     names
 }
 
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn every_recorded_latency_corpus_never_flags() {
+fn rtt_of(file: &str) -> u64 {
+    file.split_once("_rtt")
+        .and_then(|(_, rest)| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            digits.parse().ok()
+        })
+        .unwrap_or(0)
+}
+
+/// Every recorded file at one latency profile except the two canonical
+/// files, which have their own tests.
+async fn replay_latency_profile(rtt: u64) {
     for name in corpus_files() {
-        if name == "movement_corpus.txt" || name == "movement_corpus_special.txt" {
+        if name == "movement_corpus.txt"
+            || name == "movement_corpus_special.txt"
+            || rtt_of(&name) != rtt
+        {
             continue;
         }
         if name.starts_with("movement_corpus_special") {
@@ -168,6 +180,36 @@ async fn every_recorded_latency_corpus_never_flags() {
             replay_base_file(&name).await;
         }
     }
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_latency_corpus_never_flags_rtt0() {
+    replay_latency_profile(0).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_latency_corpus_never_flags_rtt100() {
+    replay_latency_profile(100).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_latency_corpus_never_flags_rtt250() {
+    replay_latency_profile(250).await;
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn every_corpus_file_has_a_replayed_latency_profile() {
+    for name in corpus_files() {
+        assert!(
+            [0, 100, 250].contains(&rtt_of(&name)),
+            "{name}: no replay test covers this latency profile"
+        );
+    }
+    assert_eq!(rtt_of("movement_corpus_special_rtt250_s3.txt"), 250);
 }
 
 #[tuff_core::watchdog]
@@ -217,9 +259,10 @@ async fn replay_base_file(file: &str) {
         f64::from(origin[2]),
     ];
     let lanes = Lane::parse_all(&text, abs).unwrap();
+    let canonical = file == "movement_corpus.txt";
     assert!(
-        lanes.len() >= 11,
-        "expected all recorded lanes, got {}",
+        lanes.len() >= if canonical { 11 } else { 1 },
+        "{file}: expected all recorded lanes, got {}",
         lanes.len()
     );
     for lane in &lanes {
@@ -323,12 +366,22 @@ async fn replay_special_file(file: &str, only: Option<&str>) {
     let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
     let abs = origin.map(f64::from);
     let lanes = Lane::parse_all(&text, abs).unwrap();
-    assert!(lanes.len() >= 6, "{file}: expected every special lane");
+    let canonical = file == "movement_corpus_special.txt";
+    assert!(
+        lanes.len() >= if canonical { 6 } else { 1 },
+        "{file}: expected every special lane"
+    );
     for lane in lanes
         .iter()
         .filter(|l| only.is_none_or(|name| l.name == name))
     {
-        let name = lane.name.clone();
+        replay_special_lane(lane, base, origin).await;
+    }
+}
+
+async fn replay_special_lane(lane: &Lane, base: ChunkPos, origin: [i32; 3]) {
+    let name = lane.name.clone();
+    {
         replay_lane_with(lane, base, origin, |w, blocks| {
             if name.starts_with("elytra") {
                 w.session.inventory.set_slot(
@@ -375,6 +428,89 @@ async fn replay_special_file(file: &str, only: Option<&str>) {
         })
         .await;
     }
+}
+
+/// Replays every lane of every corpus file on its own and lists the lanes
+/// that flag. With `TUFF_CORPUS_PRUNE=1` it moves them out of the fixture
+/// into `target/corpus-flagged/`. Run after recording new corpus files,
+/// then update `corpus_manifest.txt`.
+#[tuff_core::watchdog]
+#[ignore = "corpus triage tool, run by hand after recording"]
+#[test]
+fn triage_corpus_lanes() {
+    let prune = std::env::var("TUFF_CORPUS_PRUNE").as_deref() == Ok("1");
+    let only = std::env::var("TUFF_CORPUS_FILES").ok();
+    let flagged_dir = fixtures_dir().join("../../../target/corpus-flagged");
+    let base = ChunkPos::new(46, 46);
+    let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
+    let mut total = 0;
+    for file in corpus_files() {
+        if only.as_deref().is_some_and(|o| !file.starts_with(o)) {
+            continue;
+        }
+        let text = std::fs::read_to_string(fixtures_dir().join(&file)).unwrap();
+        let special = file.starts_with("movement_corpus_special");
+        let mut kept = String::new();
+        let mut dropped = String::new();
+        for chunk in lane_chunks(&text) {
+            let lane = Lane::parse_all(chunk, origin.map(f64::from))
+                .unwrap()
+                .remove(0);
+            let name = lane.name.clone();
+            let run = std::thread::spawn(move || {
+                let _fixtures = tuff_item::item::conservation::fixture_thread();
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(4)
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                rt.block_on(async {
+                    if special {
+                        replay_special_lane(&lane, base, origin).await;
+                    } else {
+                        replay_lane(&lane, base, origin).await;
+                    }
+                });
+            });
+            if run.join().is_ok() {
+                kept.push_str(chunk);
+            } else {
+                println!("FLAGGED {file} {name}");
+                dropped.push_str(chunk);
+                total += 1;
+            }
+        }
+        if prune && !dropped.is_empty() {
+            std::fs::create_dir_all(&flagged_dir).unwrap();
+            std::fs::write(flagged_dir.join(&file), dropped).unwrap();
+            std::fs::write(fixtures_dir().join(&file), kept).unwrap();
+        }
+    }
+    println!("triage: {total} flagged lane(s)");
+}
+
+/// The text of each lane, from its `lane` line to the next one.
+fn lane_chunks(text: &str) -> Vec<&str> {
+    let starts: Vec<usize> = text
+        .match_indices("lane ")
+        .map(|(i, _)| i)
+        .filter(|&i| i == 0 || text.as_bytes()[i - 1] == b'\n')
+        .chain(std::iter::once(text.len()))
+        .collect();
+    starts.windows(2).map(|w| &text[w[0]..w[1]]).collect()
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn lane_chunks_split_on_lane_lines() {
+    let text = "lane a\nT\nlane b\nfill 0 0 0 0 0 0 minecraft:lane\nT\n";
+    assert_eq!(
+        lane_chunks(text),
+        [
+            "lane a\nT\n",
+            "lane b\nfill 0 0 0 0 0 0 minecraft:lane\nT\n"
+        ]
+    );
 }
 
 #[tuff_core::watchdog]

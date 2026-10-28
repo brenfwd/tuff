@@ -11,6 +11,7 @@
 )]
 mod cache;
 pub mod control;
+pub mod corpus;
 pub mod fetch;
 pub mod latency;
 pub mod launch;
