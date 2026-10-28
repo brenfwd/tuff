@@ -1,0 +1,3 @@
+# name rtt_ms styles ticks   (20 ticks per second; target 10 h = 720000 ticks, 3 rtt profiles)
+movement_corpus.txt 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs 2116
+movement_corpus_special.txt 0 elytra,boat,horse,bridge 841
