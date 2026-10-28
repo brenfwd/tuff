@@ -69,6 +69,10 @@ pub struct LongJump {
 }
 
 impl LongJump {
+    pub fn is_active(&self) -> bool {
+        !matches!(self.phase, Phase::Idle)
+    }
+
     pub fn new(spec: LongJumpSpec) -> Self {
         Self {
             spec,

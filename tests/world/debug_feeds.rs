@@ -453,7 +453,17 @@ async fn brain_mobs_report_brains_and_goal_mobs_do_not() {
             break;
         }
     }
-    assert_eq!(brains.len(), 1, "only the goat has a brain: {brains:?}");
+    let goat = brains[0].0;
+    assert!(
+        brains.iter().all(|(entity, _)| *entity == goat),
+        "only the goat has a brain: {brains:?}"
+    );
     assert!(brains[0].1.contains("idle"), "{}", brains[0].1);
+    assert!(brains[0].1.contains("attack_target: -"), "{}", brains[0].1);
+    assert!(
+        brains[0].1.contains("ram_cooldown_ticks"),
+        "{}",
+        brains[0].1
+    );
     world.shutdown().await;
 }

@@ -446,7 +446,38 @@ pub struct Frog {
     variant: usize,
 }
 
+fn frog_activity(tongue: bool, swimming: bool, jumping: bool) -> &'static str {
+    if tongue {
+        "tongue"
+    } else if swimming {
+        "swim"
+    } else if jumping {
+        "long_jump"
+    } else {
+        "idle"
+    }
+}
+
 impl Species for Frog {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        let tongue = core
+            .goals
+            .find::<ShootTongue>()
+            .is_some_and(|t| t.phase != TonguePhase::Done);
+        let jumping = core
+            .goals
+            .find::<LongJump>()
+            .is_some_and(LongJump::is_active);
+        let mut state = crate::brain_debug::BrainState {
+            activity: Some(frog_activity(tongue, core.body.in_water, jumping)),
+            ..Default::default()
+        };
+        if core.body.in_water {
+            state.memories.push("is_in_water: true".to_owned());
+        }
+        state
+    }
+
     fn pushed_by_fluid(&self) -> bool {
         false
     }

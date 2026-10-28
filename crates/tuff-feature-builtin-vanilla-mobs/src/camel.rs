@@ -176,6 +176,19 @@ impl<const HUSK: bool> Camel<HUSK> {
 }
 
 impl<const HUSK: bool> Species for Camel<HUSK> {
+    fn brain_state(&self, _core: &MobCore) -> crate::brain_debug::BrainState {
+        let mut state = crate::brain_debug::BrainState {
+            activity: Some("idle"),
+            ..Default::default()
+        };
+        if self.dash_cooldown > 0 {
+            state
+                .memories
+                .push(format!("dash_cooldown: {}", self.dash_cooldown));
+        }
+        state
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }

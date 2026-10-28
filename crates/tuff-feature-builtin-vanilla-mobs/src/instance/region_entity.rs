@@ -34,6 +34,7 @@ impl<S: Species> RegionEntity for Mob<S> {
         &self,
         feed: tuff_vanilla_data::registry::DebugSubscription,
         tick: u64,
+        names: &dyn Fn(i32) -> Option<String>,
     ) -> Option<tuff_core::protocol::play::DebugValue> {
         use tuff_core::protocol::play::{DebugPath, DebugValue};
         use tuff_vanilla_data::registry::DebugSubscription as Feed;
@@ -81,6 +82,7 @@ impl<S: Species> RegionEntity for Mob<S> {
                         self.species.brain_state(&self.core),
                         behaviors,
                         tick,
+                        names,
                     ))
                 }),
             _ => self.species.debug_value(&self.core, feed, tick),

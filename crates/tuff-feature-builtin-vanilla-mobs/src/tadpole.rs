@@ -84,6 +84,17 @@ impl Tadpole {
 }
 
 impl Species for Tadpole {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        crate::brain_debug::BrainState {
+            activity: Some(if core.target.is_some() {
+                "fight"
+            } else {
+                "idle"
+            }),
+            ..Default::default()
+        }
+    }
+
     fn pushed_by_fluid(&self) -> bool {
         false
     }
