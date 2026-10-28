@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// A container's item slots at a position, read-only (see
 /// [`TickContext::container`]).
@@ -64,10 +65,97 @@ pub(super) struct TransportItems {
     pub(super) visited: Vec<BlockPos>,
     pub(super) unreachable: Vec<BlockPos>,
     pub(super) unreachable_until: u64,
-    pub(super) cooldown_until: u64,
+    pub(super) cooldown: Cooldown,
     /// The chest whose lid this golem holds open.
     pub(super) open: Option<BlockPos>,
 }
+
+/// The transport cooldown, shared with the idle wander that only runs while
+/// it is active.
+#[derive(Debug, Default, Clone)]
+pub(super) struct Cooldown(std::sync::Arc<(AtomicU64, AtomicBool)>);
+
+impl Cooldown {
+    pub(super) fn until(&self) -> u64 {
+        self.0.0.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn set(&self, tick: u64) {
+        self.0.0.store(tick, Ordering::Relaxed);
+    }
+
+    /// A fresh golem waits 60 to 99 ticks before its first trip.
+    pub(super) fn arm(&self, cx: &mut TickContext) {
+        if !self.0.1.swap(true, Ordering::Relaxed) {
+            self.set(cx.tick + cx.rng.gen_range(INITIAL_COOLDOWN.0..INITIAL_COOLDOWN.1));
+        }
+    }
+
+    pub(super) fn active(&self, cx: &mut TickContext) -> bool {
+        self.arm(cx);
+        cx.tick < self.until()
+    }
+}
+
+/// While the transport cooldown runs and nothing else moves the golem, it
+/// either takes a 2 block stroll or stands still for 30 to 60 ticks.
+#[derive(Debug, Default)]
+pub(super) struct IdleWander {
+    pub(super) cooldown: Cooldown,
+    pub(super) target: Option<[f64; 3]>,
+    pub(super) wait: i32,
+}
+
+impl Goal for IdleWander {
+    fn flags(&self) -> Flags {
+        Flags::MOVE
+    }
+
+    fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
+        if !self.cooldown.active(cx) || !mob.navigation.is_done() {
+            return false;
+        }
+        if cx.rng.gen_bool(0.5) {
+            self.target = crate::random_pos::land_pos(mob, 2, 2, cx);
+            self.target.is_some()
+        } else {
+            self.target = None;
+            self.wait = cx.rng.gen_range(IDLE_WAIT.0..=IDLE_WAIT.1);
+            true
+        }
+    }
+
+    fn can_continue(&mut self, mob: &mut MobCore, _cx: &mut TickContext) -> bool {
+        if self.target.is_some() {
+            !mob.navigation.is_done()
+        } else {
+            self.wait > 0
+        }
+    }
+
+    fn start(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
+        if let Some(target) = self.target {
+            mob.move_to_position(target, TRANSPORT_SPEED, cx);
+        }
+    }
+
+    fn stop(&mut self, mob: &mut MobCore, _cx: &mut TickContext) {
+        if self.target.take().is_some() {
+            mob.navigation.stop();
+        }
+    }
+
+    fn tick(&mut self, _mob: &mut MobCore, _cx: &mut TickContext) {
+        self.wait -= 1;
+    }
+
+    fn every_tick(&self) -> bool {
+        true
+    }
+}
+
+pub(super) const INITIAL_COOLDOWN: (u64, u64) = (60, 100);
+pub(super) const IDLE_WAIT: (i32, i32) = (30, 60);
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Stage {
@@ -139,7 +227,7 @@ impl TransportItems {
         self.drop_target(mob, cx);
         self.visited.clear();
         self.unreachable.clear();
-        self.cooldown_until = cx.tick + GIVEUP_TICKS;
+        self.cooldown.set(cx.tick + GIVEUP_TICKS);
     }
 
     /// Lets go of the chest: the lid closes and the golem is idle again.
@@ -359,11 +447,12 @@ impl Goal for TransportItems {
     }
 
     fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
-        cx.tick >= self.cooldown_until && mob.leash.is_none()
+        self.cooldown.arm(cx);
+        cx.tick >= self.cooldown.until() && mob.leash.is_none()
     }
 
     fn can_continue(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
-        cx.tick >= self.cooldown_until && mob.leash.is_none() && !mob.is_panicking()
+        cx.tick >= self.cooldown.until() && mob.leash.is_none() && !mob.is_panicking()
     }
 
     fn stop(&mut self, mob: &mut MobCore, cx: &mut TickContext) {

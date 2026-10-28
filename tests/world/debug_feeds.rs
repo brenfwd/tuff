@@ -419,7 +419,12 @@ async fn brain_mobs_report_brains_and_goal_mobs_do_not() {
             PlayerLooks::default(),
         ))
         .await;
-    for (id, x) in [("minecraft:goat", 3.5), ("minecraft:zombie", 8.5)] {
+    for (id, x) in [
+        ("minecraft:goat", 3.5),
+        ("minecraft:zombie", 8.5),
+        ("minecraft:copper_golem", 5.5),
+        ("minecraft:happy_ghast", 1.5),
+    ] {
         let (reply, summoned) = oneshot::channel();
         region
             .request(RegionRequest::Summon {
@@ -449,21 +454,47 @@ async fn brain_mobs_report_brains_and_goal_mobs_do_not() {
                 }
             }
         }
-        if !brains.is_empty() {
+        let mut seen: Vec<i32> = brains.iter().map(|(entity, _)| *entity).collect();
+        seen.sort_unstable();
+        seen.dedup();
+        if seen.len() >= 3 {
             break;
         }
     }
-    let goat = brains[0].0;
-    assert!(
-        brains.iter().all(|(entity, _)| *entity == goat),
-        "only the goat has a brain: {brains:?}"
+    let latest = |needle: &str| {
+        brains
+            .iter()
+            .rev()
+            .find(|(_, text)| text.contains(needle))
+            .unwrap_or_else(|| panic!("no brain with {needle}: {brains:?}"))
+    };
+    let mut seen: Vec<i32> = brains.iter().map(|(entity, _)| *entity).collect();
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(
+        seen.len(),
+        3,
+        "goat, copper golem and happy ghast only: {brains:?}"
     );
-    assert!(brains[0].1.contains("idle"), "{}", brains[0].1);
-    assert!(brains[0].1.contains("attack_target: -"), "{}", brains[0].1);
+    let goat = latest("long_jump_cooling_down");
+    assert!(goat.1.contains("idle"), "{}", goat.1);
+    assert!(goat.1.contains("long_jump_cooling_down: -"), "{}", goat.1);
+    let golem = latest("doors_to_close");
+    assert!(golem.1.contains("idle"), "{}", golem.1);
     assert!(
-        brains[0].1.contains("ram_cooldown_ticks"),
+        golem.1.contains("transport_items_cooldown_ticks: -"),
         "{}",
-        brains[0].1
+        golem.1
     );
+    let ghast = brains
+        .iter()
+        .rev()
+        .find(|(_, text)| {
+            !text.contains("long_jump_cooling_down") && !text.contains("doors_to_close")
+        })
+        .expect("a happy ghast brain");
+    assert!(ghast.1.contains("idle"), "{}", ghast.1);
+    assert!(ghast.1.contains("is_panicking: -"), "{}", ghast.1);
+    assert_ne!(golem.0, ghast.0);
     world.shutdown().await;
 }

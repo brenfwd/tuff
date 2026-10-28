@@ -1120,6 +1120,18 @@ impl CopperGolem {
 }
 
 impl Species for CopperGolem {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        crate::brain_debug::BrainState {
+            activity: Some("idle"),
+            memories: core
+                .is_panicking()
+                .then(|| "is_panicking: true".to_owned())
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        }
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }
@@ -1127,9 +1139,24 @@ impl Species for CopperGolem {
     fn configure(core: &mut MobCore) {
         let mut goals = GoalSelector::default();
         goals.add(0, super::goals::Panic::new(1.5));
-        goals.add(5, TransportItems::default());
+        let cooldown = Cooldown::default();
+        goals.add(
+            5,
+            TransportItems {
+                cooldown: cooldown.clone(),
+                ..TransportItems::default()
+            },
+        );
+        goals.add(
+            7,
+            IdleWander {
+                cooldown,
+                ..IdleWander::default()
+            },
+        );
         core.goals = goals;
-        common_goals(core);
+        core.goals.add(8, LookAtPlayer::new(6.0));
+        core.goals.add(8, RandomLookAround::default());
     }
 
     fn load(&mut self, _core: &mut MobCore, nbt: &mut Compound) {

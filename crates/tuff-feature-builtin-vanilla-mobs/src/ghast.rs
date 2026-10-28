@@ -488,6 +488,18 @@ impl HappyGhast {
 }
 
 impl Species for HappyGhast {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        let panicking = core.is_baby() && core.is_panicking();
+        crate::brain_debug::BrainState {
+            activity: Some(if panicking { "panic" } else { "idle" }),
+            memories: panicking
+                .then(|| "is_panicking: true".to_owned())
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        }
+    }
+
     fn track_shape(&self, core: &MobCore) -> Option<tuff_core::world::messages::Shape> {
         core.is_baby().then_some(tuff_core::world::messages::Shape {
             non_solid: true,

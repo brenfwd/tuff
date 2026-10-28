@@ -639,10 +639,15 @@ async fn a_fully_oxidized_copper_golem_turns_into_a_statue_that_an_axe_reanimate
     assert_eq!(golems.len(), 1, "{golems:?}");
 
     let mut turned = None;
+    let mut last = feet;
     for _ in 0..4000 {
         world.ticks(1).await;
-        if mobs(&region, EntityType::CopperGolem).await.is_empty() {
-            turned = block_at(&region, feet).await;
+        let found = mobs(&region, EntityType::CopperGolem).await;
+        if let Some(golem) = found.first() {
+            let [x, y, z] = golem.position;
+            last = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
+        } else {
+            turned = block_at(&region, last).await;
             break;
         }
     }

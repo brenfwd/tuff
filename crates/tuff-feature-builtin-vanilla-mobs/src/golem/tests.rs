@@ -605,6 +605,8 @@ fn a_copper_golem_queues_behind_a_chest_in_use_and_opens_the_lid_while_working()
 #[test]
 fn a_panicking_copper_golem_stops_transporting() {
     run_with_chest(Block::Air, |goal, core, cx| {
+        goal.cooldown.arm(cx);
+        goal.cooldown.set(0);
         assert!(goal.can_use(core, cx));
         core.panicking = true;
         assert!(!goal.can_continue(core, cx));
@@ -763,5 +765,52 @@ fn a_copper_golem_takes_the_whole_stack_and_holds_only_what_the_chest_gives() {
         let mut golem = CopperGolem::default();
         golem.took_item(core, pick.test_copy());
         assert_eq!(core.equipment.get(EquipmentSlot::Mainhand), Some(&pick));
+    });
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn a_fresh_copper_golem_waits_60_to_99_ticks_before_its_first_trip() {
+    run_with_chest(Block::Air, |_, core, cx| {
+        let cooldown = Cooldown::default();
+        let mut goal = TransportItems {
+            cooldown: cooldown.clone(),
+            ..TransportItems::default()
+        };
+        let start = cx.tick;
+        assert!(!goal.can_use(core, cx), "still on its starting cooldown");
+        let wait = cooldown.until() - start;
+        assert!((60..100).contains(&wait), "{wait}");
+        cx.tick = cooldown.until();
+        assert!(goal.can_use(core, cx));
+    });
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn a_copper_golem_only_idles_while_the_transport_cooldown_runs() {
+    run_with_chest(Block::Air, |_, core, cx| {
+        let cooldown = Cooldown::default();
+        let mut idle = IdleWander {
+            cooldown: cooldown.clone(),
+            ..IdleWander::default()
+        };
+        let mut started = false;
+        for _ in 0..40 {
+            started |= idle.can_use(core, cx);
+        }
+        assert!(started, "idles during the starting cooldown");
+        cx.tick = cooldown.until();
+        for _ in 0..40 {
+            assert!(!idle.can_use(core, cx), "no idling once trips may start");
+        }
+        cooldown.set(cx.tick + 140);
+        let mut waits = Vec::new();
+        for _ in 0..200 {
+            if idle.can_use(core, cx) && idle.target.is_none() {
+                waits.push(idle.wait);
+            }
+        }
+        assert!(waits.iter().all(|w| (30..=60).contains(w)), "{waits:?}");
     });
 }
