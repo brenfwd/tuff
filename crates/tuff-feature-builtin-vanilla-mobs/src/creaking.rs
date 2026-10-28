@@ -370,6 +370,23 @@ pub fn tear_down_particles(bounds: [f64; 6]) -> Packets {
 }
 
 impl Species for Creaking {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        let mut state = crate::brain_debug::BrainState {
+            activity: Some(if core.target.is_some() {
+                "fight"
+            } else {
+                "idle"
+            }),
+            ..Default::default()
+        };
+        if self.invulnerable_ticks > 0 {
+            state
+                .memories
+                .push(format!("invulnerable_ticks: {}", self.invulnerable_ticks));
+        }
+        state
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }

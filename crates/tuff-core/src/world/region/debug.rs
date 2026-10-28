@@ -400,6 +400,11 @@ impl RegionActor {
         let tick = self.sched.tick;
         let mut synced = std::mem::take(&mut self.debug.entities);
         let mut live = HashSet::new();
+        let ents = &self.ents.entities;
+        let names = |id: i32| {
+            ents.get(&id)
+                .map(|t| crate::world::debug_feeds::entity_name(t.entity.base()))
+        };
         for (id, tracked) in &self.ents.entities {
             let entity = &tracked.entity;
             let chunk = ChunkPos::of_position(entity.base().position);
@@ -417,7 +422,7 @@ impl RegionActor {
                     .filter(|(p, _)| subscribers.wants(**p, feed))
                     .map(|(_, h)| h)
                     .collect();
-                let value = entity.debug_value(feed, tick);
+                let value = entity.debug_value(feed, tick, &names);
                 let entry = synced.entry(key).or_default();
                 live.insert(key);
                 let changed = entry.value != value;

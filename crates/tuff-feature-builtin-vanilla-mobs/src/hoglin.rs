@@ -403,7 +403,7 @@ impl Species for Hoglin {
         let mut state = crate::brain_debug::BrainState::default();
         if let Some(from) = core.goals.find::<Retreat>().and_then(|r| r.from) {
             state.activity = Some("avoid");
-            state.memories.push(format!("avoid_target: #{from}"));
+            state.avoid_target = Some(from);
         }
         if core.signal > 0 {
             state.memories.push("pacified: true".to_owned());

@@ -542,6 +542,24 @@ fn memory_value<'a>(memories: &'a Compound, key: &str) -> Option<&'a Tag> {
 }
 
 impl Species for Allay {
+    fn brain_state(&self, _core: &MobCore) -> crate::brain_debug::BrainState {
+        let mut state = crate::brain_debug::BrainState {
+            activity: Some("idle"),
+            ..Default::default()
+        };
+        if let Some(ticks) = self.pickup_cooldown.filter(|t| *t > 0) {
+            state
+                .memories
+                .push(format!("item_pickup_cooldown_ticks: {ticks}"));
+        }
+        if let Some(ticks) = self.noteblock_cooldown.filter(|t| *t > 0) {
+            state
+                .memories
+                .push(format!("liked_note_block_cooldown_ticks: {ticks}"));
+        }
+        state
+    }
+
     fn take_items(&mut self) -> Vec<ItemStack> {
         self.inventory.take().into_iter().collect()
     }

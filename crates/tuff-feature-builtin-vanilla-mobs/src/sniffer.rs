@@ -288,7 +288,31 @@ impl Sniffer {
     }
 }
 
+fn sniffer_activity(state: i32) -> &'static str {
+    match state {
+        SNIFFING | SEARCHING => "sniff",
+        DIGGING | RISING => "dig",
+        _ => "idle",
+    }
+}
+
 impl Species for Sniffer {
+    fn brain_state(&self, _core: &MobCore) -> crate::brain_debug::BrainState {
+        let mut state = crate::brain_debug::BrainState {
+            activity: Some(sniffer_activity(self.state)),
+            ..Default::default()
+        };
+        if self.sniff_cooldown > 0 {
+            state
+                .memories
+                .push(format!("sniff_cooldown: {}", self.sniff_cooldown));
+        }
+        if self.digging {
+            state.memories.push("sniffer_digging: true".to_owned());
+        }
+        state
+    }
+
     fn create(_rng: &mut StdRng) -> Self {
         Self::default()
     }

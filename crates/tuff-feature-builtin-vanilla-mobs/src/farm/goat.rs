@@ -1,4 +1,5 @@
 use super::*;
+use crate::long_jump::LongJump;
 
 pub(super) fn goat_food(item: Item) -> bool {
     tuff_datapack::tags::is(tag::item::key::GOAT_FOOD, item)
@@ -62,6 +63,28 @@ impl Goat {
 }
 
 impl Species for Goat {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        let mut state = crate::brain_debug::BrainState::default();
+        let ram = core.goals.find::<RamGoal>();
+        state.activity = Some(if ram.is_some_and(RamGoal::is_ramming) {
+            "ram"
+        } else if core
+            .goals
+            .find::<LongJump>()
+            .is_some_and(LongJump::is_active)
+        {
+            "long_jump"
+        } else {
+            "idle"
+        });
+        if let Some(ram) = ram.filter(|r| r.cooldown() > 0) {
+            state
+                .memories
+                .push(format!("ram_cooldown_ticks: {}", ram.cooldown()));
+        }
+        state
+    }
+
     fn create(rng: &mut StdRng) -> Self {
         Self {
             initial_ram_cooldown: Some(rng.gen_range(600..=6000)),

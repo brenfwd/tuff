@@ -567,6 +567,7 @@ pub trait RegionEntity: Any + Send + Debug {
         &self,
         _feed: tuff_vanilla_data::registry::DebugSubscription,
         _tick: u64,
+        _names: &dyn Fn(i32) -> Option<String>,
     ) -> Option<crate::protocol::play::DebugValue> {
         None
     }

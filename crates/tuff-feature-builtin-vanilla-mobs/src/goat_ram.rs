@@ -85,6 +85,14 @@ impl RamGoal {
         }
     }
 
+    pub fn is_ramming(&self) -> bool {
+        !matches!(self.phase, Phase::Idle)
+    }
+
+    pub fn cooldown(&self) -> i32 {
+        self.cooldown
+    }
+
     pub fn set_cooldown(&mut self, ticks: i32) {
         self.cooldown = ticks;
     }

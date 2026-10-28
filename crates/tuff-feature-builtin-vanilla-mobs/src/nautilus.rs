@@ -451,6 +451,17 @@ impl Nautilus {
 }
 
 impl Species for Nautilus {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        crate::brain_debug::BrainState {
+            activity: Some(if core.target.is_some() {
+                "fight"
+            } else {
+                "idle"
+            }),
+            ..Default::default()
+        }
+    }
+
     fn pushed_by_fluid(&self) -> bool {
         false
     }
@@ -714,6 +725,10 @@ impl ZombieNautilus {
 }
 
 impl Species for ZombieNautilus {
+    fn brain_state(&self, core: &MobCore) -> crate::brain_debug::BrainState {
+        self.inner.brain_state(core)
+    }
+
     fn pushed_by_fluid(&self) -> bool {
         false
     }
