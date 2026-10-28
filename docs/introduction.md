@@ -6,6 +6,43 @@ plugins are sandboxed WebAssembly modules. See `CONTRIBUTING.md` for
 development guidelines.
 
 
+## Release notes: v0.1.0-alpha.2 (unreleased)
+
+The next alpha, undated until it is tagged. The support statement below
+for alpha.1 still holds: build from source, worlds from 1.13 or newer,
+Linux and macOS supported (Windows best effort), anti-cheat logs only by
+default, and the admin panel needs a reverse proxy for remote access.
+
+What changed since alpha.1:
+
+- Item and block duplication prevention. Items are now tracked as
+  move-only stacks through inventories, menus, hoppers, dispensers,
+  projectiles, mobs, plugins and chunk unloads, and falling blocks and
+  endermen own the block they carry. Each world save is written whole and
+  refused if it would break item conservation, with the save journal
+  recovered before offline tools open a world.
+- Vanilla duplication glitches are kept on purpose and can be switched off:
+  `tuff.blocks.tntDuplication`, `tuff.blocks.carpetRailDuplication`,
+  `tuff.blocks.gravityBlockPortalDuplication` and
+  `tuff.blocks.permanentBlockBreaking` (default `true`; see
+  `docs/settings.md`). Other piston and rail dupers are fixed.
+- Menus and trades: trades are paid at the click, menu contents drop on
+  death, stale station menus close, and replaced station results no longer
+  leak items.
+- Mobs: animals, water mobs, horses, donkeys and llamas now despawn the way
+  vanilla does.
+- Anti-cheat: new `tuff.anticheat.kickOperators` (default `false`) so
+  checked operators are never kicked; the baseline movement and reach checks
+  always run; floating is not counted while nearby chunks are unknown.
+- World and sessions: each player's data is leased to one session at a time,
+  a session crashing while leaving no longer loses items in flight, audible
+  and global events are scoped by range and dimension like vanilla, and
+  block corrections no longer leak the true block.
+- Storage and performance: save journal syncs are grouped, chunk writes are
+  batched, and ownership accounting stays off the hot path.
+- Admin panel: the login command prints a clickable link to the panel.
+- macOS: dylib plugin features use the correct library naming.
+
 ## Release notes: v0.1.0-alpha.1
 
 The first public alpha is a drop-in survival server for 26.3 with

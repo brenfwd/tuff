@@ -31,6 +31,11 @@ class InstallScriptTest(unittest.TestCase):
         self.assertIn("/tmp/x/tuff", r.stdout)
         self.assertIn("rm -rf", r.stdout)
 
+    def test_honours_cargo_target_dir(self):
+        r = run("--dry-run", "--accept-eula", "--prefix", "/tmp/x", env={"CARGO_TARGET_DIR": "/tmp/tgt"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("install -m 755 /tmp/tgt/release/tuff /tmp/x/tuff", r.stdout)
+
     def test_opt_uses_release_opt_profile(self):
         r = run("--dry-run", "--accept-eula", "--no-update", "--opt", "--prefix", "/tmp/x")
         self.assertEqual(r.returncode, 0, r.stderr)
