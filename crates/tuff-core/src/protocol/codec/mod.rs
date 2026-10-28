@@ -139,6 +139,10 @@ pub trait WriteExt {
     /// and book contents and any oversized component are left out.
     fn write_viewer_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>);
     fn write_viewer_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>);
+    /// A viewer slot that also drops durability, enchantments and custom
+    /// data, keeping only the enchantment glint.
+    fn write_obfuscated_viewer_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>);
+    fn write_obfuscated_viewer_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>);
     /// A non-empty stack as item, count and component patch, with no Slot
     /// count prefix (recipe book stack displays, container contents).
     fn write_item_template<M: Mode>(&mut self, stack: ItemView<'_, M>);

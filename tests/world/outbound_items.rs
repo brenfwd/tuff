@@ -37,6 +37,7 @@ fn outbound_items_equipment_is_stripped_for_viewers() {
     let packet = encode_packet(&SetEquipment {
         entity_id: 1,
         items: &items,
+        obfuscate: false,
     });
     assert!(
         packet.len() < 64,

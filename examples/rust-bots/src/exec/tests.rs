@@ -656,6 +656,68 @@ fn sprint_jumps_a_three_block_gap_when_the_plugin_ticks_less_often_than_the_body
     }
 }
 
+fn gap_with(steps: usize, lag: usize) -> bool {
+    let mut t = Terrain::new(32, 1);
+    for x in 6..9 {
+        for y in -39..=0 {
+            t.set((x, y, 0), Class::PASSABLE);
+        }
+    }
+    let mut run = parkour_run(t, block(14, 1, 0));
+    run.host.lag = lag;
+    for _ in 0..900 {
+        run.bots.tick(&mut run.host);
+        for _ in 0..steps {
+            run.host.physics();
+        }
+        if run.finished() {
+            break;
+        }
+    }
+    run.last_event() == Some(&Event::ProcessDone)
+}
+
+#[test]
+fn sprint_jumps_a_three_block_gap_from_a_view_behind_the_body() {
+    for (steps, lag) in [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1)] {
+        assert!(
+            gap_with(steps, lag),
+            "{steps} body ticks per plugin tick, view {lag} ticks behind"
+        );
+    }
+}
+
+#[test]
+fn walking_on_a_slightly_lowered_top_never_jumps() {
+    let spec = spec_at(0.5, 1.0, 0.5);
+    let mut terrain = Terrain::new(16, 1);
+    let mut exec = super::Executor::new(
+        block(8, 1, 0),
+        &spec.policy,
+        None,
+        super::work::Kit {
+            throwaway: 0,
+            throwaway_slot: None,
+        },
+    );
+    for tick in 0..40 {
+        let view = super::View {
+            pos: Vec3 {
+                x: 0.5 + f64::from(tick) * 0.2,
+                y: 0.9375,
+                z: 0.5,
+            },
+            yaw: -90.0,
+            on_ground: true,
+            in_fluid: false,
+            food: 20,
+        };
+        if let super::Step::Drive(drive) = exec.tick(&view, &spec.skill, &mut terrain) {
+            assert!(!drive.jump, "tick {tick} jumped: {drive:?}");
+        }
+    }
+}
+
 #[test]
 fn climbs_a_ladder_tower() {
     let mut t = Terrain::new(8, 2);

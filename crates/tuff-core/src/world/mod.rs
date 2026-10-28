@@ -52,6 +52,7 @@ pub mod game_rules;
 pub mod generator;
 pub mod growth;
 pub mod heightmap_kind;
+pub mod hide_details;
 pub mod inert_entity;
 pub mod inventory;
 pub mod inventory_edit;

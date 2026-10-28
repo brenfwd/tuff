@@ -513,6 +513,7 @@ fn metadata_attributes_and_equipment_round_trip() {
                 (equipment_slot::MAIN_HAND, Some(damaged.any())),
                 (equipment_slot::HEAD, None),
             ],
+            obfuscate: false,
         }),
         &[
             "items: [0=minecraft:iron_pickaxe x1 +[\"minecraft:damage\"]",
