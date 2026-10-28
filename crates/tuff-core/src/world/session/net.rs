@@ -48,6 +48,7 @@ pub struct Net {
     /// Most packets accepted per second; 0 is unlimited.
     pub rate_limit: u32,
     pub(super) rate_meter: rate::RateMeter,
+    pub(super) budgets: rate::Budgets,
     pub latency_ms: i32,
     pub chat_spam: TickThrottler,
     pub command_spam: TickThrottler,
@@ -64,6 +65,7 @@ impl Net {
             last_action: now,
             rate_limit: network.rate_limit,
             rate_meter: rate::RateMeter::new(now),
+            budgets: rate::Budgets::new(now),
             latency_ms: 0,
             chat_spam: TickThrottler::new(20, 20 * network.chat_spam_threshold_seconds),
             command_spam: TickThrottler::new(20, 20 * network.command_spam_threshold_seconds),
@@ -125,6 +127,13 @@ impl PlayerSession {
                 }
             }
         }
+    }
+
+    pub fn admit_budgeted(&mut self, packet: &Serverbound) -> bool {
+        if self.net.rate_limit == 0 {
+            return true;
+        }
+        self.net.budgets.admit(packet, Instant::now())
     }
 
     pub(super) fn over_rate_limit(&mut self) -> bool {

@@ -95,7 +95,10 @@ impl Check for Sanity {
                 Flag::cancel(NAME, 10.0)
             }
             Serverbound::SignUpdate { lines, .. }
-                if lines.len() > 4 || lines.iter().any(|l| l.chars().count() > MAX_SIGN_LINE) =>
+                if lines.len() > 4
+                    || lines
+                        .iter()
+                        .any(|l| l.encode_utf16().count() > MAX_SIGN_LINE) =>
             {
                 Flag::cancel(NAME, 10.0)
             }
