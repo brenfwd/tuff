@@ -446,12 +446,7 @@ fn edge_ore_sent(side: usize, dense: bool, present: bool) -> BlockState {
     chunk.set(x, 10, z, diamond);
     if dense {
         for i in 0..400 {
-            chunk.set(
-                1 + i % 14,
-                20 + i / 196,
-                1 + (i / 14) % 14,
-                diamond,
-            );
+            chunk.set(1 + i % 14, 20 + i / 196, 1 + (i / 14) % 14, diamond);
         }
     }
     let plan = overworld_plan(Mode::Hide);
