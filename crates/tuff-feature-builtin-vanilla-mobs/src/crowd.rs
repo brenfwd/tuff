@@ -30,6 +30,7 @@ pub const ENABLED_KEY: &str = "tuff.mobs.crowd.enabled";
 pub const THRESHOLD_KEY: &str = "tuff.mobs.crowd.threshold";
 pub const DEFAULT_THRESHOLD: i64 = 1500;
 pub const MAX_PUSHERS: usize = 8;
+pub const COLLISION_CAP_KEY: &str = "tuff.mobs.collisionCap";
 pub const GOAL_PERIOD: u64 = 4;
 pub const IDLE_GOAL_PERIOD: u64 = 8;
 pub const IDLE_RANGE: f64 = 32.0;
@@ -50,6 +51,15 @@ pub fn config_keys() -> Vec<tuff_core::config::Key> {
         .validated(|value| match value {
             Value::Int(n) if (1..=i64::from(i32::MAX)).contains(n) => Ok(()),
             _ => Err("must be between 1 and 2147483647".to_owned()),
+        }),
+        Key::new(
+            COLLISION_CAP_KEY,
+            Value::Int(0),
+            "Most entity pushes one mob processes per tick (0 = unlimited, as vanilla); never below max_entity_cramming",
+        )
+        .validated(|value| match value {
+            Value::Int(n) if (0..=i64::from(i32::MAX)).contains(n) => Ok(()),
+            _ => Err("must be between 0 and 2147483647".to_owned()),
         }),
     ]
 }
@@ -104,17 +114,37 @@ pub fn push_scale(core: &MobCore) -> f64 {
     if core.crowded { 2.0 } else { 1.0 }
 }
 
+/// The per-mob push limit from `tuff.mobs.collisionCap`: `usize::MAX` when
+/// unlimited, otherwise at least `max_entity_cramming` so cramming
+/// still sees enough neighbours.
+pub fn collision_cap(config: &tuff_core::config::ConfigStore, max_cramming: i32) -> usize {
+    match config.get_int(COLLISION_CAP_KEY).unwrap_or(0) {
+        n if n <= 0 => usize::MAX,
+        n => (n as usize).max(max_cramming.max(0) as usize),
+    }
+}
+
 /// Keeps only the [`MAX_PUSHERS`] nearest of `pushers`.
 pub fn keep_nearest<T>(pushers: &mut Vec<T>, own: [f64; 3], position: impl Fn(&T) -> [f64; 3]) {
-    if pushers.len() <= MAX_PUSHERS {
+    keep_nearest_n(pushers, MAX_PUSHERS, own, position);
+}
+
+/// Keeps only the `limit` nearest of `pushers`.
+pub fn keep_nearest_n<T>(
+    pushers: &mut Vec<T>,
+    limit: usize,
+    own: [f64; 3],
+    position: impl Fn(&T) -> [f64; 3],
+) {
+    if pushers.len() <= limit {
         return;
     }
     let distance = |p: &T| {
         let [x, _, z] = position(p);
         (x - own[0]).powi(2) + (z - own[2]).powi(2)
     };
-    pushers.select_nth_unstable_by(MAX_PUSHERS, |a, b| distance(a).total_cmp(&distance(b)));
-    pushers.truncate(MAX_PUSHERS);
+    pushers.select_nth_unstable_by(limit, |a, b| distance(a).total_cmp(&distance(b)));
+    pushers.truncate(limit);
 }
 
 /// How often full goal selection runs for this mob.
@@ -157,5 +187,29 @@ mod tests {
         pushers.sort_by(|a, b| a[0].total_cmp(&b[0]));
         assert_eq!(pushers.len(), MAX_PUSHERS);
         assert!(pushers.last().unwrap()[0] < 0.075);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn the_collision_cap_is_unlimited_by_default_and_floored_at_cramming() {
+        let config = tuff_core::config::ConfigStore::default();
+        for key in config_keys() {
+            config.register(key).unwrap();
+        }
+        assert_eq!(collision_cap(&config, 24), usize::MAX);
+        config
+            .set(COLLISION_CAP_KEY, tuff_core::config::Value::Int(2))
+            .unwrap();
+        assert_eq!(collision_cap(&config, 24), 24);
+        assert_eq!(collision_cap(&config, 0), 2);
+        config
+            .set(COLLISION_CAP_KEY, tuff_core::config::Value::Int(40))
+            .unwrap();
+        assert_eq!(collision_cap(&config, 24), 40);
+        assert!(
+            config
+                .set(COLLISION_CAP_KEY, tuff_core::config::Value::Int(-1))
+                .is_err()
+        );
     }
 }

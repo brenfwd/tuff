@@ -58,6 +58,7 @@ mod inert_core;
 mod item_conservation;
 mod menu_close_dupes;
 mod minecart_improvements;
+mod nether_roof;
 mod network_ids;
 mod no_println;
 mod no_save;

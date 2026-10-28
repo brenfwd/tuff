@@ -1203,6 +1203,10 @@ interface types {
         entity: uuid,
         /// Its type, like `minecraft:villager`.
         kind: string,
+        /// The custom entity id when the target is a custom entity or one
+        /// of its interaction parts (then `entity` and `kind` are the
+        /// owner's).
+        custom: option<string>,
         /// Whether a filter cancelled the vanilla interaction.
         cancelled: bool,
     }
@@ -1231,6 +1235,10 @@ interface types {
         victim: uuid,
         /// The victim's type, like `minecraft:zombie`.
         kind: string,
+        /// The custom entity id when the victim is a custom entity or one
+        /// of its interaction parts (then `victim` and `kind` are the
+        /// owner's).
+        custom: option<string>,
         /// Whether a filter cancelled the attack.
         cancelled: bool,
     }
@@ -1703,6 +1711,9 @@ interface host {
     /// the entity is set up like a newly spawned mob. An unknown kind or
     /// bad SNBT is invalid-state.
     spawn-entity: func(dimension: string, kind: string, pos: vec3, snbt: option<string>) -> result<uuid, world-error>;
+    /// Spawns a registered custom entity (its stand-in with its parts) and
+    /// returns the stand-in's uuid. Unknown ids fail with `invalid-state`.
+    spawn-custom-entity: func(dimension: string, id: string, pos: vec3, yaw: f32) -> result<uuid, world-error>;
     /// Queues removing a non-player entity in a loaded region without
     /// death effects or drops; one that is gone then is skipped.
     remove-entity: func(entity: uuid) -> result<_, world-error>;

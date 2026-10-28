@@ -324,6 +324,7 @@ async fn a_game_is_queued_built_played_decided_and_reset() {
             player: carrying.to_wit(),
             entity: uuid(500),
             kind: "minecraft:villager".into(),
+            custom: None,
             cancelled: true,
         }),
         &carrying,
@@ -667,7 +668,12 @@ impl WithBots {
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        panic!("{what} did not happen within a minute");
+        let modes = format!("{:?}", self.modes.lock().unwrap());
+        let online = self.say("list").await;
+        let games = self.bedwars("list").await;
+        panic!(
+            "{what} did not happen within a minute; modes {modes}; online {online}; games {games}"
+        );
     }
 
     async fn numbers(&self, line: &str) -> Vec<f64> {

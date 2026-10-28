@@ -274,6 +274,12 @@ impl World {
         host::spawn_entity(&self.key, kind, at, snbt).map(EntityRef)
     }
 
+    /// Spawns the registered custom entity `id` (its stand-in with its
+    /// parts), facing `yaw`.
+    pub fn spawn_custom(&self, id: &str, at: Vec3, yaw: f32) -> Result<EntityRef, WorldError> {
+        host::spawn_custom_entity(&self.key, id, at, yaw).map(EntityRef)
+    }
+
     /// Shows a particle effect to the players near it.
     pub fn particles(&self, particle: &Particle) -> Result<(), WorldError> {
         host::spawn_particles(&self.key, &particle.0, None)

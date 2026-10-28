@@ -1099,12 +1099,13 @@ impl<S: Species> Mob<S> {
         let Some(distance) = nearest else {
             return despawnable && cx.players_in_dimension > 0;
         };
-        let category = self.core.base.kind.category().info();
-        let far = (category.despawn_distance * category.despawn_distance) as f64;
+        let (far, near) =
+            crate::despawn::distances(&cx.shared.config, self.core.base.kind.category());
+        let far = f64::from(far) * f64::from(far);
         if despawnable && distance > far {
             return true;
         }
-        let near = (category.no_despawn_distance * category.no_despawn_distance) as f64;
+        let near = f64::from(near) * f64::from(near);
         let patrolling = self.core.raider.as_ref().is_some_and(|r| r.patrolling);
         if despawnable
             && !patrolling

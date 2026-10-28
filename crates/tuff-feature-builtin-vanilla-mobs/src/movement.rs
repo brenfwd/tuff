@@ -654,8 +654,13 @@ impl MobCore {
             self.tame.as_ref().and_then(|t| t.owner),
         );
         let max = cx.shared.rule_int("max_entity_cramming");
-        let (near, sample) = if self.crowded {
-            let sample = crate::crowd::MAX_PUSHERS.max(max.max(0) as usize);
+        let cap = crate::crowd::collision_cap(&cx.shared.config, max);
+        let (near, sample) = if self.crowded || cap != usize::MAX {
+            let sample = if self.crowded {
+                crate::crowd::MAX_PUSHERS.max(max.max(0) as usize).min(cap)
+            } else {
+                cap
+            };
             let seed = self.tick_count + self.base.id as u64;
             (
                 cx.entities_overlapping_sample(&bounds, seed, sample * 2),
@@ -801,6 +806,9 @@ impl MobCore {
         }
         if self.crowded {
             crate::crowd::keep_nearest(&mut pushers, self.base.position, |p| p.position);
+        }
+        if cap != usize::MAX {
+            crate::crowd::keep_nearest_n(&mut pushers, cap, self.base.position, |p| p.position);
         }
         let scale = crate::crowd::push_scale(self);
         for pusher in pushers {

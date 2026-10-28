@@ -79,6 +79,26 @@ impl CustomEntityDef {
     }
 }
 
+/// The id of the entity a hit or use on `id` counts for: the custom entity
+/// an interaction part rides, else `id` itself.
+pub fn reported_entity(world: &dyn crate::world::region_api::RegionWorld, id: i32) -> i32 {
+    let Some(part) = world.entity(id) else {
+        return id;
+    };
+    let base = part.entity.base();
+    if base.kind != EntityType::Interaction {
+        return id;
+    }
+    base.vehicle
+        .as_ref()
+        .filter(|mount| {
+            world
+                .entity(mount.id)
+                .is_some_and(|v| crate::custom::entity_id(&v.entity.base().tags).is_some())
+        })
+        .map_or(id, |mount| mount.id)
+}
+
 impl CustomContent {
     /// The saved entity for a new instance of custom entity `id`, ready for
     /// the region's saved-entity spawn path.

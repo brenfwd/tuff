@@ -403,6 +403,10 @@ impl RegionActor {
         }
     }
 
+    pub(super) fn despawn_settings(&self) -> crate::world::despawn_settings::DespawnSettings {
+        crate::world::despawn_settings::DespawnSettings::from_config(&self.shared.config)
+    }
+
     /// Removes the free-standing entities of a chunk beyond the per-type
     /// caps, oldest kept, before the chunk is saved; their items burn.
     pub(super) fn enforce_entity_caps(&mut self, pos: ChunkPos) {
@@ -1065,13 +1069,14 @@ impl RegionActor {
     /// way the game does, and returns every item it changed or removed.
     /// Items in a neighbour region are asked for through it.
     fn merge_items(&mut self, id: i32, moved: bool) -> Vec<i32> {
+        let settings = self.despawn_settings();
         let Some(reach) = self
             .ents
             .entities
             .get(&id)
             .and_then(|tracked| tracked.entity.downcast_ref::<ItemEntity>())
-            .filter(|item| item.merge_due(moved))
-            .map(ItemEntity::merge_reach)
+            .filter(|item| item.merge_due(moved, &settings))
+            .map(|item| item.merge_reach(&settings))
         else {
             return Vec::new();
         };
@@ -1082,7 +1087,7 @@ impl RegionActor {
                 .entities
                 .values()
                 .filter_map(|other| other.entity.downcast_ref::<ItemEntity>())
-                .filter(|other| other.mergeable())
+                .filter(|other| other.mergeable(&settings))
             {
                 let [x, _, z] = other.base.position;
                 grid.entry((x.floor() as i32, z.floor() as i32))
@@ -1107,7 +1112,8 @@ impl RegionActor {
                         .get(&other_id)
                         .and_then(|other| other.entity.downcast_ref::<ItemEntity>())
                         .is_some_and(|other| {
-                            other.mergeable() && experience::intersects(other.bounds(), reach)
+                            other.mergeable(&settings)
+                                && experience::intersects(other.bounds(), reach)
                         })
             })
             .collect();
@@ -1123,7 +1129,7 @@ impl RegionActor {
                 .get_mut(&other_id)
                 .and_then(|other| other.entity.downcast_mut::<ItemEntity>())
                 .zip(own.entity.downcast_mut::<ItemEntity>())
-                .filter(|(other, item)| other.mergeable() && item.merges_with(other))
+                .filter(|(other, item)| other.mergeable(&settings) && item.merges_with(other))
                 .map(|(other, item)| {
                     if item.absorbs(other) {
                         item.absorb(other);
@@ -1178,6 +1184,7 @@ impl RegionActor {
         let packet = packets([framed(&play::SetEquipment {
             entity_id: tracked.id(),
             items: &items,
+            obfuscate: false,
         })]);
         let (id, chunk) = (tracked.id(), tracked.chunk());
         self.send_to_viewers(&[chunk], || PlayerEvent::EntityPackets {

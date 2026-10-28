@@ -655,6 +655,7 @@ pub mod equipment_slot {
 pub struct SetEquipment<'a> {
     pub entity_id: i32,
     pub items: &'a [(u8, Option<tuff_item::item::AnyItem<'a>>)],
+    pub obfuscate: bool,
 }
 
 impl Encode for SetEquipment<'_> {
@@ -665,7 +666,11 @@ impl Encode for SetEquipment<'_> {
         for (i, (slot, item)) in self.items.iter().enumerate() {
             let more = if i + 1 < self.items.len() { 0x80 } else { 0 };
             w.write_unsigned_byte(slot | more);
-            w.write_viewer_any_slot(*item);
+            if self.obfuscate {
+                w.write_obfuscated_viewer_any_slot(*item);
+            } else {
+                w.write_viewer_any_slot(*item);
+            }
         }
     }
 }

@@ -22,10 +22,44 @@ fn viewer_visible<M: Mode>(component: &NetworkComponent<'_, M>) -> bool {
     probe.len() <= VIEWER_COMPONENT_MAX_BYTES
 }
 
-fn write_component_patch<M: Mode>(w: &mut PacketWriter, stack: ItemView<'_, M>, viewer: bool) {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SlotDetail {
+    Holder,
+    Viewer,
+    Obfuscated,
+}
+
+fn write_component_patch<M: Mode>(
+    w: &mut PacketWriter,
+    stack: ItemView<'_, M>,
+    detail: SlotDetail,
+) {
     let mut added = stack.components.network_added();
-    if viewer {
+    if detail != SlotDetail::Holder {
         added.retain(viewer_visible);
+    }
+    if detail == SlotDetail::Obfuscated {
+        let enchanted = added.iter().any(|component| {
+            matches!(
+                component,
+                NetworkComponent::Enchantments(_) | NetworkComponent::StoredEnchantments(_)
+            )
+        });
+        added.retain(|component| {
+            !matches!(
+                component,
+                NetworkComponent::Damage(_)
+                    | NetworkComponent::Enchantments(_)
+                    | NetworkComponent::StoredEnchantments(_)
+                    | NetworkComponent::ClientData(_)
+            )
+        });
+        let has_glint = added
+            .iter()
+            .any(|component| matches!(component, NetworkComponent::GlintOverride(_)));
+        if enchanted && !has_glint {
+            added.push(NetworkComponent::GlintOverride(true));
+        }
     }
     let removed = stack.components.network_removed();
     w.write_var_int(added.len() as i32);
@@ -85,7 +119,7 @@ impl WriteExt for PacketWriter {
         };
         self.write_var_int(stack.count() as i32);
         self.write_var_int(stack.item().id() as i32);
-        write_component_patch(self, stack, false);
+        write_component_patch(self, stack, SlotDetail::Holder);
     }
 
     fn write_viewer_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>) {
@@ -95,7 +129,25 @@ impl WriteExt for PacketWriter {
         };
         self.write_var_int(stack.count() as i32);
         self.write_var_int(stack.item().id() as i32);
-        write_component_patch(self, stack, true);
+        write_component_patch(self, stack, SlotDetail::Viewer);
+    }
+
+    fn write_obfuscated_viewer_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>) {
+        let Some(stack) = stack else {
+            self.write_var_int(0);
+            return;
+        };
+        self.write_var_int(stack.count() as i32);
+        self.write_var_int(stack.item().id() as i32);
+        write_component_patch(self, stack, SlotDetail::Obfuscated);
+    }
+
+    fn write_obfuscated_viewer_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>) {
+        match stack {
+            None => self.write_obfuscated_viewer_slot::<tuff_item::item::Counted>(None),
+            Some(stack) => tuff_item::with_item!(stack, |stack| self
+                .write_obfuscated_viewer_slot(Some(stack.view()))),
+        }
     }
 
     fn write_viewer_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>) {
@@ -119,7 +171,7 @@ impl WriteExt for PacketWriter {
     fn write_item_template<M: Mode>(&mut self, stack: ItemView<'_, M>) {
         self.write_var_int(stack.item().id() as i32);
         self.write_var_int(stack.count() as i32);
-        write_component_patch(self, stack, false);
+        write_component_patch(self, stack, SlotDetail::Holder);
     }
 
     fn write_component<M: Mode>(&mut self, component: &NetworkComponent<'_, M>) {

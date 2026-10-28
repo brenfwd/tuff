@@ -1370,6 +1370,15 @@ impl PlayerSession {
                 self.damage(VOID_DAMAGE, &damage_type::OUT_OF_WORLD, None)
                     .await;
             }
+            if !matches!(
+                self.mode.game_mode,
+                GameMode::Creative | GameMode::Spectator
+            ) && let Some((height, amount)) =
+                crate::world::dimension::ceiling_damage(&self.shared.config, &self.dimension().key)
+                && self.pose.position[1] >= height
+            {
+                self.damage(amount, &damage_type::OUT_OF_WORLD, None).await;
+            }
             self.tick_fire().await;
             let fire_before = self.body.fire_ticks;
             self.tick_lava().await;

@@ -349,3 +349,53 @@ fn hook_cache_key_changes_with_source_classpath_and_java() {
         )
     );
 }
+
+fn hook_cache_scratch(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("tuff-hook-cache-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn hook_cache_hit_returns_existing_dir_without_javac() {
+    use tuff_client_harness::launch::{HOOK_SOURCE, build_hook, hook_cache_key};
+    let cache = hook_cache_scratch("hit");
+    let java = std::path::Path::new("/nonexistent/bin/java");
+    let cp = vec![std::path::PathBuf::from("a.jar")];
+    let source = std::fs::read(HOOK_SOURCE).unwrap();
+    let dir = cache.join(hook_cache_key(&source, &cp, java));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("TuffClientHook.class"), b"cached").unwrap();
+    assert_eq!(build_hook(java, &cp, &cache).unwrap(), dir);
+    assert_eq!(
+        std::fs::read(dir.join("TuffClientHook.class")).unwrap(),
+        b"cached"
+    );
+    let _ = std::fs::remove_dir_all(&cache);
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn hook_cache_miss_does_not_reuse_other_key_and_failed_javac_leaves_no_tmp() {
+    use tuff_client_harness::launch::{HOOK_SOURCE, build_hook, hook_cache_key};
+    let cache = hook_cache_scratch("miss");
+    let java = std::path::Path::new("/nonexistent/bin/java");
+    let cp = vec![std::path::PathBuf::from("a.jar")];
+    let source = std::fs::read(HOOK_SOURCE).unwrap();
+    let dir = cache.join(hook_cache_key(&source, &cp, java));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("TuffClientHook.class"), b"cached").unwrap();
+    let other = vec![std::path::PathBuf::from("/nonexistent/b.jar")];
+    assert!(build_hook(java, &other, &cache).is_err());
+    let names: Vec<String> = std::fs::read_dir(&cache)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        names,
+        vec![dir.file_name().unwrap().to_string_lossy().into_owned()]
+    );
+    let _ = std::fs::remove_dir_all(&cache);
+}
