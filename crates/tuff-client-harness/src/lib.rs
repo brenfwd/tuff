@@ -12,6 +12,7 @@
 mod cache;
 pub mod control;
 pub mod fetch;
+pub mod latency;
 pub mod launch;
 pub mod lock;
 pub mod log;

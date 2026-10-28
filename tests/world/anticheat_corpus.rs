@@ -138,8 +138,75 @@ async fn replay_lane_with(
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn recorded_vanilla_movement_never_flags() {
-    let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-        .join("tests/world/fixtures/movement_corpus.txt");
+    replay_base_file("movement_corpus.txt").await;
+}
+
+fn fixtures_dir() -> std::path::PathBuf {
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join("tests/world/fixtures")
+}
+
+fn corpus_files() -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(fixtures_dir())
+        .unwrap()
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|n| n.starts_with("movement_corpus") && n.ends_with(".txt"))
+        .collect();
+    names.sort();
+    names
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_latency_corpus_never_flags() {
+    for name in corpus_files() {
+        if name == "movement_corpus.txt" || name == "movement_corpus_special.txt" {
+            continue;
+        }
+        if name.starts_with("movement_corpus_special") {
+            replay_special_file(&name, None).await;
+        } else {
+            replay_base_file(&name).await;
+        }
+    }
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn corpus_manifest_matches_fixtures() {
+    let text = std::fs::read_to_string(fixtures_dir().join("corpus_manifest.txt"))
+        .expect("corpus_manifest.txt");
+    let mut listed = Vec::new();
+    let mut total_ticks = 0u64;
+    for line in text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+    {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        assert_eq!(cols.len(), 4, "name rtt_ms styles ticks: {line}");
+        let ticks: u64 = cols[3].parse().expect("ticks");
+        let actual = std::fs::read_to_string(fixtures_dir().join(cols[0]))
+            .unwrap_or_else(|e| panic!("{}: {e}", cols[0]))
+            .lines()
+            .filter(|l| *l == "T")
+            .count() as u64;
+        assert_eq!(ticks, actual, "{}: tick count", cols[0]);
+        total_ticks += ticks;
+        listed.push(cols[0].to_owned());
+    }
+    listed.sort();
+    assert_eq!(
+        listed,
+        corpus_files(),
+        "manifest must list every corpus file"
+    );
+    println!(
+        "corpus: {total_ticks} ticks = {:.3} h of 10 h target",
+        total_ticks as f64 / 20.0 / 3600.0
+    );
+}
+
+async fn replay_base_file(file: &str) {
+    let path = fixtures_dir().join(file);
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("movement corpus missing at {}: {e}", path.display()));
     let base = ChunkPos::new(46, 46);
@@ -245,19 +312,21 @@ fn bridge_placements(
 }
 
 async fn replay_special(only: &str) {
-    let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-        .join("tests/world/fixtures/movement_corpus_special.txt");
+    replay_special_file("movement_corpus_special.txt", Some(only)).await;
+}
+
+async fn replay_special_file(file: &str, only: Option<&str>) {
+    let path = fixtures_dir().join(file);
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("special corpus missing at {}: {e}", path.display()));
     let base = ChunkPos::new(46, 46);
     let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
     let abs = origin.map(f64::from);
     let lanes = Lane::parse_all(&text, abs).unwrap();
-    assert_eq!(lanes.len(), 6, "expected every special lane");
-    let lane = lanes
+    assert!(lanes.len() >= 6, "{file}: expected every special lane");
+    for lane in lanes
         .iter()
-        .find(|l| l.name == only)
-        .unwrap_or_else(|| panic!("no lane {only}"));
+        .filter(|l| only.is_none_or(|name| l.name == name))
     {
         let name = lane.name.clone();
         replay_lane_with(lane, base, origin, |w, blocks| {

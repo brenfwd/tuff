@@ -2277,6 +2277,22 @@ const CORPUS_LANES: &[CorpusLane] = &[
 ];
 
 #[tuff_core::watchdog]
+fn corpus_rtt_ms() -> u64 {
+    std::env::var("TUFF_CORPUS_RTT_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0)
+}
+
+fn corpus_file(stem: &str, rtt: u64) -> String {
+    if rtt == 0 {
+        format!("{stem}.txt")
+    } else {
+        format!("{stem}_rtt{rtt}.txt")
+    }
+}
+
+#[tuff_core::watchdog]
 #[ignore = "launches a real vanilla client"]
 #[tokio::test(flavor = "multi_thread")]
 async fn real_client_record_movement_corpus() {
@@ -2290,7 +2306,14 @@ async fn real_client_record_movement_corpus() {
     }
     let name = "real_client_record_corpus";
     let srv = start_server("127.0.0.1:0", "corpus").await;
-    let addr = format!("127.0.0.1:{}", srv.game.port());
+    let rtt = corpus_rtt_ms();
+    let proxy = tuff_client_harness::latency::LatencyProxy::start(
+        std::net::SocketAddr::from(([127, 0, 0, 1], srv.game.port())),
+        std::time::Duration::from_millis(rtt),
+    )
+    .await
+    .unwrap();
+    let addr = proxy.addr().to_string();
     let platform = Platform::current();
     let cache = cache_dir();
     let files = tokio::task::spawn_blocking({
@@ -2421,7 +2444,7 @@ async fn real_client_record_movement_corpus() {
         );
         text.push_str(&lane.render([f64::from(x0), f64::from(fy), f64::from(z)]));
     }
-    std::fs::write(out_dir.join("movement_corpus.txt"), text).unwrap();
+    std::fs::write(out_dir.join(corpus_file("movement_corpus", rtt)), text).unwrap();
     client.quit().await;
     let _ = std::fs::remove_dir_all(&run.root);
 }
@@ -2513,7 +2536,14 @@ async fn real_client_record_special_movement_corpus() {
     }
     let name = "real_client_record_special_corpus";
     let srv = start_server("127.0.0.1:0", "special_corpus").await;
-    let addr = format!("127.0.0.1:{}", srv.game.port());
+    let rtt = corpus_rtt_ms();
+    let proxy = tuff_client_harness::latency::LatencyProxy::start(
+        std::net::SocketAddr::from(([127, 0, 0, 1], srv.game.port())),
+        std::time::Duration::from_millis(rtt),
+    )
+    .await
+    .unwrap();
+    let addr = proxy.addr().to_string();
     let platform = Platform::current();
     let cache = cache_dir();
     let files = tokio::task::spawn_blocking({
@@ -2751,7 +2781,11 @@ async fn real_client_record_special_movement_corpus() {
         let _ = server_says(s, &format!("ride {username} dismount")).await;
         server_says(s, "kill @e[type=!player]").await;
     }
-    std::fs::write(out_dir.join("movement_corpus_special.txt"), text).unwrap();
+    std::fs::write(
+        out_dir.join(corpus_file("movement_corpus_special", rtt)),
+        text,
+    )
+    .unwrap();
     client.quit().await;
     let _ = std::fs::remove_dir_all(&run.root);
     assert!(notes.is_empty(), "lanes flagged: {notes:#?}");
