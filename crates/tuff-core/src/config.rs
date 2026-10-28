@@ -669,6 +669,7 @@ fn core_keys() -> Vec<Key> {
     ]
     .into_iter()
     .chain(crate::world::anti_xray::config_keys())
+    .chain(crate::world::hide_details::config_keys())
     .chain(crate::panel_host::config_keys())
     .chain(crate::storage::backup::config_keys())
     .chain(crate::world::pregen::config_keys())

@@ -265,6 +265,7 @@ mod tests {
                 (equipment_slot::MAIN_HAND, None),
                 (equipment_slot::OFF_HAND, None),
             ],
+            obfuscate: false,
         };
         let mut r = PacketReader::new(payload(encode_packet(&packet)));
         assert_eq!(r.read_var_int().unwrap(), Id::SetEquipment.id());

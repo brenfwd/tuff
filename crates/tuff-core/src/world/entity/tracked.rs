@@ -425,6 +425,7 @@ pub fn equipment_packet(entity: &dyn RegionEntity) -> Option<bytes::Bytes> {
     Some(framed(&play::SetEquipment {
         entity_id: entity.base().id,
         items: &equipment,
+        obfuscate: false,
     }))
 }
 
