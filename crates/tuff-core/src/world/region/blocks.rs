@@ -1356,8 +1356,13 @@ impl RegionActor {
                             None
                         }
                         HandEffect::Consume(count) => {
-                            paid.burn(BurnReason::Consumed);
-                            *effect = HandEffect::Consume(count.saturating_sub(1));
+                            let mut paid = paid;
+                            let spent = paid.take(count.min(paid.count()));
+                            spent.burn(BurnReason::Consumed);
+                            (!paid.is_empty()).then_some(paid)
+                        }
+                        HandEffect::Damage(amount) => {
+                            place.offer.give_worn(place.hand_slot, paid, amount);
                             None
                         }
                         HandEffect::Emptied(item) => {
@@ -1425,17 +1430,25 @@ impl RegionActor {
             if stack.is_empty() {
                 continue;
             }
+            let wear = place.offer.take_wear(slot);
             let pos = BlockPos::containing(place.position);
             let transfer = crate::world::conservation::Transfer::HandReturn;
             if !self.may_transfer_with(transfer, pos, &place.player, true) {
                 self.spawn_item_at(stack, place.position, [0.0; 3], 0);
                 continue;
             }
-            if let Err(refused) = place.player.try_send(PlayerEvent::HandReturned {
-                slot,
-                stack,
-                creative: false,
-            }) && let PlayerEvent::HandReturned { stack, .. } = *refused
+            let event = if wear > 0 {
+                PlayerEvent::ToolWorn { slot, stack, wear }
+            } else {
+                PlayerEvent::HandReturned {
+                    slot,
+                    stack,
+                    creative: false,
+                }
+            };
+            if let Err(refused) = place.player.try_send(event)
+                && let PlayerEvent::HandReturned { stack, .. } | PlayerEvent::ToolWorn { stack, .. } =
+                    *refused
             {
                 self.spawn_item_at(stack, place.position, [0.0; 3], 0);
             }

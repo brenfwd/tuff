@@ -205,6 +205,9 @@ impl PlayerSession {
                         .await;
                 }
             }
+            PlayerEvent::ToolWorn { slot, stack, wear } => {
+                self.return_worn_tool(slot, stack, wear).await;
+            }
             PlayerEvent::OfferItem {
                 item,
                 offer,
@@ -780,6 +783,7 @@ impl PlayerSession {
                 let costly = matches!(
                     effect,
                     HandEffect::Consume(_)
+                        | HandEffect::Damage(_)
                         | HandEffect::Emptied(_)
                         | HandEffect::Exchange(_)
                         | HandEffect::ExchangeStack(_)

@@ -244,6 +244,8 @@ pub struct PlaceOffer {
     /// placement (an entity spawned, a bucket emptied, a key turned):
     /// spent when the use costs the item, else handed back.
     costing: std::cell::RefCell<Option<(usize, ItemStack)>>,
+    /// Durability the returned stack in a slot loses on the way back.
+    wear: std::cell::Cell<Option<(usize, u32)>>,
     /// The player has infinite materials: a block keeping one item of the
     /// hand keeps a creative copy and the hand keeps its stack.
     pub creative: bool,
@@ -263,6 +265,7 @@ impl Clone for PlaceOffer {
             stacks: std::cell::RefCell::default(),
             placing: std::cell::RefCell::default(),
             costing: std::cell::RefCell::default(),
+            wear: std::cell::Cell::default(),
             creative: self.creative,
         }
     }
@@ -274,6 +277,7 @@ impl PlaceOffer {
             stacks: std::cell::RefCell::new(stacks),
             placing: std::cell::RefCell::default(),
             costing: std::cell::RefCell::default(),
+            wear: std::cell::Cell::default(),
             creative,
         }
     }
@@ -305,6 +309,23 @@ impl PlaceOffer {
             .borrow_mut()
             .take()
             .or_else(|| self.costing.borrow_mut().take())
+    }
+
+    /// Hands `stack` back to `slot` worn by `amount` durability points.
+    pub fn give_worn(&self, slot: usize, stack: ItemStack, amount: u32) {
+        self.wear.set(Some((slot, amount)));
+        self.give(slot, stack);
+    }
+
+    /// The wear the stack handed back to `slot` takes, once.
+    pub fn take_wear(&self, slot: usize) -> u32 {
+        match self.wear.get() {
+            Some((at, amount)) if at == slot => {
+                self.wear.set(None);
+                amount
+            }
+            _ => 0,
+        }
     }
 
     /// Takes the item that pays for the placement, to spend it.
