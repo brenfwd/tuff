@@ -119,7 +119,7 @@ command, its tab completion and the panel:
 | `prevent-proxy-connections` | live | next online-mode login |
 | `pvp` | live | sets the pvp game rule; players are spared player damage when off |
 | `query.port` | restart | the query socket is bound when the server starts |
-| `rate-limit` | live | online players and later joins |
+| `rate-limit` | live | online players and later joins; 0 turns off the total cap and the per-type budgets (recipes, suggestions, book edits, signs); independent of `tuff.anticheat.enforce` |
 | `rcon.password` | permanent | remote console is not planned |
 | `rcon.port` | permanent | remote console is not planned |
 | `region-file-compression` | permanent | region files are always written with deflate |
