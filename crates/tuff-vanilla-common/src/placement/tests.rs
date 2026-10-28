@@ -917,3 +917,16 @@ fn attached_stem_reverts_to_a_ripe_stem_when_its_fruit_is_removed() {
     assert_eq!(reverted.block(), Block::PumpkinStem);
     assert_eq!(reverted.get("age"), Some("7"));
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn a_candle_stays_on_update_while_a_torch_pops() {
+    let world = World::new(Block::Air);
+    let pos = BlockPos::new(0, GROUND + 1, 0);
+    let level = |p: BlockPos| world.get(p);
+    let candle = Block::Candle.default_state();
+    assert!(!can_survive(candle, pos, &level));
+    assert_eq!(update_shape(candle, pos, Facing::Down, AIR, &level), candle);
+    let torch = Block::Torch.default_state();
+    assert_eq!(update_shape(torch, pos, Facing::Down, AIR, &level), AIR);
+}

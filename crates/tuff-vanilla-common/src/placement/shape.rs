@@ -296,7 +296,9 @@ pub fn update_shape(
         _ => state,
     };
     // Rails check their support on a neighbour update, never a shape update.
+    // Parity: a candle stays in place when its support is removed.
     if can_survive(updated, pos, level)
+        || updated.block() == Block::Candle
         || block_support::defers_break(updated.block())
         || tuff_datapack::tags::is(tags::key::RAILS, updated.block())
     {
