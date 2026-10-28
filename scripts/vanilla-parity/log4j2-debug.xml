@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="SysOut" target="SYSTEM_OUT">
+            <PatternLayout pattern="[%d{HH:mm:ss.SSS}] [%t/%level]: %msg{nolookups}%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="net.minecraft.world.level.TicketStorage" level="debug"/>
+        <Logger name="net.minecraft.server.network.PlayerChunkSender" level="debug"/>
+        <Logger name="net.minecraft.server.level.ServerPlayerGameMode" level="debug"/>
+        <Root level="info">
+            <AppenderRef ref="SysOut"/>
+        </Root>
+    </Loggers>
+</Configuration>
