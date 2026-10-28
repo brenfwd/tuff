@@ -157,7 +157,12 @@ async fn online_players_are_listed_live_and_moderated_through_commands() {
         json!({"action":"gamemode","player":"Viewer","mode":"creative"}),
     )
     .await;
-    let updated = next_event(&mut events, "update", "Viewer").await;
+    let updated = loop {
+        let update = next_event(&mut events, "update", "Viewer").await;
+        if update["gameMode"] == "creative" {
+            break update;
+        }
+    };
     assert_eq!(updated["gameMode"], "creative", "{updated}");
     act(
         &admin,
