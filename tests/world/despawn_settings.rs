@@ -147,3 +147,27 @@ async fn a_mob_despawns_beyond_the_configured_distance() {
     assert!(zombie_survives(None).await);
     assert!(!zombie_survives(Some(16)).await);
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_forced_item_despawn_uses_the_configured_age() {
+    let (_dir, world, region, _player, _events) = started().await;
+    world
+        .shared
+        .config
+        .set("tuff.world.item.despawnTicks", Value::Int(6100))
+        .unwrap();
+    let template = tuff_item::item::ItemStack::mint(
+        tuff_vanilla_data::registry::Item::Emerald,
+        1,
+        tuff_item::item::MintReason::Test,
+    );
+    region
+        .request(RegionRequest::SpawnFakeItem {
+            stack: tuff_item::item::ItemSnapshot::of(&template),
+            position: [1.5, 200.0, 1.5],
+        })
+        .await;
+    world.ticks(5).await;
+    assert_eq!(count(&region, EntityType::Item).await, 0);
+}

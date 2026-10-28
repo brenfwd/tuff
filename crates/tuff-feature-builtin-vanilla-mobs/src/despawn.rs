@@ -36,7 +36,7 @@ pub fn config_keys() -> Vec<Key> {
                 distance_key(
                     &near_key(category),
                     info.no_despawn_distance,
-                    "Blocks from the nearest player within which a mob of this category never despawns",
+                    "Blocks from the nearest player within which a mob of this category never despawns (capped at the category's distance)",
                 ),
             ]
         })
