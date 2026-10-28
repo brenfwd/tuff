@@ -18,8 +18,13 @@ pub fn register(behaviours: &mut Behaviours) {
 }
 
 /// How long until a fire ticks again.
+use tuff_core::world::growth::{FIRE_DELAY_MAX_KEY, FIRE_DELAY_MIN_KEY};
+
 pub fn tick_delay(level: &mut dyn GrowthLevel) -> u32 {
-    30 + level.random_int(10) as u32
+    let min = level.config_int(FIRE_DELAY_MIN_KEY, 30).max(1);
+    let max = level.config_int(FIRE_DELAY_MAX_KEY, 39).max(min);
+    let span = (max - min + 1).min(i64::from(i32::MAX)) as i32;
+    (min + i64::from(level.random_int(span))) as u32
 }
 
 fn fire_placed(level: &mut dyn GrowthLevel, pos: BlockPos, _state: BlockState) {
@@ -299,6 +304,21 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn fire_delay_is_30_to_39_by_default_and_follows_config() {
+        let mut level = TestLevel::new();
+        for _ in 0..200 {
+            assert!((30..=39).contains(&tick_delay(&mut level)));
+        }
+        level.rules.insert(FIRE_DELAY_MIN_KEY, 5);
+        level.rules.insert(FIRE_DELAY_MAX_KEY, 7);
+        let delays: std::collections::HashSet<u32> =
+            (0..200).map(|_| tick_delay(&mut level)).collect();
+        assert!(delays.iter().all(|d| (5..=7).contains(d)));
+        assert!(delays.len() > 1);
     }
 
     #[tuff_core::watchdog]

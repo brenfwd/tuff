@@ -225,6 +225,17 @@ damage, for example `128` to stop nether roof travel; creative and spectator
 players are exempt. `.ceilingDamage.amount` (default `4`) is the health
 points taken per hurt tick. Both apply live.
 
+`tuff.world.scheduledTicks.maxBlockPerTick` and `.maxFluidPerTick` (default
+`65536` each, at least `1`) cap the scheduled block and fluid ticks one
+region runs per game tick; the excess keeps its order and runs on later
+ticks. Lower them to bound lag machines. Both apply live.
+
+`tuff.world.freezing.enabled` (default `true`) lets precipitation freeze
+water into ice and pile snow layers; `false` stops both (cauldrons still
+fill and rain still puts fires out). `tuff.world.fireTickDelay.min` and
+`.max` (default `30` and `39`) set the range in ticks, inclusive, until a
+fire ticks again; a `max` below `min` acts as `min`. All apply live.
+
 `tuff.world.spawnDimension` names the dimension new players spawn in and
 respawns fall back to (plugin dimensions allowed). When it is empty, the
 first plugin that claims one (`spawn_dimension` in its manifest) picks it,

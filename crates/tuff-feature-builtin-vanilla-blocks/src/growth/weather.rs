@@ -84,14 +84,15 @@ pub fn precipitation(level: &mut dyn GrowthLevel, top: BlockPos, below: BlockPos
     let Some(biome) = level.zoomed_biome(top) else {
         return;
     };
-    if should_freeze(level, biome, below) {
+    let freezing = level.config_bool(tuff_core::world::growth::FREEZING_KEY, true);
+    if freezing && should_freeze(level, biome, below) {
         level.set(below, Block::Ice.default_state(), UPDATE_ALL);
     }
     if !level.is_raining() {
         return;
     }
     let max_height = level.rule_int("max_snow_accumulation_height");
-    if max_height > 0 && should_snow(level, biome, top) {
+    if freezing && max_height > 0 && should_snow(level, biome, top) {
         let state = level.state(top);
         if state.block() == Block::Snow {
             let layers = state.layers().unwrap_or(1);
@@ -192,6 +193,33 @@ mod tests {
             precipitation(&mut level, top, ground);
         }
         assert_eq!(level.state(top).layers(), Some(3));
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn switching_freezing_off_stops_ice_and_snow_but_not_cauldrons() {
+        let mut level = TestLevel::new();
+        level.biome = biome("minecraft:snowy_plains");
+        level.raining = true;
+        let water = BlockPos::new(0, 62, 0);
+        let ground = BlockPos::new(5, 63, 0);
+        let top = BlockPos::new(5, 64, 0);
+        level.put(water, Block::Water.default_state());
+        level.put(ground, Block::Stone.default_state());
+        level
+            .rules
+            .insert(tuff_core::world::growth::FREEZING_KEY, 0);
+        precipitation(&mut level, BlockPos::new(0, 63, 0), water);
+        precipitation(&mut level, top, ground);
+        assert_eq!(level.state(water).block(), Block::Water);
+        assert!(is_air(level.state(top)));
+        level
+            .rules
+            .insert(tuff_core::world::growth::FREEZING_KEY, 1);
+        precipitation(&mut level, BlockPos::new(0, 63, 0), water);
+        precipitation(&mut level, top, ground);
+        assert_eq!(level.state(water).block(), Block::Ice);
+        assert_eq!(level.state(top).block(), Block::Snow);
     }
 
     #[tuff_core::watchdog]

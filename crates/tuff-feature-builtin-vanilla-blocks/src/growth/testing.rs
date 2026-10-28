@@ -218,6 +218,14 @@ impl GrowthLevel for TestLevel {
             .unwrap_or_else(|| tuff_core::world::game_rules::GameRules::default().int(name))
     }
 
+    fn config_int(&self, name: &str, default: i64) -> i64 {
+        self.rules.get(name).map_or(default, |v| i64::from(*v))
+    }
+
+    fn config_bool(&self, name: &str, default: bool) -> bool {
+        self.rules.get(name).map_or(default, |v| *v != 0)
+    }
+
     fn dimension(&self) -> &'static tuff_vanilla_data::dimension_type::DimensionType {
         self.dimension
     }
