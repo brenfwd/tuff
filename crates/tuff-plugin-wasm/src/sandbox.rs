@@ -671,6 +671,16 @@ impl Imports for State {
         State::host_spawn_entity(self, dimension, kind, pos, snbt)
     }
 
+    fn host_spawn_custom_entity(
+        &mut self,
+        dimension: &str,
+        id: &str,
+        pos: Vec3,
+        yaw: f32,
+    ) -> value::Result<Result<Uuid, WorldError>> {
+        State::host_spawn_custom_entity(self, dimension, id, pos, yaw)
+    }
+
     fn host_remove_entity(&mut self, entity: Uuid) -> value::Result<Result<(), WorldError>> {
         State::host_remove_entity(self, entity)
     }

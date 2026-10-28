@@ -184,6 +184,9 @@ extern void __wasm_import_tuff_plugin_host_teleport_entity(int64_t, int64_t, uin
 __attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("spawn-entity")))
 extern void __wasm_import_tuff_plugin_host_spawn_entity(uint8_t *, size_t, uint8_t *, size_t, double, double, double, int32_t, uint8_t *, size_t, uint8_t *);
 
+__attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("spawn-custom-entity")))
+extern void __wasm_import_tuff_plugin_host_spawn_custom_entity(uint8_t *, size_t, uint8_t *, size_t, double, double, double, float, uint8_t *);
+
 __attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("remove-entity")))
 extern void __wasm_import_tuff_plugin_host_remove_entity(int64_t, int64_t, uint8_t *);
 
@@ -1968,6 +1971,7 @@ void tuff_plugin_types_entity_filter_free(tuff_plugin_types_entity_filter_t *ptr
 void tuff_plugin_types_entity_interact_free(tuff_plugin_types_entity_interact_t *ptr) {
   tuff_plugin_types_player_free(&ptr->player);
   plugin_string_free(&ptr->kind);
+  plugin_option_string_free(&ptr->custom);
 }
 
 void tuff_plugin_types_attack_filter_free(tuff_plugin_types_attack_filter_t *ptr) {
@@ -1982,6 +1986,7 @@ void tuff_plugin_types_attack_filter_free(tuff_plugin_types_attack_filter_t *ptr
 void tuff_plugin_types_player_attack_free(tuff_plugin_types_player_attack_t *ptr) {
   tuff_plugin_types_player_free(&ptr->player);
   plugin_string_free(&ptr->kind);
+  plugin_option_string_free(&ptr->custom);
 }
 
 void tuff_plugin_types_damage_filter_free(tuff_plugin_types_damage_filter_t *ptr) {
@@ -6292,6 +6297,59 @@ bool tuff_plugin_host_spawn_entity(plugin_string_t *dimension, plugin_string_t *
   }
   uint8_t *ptr = (uint8_t *) &ret_area;
   __wasm_import_tuff_plugin_host_spawn_entity((uint8_t *) (*dimension).ptr, (*dimension).len, (uint8_t *) (*kind).ptr, (*kind).len, (*pos).x, (*pos).y, (*pos).z, option, option1, option2, ptr);
+  tuff_plugin_host_result_uuid_world_error_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (tuff_plugin_types_uuid_t) {
+        (uint64_t) (uint64_t) (*((int64_t*) (ptr + 8))),
+        (uint64_t) (uint64_t) (*((int64_t*) (ptr + 16))),
+      };
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      tuff_plugin_types_world_error_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool tuff_plugin_host_spawn_custom_entity(plugin_string_t *dimension, plugin_string_t *id, tuff_plugin_host_vec3_t *pos, float yaw, tuff_plugin_host_uuid_t *ret, tuff_plugin_host_world_error_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[24];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_tuff_plugin_host_spawn_custom_entity((uint8_t *) (*dimension).ptr, (*dimension).len, (uint8_t *) (*id).ptr, (*id).len, (*pos).x, (*pos).y, (*pos).z, yaw, ptr);
   tuff_plugin_host_result_uuid_world_error_t result;
   switch ((int32_t) *((uint8_t*) (ptr + 0))) {
     case 0: {
@@ -11639,11 +11697,11 @@ uint8_t * __wasm_export_exports_tuff_plugin_guest_suggest(uint8_t * arg, size_t 
 
 __attribute__((__export_name__("tuff:plugin/guest@0.1.0#on-event")))
 void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
-  tuff_plugin_types_event_t variant5;
-  variant5.tag = (int32_t) *((uint8_t*) (arg + 0));
-  switch ((int32_t) variant5.tag) {
+  tuff_plugin_types_event_t variant7;
+  variant7.tag = (int32_t) *((uint8_t*) (arg + 0));
+  switch ((int32_t) variant7.tag) {
     case 0: {
-      variant5.val.join = (tuff_plugin_types_player_t) {
+      variant7.val.join = (tuff_plugin_types_player_t) {
         (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -11653,7 +11711,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 1: {
-      variant5.val.leave = (tuff_plugin_types_player_t) {
+      variant7.val.leave = (tuff_plugin_types_player_t) {
         (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -11663,7 +11721,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 2: {
-      variant5.val.chat = (tuff_plugin_types_chat_message_t) {
+      variant7.val.chat = (tuff_plugin_types_chat_message_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11694,7 +11752,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
       }
-      variant5.val.block_break = (tuff_plugin_types_block_change_t) {
+      variant7.val.block_break = (tuff_plugin_types_block_change_t) {
         (tuff_plugin_types_option_player_t) option,
         (tuff_plugin_types_block_pos_t) (tuff_plugin_types_block_pos_t) {
           (int32_t) *((int32_t*) (arg + (32+2*sizeof(void*)))),
@@ -11725,7 +11783,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
       }
-      variant5.val.block_place = (tuff_plugin_types_block_change_t) {
+      variant7.val.block_place = (tuff_plugin_types_block_change_t) {
         (tuff_plugin_types_option_player_t) option0,
         (tuff_plugin_types_block_pos_t) (tuff_plugin_types_block_pos_t) {
           (int32_t) *((int32_t*) (arg + (32+2*sizeof(void*)))),
@@ -11738,7 +11796,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 5: {
-      variant5.val.left_click = (tuff_plugin_types_click_t) {
+      variant7.val.left_click = (tuff_plugin_types_click_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11758,7 +11816,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 6: {
-      variant5.val.right_click = (tuff_plugin_types_click_t) {
+      variant7.val.right_click = (tuff_plugin_types_click_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11778,7 +11836,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 7: {
-      variant5.val.entity_spawn = (tuff_plugin_types_entity_t) {
+      variant7.val.entity_spawn = (tuff_plugin_types_entity_t) {
         (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -11794,7 +11852,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 8: {
-      variant5.val.entity_death = (tuff_plugin_types_entity_t) {
+      variant7.val.entity_death = (tuff_plugin_types_entity_t) {
         (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -11810,7 +11868,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 9: {
-      variant5.val.entity_damage = (tuff_plugin_types_entity_t) {
+      variant7.val.entity_damage = (tuff_plugin_types_entity_t) {
         (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -11826,7 +11884,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 10: {
-      variant5.val.player_hurt = (tuff_plugin_types_damage_t) {
+      variant7.val.player_hurt = (tuff_plugin_types_damage_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11846,7 +11904,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 11: {
-      variant5.val.player_death = (tuff_plugin_types_death_t) {
+      variant7.val.player_death = (tuff_plugin_types_death_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11865,7 +11923,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 12: {
-      variant5.val.inside_block = (tuff_plugin_types_inside_t) {
+      variant7.val.inside_block = (tuff_plugin_types_inside_t) {
         (bool) (int32_t) *((uint8_t*) (arg + 8)),
         (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -11899,14 +11957,14 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
       }
-      variant5.val.config_change = (tuff_plugin_types_config_change_t) {
+      variant7.val.config_change = (tuff_plugin_types_config_change_t) {
         (plugin_string_t) (plugin_string_t) { (uint8_t*)(*((uint8_t **) (arg + 8))), (*((size_t*) (arg + (8+1*sizeof(void*))))) },
         (tuff_plugin_types_config_value_t) variant,
       };
       break;
     }
     case 14: {
-      variant5.val.login = (tuff_plugin_types_login_attempt_t) {
+      variant7.val.login = (tuff_plugin_types_login_attempt_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11919,7 +11977,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 15: {
-      variant5.val.menu_click = (tuff_plugin_types_menu_click_t) {
+      variant7.val.menu_click = (tuff_plugin_types_menu_click_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11934,7 +11992,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 16: {
-      variant5.val.menu_close = (tuff_plugin_types_menu_close_t) {
+      variant7.val.menu_close = (tuff_plugin_types_menu_close_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11947,7 +12005,19 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 17: {
-      variant5.val.entity_interact = (tuff_plugin_types_entity_interact_t) {
+      plugin_option_string_t option1;
+      switch ((int32_t) *((uint8_t*) (arg + (40+4*sizeof(void*))))) {
+        case 0: {
+          option1.is_some = false;
+          break;
+        }
+        case 1: {
+          option1.is_some = true;
+          option1.val = (plugin_string_t) { (uint8_t*)(*((uint8_t **) (arg + (40+5*sizeof(void*))))), (*((size_t*) (arg + (40+6*sizeof(void*))))) };
+          break;
+        }
+      }
+      variant7.val.entity_interact = (tuff_plugin_types_entity_interact_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11960,12 +12030,13 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + (32+2*sizeof(void*))))),
         },
         (plugin_string_t) (plugin_string_t) { (uint8_t*)(*((uint8_t **) (arg + (40+2*sizeof(void*))))), (*((size_t*) (arg + (40+3*sizeof(void*))))) },
-        (bool) (int32_t) *((uint8_t*) (arg + (40+4*sizeof(void*)))),
+        (plugin_option_string_t) option1,
+        (bool) (int32_t) *((uint8_t*) (arg + (40+7*sizeof(void*)))),
       };
       break;
     }
     case 18: {
-      variant5.val.use_item = (tuff_plugin_types_item_use_t) {
+      variant7.val.use_item = (tuff_plugin_types_item_use_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -11983,7 +12054,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 19: {
-      variant5.val.projectile_hit = (tuff_plugin_types_entity_t) {
+      variant7.val.projectile_hit = (tuff_plugin_types_entity_t) {
         (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
           (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -11999,7 +12070,19 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 20: {
-      variant5.val.player_attack = (tuff_plugin_types_player_attack_t) {
+      plugin_option_string_t option2;
+      switch ((int32_t) *((uint8_t*) (arg + (40+4*sizeof(void*))))) {
+        case 0: {
+          option2.is_some = false;
+          break;
+        }
+        case 1: {
+          option2.is_some = true;
+          option2.val = (plugin_string_t) { (uint8_t*)(*((uint8_t **) (arg + (40+5*sizeof(void*))))), (*((size_t*) (arg + (40+6*sizeof(void*))))) };
+          break;
+        }
+      }
+      variant7.val.player_attack = (tuff_plugin_types_player_attack_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12012,16 +12095,17 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           (uint64_t) (uint64_t) (*((int64_t*) (arg + (32+2*sizeof(void*))))),
         },
         (plugin_string_t) (plugin_string_t) { (uint8_t*)(*((uint8_t **) (arg + (40+2*sizeof(void*))))), (*((size_t*) (arg + (40+3*sizeof(void*))))) },
-        (bool) (int32_t) *((uint8_t*) (arg + (40+4*sizeof(void*)))),
+        (plugin_option_string_t) option2,
+        (bool) (int32_t) *((uint8_t*) (arg + (40+7*sizeof(void*)))),
       };
       break;
     }
     case 21: {
-      tuff_plugin_types_damage_victim_t variant1;
-      variant1.tag = (int32_t) *((uint8_t*) (arg + 8));
-      switch ((int32_t) variant1.tag) {
+      tuff_plugin_types_damage_victim_t variant3;
+      variant3.tag = (int32_t) *((uint8_t*) (arg + 8));
+      switch ((int32_t) variant3.tag) {
         case 0: {
-          variant1.val.player = (tuff_plugin_types_player_t) {
+          variant3.val.player = (tuff_plugin_types_player_t) {
             (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
               (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
               (uint64_t) (uint64_t) (*((int64_t*) (arg + 24))),
@@ -12031,7 +12115,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
         case 1: {
-          variant1.val.entity = (tuff_plugin_types_damaged_entity_t) {
+          variant3.val.entity = (tuff_plugin_types_damaged_entity_t) {
             (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
               (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
               (uint64_t) (uint64_t) (*((int64_t*) (arg + 24))),
@@ -12041,31 +12125,31 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
       }
-      tuff_plugin_types_option_uuid_t option2;
+      tuff_plugin_types_option_uuid_t option4;
       switch ((int32_t) *((uint8_t*) (arg + (32+4*sizeof(void*))))) {
         case 0: {
-          option2.is_some = false;
+          option4.is_some = false;
           break;
         }
         case 1: {
-          option2.is_some = true;
-          option2.val = (tuff_plugin_types_uuid_t) {
+          option4.is_some = true;
+          option4.val = (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + (40+4*sizeof(void*))))),
             (uint64_t) (uint64_t) (*((int64_t*) (arg + (48+4*sizeof(void*))))),
           };
           break;
         }
       }
-      variant5.val.damage_filtered = (tuff_plugin_types_damage_filtered_t) {
-        (tuff_plugin_types_damage_victim_t) variant1,
+      variant7.val.damage_filtered = (tuff_plugin_types_damage_filtered_t) {
+        (tuff_plugin_types_damage_victim_t) variant3,
         (plugin_string_t) (plugin_string_t) { (uint8_t*)(*((uint8_t **) (arg + (32+2*sizeof(void*))))), (*((size_t*) (arg + (32+3*sizeof(void*))))) },
-        (tuff_plugin_types_option_uuid_t) option2,
+        (tuff_plugin_types_option_uuid_t) option4,
         (float) *((float*) (arg + (56+4*sizeof(void*)))),
       };
       break;
     }
     case 22: {
-      variant5.val.item_drop = (tuff_plugin_types_item_action_t) {
+      variant7.val.item_drop = (tuff_plugin_types_item_action_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12080,7 +12164,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 23: {
-      variant5.val.item_pickup = (tuff_plugin_types_item_action_t) {
+      variant7.val.item_pickup = (tuff_plugin_types_item_action_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12095,7 +12179,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 24: {
-      variant5.val.item_swap = (tuff_plugin_types_item_action_t) {
+      variant7.val.item_swap = (tuff_plugin_types_item_action_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12110,7 +12194,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 25: {
-      variant5.val.item_craft = (tuff_plugin_types_item_action_t) {
+      variant7.val.item_craft = (tuff_plugin_types_item_action_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12125,7 +12209,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 26: {
-      variant5.val.items_taken = (tuff_plugin_types_items_taken_t) {
+      variant7.val.items_taken = (tuff_plugin_types_items_taken_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12141,25 +12225,25 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 27: {
-      tuff_plugin_types_option_uuid_t option3;
+      tuff_plugin_types_option_uuid_t option5;
       switch ((int32_t) *((uint8_t*) (arg + (16+2*sizeof(void*))))) {
         case 0: {
-          option3.is_some = false;
+          option5.is_some = false;
           break;
         }
         case 1: {
-          option3.is_some = true;
-          option3.val = (tuff_plugin_types_uuid_t) {
+          option5.is_some = true;
+          option5.val = (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + (24+2*sizeof(void*))))),
             (uint64_t) (uint64_t) (*((int64_t*) (arg + (32+2*sizeof(void*))))),
           };
           break;
         }
       }
-      variant5.val.explosion = (tuff_plugin_types_explosion_t) {
+      variant7.val.explosion = (tuff_plugin_types_explosion_t) {
         (plugin_string_t) (plugin_string_t) { (uint8_t*)(*((uint8_t **) (arg + 8))), (*((size_t*) (arg + (8+1*sizeof(void*))))) },
         (uint32_t) (uint32_t) (*((int32_t*) (arg + (8+2*sizeof(void*))))),
-        (tuff_plugin_types_option_uuid_t) option3,
+        (tuff_plugin_types_option_uuid_t) option5,
         (tuff_plugin_types_vec3_t) (tuff_plugin_types_vec3_t) {
           (double) *((double*) (arg + (40+2*sizeof(void*)))),
           (double) *((double*) (arg + (48+2*sizeof(void*)))),
@@ -12170,7 +12254,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 28: {
-      variant5.val.inventory_click = (tuff_plugin_types_inventory_click_t) {
+      variant7.val.inventory_click = (tuff_plugin_types_inventory_click_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12188,7 +12272,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 29: {
-      variant5.val.inventory_open = (tuff_plugin_types_inventory_window_t) {
+      variant7.val.inventory_open = (tuff_plugin_types_inventory_window_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12201,7 +12285,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 30: {
-      variant5.val.inventory_close = (tuff_plugin_types_inventory_window_t) {
+      variant7.val.inventory_close = (tuff_plugin_types_inventory_window_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12214,11 +12298,11 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
     case 31: {
-      tuff_plugin_types_state_change_t variant4;
-      variant4.tag = (int32_t) *((uint8_t*) (arg + 8));
-      switch ((int32_t) variant4.tag) {
+      tuff_plugin_types_state_change_t variant6;
+      variant6.tag = (int32_t) *((uint8_t*) (arg + 8));
+      switch ((int32_t) variant6.tag) {
         case 0: {
-          variant4.val.respawn = (tuff_plugin_types_respawned_t) {
+          variant6.val.respawn = (tuff_plugin_types_respawned_t) {
             (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
               (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
                 (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -12236,7 +12320,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
         case 1: {
-          variant4.val.sneak = (tuff_plugin_types_sneak_change_t) {
+          variant6.val.sneak = (tuff_plugin_types_sneak_change_t) {
             (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
               (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
                 (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -12249,7 +12333,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
         case 2: {
-          variant4.val.game_mode = (tuff_plugin_types_game_mode_changed_t) {
+          variant6.val.game_mode = (tuff_plugin_types_game_mode_changed_t) {
             (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
               (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
                 (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -12264,7 +12348,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
         case 3: {
-          variant4.val.hunger = (tuff_plugin_types_hunger_changed_t) {
+          variant6.val.hunger = (tuff_plugin_types_hunger_changed_t) {
             (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
               (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
                 (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -12279,7 +12363,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
         case 4: {
-          variant4.val.dimension = (tuff_plugin_types_world_changed_t) {
+          variant6.val.dimension = (tuff_plugin_types_world_changed_t) {
             (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
               (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
                 (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -12293,7 +12377,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
         case 5: {
-          variant4.val.teleport = (tuff_plugin_types_teleport_attempt_t) {
+          variant6.val.teleport = (tuff_plugin_types_teleport_attempt_t) {
             (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
               (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
                 (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -12318,7 +12402,7 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
         case 6: {
-          variant4.val.region = (tuff_plugin_types_region_crossed_t) {
+          variant6.val.region = (tuff_plugin_types_region_crossed_t) {
             (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
               (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
                 (uint64_t) (uint64_t) (*((int64_t*) (arg + 16))),
@@ -12332,11 +12416,11 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
           break;
         }
       }
-      variant5.val.player_state = variant4;
+      variant7.val.player_state = variant6;
       break;
     }
     case 32: {
-      variant5.val.payload = (tuff_plugin_types_payload_message_t) {
+      variant7.val.payload = (tuff_plugin_types_payload_message_t) {
         (tuff_plugin_types_player_t) (tuff_plugin_types_player_t) {
           (tuff_plugin_types_uuid_t) (tuff_plugin_types_uuid_t) {
             (uint64_t) (uint64_t) (*((int64_t*) (arg + 8))),
@@ -12350,8 +12434,8 @@ void __wasm_export_exports_tuff_plugin_guest_on_event(uint8_t * arg) {
       break;
     }
   }
-  exports_tuff_plugin_guest_event_t arg6 = variant5;
-  exports_tuff_plugin_guest_on_event(&arg6);
+  exports_tuff_plugin_guest_event_t arg8 = variant7;
+  exports_tuff_plugin_guest_on_event(&arg8);
   free(arg);
 }
 

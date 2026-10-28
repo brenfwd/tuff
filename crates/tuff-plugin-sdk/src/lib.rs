@@ -195,7 +195,8 @@ pub enum Event {
     /// A plugin menu closed; the payload is `"uuid menu"`.
     MenuClose,
     /// A right-click on a non-player entity; the payload is
-    /// `"uuid entity_uuid type cancelled"`.
+    /// `"uuid entity_uuid type cancelled custom_id_or_-"`; an interaction part
+    /// of a custom entity reports the owning entity.
     EntityInteract,
     /// A use in the air filtered with [`ClickKind::Air`] was cancelled; the
     /// payload is the item id.
@@ -205,7 +206,8 @@ pub enum Event {
     /// it struck.
     ProjectileHit,
     /// A player attacked a non-player entity; the payload is
-    /// `"uuid victim_uuid type cancelled"`.
+    /// `"uuid victim_uuid type cancelled custom_id_or_-"`; an interaction part
+    /// of a custom entity reports the owning entity.
     PlayerAttack,
     /// A hit on a player matched a damage filter; the payload is
     /// `"victim_uuid damage_type attacker_uuid_or_- scale"`.
@@ -346,11 +348,12 @@ pub fn payload(event: wit::Event) -> (Event, String) {
         ),
         wit::Event::EntityInteract(i) => {
             let text = format!(
-                "{} {} {} {}",
+                "{} {} {} {} {}",
                 uuid_hex(i.player.uuid),
                 uuid_hex(i.entity),
                 i.kind,
-                i.cancelled
+                i.cancelled,
+                i.custom.as_deref().unwrap_or("-")
             );
             (Event::EntityInteract, text)
         }
@@ -358,11 +361,12 @@ pub fn payload(event: wit::Event) -> (Event, String) {
         wit::Event::ProjectileHit(e) => (Event::ProjectileHit, entity(e)),
         wit::Event::PlayerAttack(a) => {
             let text = format!(
-                "{} {} {} {}",
+                "{} {} {} {} {}",
                 uuid_hex(a.player.uuid),
                 uuid_hex(a.victim),
                 a.kind,
-                a.cancelled
+                a.cancelled,
+                a.custom.as_deref().unwrap_or("-")
             );
             (Event::PlayerAttack, text)
         }
