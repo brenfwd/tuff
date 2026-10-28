@@ -380,6 +380,8 @@ enum Side {
     Floor,
     /// Unknown or open: counts as exposed.
     Open,
+    /// Not loaded yet, held shut until it is: counts as enclosed.
+    Closed,
 }
 
 /// A section with the six it touches, `None` where unknown.
@@ -388,30 +390,33 @@ struct View<'a> {
     below: Option<&'a Section>,
     above: Option<&'a Section>,
     sides: [Option<&'a Section>; 4],
+    closed: [bool; 4],
     bottom: bool,
 }
 
 impl View<'_> {
     #[inline]
     fn side(&self, i: usize, face: usize) -> Side {
-        let at = |section: Option<&Section>, index: usize| {
-            section.map_or(Side::Open, |s| Side::Block(s.get(index)))
+        let at = |section: Option<&Section>, index: usize, closed: bool| {
+            section.map_or(if closed { Side::Closed } else { Side::Open }, |s| {
+                Side::Block(s.get(index))
+            })
         };
         let (x, z, y) = (i & 15, (i >> 4) & 15, i >> 8);
         match face {
             0 if y > 0 => Side::Block(self.this.get(i - 256)),
             0 if self.bottom => Side::Floor,
-            0 => at(self.below, i + 15 * 256),
+            0 => at(self.below, i + 15 * 256, false),
             1 if y < 15 => Side::Block(self.this.get(i + 256)),
-            1 => at(self.above, i - 15 * 256),
+            1 => at(self.above, i - 15 * 256, false),
             2 if x > 0 => Side::Block(self.this.get(i - 1)),
-            2 => at(self.sides[0], i + 15),
+            2 => at(self.sides[0], i + 15, self.closed[0]),
             3 if x < 15 => Side::Block(self.this.get(i + 1)),
-            3 => at(self.sides[1], i - 15),
+            3 => at(self.sides[1], i - 15, self.closed[1]),
             4 if z > 0 => Side::Block(self.this.get(i - 16)),
-            4 => at(self.sides[2], i + 15 * 16),
+            4 => at(self.sides[2], i + 15 * 16, self.closed[2]),
             _ if z < 15 => Side::Block(self.this.get(i + 16)),
-            _ => at(self.sides[3], i - 15 * 16),
+            _ => at(self.sides[3], i - 15 * 16, self.closed[3]),
         }
     }
 }
@@ -429,6 +434,7 @@ struct Entry {
     source: Arc<Section>,
     /// The sections around it, when the result depended on them.
     around: Option<[Option<Arc<Section>>; 6]>,
+    closed: [bool; 4],
     output: Arc<Section>,
 }
 
@@ -458,6 +464,19 @@ pub fn obfuscate(
     chunk: &Chunk,
     pos: ChunkPos,
     around: &[Option<Chunk>; 4],
+    plan: &Arc<Plan>,
+    cache: &mut Cache,
+) -> (Chunk, Stats) {
+    obfuscate_closed(chunk, pos, around, [false; 4], plan, cache)
+}
+
+/// As [`obfuscate`], but a missing neighbour whose `closed` flag is set
+/// counts as solid: its blocks are not to be learned before it arrives.
+pub fn obfuscate_closed(
+    chunk: &Chunk,
+    pos: ChunkPos,
+    around: &[Option<Chunk>; 4],
+    closed: [bool; 4],
     plan: &Arc<Plan>,
     cache: &mut Cache,
 ) -> (Chunk, Stats) {
@@ -491,6 +510,7 @@ pub fn obfuscate(
         ];
         let hit = slot.as_ref().filter(|entry| {
             Arc::ptr_eq(&entry.source, source)
+                && entry.closed == closed
                 && entry
                     .around
                     .as_ref()
@@ -508,6 +528,7 @@ pub fn obfuscate(
                     below: neighbours[0].as_deref(),
                     above: neighbours[1].as_deref(),
                     sides: std::array::from_fn(|k| neighbours[2 + k].as_deref()),
+                    closed,
                     bottom: index == 0,
                 };
                 let origin = (pos.x * 16, base, pos.z * 16);
@@ -518,6 +539,7 @@ pub fn obfuscate(
                 *slot = Some(Entry {
                     source: source.clone(),
                     around: depends.then(|| neighbours.clone()),
+                    closed,
                     output: output.clone(),
                 });
                 output
@@ -585,6 +607,19 @@ fn edge(view: &View, face: usize) -> BlockMask {
         _ => (view.sides[3], -15 * 16),
     };
     let Some(section) = section else {
+        if face >= 2 && view.closed[face - 2] {
+            for a in 0..16 {
+                for b in 0..16 {
+                    let i = match face {
+                        2 => a << 8 | b << 4,
+                        3 => a << 8 | b << 4 | 15,
+                        4 => a << 8 | b,
+                        _ => a << 8 | 15 << 4 | b,
+                    };
+                    out[i >> 6] |= 1 << (i & 63);
+                }
+            }
+        }
         return out;
     };
     if let Some(state) = section.uniform_state()
@@ -635,7 +670,7 @@ fn obfuscate_section(
                 let i = w << 6 | bit as usize;
                 let enclosed = (0..6).all(|face| match view.side(i, face) {
                     Side::Block(state) => occludes(state),
-                    Side::Floor => true,
+                    Side::Floor | Side::Closed => true,
                     Side::Open => false,
                 });
                 if !enclosed {

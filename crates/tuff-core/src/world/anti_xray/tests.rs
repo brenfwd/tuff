@@ -336,7 +336,7 @@ fn reference(chunk: &Chunk, around: &[Option<Chunk>; 4], plan: &Plan) -> Chunk {
         ];
         let enclosed = sides.iter().all(|side| match side {
             Side::Block(state) => occludes(*state),
-            Side::Floor => true,
+            Side::Floor | Side::Closed => true,
             Side::Open => false,
         });
         if enclosed {
@@ -437,4 +437,77 @@ fn obfuscation_matches_a_block_by_block_reference() {
         }
     }
     assert!(replaced > 10_000, "only {replaced} blocks replaced");
+}
+
+fn edge_ore_sent(side: usize, dense: bool, present: bool) -> BlockState {
+    let diamond = Block::DiamondOre.default_state();
+    let mut chunk = solid_chunk();
+    let (x, z) = [(0, 5), (15, 5), (5, 0), (5, 15)][side];
+    chunk.set(x, 10, z, diamond);
+    if dense {
+        for i in 0..400 {
+            chunk.set(
+                1 + i % 14,
+                20 + i / 196,
+                1 + (i / 14) % 14,
+                diamond,
+            );
+        }
+    }
+    let plan = overworld_plan(Mode::Hide);
+    let mut around: [Option<Chunk>; 4] = std::array::from_fn(|_| Some(solid_chunk()));
+    let mut closed = [false; 4];
+    if present {
+        let mut open = solid_chunk();
+        let (ox, oz) = [(15, 5), (0, 5), (5, 15), (5, 0)][side];
+        open.set(ox, 10, oz, Block::Air.default_state());
+        around[side] = Some(open);
+    } else {
+        around[side] = None;
+        closed[side] = true;
+    }
+    let (out, _) = obfuscate_closed(&chunk, POS, &around, closed, &plan, &mut Cache::default());
+    out.get(x, 10, z)
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn a_closed_edge_hides_ore_on_every_side_in_both_paths() {
+    for side in 0..4 {
+        for dense in [false, true] {
+            assert_eq!(edge_ore_sent(side, dense, false), stone(), "{side} {dense}");
+            assert_eq!(
+                edge_ore_sent(side, dense, true),
+                Block::DiamondOre.default_state(),
+                "{side} {dense}"
+            );
+        }
+    }
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn the_cache_recomputes_when_a_closed_side_gets_its_neighbour() {
+    let diamond = Block::DiamondOre.default_state();
+    let mut chunk = solid_chunk();
+    chunk.set(0, 10, 5, diamond);
+    let plan = overworld_plan(Mode::Hide);
+    let mut around: [Option<Chunk>; 4] = std::array::from_fn(|_| Some(solid_chunk()));
+    around[0] = None;
+    let mut cache = Cache::default();
+    let (first, _) = obfuscate_closed(
+        &chunk,
+        POS,
+        &around,
+        [true, false, false, false],
+        &plan,
+        &mut cache,
+    );
+    assert_eq!(first.get(0, 10, 5), stone());
+    let mut open = solid_chunk();
+    open.set(15, 10, 5, Block::Air.default_state());
+    around[0] = Some(open);
+    let (second, stats) = obfuscate_closed(&chunk, POS, &around, [false; 4], &plan, &mut cache);
+    assert_eq!(second.get(0, 10, 5), diamond);
+    assert!(stats.computed > 0);
 }

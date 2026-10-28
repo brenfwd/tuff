@@ -262,6 +262,54 @@ async fn opening_a_block_across_a_region_border_reveals_the_ore_behind_it() {
     world.shutdown().await;
 }
 
+async fn border_edge_ore_case(open_across: bool) {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    enable(&world, true);
+    let west = world.region(RegionPos::new(0, 1)).await;
+    let east = world.region(RegionPos::new(1, 1)).await;
+    let center = ChunkPos::new(32, 40);
+    let (west_chunks, east_chunks): (Vec<_>, Vec<_>) =
+        around(center).into_iter().partition(|c| c.x < 32);
+    let at = BlockPos::new(center.x * 16, 20, center.z * 16 + 5);
+    let mut loader = viewer(&world, 1000);
+    loader.subscribe(&east, &east_chunks).await;
+    place_blocks(&world, &east, [(at, diamond())]).await;
+    world.ticks(2).await;
+
+    let mut v = viewer(&world, 1001);
+    v.subscribe(&east, &east_chunks).await;
+    assert_eq!(v.sees(at), Some(stone()), "hidden while the halo is absent");
+
+    let across = offset(at, -1, 0, 0);
+    let state = if open_across {
+        Block::Air.default_state()
+    } else {
+        stone()
+    };
+    loader.subscribe(&west, &west_chunks).await;
+    place_blocks(&world, &west, [(across, state)]).await;
+    for _ in 0..10 {
+        world.ticks(1).await;
+        v.pump().await;
+    }
+    let expected = if open_across { diamond() } else { stone() };
+    assert_eq!(v.sees(at), Some(expected));
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_edge_ore_stays_hidden_until_the_halo_opens_it() {
+    border_edge_ore_case(true).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_edge_ore_next_to_a_solid_halo_block_stays_hidden() {
+    border_edge_ore_case(false).await;
+}
+
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn settings_apply_live_to_later_sends() {
