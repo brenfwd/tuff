@@ -222,6 +222,17 @@ pub struct Stock {
 }
 
 impl Stock {
+    /// The stock a bot really carries, from its slot snapshots.
+    pub fn from_carried(carried: &[(u8, String)]) -> Self {
+        let mut stock = Self::default();
+        for (_, snbt) in carried {
+            if let Some(id) = crate::shop::snbt_id(snbt) {
+                stock.bought(id, crate::shop::snbt_count(snbt));
+            }
+        }
+        stock
+    }
+
     /// Counts a purchase of `count` of `item`.
     pub fn bought(&mut self, item: &str, count: u32) {
         match item {

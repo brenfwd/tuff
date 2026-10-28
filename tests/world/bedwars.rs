@@ -570,7 +570,7 @@ impl WithBots {
         let backend = Arc::new(SqliteBackend::open(dir.path().join("world.mcserver")).unwrap());
         let config = backend.config().expect("sqlite keeps the config");
         config
-            .write_plugin_grant("bots", Some("cross-plugin = all"))
+            .write_plugin_grant("bots", Some("cross-plugin = all\nplayer-read = all"))
             .unwrap();
         config
             .write_plugin_grant(
@@ -651,9 +651,18 @@ impl WithBots {
     async fn until<T, F: std::future::Future<Output = Option<T>>>(
         &self,
         what: &str,
+        probe: impl FnMut() -> F,
+    ) -> T {
+        self.until_polls(what, 1200, probe).await
+    }
+
+    async fn until_polls<T, F: std::future::Future<Output = Option<T>>>(
+        &self,
+        what: &str,
+        polls: u32,
         mut probe: impl FnMut() -> F,
     ) -> T {
-        for _ in 0..1200 {
+        for _ in 0..polls {
             if let Some(found) = probe().await {
                 return found;
             }
@@ -755,5 +764,78 @@ async fn bots_are_fake_players_that_play_die_respawn_and_shop_by_the_rules() {
         (!run.say("list").await.contains(bot)).then_some(())
     })
     .await;
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_shoots_a_target_across_a_gap() {
+    let Some(run) = WithBots::start().await else {
+        return;
+    };
+    let names = ["BOT_Ashwin", "BOT_Brakken"];
+    for _ in names {
+        let added = run.bedwars("bot add 1 hard").await;
+        assert!(added.contains("Adding"), "{added}");
+    }
+    run.until("the bots coming online", || async {
+        let list = run.say("list").await;
+        names.iter().all(|n| list.contains(n)).then_some(())
+    })
+    .await;
+    run.until("the start", || async {
+        let said = run.bedwars("start 1").await;
+        let started = !said.contains("error:") || run.bedwars("list").await.contains("running");
+        started.then_some(())
+    })
+    .await;
+    run.until("the bots on their islands", || async {
+        let mut home = true;
+        for name in names {
+            home &= run
+                .say(&format!("data get entity {name} Dimension"))
+                .await
+                .contains(ARENA);
+        }
+        home.then_some(())
+    })
+    .await;
+    run.say(&format!(
+        "execute in {ARENA} run fill 16 64 -44 24 64 -39 minecraft:stone"
+    ))
+    .await;
+    run.say(&format!(
+        "execute in {ARENA} run tp {} 20.5 65 -41.5",
+        names[1]
+    ))
+    .await;
+    for name in names {
+        run.say(&format!("give {name} minecraft:bow 1")).await;
+        run.say(&format!("give {name} minecraft:arrow 32")).await;
+        run.say(&format!(
+            "execute in {ARENA} at {name} run summon minecraft:item ~ ~ ~ {{Item:{{id:\"minecraft:iron_ingot\",count:1}}}}"
+        ))
+        .await;
+    }
+    let arrow = run
+        .until_polls("an arrow in flight", 1200, || async {
+            run.say(&format!(
+                "execute in {ARENA} run tp {} 20.5 65 -41.5",
+                names[1]
+            ))
+            .await;
+            let seen = run
+                .say(&format!(
+                    "execute in {ARENA} if entity @e[type=minecraft:arrow]"
+                ))
+                .await;
+            let health = run
+                .numbers(&format!("data get entity {} Health", names[1]))
+                .await;
+            let hit = health.first().is_some_and(|h| *h < 20.0);
+            (!seen.contains("Test failed") || hit).then_some(seen)
+        })
+        .await;
+    assert!(!arrow.is_empty());
     run.stop().await;
 }
