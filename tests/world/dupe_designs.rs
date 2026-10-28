@@ -721,6 +721,28 @@ pub const DESIGNS: &[Design] = &[
         area: COUNT_BOX,
     },
     Design {
+        name: "gravity_pushed_into_portal",
+        build: &[
+            (-2, -1, 0, "minecraft:stone"),
+            (-1, -1, 0, "minecraft:stone"),
+            (0, -2, 0, "minecraft:stone"),
+            (0, -1, 0, "minecraft:end_portal"),
+            (-3, 0, 0, "minecraft:sticky_piston[facing=east]"),
+            (-2, 0, 0, "minecraft:slime_block"),
+            (-1, 0, 0, "minecraft:sand"),
+        ],
+        trigger: &[
+            (-3, -1, 0, "minecraft:redstone_block"),
+            (0, 0, 0, "@step:40"),
+        ],
+        steps: 0,
+        end: true,
+        kinds: &["minecraft:sand"],
+        vanilla: &[("minecraft:sand", 1)],
+        slabs: None,
+        area: COUNT_BOX,
+    },
+    Design {
         name: "gravity_fall_into_portal",
         build: &[
             (0, -1, 0, "minecraft:stone"),
