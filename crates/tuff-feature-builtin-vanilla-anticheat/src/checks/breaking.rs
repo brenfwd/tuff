@@ -738,4 +738,66 @@ mod tests {
         assert_eq!(s.names(), vec!["break_face"], "only the hidden face");
         assert_eq!(s.kicked, None);
     }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn retargeting_sends_abort_then_start_in_one_tick_never_flags() {
+        let mut s = Session::new(stone());
+        let mut tick = mine(&mut s, 100, 10, 0);
+        s.at(tick * 50);
+        s.send(&start(1));
+        s.send(&Serverbound::Punch);
+        s.send(&Serverbound::ClientTickEnd);
+        for x in 2..30 {
+            tick += 1;
+            s.at(tick * 50);
+            s.send(&abort(x - 1));
+            s.send(&start(x));
+            s.send(&Serverbound::Punch);
+            s.send(&Serverbound::ClientTickEnd);
+        }
+        assert!(s.flags.is_empty(), "{:?}", s.names());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn held_cadences_of_six_ticks_never_flag() {
+        let mut creative = grass();
+        creative.instabuild = true;
+        let mut s = Session::new(creative);
+        for n in 0..300u64 {
+            s.at(n * 50);
+            if n % 6 == 0 {
+                s.instant(i32::try_from(n / 6).unwrap());
+            } else {
+                s.send(&Serverbound::Punch);
+                s.send(&Serverbound::ClientTickEnd);
+            }
+        }
+        assert!(s.flags.is_empty(), "creative: {:?}", s.names());
+
+        let mut s = Session::new(stone());
+        let mut tick = 100;
+        for x in 0..60 {
+            tick = mine(&mut s, tick, 1, x) + 5;
+        }
+        assert!(s.flags.is_empty(), "survival: {:?}", s.names());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn queued_clicks_in_one_tick_at_one_position_never_flag() {
+        let mut s = Session::new(grass());
+        for n in 0..200u64 {
+            s.at(n * 50);
+            let x = i32::try_from(n % 8).unwrap();
+            for _ in 0..4 {
+                s.send(&start(x));
+                s.send(&Serverbound::Punch);
+            }
+            s.send(&Serverbound::ClientTickEnd);
+        }
+        let breaks = s.names().into_iter().filter(|n| *n != "swing_rate");
+        assert_eq!(breaks.count(), 0, "{:?}", s.names());
+    }
 }
