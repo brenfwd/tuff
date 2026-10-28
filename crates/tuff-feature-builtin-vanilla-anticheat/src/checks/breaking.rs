@@ -406,6 +406,89 @@ mod tests {
 
     #[tuff_core::watchdog]
     #[test]
+    fn efficiency_five_haste_two_instant_mining_of_every_instant_class_never_flags() {
+        let blocks = [
+            Block::ShortGrass,
+            Block::Torch,
+            Block::Dandelion,
+            Block::Stone,
+            Block::Dirt,
+            Block::OakLeaves,
+        ];
+        for block in blocks {
+            let mut f = grass();
+            f.target = Some(block.default_state());
+            f.mining = Some(super::super::Mining {
+                lenient: 40.0,
+                actual: 40.0,
+                factor: 1.0,
+                strict: false,
+            });
+            let mut s = Session::new(f);
+            for n in 0..1200u64 {
+                s.at(n * 50);
+                s.instant(i32::try_from(n % 64).unwrap());
+            }
+            assert!(s.flags.is_empty(), "{block:?}: {:?}", s.names());
+        }
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_long_stall_flushed_at_one_instant_is_rate_limited_but_never_a_nuker() {
+        let mut s = Session::new(grass());
+        for n in 0..200u64 {
+            s.at(n * 50 + 40);
+            s.instant(i32::try_from(n % 64).unwrap());
+        }
+        let resume = 200 * 50 + 3000;
+        for n in 200..260u64 {
+            s.at(resume);
+            s.instant(i32::try_from(n % 64).unwrap());
+        }
+        assert!(!s.names().contains(&"nuker"), "{:?}", s.names());
+        assert!(s.kicked.is_none(), "{:?}", s.kicked);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_swing_after_the_stop_or_in_a_later_tick_never_flags() {
+        let mut s = Session::new(stone());
+        s.at(1000);
+        s.send(&start(0));
+        s.send(&Serverbound::ClientTickEnd);
+        for n in 1..30u64 {
+            s.at(1000 + n * 50);
+            s.send(&Serverbound::Punch);
+            s.send(&Serverbound::ClientTickEnd);
+        }
+        s.send(&stop(0));
+        s.send(&Serverbound::Punch);
+        s.send(&Serverbound::ClientTickEnd);
+        s.at(1000 + 31 * 50);
+        s.send(&start(1));
+        s.send(&Serverbound::Punch);
+        s.send(&Serverbound::ClientTickEnd);
+        assert!(s.flags.is_empty(), "{:?}", s.names());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_hold_without_swings_past_the_window_is_flagged_on_the_next_start() {
+        let mut check = BlockBreak::default();
+        let mut f = stone();
+        assert_eq!(name(check.examine(&f, &start(0))), None);
+        f.tick += super::SWING_WINDOW;
+        assert_eq!(name(check.examine(&f, &start(1))), Some("no_swing"));
+        let mut check = BlockBreak::default();
+        let mut f = stone();
+        check.examine(&f, &start(0));
+        f.tick += super::SWING_WINDOW + 1;
+        assert_eq!(name(check.examine(&f, &start(1))), None);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
     fn a_nuker_breaking_many_blocks_in_one_tick_is_set_back_and_kicked() {
         let mut s = Session::new(grass());
         s.at(1000);
