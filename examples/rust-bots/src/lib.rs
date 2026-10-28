@@ -170,6 +170,7 @@ impl Host for Real {
                 forward: drive.forward,
                 strafe: drive.strafe,
                 jump: drive.jump,
+                jump_at_edge: drive.jump_at_edge,
                 sprint: drive.sprint,
                 sneak: drive.sneak,
                 yaw: drive.yaw,

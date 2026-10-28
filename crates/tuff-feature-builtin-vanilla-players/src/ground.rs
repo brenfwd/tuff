@@ -242,6 +242,37 @@ fn minor_collision(held: &Held, wanted: [f64; 3]) -> bool {
     (dot / (desired_sq * wanted_sq).sqrt()).acos() < MINOR_COLLISION_ANGLE
 }
 
+fn leaves_support(
+    state: &MotionState,
+    held: &Held,
+    body: &Body,
+    rig: &Rig,
+    world: &ChunkMirror,
+    in_lava: bool,
+) -> bool {
+    if !held.jump_at_edge
+        || held.jump
+        || held.forward <= 0
+        || !state.on_ground
+        || state.gliding
+        || state.in_water
+        || in_lava
+        || state.no_jump != 0
+    {
+        return false;
+    }
+    let mut ahead = state.clone();
+    travel_in_air(&mut ahead, held, body, rig, world);
+    can_fall(
+        &ahead,
+        rig,
+        world,
+        0.0,
+        0.0,
+        f64::from(body.movement.step_height),
+    )
+}
+
 fn travel(
     state: &mut MotionState,
     held: &Held,
@@ -819,6 +850,15 @@ impl GroundMotion {
         if state.gliding && state.velocity[1] > -0.5 && state.fall > 1.0 {
             state.fall = 1.0;
         }
+        let edge_jump = Held {
+            jump: true,
+            ..*held
+        };
+        let held = if leaves_support(state, held, body, rig, world, in_lava) {
+            &edge_jump
+        } else {
+            held
+        };
         if held.jump {
             let fluid_height = if in_lava { sub.lava } else { sub.water };
             let in_water_height = state.in_water && fluid_height > 0.0;

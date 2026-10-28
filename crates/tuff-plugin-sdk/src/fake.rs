@@ -108,6 +108,7 @@ impl FakePlayer {
             forward,
             strafe: 0,
             jump: false,
+            jump_at_edge: false,
             sprint,
             sneak: false,
             yaw: look.0,

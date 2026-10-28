@@ -577,3 +577,79 @@ fn ground_motion_timing() {
     }
     eprintln!("ground_motion_timing_ms {}", start.elapsed().as_millis());
 }
+
+fn edge_run(gap: Option<(i32, i32)>, held: Held, ticks: usize) -> (MotionState, Vec<[f64; 3]>) {
+    let mut world = World::flat();
+    world.fill(-64, 6, 64, 192, |_| Block::Air.default_state());
+    if let Some((from, to)) = gap {
+        for z in from..to {
+            for x in -64..64 {
+                for y in 0..FLOOR {
+                    world.set(x, y, z, Block::Stone.default_state());
+                }
+            }
+        }
+    }
+    run(&world.mirror(), [0.5, f64::from(FLOOR), 0.5], held, ticks)
+}
+
+fn edge_held(sprint: bool) -> Held {
+    Held {
+        sprint,
+        jump_at_edge: true,
+        ..forward()
+    }
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn edge_jump_takes_off_only_when_the_move_leaves_the_block() {
+    for sprint in [false, true] {
+        let (_, path) = edge_run(None, edge_held(sprint), 80);
+        let lift = path
+            .iter()
+            .position(|p| p[1] > f64::from(FLOOR) + 0.01)
+            .expect("jumped");
+        let before = path[lift - 1][2];
+        assert!(
+            before < 6.3 && path[lift][2] >= 6.3,
+            "sprint {sprint}: {:?} -> {:?}",
+            path[lift - 1],
+            path[lift]
+        );
+        assert!(
+            path[..lift]
+                .iter()
+                .all(|p| (p[1] - f64::from(FLOOR)).abs() < 1.0e-9)
+        );
+        assert!(path[lift - 1][2] + (path[lift - 1][2] - path[lift - 2][2]) > 5.9);
+    }
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn edge_jump_clears_a_three_block_gap_while_sprinting() {
+    let (_, path) = edge_run(Some((9, 40)), edge_held(true), 70);
+    assert!(path.iter().all(|p| p[1] >= f64::from(FLOOR) - 1.0e-9));
+    assert!(path.iter().any(|p| p[2] > 12.0));
+    let last = path.last().unwrap();
+    assert!((last[1] - f64::from(FLOOR)).abs() < 1.0e-9, "{last:?}");
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn edge_jump_never_fires_on_a_long_flat_floor() {
+    let (_, path) = edge_run(Some((6, 192)), edge_held(true), 100);
+    assert!(path.iter().all(|p| p[1] <= f64::from(FLOOR) + 1.0e-9));
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn edge_jump_off_walks_off_the_block() {
+    let held = Held {
+        jump_at_edge: false,
+        ..edge_held(true)
+    };
+    let (state, _) = edge_run(None, held, 60);
+    assert!(state.position[1] < f64::from(FLOOR) - 1.0);
+}

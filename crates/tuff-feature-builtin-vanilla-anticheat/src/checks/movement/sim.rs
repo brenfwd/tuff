@@ -164,6 +164,7 @@ impl Client {
             forward: i8::from(input.forward) - i8::from(input.back),
             strafe: i8::from(input.left) - i8::from(input.right),
             jump: input.jump,
+            jump_at_edge: false,
             sprint: input.sprint,
             sneak: input.sneak,
             yaw: input.yaw,

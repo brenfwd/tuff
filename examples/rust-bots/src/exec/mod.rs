@@ -38,10 +38,7 @@ const BRIDGE_OVERHANG: f64 = 0.6;
 const BRIDGE_APPROACH_TICKS: u32 = 60;
 const PILLAR_JUMPS: u32 = 3;
 const PILLAR_JUMP_TICKS: u32 = 14;
-const TAKE_OFF: f64 = 0.1;
 const STAND_TOLERANCE: f64 = 0.07;
-const TAKE_OFF_REACH: f64 = 0.2806;
-const TAKE_OFF_LEAD: f64 = 0.7;
 
 /// The keys and look a bot holds. The host is called only when it changes.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -49,6 +46,7 @@ pub struct Drive {
     pub forward: i8,
     pub strafe: i8,
     pub jump: bool,
+    pub jump_at_edge: bool,
     pub sprint: bool,
     pub sneak: bool,
     pub yaw: f32,
@@ -125,7 +123,6 @@ pub struct Executor {
     anchor: (f64, f64),
     moved_since_replan: f64,
     target: Option<Pos>,
-    last_pos: Option<(f64, f64)>,
     last_at: Option<Pos>,
 }
 
@@ -168,7 +165,6 @@ impl Executor {
             anchor: (0.0, 0.0),
             moved_since_replan: 0.0,
             target: None,
-            last_pos: None,
             last_at: None,
         }
     }
@@ -514,10 +510,6 @@ impl Executor {
         let climbing = world
             .class_at(at.0, at.1, at.2)
             .is_ok_and(|c| c.climbable());
-        let speed = self
-            .last_pos
-            .replace((view.pos.x, view.pos.z))
-            .map_or(0.0, |(x, z)| (view.pos.x - x).hypot(view.pos.z - z));
         if let Some(step) = self.work_tick(view, world) {
             return step;
         }
@@ -586,14 +578,13 @@ impl Executor {
             && view.food > SPRINT_FOOD
             && misaligned < SPRINT_ALIGNED
             && forward != 0;
-        let sprint =
-            can_sprint && ((vertical == 0 && straight_on) || parkour.is_some_and(|g| g > 1));
+        let parkour_next = after.and_then(|next| parkour_gap(waypoint, next));
+        let sprint = can_sprint
+            && ((vertical == 0 && straight_on)
+                || parkour.or(parkour_next).is_some_and(|g| g > 1));
+        let jump_at_edge = parkour.or(parkour_next).is_some();
         let jump = match parkour {
-            Some(_) => {
-                view.on_ground
-                    && edge_distance(&view.pos, at, waypoint)
-                        <= take_off_reach(speed)
-            }
+            Some(_) => false,
             None => {
                 (vertical > 0 && flat <= JUMP_REACH && view.on_ground)
                     || ((view.in_fluid || climbing) && vertical > 0)
@@ -604,6 +595,7 @@ impl Executor {
             forward,
             strafe: 0,
             jump,
+            jump_at_edge,
             sprint,
             sneak: false,
             yaw,
@@ -612,21 +604,6 @@ impl Executor {
         self.last = drive;
         Step::Drive(drive)
     }
-}
-
-fn take_off_reach(speed: f64) -> f64 {
-    TAKE_OFF.max((speed + TAKE_OFF_REACH).min(TAKE_OFF_LEAD))
-}
-
-/// How far the body centre is from the side of block `at` that faces `to`.
-fn edge_distance(pos: &Vec3, at: Pos, to: Pos) -> f64 {
-    let (dx, dz) = ((to.0 - at.0).signum(), (to.2 - at.2).signum());
-    let along = |p: f64, b: i32, d: i32| match d {
-        1 => f64::from(b) + 1.0 - p,
-        -1 => p - f64::from(b),
-        _ => f64::INFINITY,
-    };
-    along(pos.x, at.0, dx).min(along(pos.z, at.2, dz))
 }
 
 pub fn unit_box((x, y, z): Pos) -> Aabb {

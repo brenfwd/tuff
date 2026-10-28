@@ -14,6 +14,8 @@ pub struct Held {
     /// -1 right, 0 none, 1 left.
     pub strafe: i8,
     pub jump: bool,
+    /// Jump on the tick the body would otherwise walk off its block.
+    pub jump_at_edge: bool,
     pub sprint: bool,
     pub sneak: bool,
     pub yaw: f32,
