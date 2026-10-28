@@ -167,6 +167,51 @@ but a kick is only logged as "would kick".
 
 Fill and clone limits come from the `max_block_modifications` game rule.
 
+## Security, backups and proxy
+
+Fuller explanations live in the Anti-cheat (`docs/anti-cheat.md`) and
+Running (`docs/running.md`) docs.
+
+Anti-xray (all live; changes apply to chunks sent afterwards):
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.antiXray.enabled` | `false` | Send chunks with hidden blocks replaced; the true blocks follow once exposed or mined towards |
+| `tuff.antiXray.mode` | `hide` | `hide` sends a neighbouring stone-like block; `fill` sends every enclosed hidden or replacement block as a random hidden block |
+| `tuff.antiXray.maxY` | `64` | Highest y at which blocks are hidden |
+| `tuff.antiXray.updateRadius` | `2` | Blocks (1 to 4, along the axes) around a changed or mined block whose true blocks are resent |
+| `tuff.antiXray.<dimension>.hiddenBlocks` | ores, chests and a few others in `overworld`; ancient debris, nether gold and quartz ore in `the_nether`; empty in `the_end` | Blocks to hide, comma or space separated; empty turns anti-xray off in that dimension |
+| `tuff.antiXray.<dimension>.replacementBlocks` | stone, deepslate and oak planks in `overworld`; netherrack, basalt, blackstone, gravel, soul sand and soul soil in `the_nether`; end stone in `the_end` | Blocks that stand in for hidden ones (the first is the fallback); `fill` also replaces them |
+
+`<dimension>` is `overworld`, `the_nether` or `the_end`.
+
+Login and operators:
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.offlineOps` | `false` | Honour `ops.json` for unverified names (offline mode without proxy forwarding); anyone can claim an operator's name |
+| `tuff.allowPublicOffline` | `false` | Start in offline mode on a non-loopback address without proxy forwarding; read at start-up |
+| `tuff.refuseDuplicateLogin` | `false` | Refuse a login whose player is already online instead of kicking the online player |
+
+Backups:
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.backup.directory` | empty | Folder backups go to (empty: `backups/` in the instance directory) |
+| `tuff.backup.keep` | `10` | Backups kept after a new one succeeds, oldest deleted first (`0` keeps all) |
+| `tuff.backup.maxAgeDays` | `0` | Delete backups older than this many days after a new one succeeds (`0` never) |
+| `tuff.backup.interval` | `0` | Minutes between automatic backups (`0` turns them off) |
+| `tuff.backup.staged` | `true` | Copy a folder world aside while saving is held and compress after it resumes (shortest pause; needs room for one uncompressed copy) |
+| `tuff.backup.compression` | `6` | Deflate level for folder world backups, `0` (store) to `9` |
+
+Velocity proxy (all read at start-up):
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.proxy.velocity.enabled` | `false` | Accept players only through a Velocity proxy with modern forwarding, taking identity and address from it |
+| `tuff.proxy.velocity.secret` | empty | The forwarding secret shared with the proxy; sensitive, so prefer `secretFile` |
+| `tuff.proxy.velocity.secretFile` | empty | File holding the secret (like Velocity's `forwarding.secret`), used when `secret` is empty |
+
 ## Dimensions
 
 `tuff.world.dimensions.overworld.enabled`, `.nether.enabled` and
