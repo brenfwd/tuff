@@ -135,6 +135,10 @@ pub trait WriteExt {
     fn write_lp_vec3(&mut self, v: [f64; 3]);
     fn write_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>);
     fn write_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>);
+    /// A slot as players other than the holder see it: container, bundle
+    /// and book contents and any oversized component are left out.
+    fn write_viewer_slot<M: Mode>(&mut self, stack: Option<ItemView<'_, M>>);
+    fn write_viewer_any_slot(&mut self, stack: Option<tuff_item::item::AnyItem<'_>>);
     /// A non-empty stack as item, count and component patch, with no Slot
     /// count prefix (recipe book stack displays, container contents).
     fn write_item_template<M: Mode>(&mut self, stack: ItemView<'_, M>);

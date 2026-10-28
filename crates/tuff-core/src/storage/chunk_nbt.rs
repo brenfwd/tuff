@@ -77,7 +77,25 @@ pub fn client_block_entities(meta: &Meta) -> Vec<(BlockPos, u32, Compound)> {
         .values()
         .filter_map(block_entity::raw::client_data)
         .map(|(pos, kind, data)| (pos, kind.id(), data));
-    modeled.chain(raw).collect()
+    modeled
+        .chain(raw)
+        .map(|(pos, kind, data)| (pos, kind, bounded_client_data(data)))
+        .collect()
+}
+
+/// Largest block entity compound a chunk packet carries.
+pub const CLIENT_BLOCK_ENTITY_MAX_BYTES: usize = 64 * 1024;
+
+/// `data`, or an empty compound when it would encode past the bound, so
+/// one entity cannot make the chunk packet unsendable.
+pub fn bounded_client_data(data: Compound) -> Compound {
+    let tag = Tag::Compound(data);
+    let mut probe = tuff_wire::PacketWriter::new();
+    let fits = probe.write_nbt(&tag).is_ok() && probe.len() <= CLIENT_BLOCK_ENTITY_MAX_BYTES;
+    match tag {
+        Tag::Compound(data) if fits => data,
+        _ => Compound::default(),
+    }
 }
 
 /// Every block entity in its saved form, in a stable order.
