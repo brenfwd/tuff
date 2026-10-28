@@ -12,7 +12,7 @@ impl PlayerSession {
         let Some(packet) = self.hold_use(packet) else {
             return;
         };
-        if self.over_rate_limit() {
+        if self.over_rate_limit() || !self.admit_budgeted(&packet) {
             return;
         }
         let Some(packet) = self.secure_chat(packet) else {

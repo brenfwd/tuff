@@ -97,6 +97,7 @@ mod fake_players;
 mod fake_plugin_abi;
 mod fishing;
 mod floating_kick;
+mod flood;
 mod fluid_gaps;
 mod fluids;
 mod forgiving;
