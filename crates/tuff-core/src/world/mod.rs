@@ -35,6 +35,7 @@ pub mod crafting;
 pub mod custom_dimension;
 pub mod death;
 pub mod debug_feeds;
+pub mod despawn_settings;
 pub mod dimension;
 pub mod drops;
 pub mod effects;

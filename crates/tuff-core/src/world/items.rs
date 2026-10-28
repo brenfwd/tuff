@@ -6,6 +6,7 @@ use tuff_vanilla_data::registry::EntityType;
 
 use crate::protocol::play::{MetadataValue, metadata};
 use crate::world::contact::{Immersion, immersion};
+use crate::world::despawn_settings::DespawnSettings;
 use crate::world::entity::{
     Effect, EntityBase, RegionEntity, Tick, TickContext, take, take_number,
 };
@@ -30,14 +31,13 @@ const RISE: f32 = 5.0e-4;
 const MAX_RISE: f64 = 0.05999999865889549;
 pub const DESPAWN_AGE: i32 = 6000;
 pub const INFINITE_LIFETIME: i32 = -32768;
-pub const EXTENDED_LIFETIME_AGE: i32 = -6000;
 pub const BLOCK_DROP_PICKUP_DELAY: u32 = 10;
 const HALF_WIDTH: f64 = 0.125;
 const DEFAULT_HEALTH: i16 = 5;
 pub const NEVER_PICKUP: u32 = 32767;
 const MERGE_PERIOD_MOVING: u32 = 2;
 const MERGE_PERIOD_RESTING: u32 = 40;
-const MERGE_REACH: f64 = 0.5;
+pub const MERGE_REACH: f64 = 0.5;
 
 #[derive(Debug)]
 pub struct ItemEntity {
@@ -140,10 +140,10 @@ impl ItemEntity {
 
     /// Whether it may take part in a merge at all. An item with an offer
     /// outstanding sits out so the offered count stays what it was.
-    pub fn mergeable(&self) -> bool {
+    pub fn mergeable(&self, settings: &DespawnSettings) -> bool {
         self.pickup_delay != NEVER_PICKUP
             && self.age != INFINITE_LIFETIME
-            && self.age < DESPAWN_AGE
+            && self.age < settings.item_age
             && self.reserved.is_none()
             && self.stack.count() < self.stack.max_stack_size()
     }
@@ -154,27 +154,27 @@ impl ItemEntity {
     }
 
     /// Gives it a second life span on top of the usual one.
-    pub fn set_extended_lifetime(&mut self) {
-        self.age = EXTENDED_LIFETIME_AGE;
+    pub fn set_extended_lifetime(&mut self, settings: &DespawnSettings) {
+        self.age = -settings.item_age;
     }
 
     /// Whether this tick is one it looks for neighbours to merge with:
     /// every other tick after changing block, else every 40th.
-    pub fn merge_due(&self, moved: bool) -> bool {
+    pub fn merge_due(&self, moved: bool, settings: &DespawnSettings) -> bool {
         let period = if moved {
             MERGE_PERIOD_MOVING
         } else {
             MERGE_PERIOD_RESTING
         };
-        self.ticks.is_multiple_of(period) && self.mergeable()
+        self.ticks.is_multiple_of(period) && self.mergeable(settings)
     }
 
     /// The box other items must meet to merge with this one.
-    pub fn merge_reach(&self) -> [f64; 6] {
+    pub fn merge_reach(&self, settings: &DespawnSettings) -> [f64; 6] {
         let mut reach = self.bounds();
         for axis in [0, 2] {
-            reach[axis] -= MERGE_REACH;
-            reach[axis + 3] += MERGE_REACH;
+            reach[axis] -= settings.item_merge;
+            reach[axis + 3] += settings.item_merge;
         }
         reach
     }
@@ -475,7 +475,7 @@ impl RegionEntity for ItemEntity {
             }
             return Tick::Discard;
         }
-        if self.age >= DESPAWN_AGE {
+        if self.age >= DespawnSettings::from_config(&context.shared.config).item_age {
             Tick::Discard
         } else {
             Tick::Alive
@@ -688,11 +688,12 @@ mod tests {
             entity.step_tick(&|_| Some(Block::Air.default_state()));
         }
         assert_eq!(entity.age, INFINITE_LIFETIME);
-        assert!(!entity.mergeable());
-        entity.set_extended_lifetime();
+        let settings = DespawnSettings::default();
+        assert!(!entity.mergeable(&settings));
+        entity.set_extended_lifetime(&settings);
         entity.step_tick(&|_| Some(Block::Air.default_state()));
         assert_eq!(entity.age, -5999);
-        assert!(entity.mergeable());
+        assert!(entity.mergeable(&settings));
     }
 
     #[tuff_core::watchdog]
@@ -912,10 +913,10 @@ mod tests {
             .extra
             .insert("Owner", Tag::IntArray(vec![1, 2, 3, 4]));
         assert!(!dirt.merges_with(&owned));
-        assert!(!stack_of(Item::Dirt, 64).mergeable());
+        assert!(!stack_of(Item::Dirt, 64).mergeable(&DespawnSettings::default()));
         let mut never = stack_of(Item::Dirt, 1);
         never.pickup_delay = NEVER_PICKUP;
-        assert!(!never.mergeable());
+        assert!(!never.mergeable(&DespawnSettings::default()));
     }
 
     #[tuff_core::watchdog]
@@ -941,7 +942,7 @@ mod tests {
     #[test]
     fn merges_are_scanned_every_other_tick_while_moving_else_every_fortieth() {
         let mut entity = stack_of(Item::Dirt, 1);
-        let due = |entity: &ItemEntity, moved| entity.merge_due(moved);
+        let due = |entity: &ItemEntity, moved| entity.merge_due(moved, &DespawnSettings::default());
         entity.ticks = 2;
         assert!(due(&entity, true));
         assert!(!due(&entity, false));
@@ -949,7 +950,7 @@ mod tests {
         assert!(due(&entity, false));
         entity.ticks = 41;
         assert!(!due(&entity, true));
-        let reach = entity.merge_reach();
+        let reach = entity.merge_reach(&DespawnSettings::default());
         assert_eq!(reach[1], entity.bounds()[1]);
         assert_eq!(reach[0], entity.bounds()[0] - 0.5);
     }
