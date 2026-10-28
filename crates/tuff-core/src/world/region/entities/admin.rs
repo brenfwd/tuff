@@ -366,7 +366,9 @@ impl RegionActor {
         let before = tracked.entity.base().position;
         place_teleported(&mut *tracked.entity, teleport);
         let mut to = tracked.chunk();
+        let mut landed = true;
         if to != from && !self.columns.contains_key(&to) && !self.border.halo.contains_key(&to) {
+            landed = false;
             let base = tracked.entity.base_mut();
             base.position = before;
             base.velocity = [0.0; 3];
@@ -404,6 +406,6 @@ impl RegionActor {
             column.entities_dirty = true;
         }
         self.ents.entities.insert(id, tracked);
-        true
+        landed
     }
 }

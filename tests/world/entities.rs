@@ -618,3 +618,47 @@ async fn teleport_moves_entities_into_another_dimension() {
     );
     world.shutdown().await;
 }
+
+/// A destination in a region this one has no link to is refused: the mob
+/// stays where it was and is not counted as moved.
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn teleport_entities_refuses_an_unlinked_destination_and_keeps_the_mob() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let dimension = world.dimension(OVERWORLD);
+    let west = world.region(ChunkPos::new(0, 0).region()).await;
+    let (viewer, mut events) = PlayerHandle::new(100);
+    subscribe(&west, &viewer, &mut events, &[ChunkPos::new(0, 0)]).await;
+    world.ticks(3).await;
+    let (reply, summoned) = oneshot::channel();
+    west.request(RegionRequest::Summon {
+        nbt: Compound::new()
+            .with("id", "minecraft:pig")
+            .with("NoAI", true)
+            .with("NoGravity", true),
+        position: [8.5, SKY as f64, 8.5],
+        fresh: false,
+        reply,
+    })
+    .await;
+    assert!(summoned.await.unwrap());
+    let id = snapshots(&west).await[0].id;
+    let teleport = Teleport {
+        dimension,
+        position: [5000.5, SKY as f64, 5000.5],
+        relative: [false; 3],
+        rotation: None,
+        relative_rotation: [false; 2],
+        look_at: None,
+    };
+    let moved = west
+        .ask(move |world| world.teleport_entity(id, &teleport))
+        .await
+        .unwrap();
+    assert!(!moved);
+    let found = snapshots(&west).await;
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].position, [8.5, SKY as f64, 8.5]);
+    world.shutdown().await;
+}

@@ -23,6 +23,7 @@ pub mod data;
 pub mod datapack;
 pub mod debugconfig;
 pub mod debugpath;
+pub mod entity_teleport;
 pub mod execute;
 pub mod function;
 pub mod gamemode;
