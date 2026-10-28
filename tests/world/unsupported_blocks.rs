@@ -241,3 +241,29 @@ async fn cactus_and_cane_drop_items_when_they_lose_support() {
     assert_eq!(items(&b.region).await, 2);
     b.world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_candle_stays_when_its_support_is_removed() {
+    let dir = TestDir::new();
+    let b = bench(dir.path()).await;
+    place_blocks(
+        &b.world,
+        &b.region,
+        [
+            (at(4, 0, 4), Block::Stone.default_state()),
+            (at(4, 1, 4), Block::Candle.default_state()),
+        ],
+    )
+    .await;
+    place_blocks(
+        &b.world,
+        &b.region,
+        [(at(4, 0, 4), Block::Air.default_state())],
+    )
+    .await;
+    b.world.ticks(5).await;
+    assert_eq!(state(&b.region, at(4, 1, 4)).await.block(), Block::Candle);
+    assert_eq!(items(&b.region).await, 0);
+    b.world.shutdown().await;
+}
