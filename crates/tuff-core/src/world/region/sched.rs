@@ -14,6 +14,7 @@ pub(super) struct Sched {
     pub(super) ticked: u64,
     /// Released when the region starts closing and stops ticking.
     pub(super) tick_member: Option<TickMember>,
+    pub(super) beat: Option<Arc<crate::world::stall::Beat>>,
     pub(super) closing: Option<watch::Sender<bool>>,
     pub(super) final_save: bool,
     pub(super) requests_open: bool,
@@ -45,6 +46,7 @@ impl Sched {
             tick,
             ticked: 0,
             tick_member: Some(shared.tick_barrier.join(tick)),
+            beat: None,
             closing: None,
             final_save: false,
             requests_open: true,
