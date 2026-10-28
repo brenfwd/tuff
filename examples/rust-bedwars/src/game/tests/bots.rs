@@ -152,15 +152,11 @@ fn a_bot_walks_by_bots_api_processes_and_breaks_the_enemy_bed_by_one_break_proce
         })
         .collect();
     assert_eq!(breaks.len(), 1, "one break process while the bed stands");
-    assert_eq!(
-        breaks[0],
-        vec![control::BlockPos {
-            x: 0,
-            y: 65,
-            z: -8
-        }]
+    assert_eq!(breaks[0], vec![control::BlockPos { x: 0, y: 65, z: -8 }]);
+    assert!(
+        running_game(&game).teams[0].bed,
+        "the game no longer breaks for the bot"
     );
-    assert!(running_game(&game).teams[0].bed, "the game no longer breaks for the bot");
 
     host.set_block(ARENA, [0, 65, -8], "minecraft:air");
     game.broken(
@@ -191,7 +187,11 @@ fn a_bot_retries_a_break_process_the_bots_plugin_gave_up() {
     assert_eq!(count(&game), 1);
     game.bot_walk_ended(HANDLE);
     ticks(&mut game, &mut host, 2 * SECOND + 1);
-    assert_eq!(count(&game), 2, "a failed break is asked again after a pause");
+    assert_eq!(
+        count(&game),
+        2,
+        "a failed break is asked again after a pause"
+    );
 }
 
 #[test]
@@ -199,9 +199,21 @@ fn bots_bridge_with_wool_and_may_dig_only_placed_blocks_and_beds() {
     let (game, _) = against(Difficulty::Normal);
     let policy = &spawns(&game)[0].1.policy;
     assert!(policy.allow_place && policy.allow_break);
-    assert!(policy.throwaway_items.contains(&"minecraft:red_wool".to_string()));
-    assert!(policy.break_allow.contains(&"minecraft:blue_bed".to_string()));
-    assert!(policy.break_allow.contains(&"minecraft:end_stone".to_string()));
+    assert!(
+        policy
+            .throwaway_items
+            .contains(&"minecraft:red_wool".to_string())
+    );
+    assert!(
+        policy
+            .break_allow
+            .contains(&"minecraft:blue_bed".to_string())
+    );
+    assert!(
+        policy
+            .break_allow
+            .contains(&"minecraft:end_stone".to_string())
+    );
     assert!(policy.break_allow.iter().all(|b| b.ends_with("_wool")
         || b.ends_with("_bed")
         || b.ends_with("_planks")
@@ -407,4 +419,43 @@ fn a_bot_with_a_bridge_egg_throws_it_ahead_over_open_air_once() {
         .count();
     assert_eq!(thrown, 1, "{:?}", game.bot_calls);
     assert_eq!(game.bots[&0].stock.eggs, 1);
+}
+
+#[test]
+fn picking_up_refreshes_a_wrong_stock_from_the_real_inventory() {
+    let (mut game, mut host) = against(Difficulty::Hard);
+    {
+        let stock = &mut game.bots.get_mut(&0).unwrap().stock;
+        stock.bought("minecraft:bow", 1);
+        stock.bought("minecraft:arrow", 30);
+        stock.bought("minecraft:fire_charge", 3);
+    }
+    host.carry = vec![
+        (0, stack("minecraft:bow", 1)),
+        (1, stack("minecraft:arrow", 4)),
+        (2, stack("minecraft:egg", 2)),
+    ];
+    game.bot_picked_up(&mut host, BOT);
+    let stock = &game.bots[&0].stock;
+    assert!(stock.bow);
+    assert_eq!((stock.arrows, stock.fireballs, stock.eggs), (4, 0, 2));
+}
+
+#[test]
+fn a_bot_without_arrows_sends_no_shoot_even_when_its_stock_claimed_a_bow() {
+    let (mut game, mut host) = against(Difficulty::Hard);
+    game.bots
+        .get_mut(&0)
+        .unwrap()
+        .stock
+        .bought("minecraft:bow", 1);
+    host.carry = vec![(0, stack("minecraft:bow", 1))];
+    game.bot_picked_up(&mut host, BOT);
+    host.at.insert(A, [0.5, 65.0, -14.5]);
+    host.at.insert(BOT, [0.5, 65.0, 0.5]);
+    ticks(&mut game, &mut host, 60);
+    let shot = walks(&game)
+        .into_iter()
+        .any(|p| matches!(p, control::Process::Shoot(_)));
+    assert!(!shot, "{:?}", game.bot_calls);
 }
