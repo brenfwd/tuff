@@ -213,6 +213,11 @@ instead of every 2. Tempting, breeding, wandering and targeting still
 work, with a few ticks more latency. The server logs once when a region
 enters or leaves crowd mode. Off, behaviour is vanilla.
 
+`tuff.mobs.collisionCap` (default `0`, unlimited like vanilla) limits how
+many overlapping entities one mob pushes against per tick, keeping the
+nearest. It is never applied below `max_entity_cramming`, so cramming
+still triggers whatever the setting.
+
 ## Item conservation and save safety
 
 Item stacks are move-only: a stack moves between players, containers,

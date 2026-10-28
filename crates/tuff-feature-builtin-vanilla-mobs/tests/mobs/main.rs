@@ -21,6 +21,7 @@ pub use std::time::Duration;
 pub use tokio::sync::{mpsc, oneshot};
 
 mod aquatic;
+mod collision_cap;
 mod cramming;
 mod creaking_heart;
 mod creepers;
