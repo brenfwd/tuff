@@ -895,6 +895,9 @@ impl World {
             network,
         );
         live_settings.set_max_chained_neighbor_updates(properties.max_chained_neighbor_updates());
+        if let Some(budget) = settings.get_int(live::CHUNK_BUDGET_KEY) {
+            live_settings.set_chunk_budget(budget.max(0) as u32);
+        }
         let shared = Arc::new(Shared {
             conservation: Default::default(),
             stopwatches: commands::session_state::Stopwatches::load(backend.clone()),

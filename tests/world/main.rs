@@ -70,6 +70,7 @@ mod bubble_columns;
 mod bundles;
 mod camel_husks;
 mod cauldrons;
+mod chunk_budget;
 mod chunk_lifecycle;
 mod chunk_mirror;
 mod command_execution;
