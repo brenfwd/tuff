@@ -194,6 +194,13 @@ chunks players have loaded. The categories and their vanilla defaults are
 `0` stops natural spawning of that category. Changes apply from the next
 tick.
 
+`tuff.mobs.spawnCap.perPlayer` (default `false`) caps spawns per player
+instead of by the chunks all players have loaded. A category then spawns
+near a player only while fewer than its cap of that category's mobs are
+within 128 blocks of them; mobs near two players count for both, and mobs
+far from a player do not count against them. This stops one player's AFK
+farm from taking spawns from other players.
+
 ## Crowd mode
 
 `tuff.mobs.crowd.enabled` (default `false`) is an opt-in for mob farms and

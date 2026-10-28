@@ -105,6 +105,73 @@ async fn mobs_in_a_neighbour_region_count_towards_the_caps() {
     world.shutdown().await;
 }
 
+/// Two cows held beyond 128 blocks of the only player fill the creature cap
+/// of the loaded chunks around it, so nothing spawns for the player unless
+/// the caps are per player, where only the mobs near them count.
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn per_player_caps_ignore_mobs_far_from_the_player() {
+    for per_player in [false, true] {
+        let dir = TestDir::new();
+        let setting = if per_player { "true" } else { "false" };
+        let world = TestWorld::start_with_settings(
+            dir.path(),
+            Vec::new(),
+            &[("tuff.mobs.spawnCap.perPlayer", setting)],
+        );
+        allow_spawning(&world);
+        let center = ChunkPos::new(31, 12);
+        let (viewer, mut events) = PlayerHandle::new(100);
+        let area = Area::subscribe(&world, &viewer, &mut events, &around(center, 4)).await;
+        let far_chunk = ChunkPos::new(10, 12);
+        let (far_viewer, mut far_events) = PlayerHandle::new(101);
+        let far_area =
+            Area::subscribe(&world, &far_viewer, &mut far_events, &around(far_chunk, 1)).await;
+        let generator = Generator::new(1);
+        let (x, z) = (center.x * 16 + 8, center.z * 16 + 8);
+        let player = [
+            x as f64 + 0.5,
+            generator.height(x, z) as f64 + 1.0,
+            z as f64 + 0.5,
+        ];
+        for region in area.regions() {
+            region.request(player_update(&viewer, player, None)).await;
+        }
+        world.publish_players(OVERWORLD, &[(&viewer, player)]);
+        let (fx, fz) = (far_chunk.x * 16 + 8, far_chunk.z * 16 + 8);
+        let at = [
+            fx as f64 + 0.5,
+            generator.height(fx, fz) as f64 + 1.0,
+            fz as f64 + 0.5,
+        ];
+        let far_owner = far_area.owner(at).clone();
+        for _ in 0..2 {
+            summon(
+                &far_owner,
+                EntityType::Cow,
+                Compound::new().with("NoAI", true),
+                at,
+            )
+            .await;
+        }
+        world.ticks(5).await;
+        let mut spawned = 0;
+        for _ in 0..12 {
+            spawn_cycles(&world, 1).await;
+            spawned = animals(&area).await.len().saturating_sub(2);
+            if spawned > 0 {
+                break;
+            }
+        }
+        if per_player {
+            assert!(spawned > 0, "far mobs do not count against the player");
+        } else {
+            assert_eq!(spawned, 0, "the dimension cap is full");
+        }
+        world.shutdown().await;
+    }
+}
+
 /// Animals spawn around a player in the open, and none once the border
 /// leaves every spawn candidate outside it.
 #[tuff_core::watchdog]
