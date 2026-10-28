@@ -368,7 +368,7 @@ __attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("fak
 extern void __wasm_import_tuff_plugin_host_fake_player_remove(int64_t, int64_t, uint8_t *);
 
 __attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("fake-player-input")))
-extern void __wasm_import_tuff_plugin_host_fake_player_input(int64_t, int64_t, int32_t, int32_t, int32_t, int32_t, int32_t, float, float, uint8_t *);
+extern void __wasm_import_tuff_plugin_host_fake_player_input(int64_t, int64_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, float, float, uint8_t *);
 
 __attribute__((__import_module__("tuff:plugin/host@0.1.0"), __import_name__("fake-player-act")))
 extern void __wasm_import_tuff_plugin_host_fake_player_act(int64_t, int64_t, int32_t, int64_t, int64_t, int32_t, int32_t, int32_t, double, double, double, uint8_t *);
@@ -9611,7 +9611,7 @@ bool tuff_plugin_host_fake_player_input(tuff_plugin_host_uuid_t *fake, tuff_plug
   __attribute__((__aligned__(sizeof(void*))))
   uint8_t ret_area[(4*sizeof(void*))];
   uint8_t *ptr = (uint8_t *) &ret_area;
-  __wasm_import_tuff_plugin_host_fake_player_input((int64_t) ((*fake).high), (int64_t) ((*fake).low), (int32_t) ((*input).forward), (int32_t) ((*input).strafe), (*input).jump, (*input).sprint, (*input).sneak, (*input).yaw, (*input).pitch, ptr);
+  __wasm_import_tuff_plugin_host_fake_player_input((int64_t) ((*fake).high), (int64_t) ((*fake).low), (int32_t) ((*input).forward), (int32_t) ((*input).strafe), (*input).jump, (*input).jump_at_edge, (*input).sprint, (*input).sneak, (*input).yaw, (*input).pitch, ptr);
   tuff_plugin_host_result_void_fake_error_t result;
   switch ((int32_t) *((uint8_t*) (ptr + 0))) {
     case 0: {

@@ -1,0 +1,10 @@
+[21:48:40.117] [Server thread/DEBUG]: ATI [-2, -2] Ticket[minecraft:forced 31] with no timeout
+[21:48:40.117] [Server thread/DEBUG]: ATI [-2, -1] Ticket[minecraft:forced 31] with no timeout
+[21:48:40.117] [Server thread/DEBUG]: ATI [-2, 0] Ticket[minecraft:forced 31] with no timeout
+[21:48:22.218] [Server thread/DEBUG]: ATI [0, 0] Ticket[minecraft:player_loading 31] with no timeout
+[21:48:22.220] [Server thread/DEBUG]: ATI [-1, -1] Ticket[minecraft:player_loading 31] with no timeout
+[21:48:18.802] [Server thread/DEBUG]: ATI [-1, -1] Ticket[minecraft:player_spawn 30] with 20 ticks left ( out of20)
+[21:48:04.248] [Server thread/DEBUG]: ATI [0, 0] Ticket[minecraft:unknown 33] with 1 ticks left ( out of1)
+[21:48:18.772] [Server thread/DEBUG]: ATI [-1, -1] Ticket[minecraft:unknown 33] with 1 ticks left ( out of1)
+[21:48:22.207] [Server thread/DEBUG]: SEN [-1, -1]
+[21:48:22.209] [Server thread/DEBUG]: SEN [-1, 0]

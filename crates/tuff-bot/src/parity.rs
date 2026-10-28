@@ -45,7 +45,7 @@ pub fn vanilla_tickets(text: &str) -> Vec<String> {
 pub fn vanilla_forced_tickets(text: &str) -> Vec<String> {
     let forced: Vec<&str> = text
         .lines()
-        .filter(|l| l.to_ascii_lowercase().contains("forced"))
+        .filter(|l| l.contains("Ticket[minecraft:forced ") || l.contains("Ticket[forced "))
         .collect();
     let mut out: Vec<String> = forced.into_iter().filter_map(vanilla_ticket).collect();
     out.sort();
@@ -186,8 +186,19 @@ mod tests {
             normalize_tickets(&[(2, -1), (0, 0), (2, -1)]),
             ["ticket 0 0", "ticket 2 -1"]
         );
-        let log = "DEBUG ATI [2, -1] Ticket[forced]\nDEBUG ATI [2, -1] Ticket[forced]\nDEBUG ATI [5, 5] Ticket[player]\nDEBUG ATI [0, 0] Ticket[minecraft:forced]";
+        let log = "[12:00:00] [Server thread/DEBUG]: ATI [2, -1] Ticket[minecraft:forced 31] with no timeout\nDEBUG ATI [2, -1] Ticket[minecraft:forced 31] with no timeout\nDEBUG ATI [5, 5] Ticket[minecraft:player_loading 33] with no timeout\nDEBUG ATI [0, 0] Ticket[minecraft:forced 31] with no timeout\nDEBUG ATI [9, 9] Ticket[minecraft:forced_extra 31] with no timeout";
         assert_eq!(vanilla_forced_tickets(log), ["ticket 0 0", "ticket 2 -1"]);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn real_vanilla_log_sample_yields_only_forced_tickets() {
+        let log = include_str!("../tests/fixtures/vanilla-ati-sample.txt");
+        assert_eq!(
+            vanilla_forced_tickets(log),
+            ["ticket -2 -1", "ticket -2 -2", "ticket -2 0"]
+        );
+        assert_eq!(vanilla_tickets(log).len(), 8);
     }
 
     #[tuff_core::watchdog]

@@ -1309,6 +1309,8 @@ typedef struct tuff_plugin_types_fake_input_t {
   int8_t   forward;
   int8_t   strafe;
   bool   jump;
+  // Jump on the tick the body would otherwise walk off its block.
+  bool   jump_at_edge;
   bool   sprint;
   bool   sneak;
   float   yaw;

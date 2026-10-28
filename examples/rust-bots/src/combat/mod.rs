@@ -406,6 +406,7 @@ impl Fighter {
                 forward,
                 strafe,
                 jump,
+                jump_at_edge: false,
                 sprint,
                 sneak: false,
                 yaw: aim,

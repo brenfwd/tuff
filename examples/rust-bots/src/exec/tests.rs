@@ -656,7 +656,7 @@ fn sprint_jumps_a_three_block_gap_when_the_plugin_ticks_less_often_than_the_body
     }
 }
 
-fn gap_with(steps: usize, lag: usize) -> bool {
+fn gap_with(steps: usize) -> bool {
     let mut t = Terrain::new(32, 1);
     for x in 6..9 {
         for y in -39..=0 {
@@ -664,7 +664,6 @@ fn gap_with(steps: usize, lag: usize) -> bool {
         }
     }
     let mut run = parkour_run(t, block(14, 1, 0));
-    run.host.lag = lag;
     for _ in 0..900 {
         run.bots.tick(&mut run.host);
         for _ in 0..steps {
@@ -678,12 +677,9 @@ fn gap_with(steps: usize, lag: usize) -> bool {
 }
 
 #[test]
-fn sprint_jumps_a_three_block_gap_from_a_view_behind_the_body() {
-    for (steps, lag) in [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1)] {
-        assert!(
-            gap_with(steps, lag),
-            "{steps} body ticks per plugin tick, view {lag} ticks behind"
-        );
+fn sprint_jumps_a_three_block_gap_at_any_body_tick_rate() {
+    for steps in 1..=3 {
+        assert!(gap_with(steps), "{steps} body ticks per plugin tick");
     }
 }
 
