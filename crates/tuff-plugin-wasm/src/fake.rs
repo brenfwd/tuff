@@ -131,6 +131,7 @@ impl Fakes {
             forward: input.forward.clamp(-1, 1),
             strafe: input.strafe.clamp(-1, 1),
             jump: input.jump,
+            jump_at_edge: input.jump_at_edge,
             sprint: input.sprint,
             sneak: input.sneak,
             yaw: input.yaw,

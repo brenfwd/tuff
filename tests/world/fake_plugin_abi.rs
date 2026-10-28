@@ -110,6 +110,7 @@ fn walking(forward: i8) -> FakeInput {
         forward,
         strafe: 0,
         jump: false,
+        jump_at_edge: false,
         sprint: false,
         sneak: false,
         yaw: 0.0,

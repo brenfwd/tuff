@@ -45,9 +45,6 @@ pub struct Double {
     pub placed: Vec<Pos>,
     pub tools: Option<Rc<RefCell<TableTools>>>,
     pub lowest: f64,
-    /// Physics ticks the state a plugin tick reads is behind the body.
-    pub lag: usize,
-    history: std::collections::VecDeque<(Vec3, bool)>,
 }
 
 struct SharedTerrain(Rc<RefCell<Terrain>>);
@@ -103,8 +100,6 @@ impl Double {
             placed: Vec::new(),
             tools: None,
             lowest: at.1,
-            lag: 0,
-            history: std::collections::VecDeque::new(),
         }
     }
 
@@ -148,6 +143,7 @@ impl Double {
     /// One tick of the body under the held input.
     pub fn physics(&mut self) {
         self.yaw = self.input.yaw;
+        let mut edge = false;
         if self.input.forward != 0 {
             let speed = if self.input.sneak {
                 WALK * SNEAK
@@ -158,6 +154,10 @@ impl Double {
             } * f64::from(self.input.forward);
             let r = f64::from(self.yaw).to_radians();
             let (dx, dz) = (-r.sin() * speed, r.cos() * speed);
+            edge = self.input.jump_at_edge
+                && self.on_ground
+                && self.input.forward > 0
+                && !self.grounded(self.pos.x + dx, self.pos.z + dz);
             if self.free(self.pos.x + dx, self.pos.y, self.pos.z)
                 && self.edge_holds(self.pos.x + dx, self.pos.z)
             {
@@ -181,7 +181,7 @@ impl Double {
                 self.vy.max(-CLIMB_FALL)
             };
             self.on_ground = false;
-        } else if self.on_ground && self.input.jump {
+        } else if self.on_ground && (self.input.jump || edge) {
             self.vy = JUMP;
             self.on_ground = false;
         }
@@ -217,10 +217,6 @@ impl Double {
             }
         }
         self.lowest = self.lowest.min(self.pos.y);
-        self.history.push_back((self.pos.clone(), self.on_ground));
-        if self.history.len() > self.lag + 1 {
-            self.history.pop_front();
-        }
     }
 }
 
@@ -232,18 +228,12 @@ impl Host for Double {
     fn remove(&mut self, _: Body) {}
 
     fn perceive(&mut self, _: Body) -> Option<Perceived> {
-        let (pos, on_ground) = match self.history.front() {
-            Some((pos, on_ground)) if self.lag > 0 && self.history.len() > self.lag => {
-                (pos.clone(), *on_ground)
-            }
-            _ => (self.pos.clone(), self.on_ground),
-        };
         Some(Perceived {
-            pos,
+            pos: self.pos.clone(),
             health: self.health,
             alive: self.alive,
             yaw: self.yaw,
-            on_ground,
+            on_ground: self.on_ground,
             in_fluid: false,
             food: 20,
             hotbar: Vec::new(),

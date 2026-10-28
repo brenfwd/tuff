@@ -792,6 +792,8 @@ interface types {
         forward: s8,
         strafe: s8,
         jump: bool,
+        /// Jump on the tick the body would otherwise walk off its block.
+        jump-at-edge: bool,
         sprint: bool,
         sneak: bool,
         yaw: f32,
