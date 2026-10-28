@@ -1067,6 +1067,14 @@ impl Serverbound {
                 w.write_var_int(ServerId::SetCarriedItem.id());
                 w.write_short(*slot);
             }
+            Self::SelectTrade(index) => {
+                w.write_var_int(ServerId::SelectTrade.id());
+                w.write_var_int(*index);
+            }
+            Self::PlayerInput(flags) => {
+                w.write_var_int(ServerId::PlayerInput.id());
+                w.write_unsigned_byte(*flags);
+            }
             Self::PlayerCommand(action) => {
                 w.write_var_int(ServerId::PlayerCommand.id());
                 w.write_var_int(0);
@@ -1413,6 +1421,8 @@ mod tests {
                 sequence: 9,
             },
             Serverbound::PlayerCommand(1),
+            Serverbound::SelectTrade(2),
+            Serverbound::PlayerInput(0x21),
             Serverbound::SetCarriedItem(4),
             Serverbound::UseItemOn {
                 hand: 0,
@@ -1433,7 +1443,7 @@ mod tests {
             let bytes = packet.encode().unwrap().into_bytes();
             assert_eq!(Serverbound::decode(bytes).unwrap(), packet);
         }
-        assert!(Serverbound::PlayerInput(0).encode().is_none());
+        assert!(Serverbound::RenameItem(String::new()).encode().is_none());
     }
 
     #[tuff_core::watchdog]
