@@ -863,7 +863,7 @@ impl RegionActor {
                     [0.0; 3],
                     crate::world::items::NEVER_PICKUP,
                 );
-                item.age = crate::world::items::DESPAWN_AGE - 1;
+                item.age = self.despawn_settings().item_age - 1;
                 self.spawn_entity(item);
             }
             RegionRequest::SpawnEntity(entity) => self.receive_entity(entity, 0),

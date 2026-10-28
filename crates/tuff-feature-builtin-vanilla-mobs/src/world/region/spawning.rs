@@ -419,8 +419,8 @@ fn spawn_at(
             let Some(rule) = shared.entity_types.spawn_rule(kind) else {
                 return;
             };
-            let despawn = kind.category().info().despawn_distance as f64;
-            if !kind.mob().spawns_far_from_players && distance > despawn * despawn {
+            let despawn = f64::from(crate::despawn::distances(&shared.config, kind.category()).0);
+            if !kind.mob().spawns_far_from_players && out_of_spawn_range(distance, despawn) {
                 continue;
             }
             if !kind.mob().summonable || !list.contains(entry) {
@@ -682,9 +682,28 @@ pub fn spawn_generation_mobs(world: &mut dyn RegionWorld, chunk: ChunkPos) {
     }
 }
 
+fn out_of_spawn_range(distance_sq: f64, despawn: f64) -> bool {
+    distance_sq > despawn * despawn
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn spawn_range_follows_the_configured_despawn_distance() {
+        let config = tuff_core::config::ConfigStore::default();
+        let category = EntityType::Zombie.category();
+        let default = f64::from(crate::despawn::distances(&config, category).0);
+        let sq = (default - 1.0) * (default - 1.0);
+        assert!(!out_of_spawn_range(sq, default));
+        assert!(out_of_spawn_range(sq, default - 2.0));
+        assert!(!out_of_spawn_range(
+            default * default,
+            f64::from(category.info().despawn_distance)
+        ));
+    }
 
     #[tuff_core::watchdog]
     #[test]
