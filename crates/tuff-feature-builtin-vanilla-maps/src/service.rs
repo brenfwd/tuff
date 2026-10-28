@@ -114,6 +114,15 @@ fn frame_key(entity_id: i32) -> String {
 }
 
 const FRAME_VIEW_TICKS: u64 = 20;
+const FRAME_REPORT_KEY: &str = "tuff.maps.frameReportInterval";
+
+fn frame_view_ticks(config: &tuff_core::config::ConfigStore) -> u64 {
+    let interval = config
+        .get_int(FRAME_REPORT_KEY)
+        .unwrap_or(10)
+        .clamp(1, 1200) as u64;
+    FRAME_VIEW_TICKS.max(interval * 2)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Derivation {
@@ -1101,7 +1110,7 @@ impl Actor {
                     live.holders.len() - 1
                 }
             };
-            live.holders[index].framed_until = now + FRAME_VIEW_TICKS;
+            live.holders[index].framed_until = now + frame_view_ticks(&self.shared.config);
             if !live.update(framed.id, index) {
                 live.holders.remove(index);
             }
@@ -1337,5 +1346,28 @@ mod tests {
             .await
             .unwrap();
         assert!(kept.is_some());
+    }
+}
+
+#[cfg(test)]
+mod frame_view_tests {
+    use super::*;
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn the_view_window_outlasts_any_report_interval() {
+        let config = tuff_core::config::ConfigStore::default();
+        assert_eq!(frame_view_ticks(&config), 20);
+        config
+            .register(tuff_core::config::Key::new(
+                FRAME_REPORT_KEY,
+                tuff_core::config::Value::Int(10),
+                "interval",
+            ))
+            .unwrap();
+        config
+            .set(FRAME_REPORT_KEY, tuff_core::config::Value::Int(100))
+            .unwrap();
+        assert!(frame_view_ticks(&config) > 100);
     }
 }

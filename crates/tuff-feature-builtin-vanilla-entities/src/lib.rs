@@ -35,6 +35,9 @@ impl tuff_core::feature::Feature for EntitiesFeature {
             crate::world::interaction::register(entities);
             crate::world::display::register(entities);
             crate::world::minecart::register(entities);
+            cx.registries()
+                .config_keys
+                .extend(crate::world::item_frame::config_keys());
             cx.registries().session_hooks.push(std::sync::Arc::new(
                 crate::world::minecart::CommandMinecartHooks,
             ));
