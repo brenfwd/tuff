@@ -1272,6 +1272,7 @@ impl PlayerSession {
                     creative: false,
                     ..
                 } => vec![stack],
+                PlayerEvent::ToolWorn { stack, .. } => vec![stack],
                 PlayerEvent::HandReturned { stack, .. } => {
                     stack.burn(tuff_item::item::BurnReason::Creative);
                     Vec::new()

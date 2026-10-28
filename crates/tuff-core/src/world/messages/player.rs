@@ -259,6 +259,13 @@ pub enum PlayerEvent {
         stack: ItemStack,
         creative: bool,
     },
+    /// The tool a block click moved to the region, back for inventory
+    /// `slot` after the click wore it by `wear` points.
+    ToolWorn {
+        slot: usize,
+        stack: ItemStack,
+        wear: u32,
+    },
     /// A tamed parrot touching this player wants to land on its shoulder.
     /// The session answers with `RegionInternal::ShoulderTaken` naming
     /// `offer`, holding a free shoulder for it until the region settles.

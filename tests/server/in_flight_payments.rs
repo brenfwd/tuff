@@ -166,7 +166,7 @@ async fn leaving_after_clicks(item: &str, selector: &str, click: Click) {
                 },
             });
         }
-        tokio::time::sleep(Duration::from_millis(5)).await;
+        bot.close().await;
         drop(bot);
         until("the player has left", || async {
             say(&server, "data get entity Payer Health")
@@ -342,4 +342,188 @@ async fn a_bottle_filled_from_a_cauldron_is_spent_when_the_slot_changes_at_once(
         .await,
         0
     );
+}
+
+async fn fake_payer(server: &TestServer) -> tuff_core::world::fake::FakeHandle {
+    let spec = FakeSpec {
+        position: Some([0.5, 150.0, 0.5]),
+        ..FakeSpec::new("Payer")
+    };
+    let made = server
+        .handle
+        .spawn_fake("test", spec)
+        .await
+        .unwrap()
+        .unwrap();
+    made.observed
+        .clone()
+        .wait_for(|o| o.teleports >= 1)
+        .await
+        .unwrap();
+    made
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_tool_worn_by_a_click_is_the_clicked_tool_when_the_slot_changes_at_once() {
+    let server = start().await;
+    let made = fake_payer(&server).await;
+    floor(&server, "stone").await;
+    let mut stripped = 0;
+    for trial in 0..SWAPS {
+        for line in ["clear Payer", "setblock 3 150 0 oak_log"] {
+            say(&server, line).await;
+        }
+        made.act(FakeAction::SelectSlot(0));
+        say(&server, "give Payer iron_axe").await;
+        until("the first axe arrives", || async {
+            found(&server, "Payer", "iron_axe").await == 1
+        })
+        .await;
+        say(&server, "give Payer iron_axe[minecraft:damage=10]").await;
+        until("the second axe arrives", || async {
+            found(&server, "Payer", "iron_axe").await == 2
+        })
+        .await;
+        made.act(FakeAction::UseItemOn {
+            off_hand: false,
+            pos: BlockPos::new(3, 150, 0),
+            face: Face::Up,
+            cursor: [0.5, 1.0, 0.5],
+        });
+        made.act(FakeAction::SelectSlot(1));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        if !say(&server, "execute if block 3 150 0 stripped_oak_log")
+            .await
+            .contains("passed")
+        {
+            continue;
+        }
+        stripped += 1;
+        assert_eq!(
+            found(&server, "Payer", "iron_axe[minecraft:damage=1]").await,
+            1,
+            "trial {trial}: the clicked axe is worn"
+        );
+        assert_eq!(
+            found(&server, "Payer", "iron_axe[minecraft:damage=10]").await,
+            1,
+            "trial {trial}: the axe swapped in is not"
+        );
+    }
+    server.handle.shutdown().await.unwrap();
+    server.task.await.unwrap().unwrap();
+    assert!(stripped > 0, "the clicks never stripped a log");
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_vault_takes_every_key_it_asks_for_when_the_slot_changes_at_once() {
+    let server = start().await;
+    let made = fake_payer(&server).await;
+    floor(&server, "stone").await;
+    let mut opened = 0;
+    for trial in 0..3 {
+        for line in ["clear Payer", "kill @e[type=item]"] {
+            say(&server, line).await;
+        }
+        say(
+            &server,
+            "setblock 3 150 0 vault{config:{loot_table:\"minecraft:chests/trial_chambers/reward\",key_item:{id:\"minecraft:trial_key\",count:2}}}",
+        )
+        .await;
+        made.act(FakeAction::SelectSlot(0));
+        say(&server, "give Payer trial_key 3").await;
+        until("the keys arrive", || async {
+            found(&server, "Payer", "trial_key").await == 3
+        })
+        .await;
+        until("the vault wakes", || async {
+            say(
+                &server,
+                "execute if block 3 150 0 vault[vault_state=active]",
+            )
+            .await
+            .contains("passed")
+        })
+        .await;
+        made.act(FakeAction::UseItemOn {
+            off_hand: false,
+            pos: BlockPos::new(3, 150, 0),
+            face: Face::Up,
+            cursor: [0.5, 1.0, 0.5],
+        });
+        made.act(FakeAction::SelectSlot(1));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        if say(
+            &server,
+            "execute if block 3 150 0 vault[vault_state=active]",
+        )
+        .await
+        .contains("passed")
+        {
+            continue;
+        }
+        opened += 1;
+        let held = found(&server, "Payer", "trial_key").await;
+        let dropped = killed(
+            &server,
+            "@e[type=item,nbt={Item:{id:\"minecraft:trial_key\"}}]",
+        )
+        .await;
+        assert_eq!(held + dropped, 1, "trial {trial}: 3 keys, the vault took 2");
+    }
+    server.handle.shutdown().await.unwrap();
+    server.task.await.unwrap().unwrap();
+    assert!(opened > 0, "the vault never opened");
+}
+
+/// Uses `item` in the air and selects another slot at once; the stack used
+/// is the one that pays, the stack swapped in is untouched.
+async fn air_use_with_a_swap(item: &str) -> (i64, i64) {
+    let server = start().await;
+    let made = fake_payer(&server).await;
+    floor(&server, "stone").await;
+    for line in ["clear Payer", "kill @e[type=item]"] {
+        say(&server, line).await;
+    }
+    made.act(FakeAction::SelectSlot(0));
+    say(&server, &format!("give Payer {item} 8")).await;
+    say(&server, "item replace entity Payer hotbar.1 with stick 5").await;
+    until("the items arrive", || async {
+        found(&server, "Payer", item).await == 8 && found(&server, "Payer", "stick").await == 5
+    })
+    .await;
+    made.act(FakeAction::UseItem { off_hand: false });
+    made.act(FakeAction::SelectSlot(1));
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    let result = (
+        found(&server, "Payer", item).await,
+        found(&server, "Payer", "stick").await,
+    );
+    server.handle.shutdown().await.unwrap();
+    server.task.await.unwrap().unwrap();
+    result
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_thrown_snowball_is_the_stack_that_was_used_when_the_slot_changes_at_once() {
+    assert_eq!(air_use_with_a_swap("snowball").await, (7, 5));
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_apple_eaten_in_the_air_never_costs_the_stack_swapped_in() {
+    let (apples, sticks) = air_use_with_a_swap("apple").await;
+    assert_eq!(sticks, 5);
+    assert!(apples >= 7, "{apples} apples left");
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn honey_drunk_in_the_air_never_costs_the_stack_swapped_in() {
+    let (potions, sticks) = air_use_with_a_swap("honey_bottle").await;
+    assert_eq!(sticks, 5);
+    assert!(potions >= 7, "{potions} bottles left");
 }
