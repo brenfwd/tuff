@@ -5,9 +5,6 @@
 //! - `/hello` greets you and counts your visits (kept across restarts)
 //! - `/hello later` greets you again two seconds later
 //! - `/hello reset` forgets your visits (operators)
-//! - `/hello sentry` spawns the custom `hello:sentry` entity (an iron golem
-//!   stand-in with a hitbox part) at your feet; hitting it reports a
-//!   `PlayerAttack` with the custom id (needs `cap.content` for `hello`)
 //! - `/hello help` lists these
 //! - joining players get a welcome, diamond finds are announced with a
 //!   sparkle of dust particles, and a tip
@@ -22,14 +19,6 @@ static VISITS: StoredMap<u32> = StoredMap::new("visits");
 struct Hello;
 
 impl Plugin for Hello {
-    fn content(content: ContentBuilder) -> ContentBuilder {
-        content.entity_with_parts(
-            "hello:sentry",
-            "minecraft:iron_golem",
-            &[("minecraft:interaction", "{width:1.4f,height:2.7f}")],
-        )
-    }
-
     fn register() -> Result<(), String> {
         GREETING.declare()?;
         GREETING.on_change(|greeting| {
@@ -71,27 +60,8 @@ impl Plugin for Hello {
                         Ok(1)
                     }),
             )
-            .then(
-                literal("sentry")
-                    .about("Spawns a custom sentry entity at your feet")
-                    .executes(|ctx| {
-                        ctx.player()?;
-                        let (Some(at), Some(world)) = (acting::location(), acting::world()) else {
-                            return Ok(0);
-                        };
-                        let rotation = at.rotation.map_or(0.0, |r| r.yaw);
-                        let _ = world.spawn_custom("hello:sentry", at.pos, rotation);
-                        Ok(1)
-                    }),
-            )
             .help()
             .register()?;
-
-        on::<ev::PlayerAttack>(|attack| {
-            if attack.custom.as_deref() == Some("hello:sentry") {
-                let _ = attack.player.tell("The sentry stands firm");
-            }
-        })?;
 
         on::<ev::Join>(|player| {
             let _ = player.tell(text!("Welcome! Say hi with ", "/hello".gold()));

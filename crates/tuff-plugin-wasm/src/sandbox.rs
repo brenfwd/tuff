@@ -1,12 +1,7 @@
-//! One plugin module instantiated in its own wasmi store: the only place
-//! guest code runs. Every call is metered (fuel), memory growth is capped,
-//! and every value the guest hands the host is bounds- and size-checked,
-//! so a misbehaving module faults instead of hurting the server. The host
-//! side of the WIT world's imports is here.
-//!
-//! Everything the plugin owns at runtime (its registrations, its per-player
-//! state, the effects of the call in progress) lives in the store's data,
-//! so dropping the sandbox drops all of it.
+//! One plugin module in its own wasmi store: the only place guest code
+//! runs, metered (fuel), memory-capped, every guest value checked. The
+//! host side of the WIT world's imports is here. Everything the plugin
+//! owns at runtime lives in the store, so dropping it drops all of it.
 
 use std::collections::HashMap;
 use std::fmt;

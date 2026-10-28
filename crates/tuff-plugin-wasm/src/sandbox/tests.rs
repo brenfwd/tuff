@@ -1407,7 +1407,7 @@ fn every_host_call_is_classified_gated_or_open() {
             .filter(|(_, group)| *group == Some(kind))
             .count()
     };
-    assert_eq!(gated(crate::caps::Kind::WorldWrite), 11);
+    assert_eq!(gated(crate::caps::Kind::WorldWrite), 12);
     assert_eq!(gated(crate::caps::Kind::CrossPlugin), 2);
     assert_eq!(gated(crate::caps::Kind::Panel), 3);
 }
