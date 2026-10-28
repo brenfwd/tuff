@@ -54,8 +54,15 @@ const CAP_KEYS: [(MobCategory, &str); 7] = [
     (MobCategory::WaterAmbient, "tuff.mobs.spawnCap.waterAmbient"),
 ];
 
+const PER_PLAYER_KEY: &str = "tuff.mobs.spawnCap.perPlayer";
+
 /// The config keys for the natural spawn caps, defaulting to vanilla's.
 pub fn cap_keys() -> Vec<tuff_core::config::Key> {
+    let per_player = tuff_core::config::Key::new(
+        PER_PLAYER_KEY,
+        tuff_core::config::Value::Bool(false),
+        "Cap natural spawns per player (mobs within 128 blocks) instead of by the loaded chunks around all players",
+    );
     CAP_KEYS
         .iter()
         .map(|(category, name)| {
@@ -69,7 +76,20 @@ pub fn cap_keys() -> Vec<tuff_core::config::Key> {
                 _ => Err("must be between 0 and 2147483647".to_owned()),
             })
         })
+        .chain(std::iter::once(per_player))
         .collect()
+}
+
+/// Whether the dimension-wide cap leaves room for a category: always when
+/// the caps are per player, which `local_room` then decides.
+fn category_open(
+    cap: i32,
+    counts: i32,
+    others: i32,
+    dimension_chunks: i32,
+    per_player: bool,
+) -> bool {
+    cap > 0 && (per_player || counts + others < cap * dimension_chunks / CAP_CHUNKS)
 }
 
 /// Each category's natural spawn cap: vanilla's, unless configured.
@@ -224,6 +244,7 @@ pub fn spawn_mobs(world: &mut dyn RegionWorld) {
             })
         })
         .count() as i32;
+    let per_player = shared.config.get_bool(PER_PLAYER_KEY) == Some(true);
     let mut state = SpawnState {
         caps: caps(&shared.config),
         local: vec![Counts::default(); players.len()],
@@ -260,8 +281,13 @@ pub fn spawn_mobs(world: &mut dyn RegionWorld) {
             *category != MobCategory::Misc
                 && (spawn_enemies || info.friendly)
                 && (spawn_persistent || !info.persistent)
-                && state.counts[id] + others.counts[id]
-                    < state.caps[id] * dimension_chunks / CAP_CHUNKS
+                && category_open(
+                    state.caps[id],
+                    state.counts[id],
+                    others.counts[id],
+                    dimension_chunks,
+                    per_player,
+                )
         })
         .collect();
     if categories.is_empty() {
@@ -715,11 +741,21 @@ mod tests {
 
     #[tuff_core::watchdog]
     #[test]
+    fn per_player_caps_skip_only_the_dimension_gate() {
+        assert!(!category_open(10, 2, 0, 81, false), "81 chunks allow 2");
+        assert!(category_open(10, 1, 0, 81, false));
+        assert!(category_open(10, 500, 500, 81, true));
+        assert!(!category_open(0, 0, 0, 81, true), "cap 0 still disables");
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
     fn spawn_caps_default_to_vanilla() {
         let config = tuff_core::config::ConfigStore::default();
         for key in cap_keys() {
             config.register(key).unwrap();
         }
+        assert_eq!(config.get_bool(PER_PLAYER_KEY), Some(false));
         let caps = caps(&config);
         let expected = [
             (MobCategory::Monster, 70),
