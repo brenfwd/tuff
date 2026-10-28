@@ -34,6 +34,7 @@ use crate::world::messages::{
 };
 use crate::world::player::Difficulty;
 use crate::world::session::PlayerSession;
+use crate::world::stall;
 use crate::world::tick_barrier::TickLockstep;
 use crate::world::tick_rate::TickAction;
 use crate::world::tick_rate::{Samples, Sprint, SprintReport, TickState, TickTime, sprint_report};
@@ -196,6 +197,7 @@ pub struct Coordinator {
     /// The tick the clock is held at until every barrier member finishes
     /// it, and when it started.
     awaiting_barrier: Option<(u64, tokio::time::Instant)>,
+    beat: Arc<stall::Beat>,
     /// The item ledger at the last save.
     ledger: std::cell::Cell<tuff_item::item::LedgerTotals>,
     spawn: watch::Sender<Spawn>,
@@ -265,6 +267,7 @@ impl Coordinator {
             sprint: None,
             sprint_report: None,
             awaiting_barrier: None,
+            beat: stall::Beat::register("the coordinator".into()),
             ledger: std::cell::Cell::new(tuff_item::item::conservation::totals()),
             spawn: config.spawn,
             difficulty: config.difficulty,
@@ -750,6 +753,12 @@ impl Coordinator {
     }
 
     fn handle(&mut self, message: CoordinatorMessage) {
+        self.beat.begin(stall::Phase::Message);
+        self.handle_message(message);
+        self.beat.end();
+    }
+
+    fn handle_message(&mut self, message: CoordinatorMessage) {
         match message {
             CoordinatorMessage::CanLogin {
                 user,

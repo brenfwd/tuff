@@ -629,6 +629,34 @@ fn sprint_jumps_a_three_block_gap() {
 }
 
 #[test]
+fn sprint_jumps_a_three_block_gap_when_the_plugin_ticks_less_often_than_the_body() {
+    for steps in 1..=3 {
+        let mut t = Terrain::new(32, 1);
+        for x in 6..9 {
+            for y in -39..=0 {
+                t.set((x, y, 0), Class::PASSABLE);
+            }
+        }
+        let mut run = parkour_run(t, block(14, 1, 0));
+        for _ in 0..900 {
+            run.bots.tick(&mut run.host);
+            for _ in 0..steps {
+                run.host.physics();
+            }
+            if run.finished() {
+                break;
+            }
+        }
+        assert_eq!(
+            run.last_event(),
+            Some(&Event::ProcessDone),
+            "{steps} body ticks per plugin tick: {}",
+            run.trace()
+        );
+    }
+}
+
+#[test]
 fn climbs_a_ladder_tower() {
     let mut t = Terrain::new(8, 2);
     for y in 1..=6 {

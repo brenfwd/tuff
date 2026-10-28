@@ -84,6 +84,7 @@ pub mod save_gate;
 pub mod scoreboard;
 pub mod services;
 pub mod session;
+pub mod stall;
 pub mod stations;
 pub mod stats;
 pub mod stored_entity;

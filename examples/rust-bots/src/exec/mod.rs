@@ -39,6 +39,7 @@ const BRIDGE_APPROACH_TICKS: u32 = 60;
 const PILLAR_JUMPS: u32 = 3;
 const PILLAR_JUMP_TICKS: u32 = 14;
 const TAKE_OFF: f64 = 0.1;
+const TAKE_OFF_REACH: f64 = 0.2806;
 
 /// The keys and look a bot holds. The host is called only when it changes.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -587,7 +588,9 @@ impl Executor {
             can_sprint && ((vertical == 0 && straight_on) || parkour.is_some_and(|g| g > 1));
         let jump = match parkour {
             Some(_) => {
-                view.on_ground && edge_distance(&view.pos, at, waypoint) <= TAKE_OFF.max(speed)
+                view.on_ground
+                    && edge_distance(&view.pos, at, waypoint)
+                        <= TAKE_OFF.max(speed.min(TAKE_OFF_REACH))
             }
             None => {
                 (vertical > 0 && flat <= JUMP_REACH && view.on_ground)
