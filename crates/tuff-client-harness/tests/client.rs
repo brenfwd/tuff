@@ -2292,6 +2292,7 @@ fn corpus_file(stem: &str, rtt: u64) -> String {
     }
 }
 
+#[tuff_core::watchdog]
 #[ignore = "launches a real vanilla client"]
 #[tokio::test(flavor = "multi_thread")]
 async fn real_client_record_movement_corpus() {
