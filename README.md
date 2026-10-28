@@ -34,8 +34,8 @@ join `localhost:25565` with a 26.3 client. For offline-mode accounts,
 start it with `--offline` and set `server-ip=127.0.0.1`.
 
 Current alpha: the release notes in
-[Introduction](docs/introduction.md) list what changed since
-v0.1.0-alpha.1. It supports worlds from 1.13 or newer, Windows is best
+[Introduction](docs/introduction.md) list what changed in
+v0.1.0-alpha.2 (2026-10-28), since v0.1.0-alpha.1. It supports worlds from 1.13 or newer, Windows is best
 effort (use WSL or Docker), anti-cheat only logs by default, and the admin
 panel needs a reverse proxy for remote access.
 
