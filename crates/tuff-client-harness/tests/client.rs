@@ -3471,3 +3471,214 @@ async fn real_client_accepts_resource_pack() {
     client.quit().await;
     let _ = std::fs::remove_dir_all(&run.root);
 }
+
+const STAND_IN: &str = "test:golem";
+
+struct StandInGolem(Arc<Mutex<Vec<String>>>);
+
+struct UseRecorder(Arc<Mutex<Vec<String>>>);
+
+impl tuff_core::world::region_api::RegionHooks for UseRecorder {
+    fn interact_entity(
+        &self,
+        world: &mut dyn tuff_core::world::region_api::RegionWorld,
+        _player: &tuff_core::world::messages::PlayerHandle,
+        target: i32,
+        _interaction: &tuff_core::world::entity::EntityInteraction,
+    ) -> tuff_core::world::entity::InteractOutcome {
+        let owner = tuff_core::custom::entities::reported_entity(world, target);
+        if let Some(found) = world.entity(owner)
+            && let Some(id) = tuff_core::custom::entity_id(&found.entity.base().tags)
+        {
+            self.0.lock().unwrap().push(id.to_owned());
+        }
+        None
+    }
+}
+
+impl Feature for StandInGolem {
+    fn id(&self) -> &'static str {
+        "test-stand-in-golem"
+    }
+
+    fn load(&self, cx: &mut LoadContext) -> Result<(), LoadError> {
+        if cx.phase() != Phase::Content {
+            return Ok(());
+        }
+        let def = tuff_core::custom::CustomEntityDef::new(
+            STAND_IN,
+            tuff_vanilla_data::registry::EntityType::IronGolem,
+        )
+        .with_part(tuff_core::custom::entities::EntityPart::new(
+            tuff_vanilla_data::registry::EntityType::ItemDisplay,
+            tuff_nbt::Compound::new(),
+        ))
+        .with_part(tuff_core::custom::entities::EntityPart::hitbox(1.5, 3.0));
+        cx.registries().custom.register_entity(self.id(), def)?;
+        cx.registries()
+            .region_hooks
+            .push(Arc::new(UseRecorder(self.0.clone())));
+        Ok(())
+    }
+}
+
+#[tuff_core::watchdog]
+#[ignore = "launches a real vanilla client"]
+#[tokio::test(flavor = "multi_thread")]
+async fn real_client_custom_entity_stand_in() {
+    if !enabled() {
+        return;
+    }
+    let name = "real_client_custom_entity_stand_in";
+    let slot = SharedSlot::default();
+    let uses = Arc::new(Mutex::new(Vec::new()));
+    let instance = std::env::temp_dir().join(format!("tuff-client-sti-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&instance);
+    std::fs::create_dir_all(&instance).unwrap();
+    let mut features = tuff::vanilla_features::all();
+    features.push(Box::new(CaptureShared(slot.clone())));
+    features.push(Box::new(StandInGolem(uses.clone())));
+    let server = Server::builder()
+        .features(features)
+        .instance_dir(instance.clone())
+        .binds(vec!["127.0.0.1:0".into()])
+        .online_mode(false)
+        .whitelist(false)
+        .view_distance(4)
+        .seed(1)
+        .build();
+    let handle = server.handle();
+    tokio::spawn(server.run());
+    let game = handle.local_addrs().await.unwrap()[0];
+    let shared = slot.lock().unwrap().clone().expect("service started");
+    let addr = format!("127.0.0.1:{}", game.port());
+    let platform = Platform::current();
+    let cache = cache_dir();
+    let files = tokio::task::spawn_blocking({
+        let platform = platform.clone();
+        let cache = cache.clone();
+        move || {
+            ensure_client(
+                &HttpSource::new()?,
+                &cache,
+                tuff_vanilla_data::version::NAME,
+                AssetProfile::from_env()?,
+                &platform,
+            )
+        }
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    let java = resolve_java(&cache, &files.meta.java_version.component).unwrap();
+    let run = RunDir::create(&default_run_base(), name).unwrap();
+    let client = launch(
+        &LaunchSpec {
+            java: &java,
+            files: &files,
+            run: &run,
+            username: "Menu",
+            address: &addr,
+            platform: &platform,
+            hook_args: &[],
+            hook_dir: None,
+        },
+        name,
+        default_lock_path(),
+    )
+    .await
+    .unwrap();
+    let joined = until(&client, JOIN_TIMEOUT, "join", |s| {
+        s.connected && s.screen == "none" && s.chunks.unwrap_or(0) > 4 && s.position.is_some()
+    })
+    .await;
+    server_says(&handle, "gamemode creative Menu").await;
+    client
+        .request(Command::Look {
+            yaw: 0.0,
+            pitch: 0.0,
+        })
+        .await
+        .unwrap();
+    let state = until(&client, Duration::from_secs(10), "settled", |s| {
+        s.yaw == Some(0.0)
+    })
+    .await;
+    let feet = state.position.unwrap_or(joined.position.unwrap());
+    let at = [feet[0], feet[1], feet[2] + 3.0];
+    let mut nbt = shared
+        .custom
+        .spawn_entity_nbt(STAND_IN, at, 0.0)
+        .expect("registered");
+    nbt.insert("NoAI", true);
+    server_says(
+        &handle,
+        &format!(
+            "summon minecraft:iron_golem {} {} {} {nbt}",
+            at[0], at[1], at[2]
+        ),
+    )
+    .await;
+
+    let near = |list: &[tuff_client_harness::protocol::EntityInfo], kind: &str| {
+        list.iter().any(|e| {
+            e.kind.contains(kind)
+                && (e.position[0] - at[0]).abs() < 3.0
+                && (e.position[1] - at[1]).abs() < 3.0
+                && (e.position[2] - at[2]).abs() < 3.0
+        })
+    };
+    let mut seen = (false, false, false);
+    for _ in 0..60 {
+        let list = client.entities(30.0).await.unwrap();
+        seen = (
+            near(&list, "iron_golem"),
+            near(&list, "item_display"),
+            near(&list, "interaction"),
+        );
+        if seen == (true, true, true) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert_eq!(seen, (true, true, true), "golem, display, interaction");
+
+    // aim above the golem body so the ray reaches the taller interaction part
+    client
+        .request(Command::Look {
+            yaw: 0.0,
+            pitch: -25.0,
+        })
+        .await
+        .unwrap();
+    client.request(Command::WaitTicks(3)).await.unwrap();
+    for _ in 0..20 {
+        client.request(Command::Use).await.unwrap();
+        client.request(Command::WaitTicks(5)).await.unwrap();
+        if !uses.lock().unwrap().is_empty() {
+            break;
+        }
+    }
+    assert!(
+        uses.lock().unwrap().iter().all(|id| id == STAND_IN) && !uses.lock().unwrap().is_empty(),
+        "use on the part should report the custom entity: {:?}",
+        uses.lock().unwrap()
+    );
+
+    let said = server_says(&handle, "kill @e[type=minecraft:iron_golem]").await;
+    log::info!("kill: {said}");
+    let mut gone = false;
+    for _ in 0..60 {
+        let list = client.entities(30.0).await.unwrap();
+        if !near(&list, "iron_golem") && !near(&list, "item_display") && !near(&list, "interaction")
+        {
+            gone = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert!(gone, "stand-in or parts still on the client: {said}");
+    client.quit().await;
+    let _ = std::fs::remove_dir_all(&run.root);
+    let _ = std::fs::remove_dir_all(&instance);
+}
