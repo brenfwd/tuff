@@ -570,7 +570,7 @@ impl Encode for SetEntityData<'_> {
                 MetadataValue::OptionalVarInt(v) => w.write_var_int(v.map_or(0, |v| v + 1)),
                 MetadataValue::VarLong(v) => w.write_var_long(*v),
                 MetadataValue::Float(v) => w.write_float(*v),
-                MetadataValue::Slot(v) => w.write_slot(v.as_ref().map(ItemSnapshot::view)),
+                MetadataValue::Slot(v) => w.write_viewer_slot(v.as_ref().map(ItemSnapshot::view)),
                 MetadataValue::Pose(v)
                 | MetadataValue::HumanoidArm(v)
                 | MetadataValue::Direction(v) => w.write_var_int(*v),
@@ -665,7 +665,7 @@ impl Encode for SetEquipment<'_> {
         for (i, (slot, item)) in self.items.iter().enumerate() {
             let more = if i + 1 < self.items.len() { 0x80 } else { 0 };
             w.write_unsigned_byte(slot | more);
-            w.write_any_slot(*item);
+            w.write_viewer_any_slot(*item);
         }
     }
 }

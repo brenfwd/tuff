@@ -137,6 +137,7 @@ mod nether;
 mod no_save;
 mod optional_features;
 mod ore_hiding;
+mod outbound_items;
 mod pack_predicates;
 mod pack_state;
 mod pack_tags;
