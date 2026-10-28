@@ -79,6 +79,8 @@ pub enum BurnReason {
     /// Still inside an entity removed for good (killed by a command,
     /// discarded, its chunk deleted).
     Discarded,
+    /// An entity dropped by a per-chunk save or load cap.
+    CapDropped,
     /// Turned into another item (see [`MintReason::Transform`]).
     Transform,
     /// Deleted in the creative inventory.

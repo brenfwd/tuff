@@ -403,6 +403,54 @@ impl RegionActor {
         }
     }
 
+    /// Removes the free-standing entities of a chunk beyond the per-type
+    /// caps, oldest kept, before the chunk is saved; their items burn.
+    pub(super) fn enforce_entity_caps(&mut self, pos: ChunkPos) {
+        let caps = crate::world::entity_caps::EntityCaps::from_config(&self.shared.config);
+        let mut free: Vec<(i32, &str)> = self
+            .ents
+            .entities
+            .values()
+            .filter(|tracked| {
+                tracked.chunk() == pos
+                    && tracked.entity.persists()
+                    && caps.limit(tracked.entity.saved_id()).is_some()
+                    && tracked.entity.base().entity_riders.is_empty()
+                    && tracked.entity.base().custom_name.is_none()
+                    && tracked.entity.leash().is_none()
+                    && !self.saved_nested(tracked.id())
+            })
+            .map(|tracked| (tracked.id(), tracked.entity.saved_id()))
+            .collect();
+        free.sort_unstable_by_key(|(id, _)| *id);
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        let mut excess: Vec<i32> = Vec::new();
+        let mut dropped: HashMap<&str, (usize, usize)> = HashMap::new();
+        for (id, name) in free {
+            let cap = caps.limit(name).unwrap_or(usize::MAX);
+            let seen = counts.entry(name).or_default();
+            *seen += 1;
+            if *seen > cap {
+                excess.push(id);
+                dropped.entry(name).or_insert((cap, 0)).1 += 1;
+            }
+        }
+        for (name, (kept, lost)) in dropped {
+            log::warn!("chunk {pos:?} holds too many {name} entities: kept {kept}, dropped {lost}");
+        }
+        for id in excess {
+            let Some(mut tracked) = self.remove_entity_intact(id, &[]) else {
+                continue;
+            };
+            for stack in tracked.entity.take_items() {
+                stack.burn(tuff_item::item::BurnReason::CapDropped);
+            }
+            if let Some(block) = tracked.entity.take_held() {
+                block.burn(crate::world::block_ledger::BlockBurn::Killed);
+            }
+        }
+    }
+
     /// The saved form of every entity in the chunk, raw ones included.
     pub(super) fn saved_entities(&self, pos: ChunkPos) -> Vec<Compound> {
         let mut saved = self

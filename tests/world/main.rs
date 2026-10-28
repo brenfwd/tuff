@@ -88,6 +88,7 @@ mod dupe_designs;
 mod enchanting_table;
 mod end;
 mod entities;
+mod entity_caps;
 mod entity_gaps;
 mod entity_registry;
 mod entity_storage;

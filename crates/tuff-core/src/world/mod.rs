@@ -39,6 +39,7 @@ pub mod dimension;
 pub mod drops;
 pub mod effects;
 pub mod entity;
+pub mod entity_caps;
 pub mod entity_claim;
 pub mod entity_slots;
 pub mod exploration;
