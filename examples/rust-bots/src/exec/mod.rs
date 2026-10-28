@@ -39,7 +39,9 @@ const BRIDGE_APPROACH_TICKS: u32 = 60;
 const PILLAR_JUMPS: u32 = 3;
 const PILLAR_JUMP_TICKS: u32 = 14;
 const TAKE_OFF: f64 = 0.1;
+const STAND_TOLERANCE: f64 = 0.07;
 const TAKE_OFF_REACH: f64 = 0.2806;
+const TAKE_OFF_LEAD: f64 = 0.7;
 
 /// The keys and look a bot holds. The host is called only when it changes.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -135,7 +137,7 @@ fn wrap(degrees: f32) -> f32 {
 fn block_of(pos: &Vec3) -> Pos {
     (
         pos.x.floor() as i32,
-        (pos.y + 1e-3).floor() as i32,
+        (pos.y + STAND_TOLERANCE).floor() as i32,
         pos.z.floor() as i32,
     )
 }
@@ -590,7 +592,7 @@ impl Executor {
             Some(_) => {
                 view.on_ground
                     && edge_distance(&view.pos, at, waypoint)
-                        <= TAKE_OFF.max(speed.min(TAKE_OFF_REACH))
+                        <= take_off_reach(speed)
             }
             None => {
                 (vertical > 0 && flat <= JUMP_REACH && view.on_ground)
@@ -610,6 +612,10 @@ impl Executor {
         self.last = drive;
         Step::Drive(drive)
     }
+}
+
+fn take_off_reach(speed: f64) -> f64 {
+    TAKE_OFF.max((speed + TAKE_OFF_REACH).min(TAKE_OFF_LEAD))
 }
 
 /// How far the body centre is from the side of block `at` that faces `to`.

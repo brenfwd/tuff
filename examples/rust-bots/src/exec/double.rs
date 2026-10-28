@@ -45,6 +45,9 @@ pub struct Double {
     pub placed: Vec<Pos>,
     pub tools: Option<Rc<RefCell<TableTools>>>,
     pub lowest: f64,
+    /// Physics ticks the state a plugin tick reads is behind the body.
+    pub lag: usize,
+    history: std::collections::VecDeque<(Vec3, bool)>,
 }
 
 struct SharedTerrain(Rc<RefCell<Terrain>>);
@@ -100,6 +103,8 @@ impl Double {
             placed: Vec::new(),
             tools: None,
             lowest: at.1,
+            lag: 0,
+            history: std::collections::VecDeque::new(),
         }
     }
 
@@ -212,6 +217,10 @@ impl Double {
             }
         }
         self.lowest = self.lowest.min(self.pos.y);
+        self.history.push_back((self.pos.clone(), self.on_ground));
+        if self.history.len() > self.lag + 1 {
+            self.history.pop_front();
+        }
     }
 }
 
@@ -223,12 +232,18 @@ impl Host for Double {
     fn remove(&mut self, _: Body) {}
 
     fn perceive(&mut self, _: Body) -> Option<Perceived> {
+        let (pos, on_ground) = match self.history.front() {
+            Some((pos, on_ground)) if self.lag > 0 && self.history.len() > self.lag => {
+                (pos.clone(), *on_ground)
+            }
+            _ => (self.pos.clone(), self.on_ground),
+        };
         Some(Perceived {
-            pos: self.pos.clone(),
+            pos,
             health: self.health,
             alive: self.alive,
             yaw: self.yaw,
-            on_ground: self.on_ground,
+            on_ground,
             in_fluid: false,
             food: 20,
             hotbar: Vec::new(),
