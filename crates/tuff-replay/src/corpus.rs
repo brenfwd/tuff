@@ -16,7 +16,7 @@
 //! zigzag varints, so the round trip is bit-exact.
 
 use anyhow::{Context, Result, bail};
-use tuff_core::protocol::play::{Movement, Serverbound};
+use tuff_core::protocol::play::{Movement, PlayerActionStatus, Serverbound};
 use tuff_world_model::{BlockPos, Face};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -87,6 +87,22 @@ pub fn encode_packet(packet: &Serverbound, origin: [f64; 3]) -> Option<String> {
                 position.y - oy,
                 position.z - oz,
                 face.id()
+            )
+        }
+        Serverbound::Punch => "K".to_string(),
+        Serverbound::PlayerAction {
+            status,
+            position,
+            face,
+            sequence,
+        } => {
+            let [ox, oy, oz] = block_origin(origin);
+            format!(
+                "A {} {} {} {} {face} {sequence}",
+                status.id(),
+                position.x - ox,
+                position.y - oy,
+                position.z - oz
             )
         }
         _ => return None,
@@ -162,6 +178,20 @@ fn decode_packet(line: &str, origin: [f64; 3]) -> Result<Serverbound> {
                 },
                 face: Face::from_id(face.parse()?)?,
                 cursor: [cx.parse()?, cy.parse()?, cz.parse()?],
+                sequence: sequence.parse()?,
+            }
+        }
+        ["K"] => Serverbound::Punch,
+        ["A", status, x, y, z, face, sequence] => {
+            let [ox, oy, oz] = block_origin(origin);
+            Serverbound::PlayerAction {
+                status: PlayerActionStatus::from_id(status.parse()?)?,
+                position: BlockPos {
+                    x: x.parse::<i32>()? + ox,
+                    y: y.parse::<i32>()? + oy,
+                    z: z.parse::<i32>()? + oz,
+                },
+                face: face.parse()?,
                 sequence: sequence.parse()?,
             }
         }
@@ -255,6 +285,7 @@ const OP_TICK_END: u8 = 3;
 const OP_VEHICLE: u8 = 4;
 const OP_USE_ITEM: u8 = 5;
 const OP_USE_ITEM_ON: u8 = 6;
+const OP_SWING: u8 = 7;
 const FLAG_A: u8 = 1 << 3;
 const FLAG_B: u8 = 1 << 4;
 const FLAG_GROUND: u8 = 1 << 5;
@@ -489,6 +520,22 @@ fn put_packet(
             }
             put_signed(out, i64::from(*sequence));
         }
+        Serverbound::Punch => out.push(OP_SWING),
+        Serverbound::PlayerAction {
+            status,
+            position,
+            face,
+            sequence,
+        } => {
+            let [ox, oy, oz] = block_origin(origin);
+            out.push(OP_SWING | FLAG_A);
+            put_signed(out, i64::from(status.id()));
+            put_signed(out, i64::from(position.x - ox));
+            put_signed(out, i64::from(position.y - oy));
+            put_signed(out, i64::from(position.z - oz));
+            put_signed(out, i64::from(*face));
+            put_signed(out, i64::from(*sequence));
+        }
         _ => return false,
     }
     true
@@ -550,6 +597,23 @@ fn read_packet(r: &mut Reader, p: &mut Predictor, origin: [f64; 3]) -> Result<Se
                 position,
                 face,
                 cursor,
+                sequence: r.int()?,
+            }
+        }
+        OP_SWING if op & FLAG_A == 0 => Serverbound::Punch,
+        OP_SWING => {
+            let [ox, oy, oz] = block_origin(origin);
+            let status = PlayerActionStatus::from_id(r.int()?)?;
+            let position = BlockPos {
+                x: r.int()?.wrapping_add(ox),
+                y: r.int()?.wrapping_add(oy),
+                z: r.int()?.wrapping_add(oz),
+            };
+            let face = i8::try_from(r.int()?)?;
+            Serverbound::PlayerAction {
+                status,
+                position,
+                face,
                 sequence: r.int()?,
             }
         }
@@ -792,6 +856,13 @@ mod tests {
                     face: Face::North,
                     cursor: [0.0, 0.123_456_79, 1.0],
                     sequence: 3,
+                },
+                Serverbound::Punch,
+                Serverbound::PlayerAction {
+                    status: PlayerActionStatus::StartDestroyBlock,
+                    position: BlockPos { x: 7, y: -2, z: 9 },
+                    face: 1,
+                    sequence: 12,
                 },
             ],
         }
