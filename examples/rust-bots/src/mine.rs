@@ -334,11 +334,7 @@ impl Miner {
             return Some(Mining::Dig(pos));
         }
         Some(Mining::Goal(Goal::Leaf(LeafGoal::Near(NearGoal {
-            pos: BlockPos {
-                x: ahead,
-                y,
-                z,
-            },
+            pos: BlockPos { x: ahead, y, z },
             radius: 0.5,
         }))))
     }

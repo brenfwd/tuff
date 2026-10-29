@@ -784,7 +784,12 @@ fn the_build_process_makes_a_hollow_cube_from_inventory_blocks() {
     assert_eq!(run.host.carried("minecraft:cobblestone"), 4);
     let terrain = run.host.terrain.borrow();
     for (x, y, z, _) in &cells {
-        assert!(terrain.class((*x, *y, *z)).standable(), "{x} {y} {z}");
+        assert!(
+            terrain.class((*x, *y, *z)).standable(),
+            "{x} {y} {z} {:?} {:?}",
+            run.host.placed,
+            run.host.digs
+        );
     }
     assert!(terrain.class((6, 2, 2)).passable());
 }
@@ -827,6 +832,32 @@ fn wrong_blocks_are_cleared_when_the_policy_allows_breaking() {
     t.block((4, 1, 1), "minecraft:white_wool", Class::STANDABLE);
     let spec = build_spec(&[(4, 1, 1, "minecraft:cobblestone")]);
     let mut run = Run::with(t, (1.5, 1.0, 1.5), spec).builder(2);
+    run.run(1000);
+    finished_with(&run, Event::ProcessDone);
+    assert_eq!(run.host.digs, [(4, 1, 1)]);
+    assert_eq!(run.host.placed, [(4, 1, 1)]);
+}
+
+#[test]
+fn a_wrong_facing_stair_is_replaced_and_a_right_one_is_left() {
+    let mut t = Terrain::new(16, 4);
+    t.block(
+        (4, 1, 1),
+        "minecraft:oak_stairs[facing=north,half=bottom,shape=straight]",
+        Class::STANDABLE,
+    );
+    t.block(
+        (5, 1, 1),
+        "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]",
+        Class::STANDABLE,
+    );
+    let spec = build_spec(&[
+        (4, 1, 1, "minecraft:oak_stairs[facing=east,half=bottom]"),
+        (5, 1, 1, "minecraft:oak_stairs[facing=east,half=bottom]"),
+    ]);
+    let mut run = Run::with(t, (1.5, 1.0, 1.5), spec).builder(2);
+    run.host.hotbar = vec![(1, "minecraft:oak_stairs".into(), 2)];
+    run.host.tools = Some(Rc::new(RefCell::new(TableTools(vec![("oak_stairs", 5)]))));
     run.run(1000);
     finished_with(&run, Event::ProcessDone);
     assert_eq!(run.host.digs, [(4, 1, 1)]);

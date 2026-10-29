@@ -590,11 +590,13 @@ impl Bots {
                 let aim = match &spec.look_at {
                     None => None,
                     Some(LookTarget::Position(p)) => Some((p.clone(), still)),
-                    Some(LookTarget::Entity(uuid)) => host.target(bot.body, uuid).found().map(|t| {
-                        let mut p = t.pos;
-                        p.y += t.height * 0.6;
-                        (p, still)
-                    }),
+                    Some(LookTarget::Entity(uuid)) => {
+                        host.target(bot.body, uuid).found().map(|t| {
+                            let mut p = t.pos;
+                            p.y += t.height * 0.6;
+                            (p, still)
+                        })
+                    }
                 };
                 let me = me_of(&seen, &bot.policy);
                 let user = bot.item_user.get_or_insert_with(ItemUser::new);
