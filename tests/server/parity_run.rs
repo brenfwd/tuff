@@ -64,8 +64,8 @@ fn script_text_parses_into_steps_and_overrides() {
         ]
     );
     assert_eq!(
-        bind_player("execute as @p at @p run raid test 1"),
-        "execute as Parity at Parity run raid test 1"
+        bind_player("execute as @p at @p run raid start 1"),
+        "execute as Parity at Parity run raid start 1"
     );
     assert_eq!(bind_player("say @p"), "say @p");
     assert_eq!(
@@ -84,36 +84,54 @@ async fn replay_parity_script_and_write_tuff_events() {
         return;
     };
     let steps = script_steps(&std::fs::read_to_string(script).expect("script"));
-    let overrides = std::fs::read_to_string(out.join("tuff-stage-config.txt"))
-        .map(|t| stage_overrides(&t))
-        .unwrap_or_default();
+    let mut overrides = Vec::new();
+    overrides.extend(
+        std::fs::read_to_string(out.join("tuff-stage-config.txt"))
+            .map(|t| stage_overrides(&t))
+            .unwrap_or_default(),
+    );
+    let view = std::env::var("PARITY_VIEW_DISTANCE")
+        .ok()
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(4);
     let seed = std::env::var("SEED")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(1);
+
+    let mut features = tuff::vanilla_features::all();
+    let dev_commands = [
+        "raid-command",
+        "debugpath-command",
+        "debugmobspawning-command",
+    ];
+    features.extend(tuff::features::make(&dev_commands.map(String::from)).unwrap());
 
     let instance = TempDir::new();
     let backend = Arc::new(
         tuff_storage::sqlite::SqliteBackend::open(instance.path().join("world.mcserver")).unwrap(),
     );
     let server = Server::builder()
-        .features(tuff::vanilla_features::all())
+        .features(features)
         .instance_dir(instance.path().to_path_buf())
         .binds(vec!["127.0.0.1:0".into()])
         .online_mode(false)
         .whitelist(false)
-        .view_distance(2)
+        .view_distance(view)
         .seed(seed)
         .storage(backend.clone())
         .config_overrides(overrides)
         .build();
     let handle = server.handle();
     let task = tokio::spawn(server.run());
-    let addr = handle.local_addrs().await.unwrap()[0];
+    let addr = match handle.local_addrs().await {
+        Ok(a) => a[0],
+        Err(_) => panic!("server failed: {:?}", task.await),
+    };
     let bot = Bot::connect(
         addr,
         BotConfig {
-            view_distance: 2,
+            view_distance: view as i8,
             keep: parity::CAPTURE_IDS.to_vec(),
             ..BotConfig::new("Parity")
         },

@@ -3,9 +3,13 @@ forceload add -32 -32 32 32
 sleep 5
 setblock 0 100 0 minecraft:stone
 setblock 0 100 0 minecraft:air destroy
-debugmobspawning minecraft:zombie
+debugmobspawning monster 0 100 0
 sleep 5
 # Player-bound: no-op on the unattended vanilla console, runs as the bot on tuff.
-execute as @p at @p run debugpath
-execute as @p at @p run raid test 1
+summon minecraft:zombie 0 100 5 {Tags:["pp"],NoGravity:1b,PersistenceRequired:1b}
+sleep 2
+execute as @e[tag=pp,limit=1] at @s run debugpath ~ ~ ~8
+execute as @p at @p run raid start 1
+execute as @p at @p run raid check
+execute as @p at @p run raid stop
 sleep 3
