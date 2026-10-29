@@ -67,7 +67,7 @@ impl Variation {
     }
 }
 
-/// `movement_corpus[_special][_rtt<ms>][_s<seed>].txt`.
+/// `movement_corpus[_special][_rtt<ms>][_s<seed>].bin`.
 pub fn file_name(stem: &str, rtt_ms: u64, seed: u64) -> String {
     let mut name = stem.to_owned();
     if rtt_ms != 0 {
@@ -76,7 +76,7 @@ pub fn file_name(stem: &str, rtt_ms: u64, seed: u64) -> String {
     if seed != 0 {
         name.push_str(&format!("_s{seed}"));
     }
-    name.push_str(".txt");
+    name.push_str(".bin");
     name
 }
 
@@ -91,10 +91,10 @@ mod tests {
         assert_eq!(v.order(17), (0..17).collect::<Vec<_>>());
         assert_eq!(v.ticks(80, 20), 80);
         assert_eq!(v.offset(0.3), 0.0);
-        assert_eq!(file_name("movement_corpus", 0, 0), "movement_corpus.txt");
+        assert_eq!(file_name("movement_corpus", 0, 0), "movement_corpus.bin");
         assert_eq!(
             file_name("movement_corpus_special", 250, 3),
-            "movement_corpus_special_rtt250_s3.txt"
+            "movement_corpus_special_rtt250_s3.bin"
         );
     }
 

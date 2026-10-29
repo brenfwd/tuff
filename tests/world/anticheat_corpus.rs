@@ -1,5 +1,5 @@
 //! Replays recorded vanilla-client movement lanes
-//! (`fixtures/movement_corpus.txt`, written by the opt-in
+//! (`fixtures/movement_corpus.bin`, written by the opt-in
 //! `real_client_record_movement_corpus` client test) through every check
 //! and requires zero alerts and zero setbacks.
 
@@ -138,18 +138,25 @@ async fn replay_lane_with(
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn recorded_vanilla_movement_never_flags() {
-    replay_base_file("movement_corpus.txt").await;
+    replay_base_file("movement_corpus.bin").await;
 }
 
 fn fixtures_dir() -> std::path::PathBuf {
     Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join("tests/world/fixtures")
 }
 
+fn read_lanes(file: &str, origin: [f64; 3]) -> Vec<Lane> {
+    let path = fixtures_dir().join(file);
+    let bytes = std::fs::read(&path)
+        .unwrap_or_else(|e| panic!("corpus file missing at {}: {e}", path.display()));
+    Lane::decode_all(&bytes, origin).unwrap_or_else(|e| panic!("{file}: {e}"))
+}
+
 fn corpus_files() -> Vec<String> {
     let mut names: Vec<String> = std::fs::read_dir(fixtures_dir())
         .unwrap()
         .filter_map(|e| e.ok()?.file_name().into_string().ok())
-        .filter(|n| n.starts_with("movement_corpus") && n.ends_with(".txt"))
+        .filter(|n| n.starts_with("movement_corpus") && n.ends_with(".bin"))
         .collect();
     names.sort();
     names
@@ -168,8 +175,8 @@ fn rtt_of(file: &str) -> u64 {
 /// files, which have their own tests.
 async fn replay_latency_profile(rtt: u64) {
     for name in corpus_files() {
-        if name == "movement_corpus.txt"
-            || name == "movement_corpus_special.txt"
+        if name == "movement_corpus.bin"
+            || name == "movement_corpus_special.bin"
             || rtt_of(&name) != rtt
         {
             continue;
@@ -209,7 +216,7 @@ fn every_corpus_file_has_a_replayed_latency_profile() {
             "{name}: no replay test covers this latency profile"
         );
     }
-    assert_eq!(rtt_of("movement_corpus_special_rtt250_s3.txt"), 250);
+    assert_eq!(rtt_of("movement_corpus_special_rtt250_s3.bin"), 250);
 }
 
 #[tuff_core::watchdog]
@@ -219,6 +226,7 @@ fn corpus_manifest_matches_fixtures() {
         .expect("corpus_manifest.txt");
     let mut listed = Vec::new();
     let mut total_ticks = 0u64;
+    let mut total_bytes = 0u64;
     for line in text
         .lines()
         .filter(|l| !l.starts_with('#') && !l.is_empty())
@@ -226,11 +234,14 @@ fn corpus_manifest_matches_fixtures() {
         let cols: Vec<&str> = line.split_whitespace().collect();
         assert_eq!(cols.len(), 4, "name rtt_ms styles ticks: {line}");
         let ticks: u64 = cols[3].parse().expect("ticks");
-        let actual = std::fs::read_to_string(fixtures_dir().join(cols[0]))
-            .unwrap_or_else(|e| panic!("{}: {e}", cols[0]))
-            .lines()
-            .filter(|l| *l == "T")
+        let actual = read_lanes(cols[0], [0.0; 3])
+            .iter()
+            .flat_map(|lane| &lane.packets)
+            .filter(|p| matches!(p, Serverbound::ClientTickEnd))
             .count() as u64;
+        total_bytes += std::fs::metadata(fixtures_dir().join(cols[0]))
+            .unwrap()
+            .len();
         assert_eq!(ticks, actual, "{}: tick count", cols[0]);
         total_ticks += ticks;
         listed.push(cols[0].to_owned());
@@ -242,15 +253,13 @@ fn corpus_manifest_matches_fixtures() {
         "manifest must list every corpus file"
     );
     println!(
-        "corpus: {total_ticks} ticks = {:.3} h of 10 h target",
-        total_ticks as f64 / 20.0 / 3600.0
+        "corpus: {total_ticks} ticks = {:.3} h of 10 h target, {total_bytes} bytes = {:.2} B/tick",
+        total_ticks as f64 / 20.0 / 3600.0,
+        total_bytes as f64 / total_ticks as f64
     );
 }
 
 async fn replay_base_file(file: &str) {
-    let path = fixtures_dir().join(file);
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("movement corpus missing at {}: {e}", path.display()));
     let base = ChunkPos::new(46, 46);
     let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
     let abs = [
@@ -258,8 +267,8 @@ async fn replay_base_file(file: &str) {
         f64::from(origin[1]),
         f64::from(origin[2]),
     ];
-    let lanes = Lane::parse_all(&text, abs).unwrap();
-    let canonical = file == "movement_corpus.txt";
+    let lanes = read_lanes(file, abs);
+    let canonical = file == "movement_corpus.bin";
     assert!(
         lanes.len() >= if canonical { 11 } else { 1 },
         "{file}: expected all recorded lanes, got {}",
@@ -355,18 +364,15 @@ fn bridge_placements(
 }
 
 async fn replay_special(only: &str) {
-    replay_special_file("movement_corpus_special.txt", Some(only)).await;
+    replay_special_file("movement_corpus_special.bin", Some(only)).await;
 }
 
 async fn replay_special_file(file: &str, only: Option<&str>) {
-    let path = fixtures_dir().join(file);
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("special corpus missing at {}: {e}", path.display()));
     let base = ChunkPos::new(46, 46);
     let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
     let abs = origin.map(f64::from);
-    let lanes = Lane::parse_all(&text, abs).unwrap();
-    let canonical = file == "movement_corpus_special.txt";
+    let lanes = read_lanes(file, abs);
+    let canonical = file == "movement_corpus_special.bin";
     assert!(
         lanes.len() >= if canonical { 6 } else { 1 },
         "{file}: expected every special lane"
@@ -448,14 +454,12 @@ fn triage_corpus_lanes() {
         if only.as_deref().is_some_and(|o| !file.starts_with(o)) {
             continue;
         }
-        let text = std::fs::read_to_string(fixtures_dir().join(&file)).unwrap();
+        let bytes = std::fs::read(fixtures_dir().join(&file)).unwrap();
         let special = file.starts_with("movement_corpus_special");
-        let mut kept = String::new();
-        let mut dropped = String::new();
-        for chunk in lane_chunks(&text) {
-            let lane = Lane::parse_all(chunk, origin.map(f64::from))
-                .unwrap()
-                .remove(0);
+        let mut kept = Lane::encode_all(&[], [0.0; 3]);
+        let mut dropped = kept.clone();
+        for chunk in Lane::split_records(&bytes).unwrap() {
+            let lane = Lane::decode_record(chunk, origin.map(f64::from)).unwrap();
             let name = lane.name.clone();
             let run = std::thread::spawn(move || {
                 let _fixtures = tuff_item::item::conservation::fixture_thread();
@@ -473,44 +477,20 @@ fn triage_corpus_lanes() {
                 });
             });
             if run.join().is_ok() {
-                kept.push_str(chunk);
+                kept.extend_from_slice(chunk);
             } else {
                 println!("FLAGGED {file} {name}");
-                dropped.push_str(chunk);
+                dropped.extend_from_slice(chunk);
                 total += 1;
             }
         }
-        if prune && !dropped.is_empty() {
+        if prune && dropped.len() > tuff_replay::corpus::MAGIC.len() {
             std::fs::create_dir_all(&flagged_dir).unwrap();
             std::fs::write(flagged_dir.join(&file), dropped).unwrap();
             std::fs::write(fixtures_dir().join(&file), kept).unwrap();
         }
     }
     println!("triage: {total} flagged lane(s)");
-}
-
-/// The text of each lane, from its `lane` line to the next one.
-fn lane_chunks(text: &str) -> Vec<&str> {
-    let starts: Vec<usize> = text
-        .match_indices("lane ")
-        .map(|(i, _)| i)
-        .filter(|&i| i == 0 || text.as_bytes()[i - 1] == b'\n')
-        .chain(std::iter::once(text.len()))
-        .collect();
-    starts.windows(2).map(|w| &text[w[0]..w[1]]).collect()
-}
-
-#[tuff_core::watchdog]
-#[test]
-fn lane_chunks_split_on_lane_lines() {
-    let text = "lane a\nT\nlane b\nfill 0 0 0 0 0 0 minecraft:lane\nT\n";
-    assert_eq!(
-        lane_chunks(text),
-        [
-            "lane a\nT\n",
-            "lane b\nfill 0 0 0 0 0 0 minecraft:lane\nT\n"
-        ]
-    );
 }
 
 #[tuff_core::watchdog]

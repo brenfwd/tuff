@@ -2464,17 +2464,20 @@ fn corpus_flagged_dir() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/corpus-flagged")
 }
 
-fn save_flagged(file: &str, lane: &str) {
+fn save_flagged(file: &str, record: &[u8]) {
     let dir = corpus_flagged_dir();
     std::fs::create_dir_all(&dir).unwrap();
     use std::io::Write as _;
-    std::fs::OpenOptions::new()
+    let path = dir.join(file);
+    let mut out = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(dir.join(file))
-        .unwrap()
-        .write_all(lane.as_bytes())
+        .open(&path)
         .unwrap();
+    if out.metadata().unwrap().len() == 0 {
+        out.write_all(tuff_replay::corpus::MAGIC).unwrap();
+    }
+    out.write_all(record).unwrap();
 }
 
 #[tuff_core::watchdog]
@@ -2549,7 +2552,7 @@ async fn real_client_record_movement_corpus() {
     let seed = corpus_env("TUFF_CORPUS_SEED", 0);
     let rounds = corpus_env("TUFF_CORPUS_ROUNDS", 1) as u32;
     let file = tuff_client_harness::corpus::file_name("movement_corpus", rtt, seed);
-    let mut text = String::new();
+    let mut text = tuff_replay::corpus::MAGIC.to_vec();
     let mut flagged = Vec::new();
     let plan = (0..rounds).flat_map(|round| {
         let mut v = Variation::new(seed, round);
@@ -2636,10 +2639,10 @@ async fn real_client_record_movement_corpus() {
             }
         }
         let _ = std::fs::remove_file(&path);
-        let rendered = lane.render([f64::from(x0), f64::from(fy), f64::from(z)]);
+        let rendered = lane.encode_record([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
         if alive && report.contains("no anti-cheat violations") {
-            text.push_str(&rendered);
+            text.extend_from_slice(&rendered);
             std::fs::write(out_dir.join(&file), &text).unwrap();
         } else {
             save_flagged(&file, &rendered);
@@ -2799,7 +2802,7 @@ async fn real_client_record_special_movement_corpus() {
     let seed = corpus_env("TUFF_CORPUS_SEED", 0);
     let rounds = corpus_env("TUFF_CORPUS_ROUNDS", 1) as u32;
     let file = tuff_client_harness::corpus::file_name("movement_corpus_special", rtt, seed);
-    let mut text = String::new();
+    let mut text = tuff_replay::corpus::MAGIC.to_vec();
     let mut notes = Vec::new();
     let plan: Vec<_> = (0..rounds)
         .flat_map(|round| {
@@ -3006,11 +3009,11 @@ async fn real_client_record_special_movement_corpus() {
             }
         }
         let _ = std::fs::remove_file(&path);
-        let rendered = lane.render([f64::from(x0), f64::from(fy), f64::from(z)]);
+        let rendered = lane.encode_record([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
         let alive = client.state().await.is_ok_and(|st| st.screen == "none");
         if alive && report.contains("no anti-cheat violations") {
-            text.push_str(&rendered);
+            text.extend_from_slice(&rendered);
             std::fs::write(out_dir.join(&file), &text).unwrap();
         } else {
             save_flagged(&file, &rendered);
