@@ -171,6 +171,28 @@ async fn until<F: std::future::Future<Output = bool>>(what: &str, mut check: imp
 
 /// Diamonds in the stacks of an NBT dump: every compound with the item's
 /// id holds its own `count` (one when absent).
+/// The hyphenated form of an `[I; a, b, c, d]` UUID dump. The census reads and
+/// kills an item entity by this id: two `limit=1` selectors can pick different
+/// entities when one appears or merges between the commands, which counted one
+/// stack twice and killed another unseen.
+fn uuid_of(text: &str) -> Option<String> {
+    let (_, ints) = text.split_once("[I;")?;
+    let ints: Vec<u32> = ints
+        .trim_end_matches(|c: char| c == ']' || c.is_whitespace())
+        .split(',')
+        .map(|n| n.trim().parse::<i32>().map(|n| n as u32))
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let [a, b, c, d] = ints[..] else { return None };
+    Some(format!(
+        "{a:08x}-{:04x}-{:04x}-{:04x}-{:04x}{d:08x}",
+        b >> 16,
+        b & 0xffff,
+        c >> 16,
+        c & 0xffff
+    ))
+}
+
 fn stacks_of(text: &str, item: &str) -> i64 {
     let needle = format!("id: \"minecraft:{item}\"");
     let bytes = text.as_bytes();
@@ -375,12 +397,18 @@ impl Rig {
             );
         }
         for _ in 0..200 {
-            let dump = self.say("data get entity @e[type=item,limit=1] Item").await;
-            if dump.contains("No entity was found") {
+            let found = self.say("data get entity @e[type=item,limit=1] UUID").await;
+            if found.contains("No entity was found") {
                 break;
             }
-            self.swept += stacks_of(&dump, ITEM);
-            self.say("kill @e[type=item,limit=1]").await;
+            let Some(uuid) = uuid_of(&found) else {
+                continue;
+            };
+            let dump = self.say(&format!("data get entity {uuid} Item")).await;
+            let killed = self.say(&format!("kill {uuid}")).await;
+            if killed.contains("Killed") {
+                self.swept += stacks_of(&dump, ITEM);
+            }
         }
         total + self.swept
     }
