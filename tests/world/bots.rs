@@ -432,9 +432,11 @@ async fn goto_swims_a_pool_climbs_a_ladder_and_jumps_a_three_block_gap() {
                 .map(|w| w.split('.').next().unwrap_or(w).to_owned())
                 .collect::<Vec<_>>()
                 .join(" ");
-            let mut seen = path.borrow_mut();
-            if seen.last() != Some(&here) {
-                seen.push(here);
+            {
+                let mut seen = path.borrow_mut();
+                if seen.last() != Some(&here) {
+                    seen.push(here);
+                }
             }
             let events = run.say("events").await;
             (events.contains("done 1") || events.contains("failed 1")).then_some(events)
@@ -1185,11 +1187,11 @@ async fn farm_wheat_field(age: u32, gives: &[&str]) -> Option<FarmResult> {
     let mut young = 0;
     let mut detail = run.op(op, "bots list").await;
     detail.push_str(&run.server("data get entity Mate Pos").await);
+    let events = run.say("events").await;
     detail.push_str(&format!(
-        " {} trace={:?} events={}",
+        " {} trace={:?} events={events}",
         lost.borrow(),
-        trace.borrow(),
-        run.say("events").await
+        trace.borrow()
     ));
     for (x, z) in (1..=3).flat_map(|x| (1..=3).map(move |z| (x, z))) {
         let ground = run
