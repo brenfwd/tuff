@@ -8,13 +8,16 @@ use std::rc::Rc;
 
 use crate::build::Builder;
 use crate::combat::{Combat, Fighter, Me, Swing, Target, line_of_sight};
+use crate::danger::{self, Nearby};
 use crate::exec::{Action, Drive, Executor, Face, Kit, Step, View};
 use crate::farm::{Farmer, Farming};
 use crate::flight::{Body as FlightBody, Fly, Run};
+use crate::gear;
 use crate::follow::{Explorer, Follower, Tracking};
 use crate::hands::{Breaker, Carried, HOTBAR, Hands, Placer};
 use crate::mine::{EXPLORE_RADIUS, Miner, Mining};
 use crate::path::{Pos, Tools};
+use crate::pickup::{self, Pickup};
 use crate::ranged::{Archer, Draw, ItemUser, Shot, Use, UseAction};
 use crate::upkeep::{Eat, Eater};
 use crate::world::{Blocks, name_of};
@@ -138,6 +141,11 @@ pub trait Host {
     fn use_held(&mut self, _body: Body) {}
     /// Lets go of the use key.
     fn stop_using(&mut self, _body: Body) {}
+    /// Entities within `radius` blocks of the body: hostile mobs and
+    /// projectiles with their velocity, and item drops.
+    fn nearby(&mut self, _body: Body, _radius: f64) -> Vec<Nearby> {
+        Vec::new()
+    }
     fn owner_loaded(&self, owner: &str) -> bool;
     fn notify(&mut self, owner: &str, bot: BotId, event: Event) -> Delivery;
 }
@@ -165,7 +173,16 @@ struct Bot {
     columns: BTreeMap<(i32, i32), i32>,
     eater: Eater,
     held: Option<Drive>,
+    nearby: Vec<Nearby>,
+    nearby_at: Option<u64>,
+    danger_cells: Vec<Pos>,
+    pickup: Pickup,
+    armor_wait: u32,
 }
+
+const NEARBY_TICKS: u64 = 5;
+const NEARBY_RADIUS: f64 = 12.0;
+const ARMOR_TICKS: u32 = 20;
 
 enum HandWork {
     Break(Breaker),
@@ -234,6 +251,12 @@ fn miner_for(process: &Process, at: &Vec3) -> Miner {
         Process::GetToBlock(s) => Miner::new(&s.blocks, 1, s.radius, false, at),
         _ => unreachable!("only mining processes make a miner"),
     }
+}
+
+fn inside(b: &tuff_bots_api::control::Aabb, p: &Vec3) -> bool {
+    (b.min.x..=b.max.x).contains(&p.x)
+        && (b.min.y..=b.max.y).contains(&p.y)
+        && (b.min.z..=b.max.z).contains(&p.z)
 }
 
 fn floor(v: f64) -> i32 {
@@ -322,6 +345,11 @@ impl Bots {
                 columns: BTreeMap::new(),
                 eater: Eater::default(),
                 held: None,
+                nearby: Vec::new(),
+                nearby_at: None,
+                danger_cells: Vec::new(),
+                pickup: Pickup::default(),
+                armor_wait: 0,
             },
         );
         self.send(host, owner, id, Event::Spawned);
@@ -510,11 +538,13 @@ impl Bots {
             bot.policy.allow_break || matches!(bot.process, Process::Break(_) | Process::Build(_));
         let farming = matches!(bot.process, Process::Farm(_));
         let flying = matches!(bot.process, Process::Fly(_));
+        let mining = matches!(bot.process, Process::Mine(_));
         let carried = if bot.policy.allow_place
             || placing
             || farming
             || flying
             || breaking
+            || mining
             || bot.policy.auto_eat
         {
             host.inventory(bot.body)
@@ -531,6 +561,42 @@ impl Bots {
             }
             Some(Eat::Stop) => host.stop_using(bot.body),
             None => {}
+        }
+        let watching = !matches!(
+            bot.process,
+            Process::Idle
+                | Process::Attack(_)
+                | Process::Shoot(_)
+                | Process::UseItem(_)
+                | Process::Fly(_)
+        );
+        if watching && bot.nearby_at.is_none_or(|at| self.ticks - at >= NEARBY_TICKS) {
+            bot.nearby = host.nearby(bot.body, NEARBY_RADIUS);
+            bot.nearby_at = Some(self.ticks);
+        }
+        let mut danger = Vec::new();
+        if watching {
+            danger = danger::danger_boxes(&bot.nearby);
+            danger.retain(|b| !inside(b, &seen.pos));
+        }
+        let cells: Vec<Pos> = danger
+            .iter()
+            .map(|b| (floor(b.min.x), floor(b.min.y), floor(b.min.z)))
+            .collect();
+        if cells != bot.danger_cells {
+            bot.danger_cells = cells;
+            bot.exec = None;
+        }
+        bot.armor_wait = bot.armor_wait.saturating_sub(1);
+        if bot.policy.auto_eat
+            && !fighting
+            && bot.armor_wait == 0
+            && !bot.eater.eating()
+            && let Some(slot) = gear::armor_to_wear(&carried)
+        {
+            host.select_slot(bot.body, slot);
+            host.use_held(bot.body);
+            bot.armor_wait = ARMOR_TICKS;
         }
         let tools = if breaking { host.tools(bot.body) } else { None };
         let mut direct = None;
@@ -843,6 +909,28 @@ impl Bots {
                 }
             }
         }
+        let wanders = matches!(
+            bot.process,
+            Process::Goto(_) | Process::Follow(_) | Process::Explore(_)
+        );
+        if wanders && bot.policy.auto_eat && goal.is_some() {
+            let drops: Vec<Vec3> = bot
+                .nearby
+                .iter()
+                .filter(|n| name_of(&n.kind) == "item")
+                .map(|n| n.pos.clone())
+                .collect();
+            let room = carried
+                .iter()
+                .filter(|(slot, _, count)| (9..=44).contains(slot) && *count > 0)
+                .count()
+                < pickup::FULL_SLOTS;
+            if let Some(detour) = bot.pickup.tick(self.ticks, &seen.pos, &drops, room) {
+                goal = Some(detour);
+            }
+        } else {
+            bot.pickup.reset();
+        }
         let active = goal.is_some() || direct.is_some();
         if let Some(slot) = select {
             host.select(bot.body, slot);
@@ -871,9 +959,11 @@ impl Bots {
                 bot.exec = None;
                 bot.exec_goal = Some(goal.clone());
             }
-            let exec = bot
-                .exec
-                .get_or_insert_with(|| Executor::new(goal, &bot.policy, tools.clone(), kit));
+            let exec = bot.exec.get_or_insert_with(|| {
+                let mut policy = bot.policy.clone();
+                policy.avoid.extend(danger.iter().cloned());
+                Executor::new(goal, &policy, tools.clone(), kit)
+            });
             exec.set_kit(kit);
             let view = View {
                 pos: seen.pos.clone(),
@@ -885,7 +975,8 @@ impl Bots {
             if let Some(world) = host.blocks(bot.body) {
                 let step = exec.tick(&view, &bot.skill, world);
                 acts.extend(exec.take_actions());
-                let goto = matches!(bot.process, Process::Goto(_));
+                let detour = bot.pickup.chasing();
+                let goto = matches!(bot.process, Process::Goto(_)) && !detour;
                 match step {
                     Step::Drive(drive) => {
                         if bot.held != Some(drive) {
@@ -894,6 +985,11 @@ impl Bots {
                         }
                     }
                     Step::Done if goto => outcome = Some(Event::ProcessDone),
+                    Step::Failed(_) if detour => {
+                        bot.pickup.give_up(self.ticks);
+                        bot.exec = None;
+                        bot.exec_goal = None;
+                    }
                     Step::Failed(reason)
                         if !matches!(
                             bot.process,
@@ -940,6 +1036,12 @@ impl Bots {
             bot.exec_goal = None;
         }
         if let Some(pos) = dig {
+            let state = host
+                .blocks(bot.body)
+                .and_then(|w| w.state_at(pos.0, pos.1, pos.2).ok().flatten());
+            if let Some(slot) = state.and_then(|s| gear::tool_for(&carried, &s)) {
+                host.select_slot(bot.body, slot);
+            }
             host.dig(bot.body, pos, &seen.pos);
         }
         perform(host, bot.body, &seen.pos, acts);

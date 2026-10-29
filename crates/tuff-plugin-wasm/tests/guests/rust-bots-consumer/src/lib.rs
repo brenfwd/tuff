@@ -72,7 +72,7 @@ fn spec_at(name: String, x: f64, y: f64, z: f64) -> control::SpawnSpec {
             break_deny: vec![],
             throwaway_items: vec!["minecraft:cobblestone".into()],
             avoid: vec![],
-            auto_eat: false,
+            auto_eat: true,
         },
         respawn: control::RespawnPolicy::Owner,
     }
