@@ -50,7 +50,7 @@ impl PlayerSession {
     pub fn teleport_after_chunk(&mut self, position: [f64; 3]) {
         self.begin_teleport(position);
         let chunk = ChunkPos::of_position(position);
-        if self.view.sent.contains(&chunk) {
+        if self.fake.is_some() || self.view.sent.contains(&chunk) {
             self.sync.deferred_teleport = None;
             self.send_teleport();
         } else {
