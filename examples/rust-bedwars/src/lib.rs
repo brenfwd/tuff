@@ -157,7 +157,7 @@ impl tuff_bots_api::events::Serve for BotEvents {
         with_game(|game, _| game.bot_walk_ended(bot));
     }
     fn process_failed(&mut self, _from: &str, bot: u32, _reason: String) {
-        with_game(|game, _| game.bot_walk_ended(bot));
+        with_game(|game, _| game.bot_walk_failed(bot));
     }
     fn removed(&mut self, _from: &str, bot: u32) {
         with_game(|game, host| game.bot_removed(host, bot));

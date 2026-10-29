@@ -18,6 +18,7 @@ pub mod gear;
 pub mod hands;
 pub mod mine;
 pub mod path;
+pub mod pickup;
 pub mod ranged;
 pub mod upkeep;
 pub mod world;
@@ -35,6 +36,8 @@ use tuff_plugin_sdk::types::FakeError;
 
 use crate::core::{Body, Bots, Delivery, Event, Host, Lookup, Perceived};
 use crate::exec::Drive;
+
+const MAX_NEARBY: usize = 64;
 
 const DEFAULT_DIMENSION: &str = "minecraft:overworld";
 
@@ -381,6 +384,62 @@ impl Host for Real {
         if let Some((fake, _, _)) = self.bodies.get(&body) {
             let _ = fake.look(yaw, pitch);
         }
+    }
+
+    fn nearby(&mut self, body: Body, radius: f64) -> Vec<danger::Nearby> {
+        let Some((_, seen, dimension)) = self.bodies.get(&body) else {
+            return Vec::new();
+        };
+        let corner = |sign: f64, up: f64| tuff_plugin_sdk::types::Vec3 {
+            x: seen.pos.x + sign * radius,
+            y: seen.pos.y + up,
+            z: seen.pos.z + sign * radius,
+        };
+        let Ok(found) = tuff_plugin_sdk::world::World::new(dimension.clone())
+            .entities(corner(-1.0, -6.0), corner(1.0, 6.0))
+        else {
+            return Vec::new();
+        };
+        let mut found: Vec<_> = found
+            .into_iter()
+            .filter(|e| {
+                let kind = world::name_of(&e.kind);
+                kind == "item" || danger::is_hostile(kind) || danger::is_projectile(kind)
+            })
+            .take(MAX_NEARBY)
+            .collect();
+        let moving: Vec<usize> = (0..found.len())
+            .filter(|i| danger::is_projectile(&found[*i].kind))
+            .collect();
+        let uuids: Vec<String> = moving.iter().map(|i| found[*i].uuid.to_string()).collect();
+        let refs: Vec<&str> = uuids.iter().map(String::as_str).collect();
+        let states = match refs.is_empty() {
+            true => Vec::new(),
+            false => tuff_plugin_sdk::entity_states(&refs).unwrap_or_default(),
+        };
+        let mut velocity = vec![control::Vec3 { x: 0.0, y: 0.0, z: 0.0 }; found.len()];
+        for (i, state) in moving.iter().zip(states) {
+            if let Some(state) = state {
+                velocity[*i] = control::Vec3 {
+                    x: state.motion.x,
+                    y: state.motion.y,
+                    z: state.motion.z,
+                };
+            }
+        }
+        found
+            .drain(..)
+            .zip(velocity)
+            .map(|(e, velocity)| danger::Nearby {
+                kind: e.kind,
+                pos: control::Vec3 {
+                    x: e.pos.x,
+                    y: e.pos.y,
+                    z: e.pos.z,
+                },
+                velocity,
+            })
+            .collect()
     }
 
     fn owner_loaded(&self, owner: &str) -> bool {

@@ -234,10 +234,13 @@ fn defenders_never_rush_and_rushers_rush_early() {
     v.elapsed = v.skill.rush_after / 3;
     let mut brain = goals::bedwars();
     v.role = Role::Defender;
-    assert!(!brain.tick(&v).goto.is_some_and(|g| g[0] > 5.0));
+    let out = brain.tick(&v);
+    assert!(out.rush.is_none() && out.dig.is_none());
     let mut brain = goals::bedwars();
     v.role = Role::Rusher;
-    assert!(brain.tick(&v).goto.is_some());
+    let out = brain.tick(&v);
+    assert_eq!(out.rush, Some(beds[0]));
+    assert_eq!(brain.tick(&v).rush, Some(beds[0]));
     v.role = Role::Solo;
     let mut brain = goals::bedwars();
     v.home = v.me;

@@ -10,6 +10,8 @@ use tuff_vanilla_data::Block;
 use tuff_vanilla_data::registry::EntityType;
 
 const RECORDED_HORSE_SPEED: f64 = 0.06;
+const BOAT_RIDE: &str = include_str!("fixtures/mount_ride_boat.txt");
+const BOAT_TRACK_LENGTH: f64 = 36.0;
 const HORSE_RIDE: &str = include_str!("fixtures/mount_ride_horse.txt");
 
 /// Replays the recorded real-client horse gallop, `ahead` blocks east of
@@ -69,6 +71,64 @@ async fn a_recorded_horse_gallop_keeps_a_wide_margin_to_the_shadow_range() {
     let margin = SHADOW_RANGE * 0.6;
     assert_eq!(replay_horse_ride(35, margin).await, 0);
     assert!(replay_horse_ride(38, SHADOW_RANGE + 0.5).await > 0);
+}
+
+/// Replays the recorded real-client boat ride on water, `ahead` blocks east
+/// of where the client really was, and returns how many moves the server
+/// answered with a correction. Stops where the test track ends.
+async fn replay_boat_ride(chunk: i32, ahead: f64) -> usize {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    world
+        .shared
+        .config
+        .set_text("tuff.anticheat.enforce", "false")
+        .unwrap();
+    let mut w = walker(&world, 1, ChunkPos::new(chunk, chunk)).await;
+    track(&mut w, &world, Block::Stone, Some(Block::Water)).await;
+    let start = [w.x - 19.0, 102.0, w.z];
+    let facing_east = tuff_nbt::Compound::new().with(
+        "Rotation",
+        tuff_nbt::Tag::List(vec![tuff_nbt::Tag::Float(-90.0), tuff_nbt::Tag::Float(0.0)]),
+    );
+    let id = board_kind(&mut w, &world, EntityType::OakBoat, facing_east, start).await;
+    let origin = mount_at(&world, EntityType::OakBoat, id).await;
+    let lane = Lane::parse_all(BOAT_RIDE, origin).unwrap().remove(0);
+    w.session.pose.yaw = -90.0;
+    let _ = setbacks(&mut w);
+    let mut corrections = 0;
+    for packet in lane.packets {
+        match packet {
+            Serverbound::MoveVehicle {
+                position: [x, y, z],
+                on_ground,
+                ..
+            } => {
+                if x - origin[0] > BOAT_TRACK_LENGTH {
+                    break;
+                }
+                ride_step(&mut w, &world, [x + ahead, y, z], on_ground).await;
+                corrections += setbacks(&mut w);
+            }
+            other => w.session.handle_packet(other).await,
+        }
+    }
+    world.shutdown().await;
+    corrections
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_recorded_boat_ride_is_never_clamped() {
+    assert_eq!(replay_boat_ride(36, 0.0).await, 0);
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_recorded_boat_ride_keeps_a_wide_margin_to_the_shadow_range() {
+    let margin = SHADOW_RANGE * 0.6;
+    assert_eq!(replay_boat_ride(37, margin).await, 0);
+    assert!(replay_boat_ride(39, SHADOW_RANGE + 0.5).await > 0);
 }
 
 #[tuff_core::watchdog]

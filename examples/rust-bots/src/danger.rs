@@ -54,6 +54,7 @@ pub fn is_projectile(kind: &str) -> bool {
 }
 
 /// A nearby entity: its type, feet position and velocity per tick.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Nearby {
     pub kind: String,
     pub pos: Vec3,

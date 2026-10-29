@@ -279,6 +279,18 @@ pub struct Placer {
     stand: Option<Pos>,
     settled: Option<(Vec3, u32)>,
     avoid: Rc<HashSet<Pos>>,
+    pub grounded: bool,
+}
+
+fn stand_goal(stand: Pos) -> Goal {
+    Goal::Leaf(LeafGoal::Near(NearGoal {
+        pos: BlockPos {
+            x: stand.0,
+            y: stand.1,
+            z: stand.2,
+        },
+        radius: STAND_RADIUS,
+    }))
 }
 
 /// Whether nothing solid stands between the eyes and the middle of the
@@ -512,6 +524,7 @@ impl Placer {
             phase: Phase::Seek,
             stand: None,
             settled: None,
+            grounded: true,
             avoid: Rc::default(),
         }
     }
@@ -587,18 +600,8 @@ impl Placer {
                     let Some(stand) = self.stand else {
                         return Hands::Failed("no stand".into());
                     };
-                    {
-                        let goal = Goal::Leaf(LeafGoal::Near(NearGoal {
-                            pos: BlockPos {
-                                x: stand.0,
-                                y: stand.1,
-                                z: stand.2,
-                            },
-                            radius: STAND_RADIUS,
-                        }));
-                        if !goal_reached(&goal, me) {
-                            return Hands::Goal(goal);
-                        }
+                    if !goal_reached(&stand_goal(stand), me) {
+                        return Hands::Goal(stand_goal(stand));
                     }
                     support = candidates.first().copied();
                 }
@@ -610,6 +613,13 @@ impl Placer {
                 }
                 if !in_reach(me, pos) {
                     return approach(me, pos);
+                }
+                if !self.grounded {
+                    self.settled = None;
+                    return match self.stand {
+                        Some(stand) => Hands::Goal(stand_goal(stand)),
+                        None => Hands::Wait,
+                    };
                 }
                 let held = match &self.settled {
                     Some((last, n))
