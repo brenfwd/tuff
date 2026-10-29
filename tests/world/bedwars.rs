@@ -916,6 +916,7 @@ async fn no_violations(run: &WithBots) {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "flaky: bots fight instead of reaching the bed (about 1 in 3 alone); see todo infrastructure/bedwars-bot-world-test-flakes"]
 async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
     let Some(run) = WithBots::start().await else {
         return;
