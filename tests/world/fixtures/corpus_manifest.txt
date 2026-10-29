@@ -2,16 +2,22 @@
 # files: movement_corpus[_special][_rtt<ms>][_s<seed>].bin; seed > 0 varies lane order, ticks and start offsets
 movement_corpus.bin 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs 2116
 movement_corpus_rtt100_s1.bin 100 walk,sprint,sneak,swim,ladder,honey,cobweb,ice,stairs,combat 1637
+movement_corpus_rtt100_s32.bin 100 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 7399
 movement_corpus_rtt100_s4.bin 100 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 8397
 movement_corpus_rtt250_s2.bin 250 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 8488
+movement_corpus_rtt250_s33.bin 250 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 7955
 movement_corpus_rtt250_s5.bin 250 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 6514
 movement_corpus_s3.bin 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 8658
+movement_corpus_s31.bin 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 8011
 movement_corpus_s6.bin 0 walk,sprint,sneak,swim,ladder,slime,honey,cobweb,ice,stairs,combat 7094
 movement_corpus_special.bin 0 elytra,boat,horse,bridge 841
 movement_corpus_special_rtt100_s1.bin 100 elytra,boat,horse 2661
+movement_corpus_special_rtt100_s32.bin 100 elytra,boat,horse,bridge 1323
 movement_corpus_special_rtt100_s7.bin 100 elytra,boat,horse 1116
 movement_corpus_special_rtt250_s2.bin 250 elytra,boat,horse 1887
+movement_corpus_special_rtt250_s33.bin 250 elytra,boat,horse,bridge 1481
 movement_corpus_special_rtt250_s5.bin 250 elytra,boat,horse 1068
 movement_corpus_special_s3.bin 0 elytra,boat,horse 2800
+movement_corpus_special_s31.bin 0 elytra,boat,horse,bridge 1487
 movement_corpus_special_s6.bin 0 elytra,boat,horse 1907
-# 758100 bytes over 55184 ticks = 13.74 bytes/tick (text form was 47.6); about 5.05 h fits in 5 MB
+# 1172813 bytes over 82840 ticks = 14.16 bytes/tick; about 4.9 h fits in 5 MB
