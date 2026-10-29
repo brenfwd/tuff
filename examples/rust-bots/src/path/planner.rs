@@ -4,7 +4,7 @@ use tuff_bots_api::control::Goal;
 use super::{Limits, MoveKind, Params, Plan, Pos, Search, Status, default_moves, reached};
 use crate::world::Blocks;
 
-const REPLAN_AHEAD: usize = 8;
+const REPLAN_AHEAD: usize = 24;
 const VALIDATE_AHEAD: usize = 12;
 const VALIDATE_EVERY_TICKS: u32 = 60;
 
@@ -34,6 +34,7 @@ pub struct Planner {
     search: Option<Search>,
     dirty: bool,
     ticks_since_validate: u32,
+    anchor: Pos,
 }
 
 impl Planner {
@@ -50,6 +51,7 @@ impl Planner {
             search: None,
             dirty: false,
             ticks_since_validate: 0,
+            anchor: (0, 0, 0),
         }
     }
 
@@ -83,6 +85,28 @@ impl Planner {
     pub fn penalise(&mut self, at: Pos) {
         self.params.avoid.push(crate::exec::unit_box(at));
         self.drop_plan();
+    }
+
+    /// The path cell a bot one block off the line stands beside: a stride
+    /// that drifts sideways under a lagging view must not stop the run.
+    fn rejoin(&self, at: Pos) -> Option<Pos> {
+        let end = self.path.len().saturating_sub(1);
+        self.path[..end]
+            .iter()
+            .rposition(|p| p.1 == at.1 && (p.0 - at.0).abs() <= 1 && (p.2 - at.2).abs() <= 1)
+            .map(|i| self.path[i])
+    }
+
+    /// The cell the last tick followed from: the bot's own, or the path cell
+    /// beside it when it had drifted off the line.
+    pub fn anchor(&self) -> Pos {
+        self.anchor
+    }
+
+    /// Cells of the current path left after `at`, and whether it reaches the goal.
+    pub fn remaining(&self, at: Pos) -> Option<(usize, bool)> {
+        let i = self.path.iter().position(|p| *p == at)?;
+        Some((self.path.len() - 1 - i, self.complete))
     }
 
     fn drop_plan(&mut self) {
@@ -126,15 +150,20 @@ impl Planner {
         self.search = None;
     }
 
-    pub fn tick(&mut self, at: Pos, world: &mut dyn Blocks) -> Advance {
+    pub fn tick(&mut self, mut at: Pos, world: &mut dyn Blocks) -> Advance {
         if reached(&self.goal, at) {
             return Advance::Arrived;
         }
         self.ticks_since_validate += 1;
         let index = self.path.iter().position(|p| *p == at);
         if index.is_none() && !self.path.is_empty() {
-            self.drop_plan();
+            match self.rejoin(at) {
+                Some(next) => at = next,
+                None => self.drop_plan(),
+            }
         }
+        self.anchor = at;
+        let index = self.path.iter().position(|p| *p == at);
         if let Some(i) = index
             && (self.dirty || self.ticks_since_validate >= VALIDATE_EVERY_TICKS)
         {

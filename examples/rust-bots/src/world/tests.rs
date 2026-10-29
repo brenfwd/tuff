@@ -264,3 +264,16 @@ fn the_cache_keeps_block_states_its_source_reports() {
     );
     assert_eq!(cache.state_at(0, 400, 0).unwrap(), None);
 }
+
+#[test]
+fn a_sparing_view_does_not_let_a_bot_stand_on_farmland() {
+    let farmland = classify("minecraft:farmland[moisture=7]", traits(true, false, false));
+    assert!(farmland.standable() && farmland.tender());
+    assert!(!classify("minecraft:dirt", traits(true, false, false)).tender());
+    let mut terrain = Terrain::new(4, 4);
+    terrain.set((1, 0, 1), farmland);
+    assert!(terrain.class_at(1, 0, 1).unwrap().standable());
+    let mut sparing = Sparing(&mut terrain);
+    assert!(!sparing.class_at(1, 0, 1).unwrap().standable());
+    assert!(sparing.class_at(2, 0, 1).unwrap().standable());
+}

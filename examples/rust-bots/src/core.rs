@@ -21,7 +21,7 @@ use crate::path::{Pos, Tools};
 use crate::pickup::{self, Pickup};
 use crate::ranged::{Archer, Draw, ItemUser, Shot, Use, UseAction};
 use crate::upkeep::{Eat, Eater};
-use crate::world::{Blocks, name_of};
+use crate::world::{Blocks, Sparing, name_of};
 use tuff_bots_api::control::{
     AttackSpec, AttackUntil, BotId, BotState, ControlError, Goal, LeafGoal, LookTarget, Policy,
     Process, RespawnPolicy, Skill, SpawnSpec, Vec3, XzGoal,
@@ -1069,7 +1069,11 @@ impl Bots {
                 food: seen.food,
             };
             if let Some(world) = host.blocks(bot.body) {
-                let step = exec.tick(&view, &bot.skill, world);
+                let step = if farming {
+                    exec.tick(&view, &bot.skill, &mut Sparing(world))
+                } else {
+                    exec.tick(&view, &bot.skill, world)
+                };
                 let taken = exec.take_actions();
                 if !taken.is_empty() {
                     bot.worked_at = Some(self.ticks);

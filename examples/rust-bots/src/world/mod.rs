@@ -27,6 +27,8 @@ impl Class {
     pub const FALLING: Class = Class(32);
     /// Water or lava: flows into a cell that is opened next to it.
     pub const FLUID: Class = Class(64);
+    /// Farmland: stepping on it from a height turns it back into dirt.
+    pub const TENDER: Class = Class(128);
 
     pub const fn with(self, other: Class) -> Class {
         Class(self.0 | other.0)
@@ -62,6 +64,10 @@ impl Class {
 
     pub const fn fluid(self) -> bool {
         self.has(Class::FLUID)
+    }
+
+    pub const fn tender(self) -> bool {
+        self.has(Class::TENDER)
     }
 }
 
@@ -157,7 +163,9 @@ pub fn classify(state: &str, traits: Traits) -> Class {
     if is_tall_solid(name) {
         return Class::NONE;
     }
-    if traits.solid && is_falling(name) {
+    if traits.solid && name == "farmland" {
+        Class::STANDABLE.with(Class::TENDER)
+    } else if traits.solid && is_falling(name) {
         Class::STANDABLE.with(Class::FALLING)
     } else if traits.solid {
         Class::STANDABLE
@@ -191,5 +199,32 @@ pub trait Blocks {
         _wanted: &[String],
     ) -> Result<Vec<(i32, i32, i32)>, Pending> {
         Ok(Vec::new())
+    }
+}
+
+/// Blocks seen by a bot that must not tread on farmland: tender floors are
+/// not standable, so no path steps, lands or jumps onto them.
+pub struct Sparing<'a>(pub &'a mut dyn Blocks);
+
+impl Blocks for Sparing<'_> {
+    fn class_at(&mut self, x: i32, y: i32, z: i32) -> Result<Class, Pending> {
+        let class = self.0.class_at(x, y, z)?;
+        Ok(if class.tender() { Class::NONE } else { class })
+    }
+
+    fn state_at(&mut self, x: i32, y: i32, z: i32) -> Result<Option<Rc<str>>, Pending> {
+        self.0.state_at(x, y, z)
+    }
+
+    fn refresh(&mut self, around: &[(i32, i32, i32)]) {
+        self.0.refresh(around);
+    }
+
+    fn find(
+        &mut self,
+        section: SectionKey,
+        wanted: &[String],
+    ) -> Result<Vec<(i32, i32, i32)>, Pending> {
+        self.0.find(section, wanted)
     }
 }
