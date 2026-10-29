@@ -20,6 +20,7 @@ const APPROACH_RADIUS: f64 = 2.5;
 const EYE: f64 = 1.62;
 /// How far the eyes may drift between the decision and the click.
 const VIEW_SLACK: f64 = 0.3;
+const SETTLE_TICKS: u32 = 1;
 const STAND_RADIUS: f64 = 0.6;
 const STAND_SEARCH: i32 = 4;
 const RECHECK_TICKS: u32 = 5;
@@ -90,6 +91,7 @@ enum Phase {
 pub struct Breaker {
     targets: VecDeque<Pos>,
     phase: Phase,
+    stand: Option<(Pos, Pos)>,
 }
 
 impl Breaker {
@@ -97,7 +99,48 @@ impl Breaker {
         Self {
             targets: targets.iter().map(|p| (p.x, p.y, p.z)).collect(),
             phase: Phase::Seek,
+            stand: None,
         }
+    }
+
+    /// A goal that brings a face of `pos` into clear view, `None` when it
+    /// is visible already or no stand shows it.
+    fn sighted(&mut self, me: &Vec3, world: &mut dyn Blocks, pos: Pos) -> Result<Option<Goal>, ()> {
+        let eye = (me.x, me.y + EYE, me.z);
+        let mut faces = Vec::new();
+        for face in Face::ALL {
+            let (dx, dy, dz) = face.normal();
+            if world
+                .class_at(pos.0 + dx, pos.1 + dy, pos.2 + dz)
+                .map_err(|_| ())?
+                .passable()
+            {
+                faces.push((pos, face));
+            }
+        }
+        for &(against, face) in &faces {
+            if clear_view(world, eye, against, face)? {
+                return Ok(None);
+            }
+        }
+        let stand = match self.stand {
+            Some((target, stand)) if target == pos => Some(stand),
+            _ => {
+                let found = find_stand(world, me, false, pos, &HashSet::new(), &faces)?;
+                self.stand = found.map(|s| (pos, s));
+                found
+            }
+        };
+        Ok(stand.map(|s| {
+            Goal::Leaf(LeafGoal::Near(NearGoal {
+                pos: BlockPos {
+                    x: s.0,
+                    y: s.1,
+                    z: s.2,
+                },
+                radius: STAND_RADIUS,
+            }))
+        }))
     }
 
     pub fn tick(
@@ -139,6 +182,11 @@ impl Breaker {
                 }
                 if !in_reach(me, pos) {
                     return approach(me, pos);
+                }
+                match self.sighted(me, world, pos) {
+                    Err(()) => return Hands::Wait,
+                    Ok(Some(goal)) if !goal_reached(&goal, me) => return Hands::Goal(goal),
+                    Ok(_) => {}
                 }
                 let Ok(state) = world.state_at(pos.0, pos.1, pos.2) else {
                     return Hands::Wait;
@@ -229,6 +277,7 @@ pub struct Placer {
     orient: Orient,
     phase: Phase,
     stand: Option<Pos>,
+    settled: Option<(Vec3, u32)>,
     avoid: Rc<HashSet<Pos>>,
 }
 
@@ -246,6 +295,10 @@ fn clear_view(
         (-VIEW_SLACK, 0.0),
         (0.0, VIEW_SLACK),
         (0.0, -VIEW_SLACK),
+        (VIEW_SLACK, VIEW_SLACK),
+        (VIEW_SLACK, -VIEW_SLACK),
+        (-VIEW_SLACK, VIEW_SLACK),
+        (-VIEW_SLACK, -VIEW_SLACK),
     ] {
         if !clear_ray(world, (eye.0 + ox, eye.1, eye.2 + oz), against, face)? {
             return Ok(false);
@@ -270,7 +323,9 @@ fn clear_ray(
     if dx * f64::from(nx) + dy * f64::from(ny) + dz * f64::from(nz) > -0.05 {
         return Ok(false);
     }
-    let steps = ((dx * dx + dy * dy + dz * dz).sqrt() / 0.1).ceil().max(1.0) as u32;
+    let steps = ((dx * dx + dy * dy + dz * dz).sqrt() / 0.02)
+        .ceil()
+        .max(1.0) as u32;
     for i in 0..steps {
         let t = f64::from(i) / f64::from(steps);
         let cell = (
@@ -381,8 +436,19 @@ fn find_stand(
             }
         }
         for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-            for dy in [0, 1, -1] {
+            'steps: for dy in [0, 1, -1, -2, -3] {
                 let next = (cell.0 + dx, cell.1 + dy, cell.2 + dz);
+                if dy < -1 {
+                    for up in [0, 1] {
+                        let open = world
+                            .class_at(next.0, cell.1 + up, next.2)
+                            .map_err(|_| ())?
+                            .passable();
+                        if !open {
+                            continue 'steps;
+                        }
+                    }
+                }
                 if (next.0 - here.0).abs() > STAND_SEARCH
                     || (next.2 - here.2).abs() > STAND_SEARCH
                     || !seen.insert(next)
@@ -445,6 +511,7 @@ impl Placer {
             orient: Orient::default(),
             phase: Phase::Seek,
             stand: None,
+            settled: None,
             avoid: Rc::default(),
         }
     }
@@ -543,6 +610,20 @@ impl Placer {
                 }
                 if !in_reach(me, pos) {
                     return approach(me, pos);
+                }
+                let held = match &self.settled {
+                    Some((last, n))
+                        if (last.x - me.x).abs() < 0.02
+                            && (last.y - me.y).abs() < 0.02
+                            && (last.z - me.z).abs() < 0.02 =>
+                    {
+                        n + 1
+                    }
+                    _ => 0,
+                };
+                self.settled = Some((me.clone(), held));
+                if held < SETTLE_TICKS {
+                    return Hands::Wait;
                 }
                 self.phase = Phase::Working {
                     pos,
