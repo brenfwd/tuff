@@ -304,6 +304,60 @@ fn every_corpus_file_has_a_replayed_latency_profile() {
     assert_eq!(rtt_of("movement_corpus_special_rtt250_s3.bin"), 250);
 }
 
+/// Prints the manifest body for the fixtures: `name rtt styles ticks` per
+/// file plus the footer. Redirect into `corpus_manifest.txt` after recording.
+#[tuff_core::watchdog]
+#[ignore = "manifest generator, run by hand after recording"]
+#[test]
+fn print_corpus_manifest() {
+    fn style(lane: &str) -> &str {
+        let family = lane.split('_').next().unwrap_or(lane);
+        match family {
+            "combat" | "elytra" | "boat" | "horse" | "bridge" => family,
+            _ => lane,
+        }
+    }
+    let (mut ticks_all, mut bytes_all) = (0u64, 0u64);
+    for name in corpus_files() {
+        let lanes = read_lanes(&name, [0.0; 3]);
+        let ticks = lanes
+            .iter()
+            .flat_map(|lane| &lane.packets)
+            .filter(|p| matches!(p, Serverbound::ClientTickEnd))
+            .count() as u64;
+        let mut styles: Vec<&str> = Vec::new();
+        for lane in &lanes {
+            let s = style(&lane.name);
+            if !styles.contains(&s) {
+                styles.push(s);
+            }
+        }
+        styles.sort_by_key(|s| {
+            ["elytra", "boat", "horse", "bridge"]
+                .iter()
+                .position(|k| k == s)
+                .unwrap_or(usize::MAX)
+        });
+        println!("{name} {} {} {ticks}", rtt_of(&name), styles.join(","));
+        let bridges = lanes
+            .iter()
+            .filter(|l| l.name.starts_with("bridge"))
+            .count();
+        let packets: usize = lanes.iter().map(|l| l.packets.len()).sum();
+        eprintln!(
+            "LANES {name} total={} bridge={bridges} packets={packets} ticks={ticks}",
+            lanes.len()
+        );
+        ticks_all += ticks;
+        bytes_all += std::fs::metadata(fixtures_dir().join(&name)).unwrap().len();
+    }
+    println!(
+        "# {bytes_all} bytes over {ticks_all} ticks = {:.2} bytes/tick; about {:.1} h fits in 5 MB",
+        bytes_all as f64 / ticks_all as f64,
+        5_000_000.0 / (bytes_all as f64 / ticks_all as f64) / 72000.0
+    );
+}
+
 #[tuff_core::watchdog]
 #[test]
 fn corpus_manifest_matches_fixtures() {
