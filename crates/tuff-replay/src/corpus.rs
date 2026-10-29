@@ -55,6 +55,9 @@ pub fn encode_packet(packet: &Serverbound, origin: [f64; 3]) -> Option<String> {
         Serverbound::PlayerInput(bits) => format!("I {bits}"),
         Serverbound::PlayerCommand(action) => format!("C {action}"),
         Serverbound::ClientTickEnd => "T".to_owned(),
+        Serverbound::PaddleBoat { left, right } => {
+            format!("B {} {}", u8::from(*left), u8::from(*right))
+        }
         Serverbound::MoveVehicle {
             position: [x, y, z],
             yaw,
@@ -130,6 +133,10 @@ fn decode_packet(line: &str, origin: [f64; 3]) -> Result<Serverbound> {
         ["I", bits] => Serverbound::PlayerInput(bits.parse()?),
         ["C", action] => Serverbound::PlayerCommand(action.parse()?),
         ["T"] => Serverbound::ClientTickEnd,
+        ["B", left, right] => Serverbound::PaddleBoat {
+            left: *left == "1",
+            right: *right == "1",
+        },
         ["V", x, y, z, yaw, pitch, ground] => Serverbound::MoveVehicle {
             position: [
                 x.parse::<f64>()? + origin[0],

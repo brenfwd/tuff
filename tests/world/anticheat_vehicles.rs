@@ -1137,3 +1137,50 @@ async fn a_boat_floating_where_the_server_run_has_it_is_never_clamped() {
     assert_eq!(setbacks(&mut w), 0);
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn mounting_a_far_boat_with_the_ride_command_flags_nothing() {
+    use crate::world::messages::{RideAnswer, RideOp, RidePassenger};
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let mut w = walker(&world, 1, ChunkPos::new(40, 40)).await;
+    track(&mut w, &world, Block::Stone, Some(Block::Water)).await;
+    let region = world.region(RegionPos::new(1, 1)).await;
+    let at = [w.x + 15.0, 102.0, w.z];
+    summon(&region, EntityType::OakBoat, Compound::new(), at).await;
+    let boat = mobs(&region, EntityType::OakBoat).await[0].id;
+    let passenger = RidePassenger::Player {
+        handle: w.handle.clone(),
+        uuid: 1,
+    };
+    let answer = region
+        .ask(move |region| {
+            region.ride(RideOp::Mount {
+                passenger,
+                vehicle: boat,
+            })
+        })
+        .await
+        .unwrap();
+    assert!(matches!(answer, RideAnswer::Vehicle(_)));
+    for _ in 0..40 {
+        world.ticks(1).await;
+        while let Ok(event) = w.events.try_recv() {
+            w.session.on_event(event).await;
+        }
+        if w.session.ride.riding.is_some() {
+            let here = vehicle_at(&w);
+            ride_step(&mut w, &world, here, true).await;
+        } else {
+            w.step(0.0, 101.0, 0.0).await;
+        }
+    }
+    assert!(
+        w.session.ride.riding.is_some(),
+        "the command seats the player"
+    );
+    let alerts = super::anticheat::operator_alerts(&world).await;
+    assert!(alerts.is_empty(), "{alerts:?}");
+    world.shutdown().await;
+}
