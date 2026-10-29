@@ -134,6 +134,7 @@ pub struct Farmer {
     current: Option<Pos>,
     cooldown: u32,
     harvested: u32,
+    rescanned: bool,
 }
 
 impl Farmer {
@@ -152,6 +153,7 @@ impl Farmer {
             current: None,
             cooldown: 0,
             harvested: 0,
+            rescanned: false,
         }
     }
 
@@ -518,6 +520,15 @@ impl Farmer {
         let pos = match self.nearest_mature(me, world) {
             Err(()) => return Farming::Wait,
             Ok(None) => {
+                if !self.rescanned {
+                    self.rescanned = true;
+                    let cells: Vec<Pos> = (self.min.0..=self.max.0)
+                        .flat_map(|x| (self.min.1..=self.max.1).map(move |y| (x, y)))
+                        .flat_map(|(x, y)| (self.min.2..=self.max.2).map(move |z| (x, y, z)))
+                        .collect();
+                    world.refresh(&cells);
+                    return Farming::Wait;
+                }
                 self.cooldown = SCAN_INTERVAL;
                 return Farming::Done;
             }

@@ -241,6 +241,7 @@ fn young_crops_are_left_alone_without_bone_meal() {
         y: 1.0,
         z: 1.5,
     };
+    assert_eq!(farmer.tick(&me, &mut field, &seeds()), Farming::Wait);
     assert_eq!(farmer.tick(&me, &mut field, &seeds()), Farming::Done);
 }
 

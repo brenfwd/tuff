@@ -177,12 +177,14 @@ struct Bot {
     nearby_at: Option<u64>,
     danger_cells: Vec<Pos>,
     pickup: Pickup,
+    worked_at: Option<u64>,
     armor_wait: u32,
 }
 
 const NEARBY_TICKS: u64 = 5;
 const NEARBY_RADIUS: f64 = 12.0;
 const ARMOR_TICKS: u32 = 20;
+const WORK_PAUSE_TICKS: u64 = 60;
 
 enum HandWork {
     Break(Breaker),
@@ -349,6 +351,7 @@ impl Bots {
                 nearby_at: None,
                 danger_cells: Vec::new(),
                 pickup: Pickup::default(),
+                worked_at: None,
                 armor_wait: 0,
             },
         );
@@ -924,7 +927,8 @@ impl Bots {
                 .iter()
                 .filter(|(slot, _, count)| (9..=44).contains(slot) && *count > 0)
                 .count()
-                < pickup::FULL_SLOTS;
+                < pickup::FULL_SLOTS
+                && bot.worked_at.is_none_or(|at| self.ticks >= at + WORK_PAUSE_TICKS);
             if let Some(detour) = bot.pickup.tick(self.ticks, &seen.pos, &drops, room) {
                 goal = Some(detour);
             }
@@ -974,7 +978,11 @@ impl Bots {
             };
             if let Some(world) = host.blocks(bot.body) {
                 let step = exec.tick(&view, &bot.skill, world);
-                acts.extend(exec.take_actions());
+                let taken = exec.take_actions();
+                if !taken.is_empty() {
+                    bot.worked_at = Some(self.ticks);
+                }
+                acts.extend(taken);
                 let detour = bot.pickup.chasing();
                 let goto = matches!(bot.process, Process::Goto(_)) && !detour;
                 match step {
