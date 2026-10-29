@@ -2593,7 +2593,7 @@ async fn real_client_record_movement_corpus() {
         let z = z0 + 5 * i as i32;
         let at = |p: [i32; 3]| (x0 + p[0], fy + p[1], z + p[2]);
         let (ax, ay, az) = at([-30, -3, -2]);
-        server_says(
+        let cleared = server_says(
             s,
             &format!(
                 "fill {ax} {ay} {az} {} {} {} minecraft:air",
@@ -2603,6 +2603,7 @@ async fn real_client_record_movement_corpus() {
             ),
         )
         .await;
+        let mut replies = vec![cleared];
         let spawn = [
             f64::from(x0) + 0.5 + dx,
             f64::from(fy + spec.start_dy),
@@ -2616,7 +2617,7 @@ async fn real_client_record_movement_corpus() {
         for (from, to, block) in spec.fills {
             let (a, b, c) = at(*from);
             let (d, e, f) = at(*to);
-            server_says(s, &format!("fill {a} {b} {c} {d} {e} {f} {block}")).await;
+            replies.push(server_says(s, &format!("fill {a} {b} {c} {d} {e} {f} {block}")).await);
             lane.fills.push(Fill {
                 from: *from,
                 to: *to,
@@ -2630,6 +2631,18 @@ async fn real_client_record_movement_corpus() {
             .await
             .unwrap();
         client.request(Command::WaitTicks(5)).await.unwrap();
+        if std::env::var_os("TUFF_CORPUS_DEBUG").is_some() {
+            let state = client.state().await.ok();
+            let floor = client
+                .block(spawn[0].floor() as i32, fy, spawn[2].floor() as i32)
+                .await
+                .ok();
+            eprintln!(
+                "CORPUS DEBUG {} spawn {spawn:?} client {:?} floor {floor:?} fills {replies:?}",
+                spec.name,
+                state.map(|s| (s.position, s.chunks))
+            );
+        }
         let started = server_says(s, &format!("tuff tracing {username} start")).await;
         let path = started.rsplit_once(": ").unwrap().1.trim().to_owned();
         let alive = drive_with(
