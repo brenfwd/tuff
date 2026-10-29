@@ -106,6 +106,10 @@ pub trait Host {
     fn select_slot(&mut self, _body: Body, _slot: u8) {}
     /// Uses the held item on a face of a block.
     fn place(&mut self, _body: Body, _against: Pos, _face: Face) {}
+    /// Uses the held item on a side face at a cursor height (0 to 1).
+    fn place_at(&mut self, body: Body, against: Pos, face: Face, _cursor_y: f32) {
+        self.place(body, against, face);
+    }
     /// What the body carries: menu slot, item and count.
     fn inventory(&mut self, _body: Body) -> Vec<Carried> {
         Vec::new()
@@ -207,6 +211,11 @@ fn perform(host: &mut impl Host, body: Body, at: &Vec3, actions: Vec<Action>) {
             Action::Select(slot) => host.select_slot(body, slot),
             Action::Dig(pos) => host.dig(body, pos, at),
             Action::Place { against, face } => host.place(body, against, face),
+            Action::PlaceAt {
+                against,
+                face,
+                cursor_y,
+            } => host.place_at(body, against, face, cursor_y),
             Action::Look { yaw, pitch } => host.look(body, yaw, pitch),
         }
     }

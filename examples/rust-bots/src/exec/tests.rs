@@ -4,6 +4,7 @@ use tuff_bots_api::control::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::Face;
 use super::double::Double;
 use crate::core::{Bots, Event};
 use crate::world::Class;
@@ -781,8 +782,19 @@ fn the_build_process_makes_a_hollow_cube_from_inventory_blocks() {
     let mut run = Run::with(Terrain::new(16, 8), (1.5, 1.0, 1.5), build_spec(&cells)).builder(30);
     run.run(6000);
     finished_with(&run, Event::ProcessDone);
-    assert_eq!(run.host.carried("minecraft:cobblestone"), 4);
+    let spent = u32::try_from(run.host.placed.len()).unwrap();
+    assert!(spent > 26, "the top layer needs a raised stance: {spent}");
+    assert_eq!(run.host.carried("minecraft:cobblestone"), 30 - spent);
     let terrain = run.host.terrain.borrow();
+    for cell in &run.host.placed {
+        let shell = cells.iter().any(|c| (c.0, c.1, c.2) == *cell);
+        assert_eq!(terrain.class(*cell).standable(), shell, "{cell:?}");
+    }
+    for (against, face, _, eye) in &run.host.clicks {
+        if *face == Face::Up {
+            assert!(*eye > f64::from(against.1) + 1.0, "{against:?} from {eye}");
+        }
+    }
     for (x, y, z, _) in &cells {
         assert!(
             terrain.class((*x, *y, *z)).standable(),
@@ -795,19 +807,36 @@ fn the_build_process_makes_a_hollow_cube_from_inventory_blocks() {
 }
 
 #[test]
+fn an_upper_half_stair_is_placed_by_clicking_a_side_face_high() {
+    let mut t = Terrain::new(16, 8);
+    t.wall((6, 1, 2));
+    let spec = build_spec(&[(5, 1, 2, "minecraft:oak_stairs[facing=east,half=top]")]);
+    let mut run = Run::with(t, (1.5, 1.0, 1.5), spec);
+    run.host.hotbar = vec![(1, "minecraft:oak_stairs".into(), 2)];
+    run.bots.set_policy("a", run.id, builder_policy()).unwrap();
+    run.run(1000);
+    finished_with(&run, Event::ProcessDone);
+    assert_eq!(run.host.clicks.len(), 1, "{:?}", run.host.clicks);
+    let (against, face, cursor_y, _) = run.host.clicks[0];
+    assert_eq!((against, face), ((6, 1, 2), Face::West));
+    assert!(cursor_y > 0.5, "{cursor_y}");
+}
+
+#[test]
 fn a_floating_block_gets_scaffolding_that_is_removed_after() {
     let spec = build_spec(&[(6, 4, 2, "minecraft:cobblestone")]);
-    let mut run = Run::with(Terrain::new(16, 8), (1.5, 1.0, 1.5), spec).builder(10);
+    let mut run = Run::with(Terrain::new(16, 8), (1.5, 1.0, 1.5), spec).builder(20);
     run.run(6000);
     finished_with(&run, Event::ProcessDone);
     let terrain = run.host.terrain.borrow();
     assert!(terrain.class((6, 4, 2)).standable());
-    for y in 1..4 {
-        assert!(terrain.class((6, y, 2)).passable(), "scaffold left at {y}");
+    for cell in run.host.placed.iter().filter(|c| **c != (6, 4, 2)) {
+        assert!(terrain.class(*cell).passable(), "scaffold left at {cell:?}");
     }
     drop(terrain);
     assert!(run.host.placed.len() >= 4);
-    assert_eq!(run.host.carried("minecraft:cobblestone"), 6);
+    let spent = u32::try_from(run.host.placed.len()).unwrap();
+    assert_eq!(run.host.carried("minecraft:cobblestone"), 20 - spent);
 }
 
 #[test]

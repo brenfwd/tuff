@@ -43,6 +43,8 @@ pub struct Double {
     pub hotbar: Vec<(u8, String, u32)>,
     pub selected: u8,
     pub placed: Vec<Pos>,
+    /// Each click: support block, face, cursor height and eye height.
+    pub clicks: Vec<(Pos, Face, f32, f64)>,
     pub tools: Option<Rc<RefCell<TableTools>>>,
     pub lowest: f64,
 }
@@ -98,6 +100,7 @@ impl Double {
             hotbar: Vec::new(),
             selected: 0,
             placed: Vec::new(),
+            clicks: Vec::new(),
             tools: None,
             lowest: at.1,
         }
@@ -261,7 +264,13 @@ impl Host for Double {
         self.selected = slot;
     }
 
-    fn place(&mut self, _: Body, against: Pos, face: Face) {
+    fn place(&mut self, body: Body, against: Pos, face: Face) {
+        self.place_at(body, against, face, 0.5 + 0.5 * face.normal().1 as f32);
+    }
+
+    fn place_at(&mut self, _: Body, against: Pos, face: Face, cursor_y: f32) {
+        self.clicks
+            .push((against, face, cursor_y, self.pos.y + 1.62));
         let (dx, dy, dz) = face.normal();
         let at = (against.0 + dx, against.1 + dy, against.2 + dz);
         let Some(held) = self

@@ -10,12 +10,18 @@ use std::rc::Rc;
 use tuff_bots_api::control::{BlockPos, BuildBlock, BuildSpec, Vec3};
 
 use crate::exec::Face;
-use crate::hands::{Breaker, Carried, Hands, Placer, prop};
+use crate::hands::{Breaker, Carried, Hands, Orient, Placer, prop, stand_works};
 use crate::path::{Pos, Tools};
 use crate::world::{Blocks, name_of};
 
 /// How deep a scaffold column may go below an unsupported block.
 const MAX_SCAFFOLD: i32 = 8;
+/// How far from a target column a standing pillar may go up.
+const PILLAR_RANGE: i32 = 2;
+/// How far below a target a pillar's ground may be.
+const PILLAR_DROP: i32 = 4;
+/// The tallest standing staircase a build may raise.
+const PILLAR_HEIGHT: i32 = 3;
 const MAX_RETRIES: u32 = 20;
 
 /// Targets bottom-up, a row at a time in alternating directions so the
@@ -214,11 +220,19 @@ impl Builder {
         Ok(false)
     }
 
-    fn scaffold_item(throwaway: &[String], carried: &[Carried]) -> Option<String> {
-        carried
-            .iter()
-            .filter(|(_, _, count)| *count > 0)
+    /// A throwaway block, or else a plain block of the build itself.
+    fn scaffold_item(&self, throwaway: &[String], carried: &[Carried]) -> Option<String> {
+        let stocked = carried.iter().filter(|(_, _, count)| *count > 0);
+        stocked
+            .clone()
             .find(|(_, held, _)| throwaway.iter().any(|t| name_of(t) == name_of(held)))
+            .or_else(|| {
+                stocked.clone().find(|(_, held, _)| {
+                    self.todo
+                        .iter()
+                        .any(|(_, state)| !state.contains('[') && name_of(state) == name_of(held))
+                })
+            })
             .map(|(_, held, _)| held.clone())
     }
 
@@ -262,14 +276,37 @@ impl Builder {
                         if reason == "in the way" && self.retries < MAX_RETRIES =>
                     {
                         self.retries += 1;
-                        if !scaffolding
-                            && let Some(i) = self.todo.iter().position(|(p, _)| *p == pos)
-                        {
+                        if scaffolding {
+                            self.scaffold.push_back(pos);
+                        } else if let Some(i) = self.todo.iter().position(|(p, _)| *p == pos) {
                             let item = self.todo.remove(i).unwrap();
                             self.todo.push_back(item);
                         }
                         self.stage = Stage::Seek;
                         Hands::Wait
+                    }
+                    Hands::Failed(reason) if reason == "no stand" && self.retries < MAX_RETRIES => {
+                        self.retries += 1;
+                        let state = self
+                            .todo
+                            .iter()
+                            .find(|(p, _)| *p == pos)
+                            .map(|(_, s)| s.clone())
+                            .unwrap_or_default();
+                        match self.plan_pillar(me, world, pos, &state) {
+                            Err(()) => Hands::Wait,
+                            Ok(Some(plan)) => {
+                                if scaffolding {
+                                    self.scaffold.push_front(pos);
+                                }
+                                for cell in plan.into_iter().rev() {
+                                    self.scaffold.push_front(cell);
+                                }
+                                self.stage = Stage::Seek;
+                                Hands::Wait
+                            }
+                            Ok(None) => Hands::Failed(reason),
+                        }
                     }
                     other => other,
                 }
@@ -286,7 +323,7 @@ impl Builder {
         throwaway: &[String],
     ) -> Hands {
         if let Some(&pos) = self.scaffold.front() {
-            let Some(item) = Self::scaffold_item(throwaway, carried) else {
+            let Some(item) = self.scaffold_item(throwaway, carried) else {
                 return Hands::Failed("missing materials: a scaffolding block".into());
             };
             self.scaffold.pop_front();
@@ -383,6 +420,100 @@ impl Builder {
             .collect();
         self.stage = Stage::Stripping(Breaker::new(&strip));
         Hands::Wait
+    }
+
+    /// Queues a throwaway staircase beside the build to stand on when no
+    /// ground stand reaches `target`; the cells to fill, bottom first. Column `i`
+    /// of a staircase of height `h` is `i + 1` blocks tall and the bot
+    /// stands on the last one.
+    fn plan_pillar(
+        &mut self,
+        me: &Vec3,
+        world: &mut dyn Blocks,
+        target: Pos,
+        state: &str,
+    ) -> Result<Option<Vec<Pos>>, ()> {
+        let orient = Orient::from_state(state);
+        let here = (me.x.floor() as i32, me.z.floor() as i32);
+        let mut starts: Vec<(i32, i32)> = Vec::new();
+        for dx in -PILLAR_RANGE..=PILLAR_RANGE {
+            for dz in -PILLAR_RANGE..=PILLAR_RANGE {
+                if (dx, dz) != (0, 0) {
+                    starts.push((target.0 + dx, target.2 + dz));
+                }
+            }
+        }
+        starts.sort_by_key(|c| (c.0 - here.0).abs() + (c.1 - here.1).abs());
+        for h in 1..=PILLAR_HEIGHT {
+            for &(x, z) in &starts {
+                for (sx, sz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    if let Some(plan) =
+                        self.staircase(world, here, (x, z), (sx, sz), h, target, &orient)?
+                    {
+                        return Ok(Some(plan));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn staircase(
+        &self,
+        world: &mut dyn Blocks,
+        here: (i32, i32),
+        start: (i32, i32),
+        step: (i32, i32),
+        h: i32,
+        target: Pos,
+        orient: &Orient,
+    ) -> Result<Option<Vec<Pos>>, ()> {
+        let column = |i: i32| (start.0 + step.0 * i, start.1 + step.1 * i);
+        let mut base = None;
+        for y in (target.1 - PILLAR_DROP..=target.1).rev() {
+            let (x, z) = start;
+            let ours = self.scaffolds.contains(&(x, y - 1, z));
+            if !ours && world.class_at(x, y - 1, z).map_err(|_| ())?.standable() {
+                base = Some(y);
+                break;
+            }
+        }
+        let Some(y) = base else {
+            return Ok(None);
+        };
+        for i in 0..h {
+            let (x, z) = column(i);
+            if (x, z) == here || (x, z) == (target.0, target.2) {
+                return Ok(None);
+            }
+            let ours = self.scaffolds.contains(&(x, y - 1, z));
+            if ours || !world.class_at(x, y - 1, z).map_err(|_| ())?.standable() {
+                return Ok(None);
+            }
+            let top = if i == h - 1 { y + i + 4 } else { y + i + 1 };
+            for cy in y..top {
+                let class = world.class_at(x, cy, z).map_err(|_| ())?;
+                let building =
+                    self.targets.contains(&(x, cy, z)) || self.scaffold.contains(&(x, cy, z));
+                let free = class.passable() && !class.climbable();
+                if building || !free {
+                    return Ok(None);
+                }
+            }
+        }
+        let (lx, lz) = column(h - 1);
+        if !stand_works(world, (lx, y + h, lz), target, orient)? {
+            return Ok(None);
+        }
+        let mut plan = Vec::new();
+        for j in 0..h {
+            for i in j..h {
+                let (x, z) = column(i);
+                plan.push((x, y + j, z));
+            }
+        }
+        Ok(Some(plan))
     }
 
     fn plan_scaffold(&mut self, world: &mut dyn Blocks, target: Pos) -> Hands {
