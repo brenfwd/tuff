@@ -1175,3 +1175,49 @@ fn a_freshly_joined_client_sprinting_off_its_first_tick_is_not_flagged() {
         }
     }
 }
+
+/// The server's movement speed while freezing in powder snow, `tick`
+/// ticks after the player waded in.
+fn frost_speed(tick: usize) -> f64 {
+    0.1 - 0.05 * (tick.min(140) as f64 / 140.0)
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn walking_through_powder_snow_at_high_latency_is_not_flagged() {
+    let snow = Block::PowderSnow.default_state();
+    let mirror = scene(move |_, _| vec![(62, stone()), (63, snow)]);
+    let lag = 5;
+    for (seed, yaw) in [(0, 0.0), (1, 37.0), (2, 211.0)] {
+        let start = [0.5 + f64::from(seed) * 0.13, 63.0, 0.5];
+        let mut client = Client::new(start);
+        let mut judge = Judge::new(start);
+        judge.facts.latency_ms = 250;
+        for _ in 0..20 {
+            client.tick(&mirror, Input::default());
+        }
+        judge.facts.position = client.sent;
+        for tick in 0..240 {
+            judge.facts.tick = 100 + tick as u64;
+            judge.facts.body.speed = frost_speed(tick);
+            client.speed = frost_speed(tick.saturating_sub(lag));
+            let held = Input {
+                forward: true,
+                sprint: tick % 80 > 40,
+                yaw,
+                ..Input::default()
+            };
+            judge.hold(&held);
+            if let Some(to) = client.tick(&mirror, held) {
+                judge.report(&mirror, to, client.on_ground);
+            }
+            judge.tick_end();
+            let before = client.position;
+            client.wrap();
+            if before != client.position {
+                judge.wrapped(client.sent);
+            }
+        }
+        assert!(judge.flags.is_empty(), "seed {seed}: {:#?}", judge.flags);
+    }
+}

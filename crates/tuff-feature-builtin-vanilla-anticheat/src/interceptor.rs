@@ -42,6 +42,8 @@ struct Player {
     link: Option<Link>,
     was_pending: bool,
     grace_until: Option<u64>,
+    /// The last tick the server had this player gliding.
+    glided_at: Option<u64>,
     vehicle_setback: Option<VehicleSetback>,
     anchors: Anchors,
     velocity: VelocityLedger,
@@ -77,6 +79,7 @@ impl Default for Player {
             link: None,
             was_pending: false,
             grace_until: None,
+            glided_at: None,
             vehicle_setback: None,
             anchors: Anchors::default(),
             velocity: VelocityLedger::default(),
@@ -217,6 +220,9 @@ const ECHO_SILENCE: u64 = 20;
 /// this long.
 const PUSH_GRACE_TICKS: u64 = 10;
 const TELEPORT_GRACE_TICKS: u64 = 60;
+/// Ticks beyond the round trip after the server ends a glide in which the
+/// client may still glide, or carry the glide's speed.
+const GLIDE_END_TICKS: u64 = 12;
 /// How far around a move entities are gathered for it.
 const NEARBY_REACH: f64 = 3.0;
 /// The ladder long airborne stretches without a clean descent climb.
@@ -374,6 +380,13 @@ fn facts_of(
         prediction: None,
         entity_id: session.id(),
     }
+}
+
+/// Compatibility: a client keeps gliding until it hears the glide ended,
+/// and keeps the glide's speed for a few ticks after.
+fn glide_end_window(latency_ms: i32) -> u64 {
+    let round_trip = u64::try_from(latency_ms.max(0)).unwrap_or(0) * 2;
+    round_trip.div_ceil(50) + GLIDE_END_TICKS
 }
 
 /// The movement attributes last synced to the client, without sprint.
@@ -623,6 +636,14 @@ impl ActionInterceptor {
             &settings,
         );
         facts.echoes = echoes;
+        if session.motion.glide.active {
+            player.glided_at = Some(session.tick);
+        } else if player
+            .glided_at
+            .is_some_and(|at| session.tick <= at + glide_end_window(session.net.latency_ms))
+        {
+            facts.velocity = true;
+        }
         let mut ignored = None;
         player
             .velocity

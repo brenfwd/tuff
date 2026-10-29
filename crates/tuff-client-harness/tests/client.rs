@@ -2464,6 +2464,18 @@ fn corpus_flagged_dir() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/corpus-flagged")
 }
 
+fn corpus_out_dir() -> std::path::PathBuf {
+    std::env::var_os("TUFF_CORPUS_OUT_DIR").map_or_else(
+        || std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/world/fixtures"),
+        std::path::PathBuf::from,
+    )
+}
+
+fn corpus_summary(file: &str, lane: &str, rendered: &str, alive: bool, report: &str) {
+    let ticks = rendered.lines().filter(|l| l.trim() == "T").count();
+    eprintln!("CORPUS SUMMARY {file} {lane} ticks={ticks} alive={alive} report={report}");
+}
+
 fn save_flagged(file: &str, lane: &str) {
     let dir = corpus_flagged_dir();
     std::fs::create_dir_all(&dir).unwrap();
@@ -2544,8 +2556,7 @@ async fn real_client_record_movement_corpus() {
     server_says(s, &format!("gamemode survival {username}")).await;
     let [px, py, pz] = state.position.unwrap();
     let (x0, fy, z0) = (px.floor() as i32, py.floor() as i32 + 40, pz.floor() as i32);
-    let out_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/world/fixtures");
+    let out_dir = corpus_out_dir();
     let seed = corpus_env("TUFF_CORPUS_SEED", 0);
     let rounds = corpus_env("TUFF_CORPUS_ROUNDS", 1) as u32;
     let file = tuff_client_harness::corpus::file_name("movement_corpus", rtt, seed);
@@ -2638,6 +2649,7 @@ async fn real_client_record_movement_corpus() {
         let _ = std::fs::remove_file(&path);
         let rendered = lane.render([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
+        corpus_summary(&file, spec.name, &rendered, alive, &report);
         if alive && report.contains("no anti-cheat violations") {
             text.push_str(&rendered);
             std::fs::write(out_dir.join(&file), &text).unwrap();
@@ -2794,8 +2806,7 @@ async fn real_client_record_special_movement_corpus() {
     server_says(s, &format!("gamemode survival {username}")).await;
     let [px, py, pz] = state.position.unwrap();
     let (x0, fy, z0) = (px.floor() as i32, py.floor() as i32 + 40, pz.floor() as i32);
-    let out_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/world/fixtures");
+    let out_dir = corpus_out_dir();
     let seed = corpus_env("TUFF_CORPUS_SEED", 0);
     let rounds = corpus_env("TUFF_CORPUS_ROUNDS", 1) as u32;
     let file = tuff_client_harness::corpus::file_name("movement_corpus_special", rtt, seed);
@@ -2980,7 +2991,11 @@ async fn real_client_record_special_movement_corpus() {
                         client.request(Command::Use).await.unwrap();
                         next_use = t + 2;
                     }
-                    t = match client.state().await.unwrap().tick {
+                    let now = client.state().await.unwrap();
+                    if now.screen != "none" {
+                        break;
+                    }
+                    t = match now.tick {
                         Some(now) => (now - start) as u32,
                         None => t + 1,
                     };
@@ -3009,6 +3024,7 @@ async fn real_client_record_special_movement_corpus() {
         let rendered = lane.render([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
         let alive = client.state().await.is_ok_and(|st| st.screen == "none");
+        corpus_summary(&file, spec.name, &rendered, alive, &report);
         if alive && report.contains("no anti-cheat violations") {
             text.push_str(&rendered);
             std::fs::write(out_dir.join(&file), &text).unwrap();

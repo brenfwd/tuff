@@ -67,6 +67,9 @@ pub(super) const LEVITATION_EASE: f64 = 0.2;
 /// Ticks after the server changed a state the client learns of late
 /// (levitation, gliding) in which the client may still move as before.
 pub(super) const STATE_CATCH_UP: u64 = 40;
+/// Ticks beyond the measured round trip in which the client may still
+/// move under movement attributes the server has since changed.
+pub(super) const SYNC_CATCH_UP: u64 = 4;
 /// Ticks past a round trip in which the client may still see the
 /// firework the server already removed.
 pub(super) const BOOST_CATCH_UP: u64 = 5;
