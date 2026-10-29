@@ -20,6 +20,7 @@ const APPROACH_RADIUS: f64 = 2.5;
 const EYE: f64 = 1.62;
 /// How far the eyes may drift between the decision and the click.
 const VIEW_SLACK: f64 = 0.3;
+const SETTLE_TICKS: u32 = 1;
 const STAND_RADIUS: f64 = 0.6;
 const STAND_SEARCH: i32 = 4;
 const RECHECK_TICKS: u32 = 5;
@@ -90,6 +91,7 @@ enum Phase {
 pub struct Breaker {
     targets: VecDeque<Pos>,
     phase: Phase,
+    stand: Option<(Pos, Pos)>,
 }
 
 impl Breaker {
@@ -97,7 +99,48 @@ impl Breaker {
         Self {
             targets: targets.iter().map(|p| (p.x, p.y, p.z)).collect(),
             phase: Phase::Seek,
+            stand: None,
         }
+    }
+
+    /// A goal that brings a face of `pos` into clear view, `None` when it
+    /// is visible already or no stand shows it.
+    fn sighted(&mut self, me: &Vec3, world: &mut dyn Blocks, pos: Pos) -> Result<Option<Goal>, ()> {
+        let eye = (me.x, me.y + EYE, me.z);
+        let mut faces = Vec::new();
+        for face in Face::ALL {
+            let (dx, dy, dz) = face.normal();
+            if world
+                .class_at(pos.0 + dx, pos.1 + dy, pos.2 + dz)
+                .map_err(|_| ())?
+                .passable()
+            {
+                faces.push((pos, face));
+            }
+        }
+        for &(against, face) in &faces {
+            if clear_view(world, eye, against, face)? {
+                return Ok(None);
+            }
+        }
+        let stand = match self.stand {
+            Some((target, stand)) if target == pos => Some(stand),
+            _ => {
+                let found = find_stand(world, me, false, pos, &HashSet::new(), &faces)?;
+                self.stand = found.map(|s| (pos, s));
+                found
+            }
+        };
+        Ok(stand.map(|s| {
+            Goal::Leaf(LeafGoal::Near(NearGoal {
+                pos: BlockPos {
+                    x: s.0,
+                    y: s.1,
+                    z: s.2,
+                },
+                radius: STAND_RADIUS,
+            }))
+        }))
     }
 
     pub fn tick(
@@ -140,6 +183,11 @@ impl Breaker {
                 if !in_reach(me, pos) {
                     return approach(me, pos);
                 }
+                match self.sighted(me, world, pos) {
+                    Err(()) => return Hands::Wait,
+                    Ok(Some(goal)) if !goal_reached(&goal, me) => return Hands::Goal(goal),
+                    Ok(_) => {}
+                }
                 let Ok(state) = world.state_at(pos.0, pos.1, pos.2) else {
                     return Hands::Wait;
                 };
@@ -174,7 +222,12 @@ pub struct Orient {
     /// Faces of the support block that give the wanted orientation;
     /// empty means any.
     pub clicked: Vec<Face>,
+    /// An upper-half block: also placeable by clicking a side face high.
+    pub high: bool,
 }
+
+/// Cursor height of a side click that makes a half block sit high.
+const HIGH_CURSOR: f32 = 0.9;
 
 pub(crate) fn prop<'a>(state: &'a str, key: &str) -> Option<&'a str> {
     let inner = state.split_once('[')?.1.strip_suffix(']')?;
@@ -207,6 +260,7 @@ impl Orient {
                 _ => vec![],
             };
         } else if let Some(half) = prop(state, "half").or_else(|| prop(state, "type")) {
+            out.high = half == "top";
             out.clicked = match half {
                 "top" => vec![Face::Down],
                 "bottom" => vec![Face::Up],
@@ -223,6 +277,7 @@ pub struct Placer {
     orient: Orient,
     phase: Phase,
     stand: Option<Pos>,
+    settled: Option<(Vec3, u32)>,
     avoid: Rc<HashSet<Pos>>,
 }
 
@@ -234,7 +289,17 @@ fn clear_view(
     against: Pos,
     face: Face,
 ) -> Result<bool, ()> {
-    for (ox, oz) in [(0.0, 0.0), (VIEW_SLACK, 0.0), (-VIEW_SLACK, 0.0), (0.0, VIEW_SLACK), (0.0, -VIEW_SLACK)] {
+    for (ox, oz) in [
+        (0.0, 0.0),
+        (VIEW_SLACK, 0.0),
+        (-VIEW_SLACK, 0.0),
+        (0.0, VIEW_SLACK),
+        (0.0, -VIEW_SLACK),
+        (VIEW_SLACK, VIEW_SLACK),
+        (VIEW_SLACK, -VIEW_SLACK),
+        (-VIEW_SLACK, VIEW_SLACK),
+        (-VIEW_SLACK, -VIEW_SLACK),
+    ] {
         if !clear_ray(world, (eye.0 + ox, eye.1, eye.2 + oz), against, face)? {
             return Ok(false);
         }
@@ -258,7 +323,9 @@ fn clear_ray(
     if dx * f64::from(nx) + dy * f64::from(ny) + dz * f64::from(nz) > -0.05 {
         return Ok(false);
     }
-    let steps = ((dx * dx + dy * dy + dz * dz).sqrt() / 0.1).ceil().max(1.0) as u32;
+    let steps = ((dx * dx + dy * dy + dz * dz).sqrt() / 0.02)
+        .ceil()
+        .max(1.0) as u32;
     for i in 0..steps {
         let t = f64::from(i) / f64::from(steps);
         let cell = (
@@ -278,11 +345,65 @@ fn clear_ray(
     Ok(true)
 }
 
+/// The support faces to click for a block at `pos`, preferred ones first.
+fn candidates(world: &mut dyn Blocks, pos: Pos, orient: &Orient) -> Result<Vec<(Pos, Face)>, ()> {
+    let preferred =
+        |f: &Face| orient.clicked.contains(&opposite(*f)) || (orient.high && f.normal().1 == 0);
+    let mut faces: Vec<Face> = Face::ALL.to_vec();
+    faces.sort_by_key(|f| (!preferred(f), orient.high && f.normal().1 != 0));
+    let want_preferred = faces.iter().any(preferred);
+    let mut standable = Vec::new();
+    let mut preferred_only = Vec::new();
+    for face in faces {
+        let (dx, dy, dz) = face.normal();
+        let n = (pos.0 + dx, pos.1 + dy, pos.2 + dz);
+        if world.class_at(n.0, n.1, n.2).map_err(|_| ())?.standable() {
+            standable.push((n, opposite(face)));
+            if preferred(&face) {
+                preferred_only.push((n, opposite(face)));
+            }
+        }
+    }
+    Ok(if want_preferred && !preferred_only.is_empty() {
+        preferred_only
+    } else {
+        standable
+    })
+}
+
+/// Whether a body standing in `stand` can click a face for the block at
+/// `target`.
+pub(crate) fn stand_works(
+    world: &mut dyn Blocks,
+    stand: Pos,
+    target: Pos,
+    orient: &Orient,
+) -> Result<bool, ()> {
+    let candidates = candidates(world, target, orient)?;
+    let eye = (
+        f64::from(stand.0) + 0.5,
+        f64::from(stand.1) + EYE,
+        f64::from(stand.2) + 0.5,
+    );
+    let feet = Vec3 {
+        x: eye.0,
+        y: f64::from(stand.1),
+        z: eye.2,
+    };
+    for (against, face) in candidates {
+        if in_reach(&feet, against) && clear_view(world, eye, against, face)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// A cell the bot can walk to from which one of the faces can be clicked,
 /// the nearest first.
 fn find_stand(
     world: &mut dyn Blocks,
     me: &Vec3,
+    leave_here: bool,
     target: Pos,
     avoid: &HashSet<Pos>,
     candidates: &[(Pos, Face)],
@@ -302,7 +423,7 @@ fn find_stand(
             f64::from(cell.2) + 0.5,
         );
         let in_build = avoid.contains(&cell) || avoid.contains(&(cell.0, cell.1 + 1, cell.2));
-        if !in_target && !in_build {
+        if !in_target && !in_build && !(leave_here && cell == here) {
             let feet = Vec3 {
                 x: eye.0,
                 y: f64::from(cell.1),
@@ -315,8 +436,19 @@ fn find_stand(
             }
         }
         for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-            for dy in [0, 1, -1] {
+            'steps: for dy in [0, 1, -1, -2, -3] {
                 let next = (cell.0 + dx, cell.1 + dy, cell.2 + dz);
+                if dy < -1 {
+                    for up in [0, 1] {
+                        let open = world
+                            .class_at(next.0, cell.1 + up, next.2)
+                            .map_err(|_| ())?
+                            .passable();
+                        if !open {
+                            continue 'steps;
+                        }
+                    }
+                }
                 if (next.0 - here.0).abs() > STAND_SEARCH
                     || (next.2 - here.2).abs() > STAND_SEARCH
                     || !seen.insert(next)
@@ -332,7 +464,7 @@ fn find_stand(
     Ok(None)
 }
 
-fn walkable(world: &mut dyn Blocks, cell: Pos) -> Result<bool, ()> {
+pub(crate) fn walkable(world: &mut dyn Blocks, cell: Pos) -> Result<bool, ()> {
     let mut ok = true;
     for (dy, floor) in [(-1, true), (0, false), (1, false)] {
         let class = world
@@ -379,6 +511,7 @@ impl Placer {
             orient: Orient::default(),
             phase: Phase::Seek,
             stand: None,
+            settled: None,
             avoid: Rc::default(),
         }
     }
@@ -425,46 +558,16 @@ impl Placer {
                 let Some(slot) = hotbar_slot(carried, &self.item) else {
                     return Hands::Failed("no item".into());
                 };
-                let mut candidates: Vec<(Pos, Face)> = Vec::new();
-                let mut faces: Vec<Face> = Face::ALL.to_vec();
-                faces.sort_by_key(|f| !self.orient.clicked.contains(&opposite(*f)));
-                let preferred = |f: &Face| self.orient.clicked.contains(&opposite(*f));
-                let want_preferred = faces.iter().any(preferred);
-                for face in faces {
-                    let (dx, dy, dz) = face.normal();
-                    let n = (pos.0 + dx, pos.1 + dy, pos.2 + dz);
-                    match world.class_at(n.0, n.1, n.2) {
-                        Err(_) => return Hands::Wait,
-                        Ok(c) if c.standable() && (!want_preferred || preferred(&face)) => {
-                            candidates.push((n, opposite(face)));
-                        }
-                        Ok(_) => {}
-                    }
-                }
-                if candidates.is_empty() {
-                    candidates = Face::ALL
-                        .iter()
-                        .map(|f| {
-                            let (dx, dy, dz) = f.normal();
-                            ((pos.0 + dx, pos.1 + dy, pos.2 + dz), opposite(*f))
-                        })
-                        .collect();
-                    let mut standable = Vec::new();
-                    for (n, face) in candidates {
-                        match world.class_at(n.0, n.1, n.2) {
-                            Err(_) => return Hands::Wait,
-                            Ok(c) if c.standable() => standable.push((n, face)),
-                            Ok(_) => {}
-                        }
-                    }
-                    candidates = standable;
-                }
+                let Ok(candidates) = candidates(world, pos, &self.orient) else {
+                    return Hands::Wait;
+                };
                 if candidates.is_empty() {
                     return Hands::Failed("nothing to place against".into());
                 }
                 let eye = (me.x, me.y + EYE, me.z);
                 let mut support = None;
-                for &(n, face) in &candidates {
+                let blocked = overlaps_body(me, pos);
+                for &(n, face) in candidates.iter().filter(|_| !blocked) {
                     match clear_view(world, eye, n, face) {
                         Err(()) => return Hands::Wait,
                         Ok(true) => {
@@ -476,12 +579,15 @@ impl Placer {
                 }
                 if support.is_none() {
                     if self.stand.is_none() {
-                        match find_stand(world, me, pos, &self.avoid, &candidates) {
+                        match find_stand(world, me, blocked, pos, &self.avoid, &candidates) {
                             Err(()) => return Hands::Wait,
                             Ok(stand) => self.stand = stand,
                         }
                     }
-                    if let Some(stand) = self.stand {
+                    let Some(stand) = self.stand else {
+                        return Hands::Failed("no stand".into());
+                    };
+                    {
                         let goal = Goal::Leaf(LeafGoal::Near(NearGoal {
                             pos: BlockPos {
                                 x: stand.0,
@@ -505,6 +611,20 @@ impl Placer {
                 if !in_reach(me, pos) {
                     return approach(me, pos);
                 }
+                let held = match &self.settled {
+                    Some((last, n))
+                        if (last.x - me.x).abs() < 0.02
+                            && (last.y - me.y).abs() < 0.02
+                            && (last.z - me.z).abs() < 0.02 =>
+                    {
+                        n + 1
+                    }
+                    _ => 0,
+                };
+                self.settled = Some((me.clone(), held));
+                if held < SETTLE_TICKS {
+                    return Hands::Wait;
+                }
                 self.phase = Phase::Working {
                     pos,
                     ticks: 0,
@@ -514,7 +634,15 @@ impl Placer {
                 if let Some((yaw, pitch)) = self.orient.look {
                     acts.push(Action::Look { yaw, pitch });
                 }
-                acts.push(Action::Place { against, face });
+                if self.orient.high && face.normal().1 == 0 {
+                    acts.push(Action::PlaceAt {
+                        against,
+                        face,
+                        cursor_y: HIGH_CURSOR,
+                    });
+                } else {
+                    acts.push(Action::Place { against, face });
+                }
                 Hands::Act(acts)
             }
         }
@@ -534,6 +662,14 @@ mod orient_tests {
         assert_eq!(o.look, None);
         assert_eq!(o.clicked, [Face::East, Face::West]);
         assert_eq!(Orient::from_state("minecraft:stone"), Orient::default());
+    }
+
+    #[test]
+    fn upper_halves_are_high_and_lower_halves_are_not() {
+        assert!(Orient::from_state("minecraft:oak_stairs[half=top]").high);
+        assert!(Orient::from_state("minecraft:oak_slab[type=top]").high);
+        assert!(!Orient::from_state("minecraft:oak_stairs[half=bottom]").high);
+        assert!(!Orient::from_state("minecraft:oak_log[axis=y]").high);
     }
 
     #[test]

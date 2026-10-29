@@ -57,6 +57,13 @@ pub enum Action {
     Dig(Pos),
     /// Uses the held item on a face of a block.
     Place { against: Pos, face: Face },
+    /// Uses the held item on a side face at this height (0 to 1) of the
+    /// clicked block, so half blocks land in the upper half.
+    PlaceAt {
+        against: Pos,
+        face: Face,
+        cursor_y: f32,
+    },
     /// Turns the body before the next action.
     Look { yaw: f32, pitch: f32 },
 }

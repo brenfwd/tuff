@@ -235,6 +235,10 @@ impl Host for Real {
     }
 
     fn place(&mut self, body: Body, against: (i32, i32, i32), face: exec::Face) {
+        self.place_at(body, against, face, 0.5 + 0.5 * face.normal().1 as f32);
+    }
+
+    fn place_at(&mut self, body: Body, against: (i32, i32, i32), face: exec::Face, cursor_y: f32) {
         let Some((fake, _, _)) = self.bodies.get(&body) else {
             return;
         };
@@ -249,7 +253,11 @@ impl Host for Real {
             direction(face),
             tuff_plugin_sdk::types::Vec3 {
                 x: half(nx),
-                y: half(ny),
+                y: if ny == 0 {
+                    f64::from(cursor_y)
+                } else {
+                    half(ny)
+                },
                 z: half(nz),
             },
             false,

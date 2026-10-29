@@ -1034,7 +1034,7 @@ async fn bots_build_a_hollow_cube_from_inventory_blocks() {
     };
     run.build_arena().await;
     let op = run.operator_bot("Op", 0, 1, "Mate").await;
-    run.server("give Mate cobblestone 40").await;
+    run.server("give Mate cobblestone 64").await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     run.build_and_wait(op, "Mate", "bots build Mate box 3 3 3 cobblestone hollow")
         .await;
@@ -1047,8 +1047,40 @@ async fn bots_build_a_hollow_cube_from_inventory_blocks() {
             }
         }
     }
-    let left = run.server("clear Mate cobblestone 0").await;
-    assert!(left.contains("14"), "{left}");
+    let flags = run.server("anticheat violations").await;
+    assert!(
+        flags.contains("No player has anti-cheat violations"),
+        "{flags}"
+    );
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bots_build_upper_half_stairs_without_flags() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    run.build_arena().await;
+    run.server("setblock 3 150 0 stone").await;
+    let op = run.operator_bot("Op", 0, 1, "Mate").await;
+    run.server("give Mate oak_stairs 4").await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    run.build_and_wait(
+        op,
+        "Mate",
+        "bots build Mate line z 1 oak_stairs[facing=east,half=top]",
+    )
+    .await;
+    assert!(
+        run.block_is(2, 150, 0, "oak_stairs[facing=east,half=top]")
+            .await
+    );
+    let flags = run.server("anticheat violations").await;
+    assert!(
+        flags.contains("No player has anti-cheat violations"),
+        "{flags}"
+    );
     run.stop().await;
 }
 
