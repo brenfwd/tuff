@@ -32,7 +32,7 @@ impl Check for SprintSpoof {
             return Flag::cancel("sprint", 1.0);
         }
         let start = *action == 1;
-        let repeated = start == self.sprinting;
+        let repeated = start == (self.sprinting && (!start || facts.sprinting));
         self.sprinting = start;
         if start && facts.sneaking {
             return Flag::cancel("sprint", 1.0);
@@ -264,6 +264,19 @@ mod tests {
             let action = if tick % 2 == 0 { 1 } else { 2 };
             assert_eq!(check.examine(&f, &Serverbound::PlayerCommand(action)), None);
         }
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_start_after_the_server_cleared_sprint_is_not_repeated() {
+        let mut check = SprintSpoof::default();
+        let mut f = facts();
+        f.sprinting = true;
+        assert_eq!(check.examine(&f, &Serverbound::PlayerCommand(1)), None);
+        assert!(check.examine(&f, &Serverbound::PlayerCommand(1)).is_some());
+        f.sprinting = false;
+        f.tick = 100;
+        assert_eq!(check.examine(&f, &Serverbound::PlayerCommand(1)), None);
     }
 
     #[tuff_core::watchdog]

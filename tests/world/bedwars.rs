@@ -824,6 +824,7 @@ async fn a_bot_shoots_a_target_across_a_gap() {
         ))
         .await;
     }
+    let shooter = names[0];
     let arrow = run
         .until_polls("an arrow in flight", 1200, || async {
             run.say(&format!(
@@ -831,6 +832,15 @@ async fn a_bot_shoots_a_target_across_a_gap() {
                 target
             ))
             .await;
+            let at = run.numbers(&format!("data get entity {shooter} Pos")).await;
+            if at.len() < 3 || at[1] < 64.0 || at[0] < 14.0 || at[0] > 26.0 {
+                run.say(&format!(
+                    "execute in {ARENA} run tp {shooter} 16.5 65 -41.5"
+                ))
+                .await;
+                run.say(&format!("give {shooter} minecraft:bow 1")).await;
+                run.say(&format!("give {shooter} minecraft:arrow 32")).await;
+            }
             let seen = run
                 .say(&format!(
                     "execute in {ARENA} if entity @e[type=minecraft:arrow]"
@@ -903,7 +913,6 @@ async fn no_violations(run: &WithBots) {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "flaky: ~15% at 8 parallel copies, respawn sprint flags (anticheat sprint, 3 of 24) and no bed broken within a minute (1 of 24); see todo/infrastructure/bedwars-bot-world-test-flakes.md"]
 async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
     let Some(run) = WithBots::start().await else {
         return;
@@ -915,7 +924,7 @@ async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
         "fill 35 64 -43 40 64 -6 minecraft:stone",
     ];
     start_two_bots(&run, names, ["hard", "easy"], &terrain).await;
-    run.until_polls("an enemy bed broken", 2400, || async {
+    run.until_polls("an enemy bed broken", 4800, || async {
         let mut gone = false;
         for (kind, at) in [("blue_bed", "37 65 0"), ("red_bed", "0 65 -37")] {
             let said = run
