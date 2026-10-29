@@ -671,8 +671,12 @@ impl WithBots {
         let modes = format!("{:?}", self.modes.lock().unwrap());
         let online = self.say("list").await;
         let games = self.bedwars("list").await;
+        let players = self.say("execute as @a run data get entity @s Pos").await;
+        let health = self
+            .say("execute as @a run data get entity @s Health")
+            .await;
         panic!(
-            "{what} did not happen within a minute; modes {modes}; online {online}; games {games}"
+            "{what} did not happen within a minute; modes {modes}; online {online}; games {games}; positions {players}; health {health}"
         );
     }
 
@@ -800,15 +804,18 @@ async fn a_bot_shoots_a_target_across_a_gap() {
         home.then_some(())
     })
     .await;
+    let target = names[1];
     run.say(&format!(
         "execute in {ARENA} run fill 16 64 -44 24 64 -39 minecraft:stone"
     ))
     .await;
     run.say(&format!(
-        "execute in {ARENA} run tp {} 20.5 65 -41.5",
-        names[1]
+        "execute in {ARENA} run tp {} 16.5 65 -41.5",
+        names[0]
     ))
     .await;
+    run.say(&format!("execute in {ARENA} run tp {target} 23.5 65 -41.5"))
+        .await;
     for name in names {
         run.say(&format!("give {name} minecraft:bow 1")).await;
         run.say(&format!("give {name} minecraft:arrow 32")).await;
@@ -820,8 +827,8 @@ async fn a_bot_shoots_a_target_across_a_gap() {
     let arrow = run
         .until_polls("an arrow in flight", 1200, || async {
             run.say(&format!(
-                "execute in {ARENA} run tp {} 20.5 65 -41.5",
-                names[1]
+                "execute in {ARENA} run tp {} 23.5 65 -41.5",
+                target
             ))
             .await;
             let seen = run
@@ -830,7 +837,7 @@ async fn a_bot_shoots_a_target_across_a_gap() {
                 ))
                 .await;
             let health = run
-                .numbers(&format!("data get entity {} Health", names[1]))
+                .numbers(&format!("data get entity {} Health", target))
                 .await;
             let hit = health.first().is_some_and(|h| *h < 20.0);
             (!seen.contains("Test failed") || hit).then_some(seen)
@@ -896,7 +903,7 @@ async fn no_violations(run: &WithBots) {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "flaky under load: bots fall off the path and respawn sprint flags; see todo/infrastructure/bedwars-bot-world-test-flakes.md"]
+#[ignore = "flaky: ~15% at 8 parallel copies, respawn sprint flags (anticheat sprint, 3 of 24) and no bed broken within a minute (1 of 24); see todo/infrastructure/bedwars-bot-world-test-flakes.md"]
 async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
     let Some(run) = WithBots::start().await else {
         return;
