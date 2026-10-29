@@ -9,7 +9,7 @@ use tuff_bots_api::control::{BlockPos, FarmSpec, Goal, LeafGoal, NearGoal, Vec3}
 use crate::core::goal_reached;
 use crate::exec::{Action, Face};
 use crate::hands::{Carried, hotbar_slot};
-use crate::world::{Blocks, name_of};
+use crate::world::{Blocks, Class, name_of};
 
 pub type Pos = (i32, i32, i32);
 
@@ -26,6 +26,10 @@ const COLLECT_RADIUS: f64 = 0.5;
 const PLACE_TICKS: u32 = 20;
 const MAX_PLANT_TRIES: u8 = 4;
 const SCAN_INTERVAL: u32 = 10;
+const SEARCH: i32 = 3;
+const STAND_RADIUS: f64 = 0.6;
+const COLLECT_REACH: f64 = 1.3;
+const MAX_FERTILIZE_TRIES: u8 = 4;
 
 #[derive(Debug, PartialEq)]
 pub enum Farming {
@@ -114,6 +118,7 @@ enum Phase {
     Digging { pos: Pos, crop: String, ticks: u32 },
     Collect { pos: Pos, ticks: u32 },
     Planting { pos: Pos, crop: String, ticks: u32 },
+    Fertilizing { pos: Pos, age: Option<u32>, ticks: u32 },
 }
 
 pub struct Farmer {
@@ -124,6 +129,8 @@ pub struct Farmer {
     replants: Vec<(Pos, String)>,
     bad: HashSet<Pos>,
     tries: std::collections::HashMap<Pos, u8>,
+    fertilize_tries: std::collections::HashMap<Pos, u8>,
+    sown: HashSet<Pos>,
     current: Option<Pos>,
     cooldown: u32,
     harvested: u32,
@@ -140,6 +147,8 @@ impl Farmer {
             replants: Vec::new(),
             bad: HashSet::new(),
             tries: std::collections::HashMap::new(),
+            fertilize_tries: std::collections::HashMap::new(),
+            sown: HashSet::new(),
             current: None,
             cooldown: 0,
             harvested: 0,
@@ -244,9 +253,14 @@ impl Farmer {
                 Farming::Wait
             }
             Phase::Collect { pos, ticks } => {
+                let stand = self.standing_cell(me, world, pos, true);
                 let c = centre(pos);
-                let close = (c.x - me.x).hypot(c.z - me.z) <= COLLECT_RADIUS + 0.1
-                    && (c.y - me.y).abs() <= 1.5;
+                let reach = if stand.is_some() {
+                    COLLECT_REACH
+                } else {
+                    COLLECT_RADIUS + 0.1
+                };
+                let close = (c.x - me.x).hypot(c.z - me.z) <= reach && (c.y - me.y).abs() <= 1.5;
                 if ticks == 0 || (close && ticks <= COLLECT_TICKS - PICKUP_DELAY) {
                     self.phase = Phase::Seek;
                     return Farming::Wait;
@@ -255,7 +269,34 @@ impl Farmer {
                     pos,
                     ticks: ticks - 1,
                 };
-                Farming::Goal(near(pos, COLLECT_RADIUS))
+                Farming::Goal(match stand {
+                    Some(cell) => near(cell, STAND_RADIUS),
+                    None => near(pos, COLLECT_RADIUS),
+                })
+            }
+            Phase::Fertilizing { pos, age: before, ticks } => {
+                if ticks.is_multiple_of(2) {
+                    world.refresh(&[pos]);
+                }
+                let now = Self::state(world, pos)
+                    .ok()
+                    .flatten()
+                    .and_then(|s| age(&s));
+                if now != before {
+                    self.phase = Phase::Seek;
+                    return Farming::Wait;
+                }
+                if ticks >= PLACE_TICKS {
+                    *self.fertilize_tries.entry(pos).or_insert(0) += 1;
+                    self.phase = Phase::Seek;
+                    return Farming::Wait;
+                }
+                self.phase = Phase::Fertilizing {
+                    pos,
+                    age: before,
+                    ticks: ticks + 1,
+                };
+                Farming::Wait
             }
             Phase::Planting { pos, crop, ticks } => {
                 if ticks.is_multiple_of(2) {
@@ -313,7 +354,7 @@ impl Farmer {
                 return Some(Farming::Wait);
             }
             if !in_reach(me, pos) {
-                let goal = near(pos, APPROACH_RADIUS);
+                let goal = self.approach(me, world, pos);
                 if goal_reached(&goal, me) {
                     self.replants.remove(i);
                     return Some(Farming::Wait);
@@ -321,6 +362,7 @@ impl Farmer {
                 return Some(Farming::Goal(goal));
             }
             self.replants.remove(i);
+            self.sown.insert(pos);
             self.phase = Phase::Planting {
                 pos,
                 crop,
@@ -336,6 +378,130 @@ impl Farmer {
         }
     }
 
+    /// A cell to stand on within reach of `target` whose floor is not
+    /// farmland, so walking there never tramples the field.
+    fn standing_cell(
+        &self,
+        me: &Vec3,
+        world: &mut dyn Blocks,
+        target: Pos,
+        closest: bool,
+    ) -> Option<Pos> {
+        let tc = centre(target);
+        let mut best: Option<((f64, f64), Pos)> = None;
+        for dx in -SEARCH..=SEARCH {
+            for dy in -1..=1 {
+                for dz in -SEARCH..=SEARCH {
+                    let cell = (target.0 + dx, target.1 + dy, target.2 + dz);
+                    let eyes = Vec3 {
+                        x: f64::from(cell.0) + 0.5,
+                        y: f64::from(cell.1) + EYE,
+                        z: f64::from(cell.2) + 0.5,
+                    };
+                    if dist2(&tc, &eyes) > (REACH - 0.4).powi(2) {
+                        continue;
+                    }
+                    let floor = Self::state(world, (cell.0, cell.1 - 1, cell.2));
+                    let feet = Self::state(world, cell);
+                    let head = Self::state(world, (cell.0, cell.1 + 1, cell.2));
+                    let (Ok(Some(floor)), Ok(feet), Ok(head)) = (floor, feet, head) else {
+                        continue;
+                    };
+                    let open = |s: Option<String>| s.is_none_or(|s| name_of(&s) == "air");
+                    let solid = world
+                        .class_at(cell.0, cell.1 - 1, cell.2)
+                        .is_ok_and(|c| c.has(Class::STANDABLE));
+                    if solid
+                        && name_of(&floor) != "farmland"
+                        && open(feet)
+                        && open(head)
+                    {
+                        let c = centre(cell);
+                        let key = if closest {
+                            ((c.x - tc.x).hypot(c.z - tc.z), dist2(&c, me))
+                        } else {
+                            (dist2(&c, me), 0.0)
+                        };
+                        if best.is_none_or(|(b, _)| key < b) {
+                            best = Some((key, cell));
+                        }
+                    }
+                }
+            }
+        }
+        best.map(|(_, c)| c)
+    }
+
+    fn approach(&self, me: &Vec3, world: &mut dyn Blocks, pos: Pos) -> Goal {
+        match self.standing_cell(me, world, pos, false) {
+            Some(cell) => near(cell, STAND_RADIUS),
+            None => near(pos, APPROACH_RADIUS),
+        }
+    }
+
+    fn fertilize(
+        &mut self,
+        me: &Vec3,
+        world: &mut dyn Blocks,
+        carried: &[Carried],
+    ) -> Result<Option<Farming>, ()> {
+        let Some(slot) = hotbar_slot(carried, "bone_meal") else {
+            return Ok(None);
+        };
+        let mut best: Option<(f64, Pos, u32)> = None;
+        for x in self.min.0..=self.max.0 {
+            for y in self.min.1..=self.max.1 {
+                for z in self.min.2..=self.max.2 {
+                    let p = (x, y, z);
+                    if self.bad.contains(&p)
+                        || self.sown.contains(&p)
+                        || self.fertilize_tries.get(&p).copied().unwrap_or(0) >= MAX_FERTILIZE_TRIES
+                    {
+                        continue;
+                    }
+                    let Some(state) = Self::state(world, p)? else {
+                        continue;
+                    };
+                    let max = match name_of(&state) {
+                        "wheat" | "carrots" | "potatoes" => 7,
+                        "beetroots" => 3,
+                        _ => continue,
+                    };
+                    let Some(a) = age(&state).filter(|a| *a < max) else {
+                        continue;
+                    };
+                    let d = dist2(&centre(p), me);
+                    if best.is_none_or(|(bd, _, _)| d < bd) {
+                        best = Some((d, p, a));
+                    }
+                }
+            }
+        }
+        let Some((_, pos, a)) = best else {
+            return Ok(None);
+        };
+        if !in_reach(me, pos) {
+            let goal = self.approach(me, world, pos);
+            if goal_reached(&goal, me) {
+                self.fertilize_tries.insert(pos, MAX_FERTILIZE_TRIES);
+                return Ok(Some(Farming::Wait));
+            }
+            return Ok(Some(Farming::Goal(goal)));
+        }
+        self.phase = Phase::Fertilizing {
+            pos,
+            age: Some(a),
+            ticks: 0,
+        };
+        Ok(Some(Farming::Act(vec![
+            Action::Select(slot),
+            Action::Place {
+                against: pos,
+                face: Face::Up,
+            },
+        ])))
+    }
+
     fn seek(&mut self, me: &Vec3, world: &mut dyn Blocks, carried: &[Carried]) -> Farming {
         if let Some(step) = self.plant(me, world, carried) {
             return step;
@@ -343,6 +509,11 @@ impl Farmer {
         if self.cooldown > 0 {
             self.cooldown -= 1;
             return Farming::Wait;
+        }
+        match self.fertilize(me, world, carried) {
+            Err(()) => return Farming::Wait,
+            Ok(Some(step)) => return step,
+            Ok(None) => {}
         }
         let pos = match self.nearest_mature(me, world) {
             Err(()) => return Farming::Wait,
@@ -365,7 +536,7 @@ impl Farmer {
             };
             return Farming::Dig(pos);
         }
-        let goal = near(pos, APPROACH_RADIUS);
+        let goal = self.approach(me, world, pos);
         if goal_reached(&goal, me) {
             self.skip_current();
             return Farming::Wait;

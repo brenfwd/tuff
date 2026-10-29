@@ -870,19 +870,15 @@ async fn a_bot_bridges_a_void_gap_and_breaks_the_wool_wall_in_its_way() {
     run.stop().await;
 }
 
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_bot_harvests_and_replants_a_wheat_field() {
-    let Some(run) = Run::start(true).await else {
-        return;
-    };
+async fn farm_wheat_field(age: u32, gives: &[&str]) -> Option<FarmResult> {
+    let run = Run::start(true).await?;
     run.server("forceload add -16 -16 31 31").await;
     run.fill_loaded("fill -6 140 -6 6 149 6 stone").await;
     for line in [
         "fill -6 150 -6 6 160 6 air",
         "fill 1 149 1 3 149 3 farmland[moisture=7]",
         "setblock 0 149 2 water",
-        "fill 1 150 1 3 150 3 wheat[age=7]",
+        &format!("fill 1 150 1 3 150 3 wheat[age={age}]"),
         "gamerule natural_health_regeneration false",
     ] {
         run.server(line).await;
@@ -906,8 +902,10 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
     .await;
     run.eventually(|| async { run.online().await.contains("Mate").then_some(()) })
         .await;
-    let given = run.server("give Mate wheat_seeds 16").await;
-    assert!(given.contains("Gave"), "{given}");
+    for item in gives {
+        let given = run.server(&format!("give Mate {item} 64")).await;
+        assert!(given.contains("Gave"), "{given}");
+    }
     let said = run.op(op, "bots farm Mate 1 150 1 3 150 3").await;
     assert!(said.contains("farming"), "{said}");
     run.eventually(|| async {
@@ -916,12 +914,17 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
             && run
                 .server("execute if block 2 150 2 wheat[age=7]")
                 .await
+                .contains("Test failed")
+            && run
+                .server("execute if block 2 150 2 wheat[age=2]")
+                .await
                 .contains("Test failed"))
         .then_some(())
     })
     .await;
     let mut replanted = 0;
     let mut ripe = 0;
+    let mut young = 0;
     for (x, z) in (1..=3).flat_map(|x| (1..=3).map(move |z| (x, z))) {
         let ground = run
             .server(&format!("execute if block {x} 149 {z} farmland"))
@@ -936,11 +939,46 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
             .await
             .contains("passed");
         ripe += usize::from(old);
+        let left = run
+            .server(&format!("execute if block {x} 150 {z} wheat[age=2]"))
+            .await
+            .contains("passed");
+        young += usize::from(left);
         replanted += usize::from(ground && wheat);
     }
-    assert_eq!(ripe, 0, "ripe wheat left");
-    assert!(replanted >= 5, "replanted {replanted} of 9");
     run.stop().await;
+    Some(FarmResult {
+        ripe,
+        replanted,
+        young,
+    })
+}
+
+struct FarmResult {
+    ripe: usize,
+    replanted: usize,
+    young: usize,
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_harvests_and_replants_a_wheat_field() {
+    let Some(r) = farm_wheat_field(7, &["wheat_seeds"]).await else {
+        return;
+    };
+    assert_eq!(r.ripe, 0, "ripe wheat left");
+    assert_eq!(r.replanted, 9, "replanted {} of 9", r.replanted);
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_bone_meals_young_wheat() {
+    let Some(r) = farm_wheat_field(2, &["wheat_seeds", "bone_meal"]).await else {
+        return;
+    };
+    assert_eq!(r.ripe, 0, "ripe wheat left");
+    assert_eq!(r.young, 0, "unfertilized wheat left");
+    assert_eq!(r.replanted, 9, "replanted {} of 9", r.replanted);
 }
 
 impl Run {
