@@ -99,7 +99,7 @@ impl Rig {
             .binds(vec!["127.0.0.1:0".into()])
             .online_mode(false)
             .whitelist(false)
-            .view_distance(4)
+            .view_distance(tuff_client_harness::launch::parity_view_distance().unwrap_or(4))
             .seed(1)
             .build();
         let srv = server.handle();

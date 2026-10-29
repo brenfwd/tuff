@@ -182,6 +182,14 @@ pub fn default_run_base() -> PathBuf {
 }
 
 pub fn options_txt(data_version: i32) -> String {
+    options_txt_with_view(data_version, 6, 5)
+}
+
+pub fn parity_view_distance() -> Option<i32> {
+    std::env::var("PARITY_VIEW_DISTANCE").ok()?.parse().ok()
+}
+
+pub fn options_txt_with_view(data_version: i32, render: i32, simulation: i32) -> String {
     let lines = [
         format!("version:{data_version}"),
         "onboardAccessibility:false".into(),
@@ -189,8 +197,8 @@ pub fn options_txt(data_version: i32) -> String {
         "joinedFirstServer:true".into(),
         "tutorialStep:none".into(),
         "pauseOnLostFocus:false".into(),
-        "renderDistance:6".into(),
-        "simulationDistance:5".into(),
+        format!("renderDistance:{render}"),
+        format!("simulationDistance:{simulation}"),
         "maxFps:60".into(),
         "enableVsync:false".into(),
         "fullscreen:false".into(),
@@ -219,7 +227,11 @@ pub fn servers_dat(address: &str) -> Result<Vec<u8>> {
 pub fn write_game_dir(run: &RunDir, address: &str, data_version: i32) -> Result<()> {
     let game = run.game_dir();
     fs::create_dir_all(&game)?;
-    fs::write(game.join("options.txt"), options_txt(data_version))?;
+    let options = match parity_view_distance() {
+        Some(view) => options_txt_with_view(data_version, view, view),
+        None => options_txt(data_version),
+    };
+    fs::write(game.join("options.txt"), options)?;
     fs::write(game.join("servers.dat"), servers_dat(address)?)?;
     Ok(())
 }

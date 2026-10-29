@@ -4,6 +4,7 @@
 # cache with debug flags: DONT_SAVE_WORLD (so every run starts from the same
 # world copy), VERBOSE_SERVER_EVENTS and BLOCK_BREAK logging, and DEV_COMMANDS
 # (/raid, /debugpath, /debugmobspawning, /warden_spawn_tracker) as triggers.
+# /debugpath needs a mob source and a target; /raid has no `test` subcommand.
 # Feeds a console script, then writes the raw log and a normalized event list
 # (timestamps and thread names stripped) for diffing between runs.
 #
@@ -28,7 +29,9 @@
 #      vanilla client (user "Parity", offline mode, Xvfb when DISPLAY is unset)
 #      to the vanilla server before the console script runs, so `@p` triggers
 #      act on vanilla too (needs TUFF_ACCEPT_MOJANG_EULA, xvfb-run or DISPLAY;
-#      uses one client slot).
+#      uses one client slot). PARITY_VIEW_DISTANCE (default 4) sets the view and
+#      simulation distance of the vanilla server, vanilla client, tuff server and
+#      tuff bot alike.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -45,7 +48,10 @@ out=$(cd "$out" && pwd)
 work=$(mktemp -d "$out/work.XXXXXX")
 trap 'kill "${client_pid:-0}" 2>/dev/null; rm -rf "$work"' EXIT
 
-vanilla_prepare "$work" "level-seed=${SEED:-}"
+SEED=${SEED:-1}
+vanilla_prepare "$work" "level-seed=$SEED"
+export PARITY_VIEW_DISTANCE=${PARITY_VIEW_DISTANCE:-4}
+printf "%s\n" "view-distance=$PARITY_VIEW_DISTANCE" "simulation-distance=$PARITY_VIEW_DISTANCE" >> "$work/server.properties"
 client_pid=
 if [[ -n "${VANILLA_CLIENT:-}" ]]; then
     if [[ -z "${DISPLAY:-}" ]] && ! command -v xvfb-run >/dev/null; then
@@ -118,7 +124,7 @@ echo "log: $out/vanilla.log"
 echo "events: $out/events.txt ($(wc -l < "$out/events.txt") lines)"
 
 if [[ -n "${TUFF_SIDE:-}" ]]; then
-    TUFF_PARITY_OUT="$out" TUFF_PARITY_SCRIPT="$script" SEED="${SEED:-1}" \
+    TUFF_PARITY_OUT="$out" TUFF_PARITY_SCRIPT="$script" SEED="$SEED" \
         cargo test -q --test server replay_parity_script_and_write_tuff_events -- --nocapture || true
 fi
 
