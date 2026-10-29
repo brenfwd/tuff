@@ -1116,6 +1116,9 @@ impl Bots {
                     Step::Done => {
                         bot.exec = None;
                         bot.exec_goal = None;
+                        if let Some(held) = bot.held.take() {
+                            host.drive(bot.body, held.released());
+                        }
                     }
                 }
             }

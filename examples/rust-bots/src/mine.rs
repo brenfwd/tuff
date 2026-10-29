@@ -73,6 +73,15 @@ fn falls(state: &str) -> bool {
         || name.ends_with("concrete_powder")
 }
 
+/// A section that failed to load reads as empty space, so a block only
+/// counts as gone once its state was actually read.
+fn confirmed_gone(world: &mut dyn Blocks, pos: Pos) -> bool {
+    matches!(world.state_at(pos.0, pos.1, pos.2), Ok(Some(_)))
+        && world
+            .class_at(pos.0, pos.1, pos.2)
+            .is_ok_and(|c| !c.standable())
+}
+
 fn centre((x, y, z): Pos) -> Vec3 {
     Vec3 {
         x: f64::from(x) + 0.5,
@@ -194,10 +203,7 @@ impl Miner {
             .collect();
         order.sort_by(|a, b| dist2(&centre(*a), me).total_cmp(&dist2(&centre(*b), me)));
         for pos in order {
-            if world
-                .class_at(pos.0, pos.1, pos.2)
-                .is_ok_and(|c| !c.standable())
-            {
+            if confirmed_gone(world, pos) {
                 self.found.remove(&pos);
                 continue;
             }
@@ -239,10 +245,7 @@ impl Miner {
             Phase::Digging { pos, ticks } => {
                 if ticks.is_multiple_of(RECHECK_TICKS) {
                     world.refresh(&[pos]);
-                    if world
-                        .class_at(pos.0, pos.1, pos.2)
-                        .is_ok_and(|c| !c.standable())
-                    {
+                    if confirmed_gone(world, pos) {
                         if !self.tunnelling {
                             self.mined += 1;
                         }
