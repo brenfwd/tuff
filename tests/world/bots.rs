@@ -655,6 +655,110 @@ async fn a_bot_kills_a_zombie_within_reach_and_flags_nothing() {
     run.stop().await;
 }
 
+fn state_coord(state: &str, key: &str) -> Option<f64> {
+    let rest = state.split(&format!("{key}=")).nth(1)?;
+    let end = rest
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+        .unwrap_or(rest.len());
+    rest[..end].parse().ok()
+}
+
+async fn open_arena(run: &Run) {
+    run.server("forceload add -16 -16 31 31").await;
+    run.fill_loaded("fill -16 140 -16 31 149 31 stone").await;
+    for line in [
+        "fill -16 150 -16 31 160 31 air",
+        "gamerule spawn_mobs false",
+        "gamerule spawn_monsters false",
+        "kill @e[type=!minecraft:player]",
+        "time set midnight",
+    ] {
+        run.server(line).await;
+    }
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_routes_around_a_placed_zombie() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    open_arena(&run).await;
+    run.ask("spawnat Botty 0 150 0", |a| a.contains("spawned 1"))
+        .await;
+    run.botty_online(true).await;
+    run.server(
+        "summon minecraft:zombie 0.5 150 12.5 {UUID:[I;0,0,0,1],NoAI:1b,PersistenceRequired:1b}",
+    )
+    .await;
+    run.ask("goto 1 0 150 25", |a| a.contains("going 1")).await;
+    let mut closest = f64::MAX;
+    let mut events = String::new();
+    for _ in 0..800 {
+        let state = run.say("state 1").await;
+        if let (Some(x), Some(z)) = (state_coord(&state, "x"), state_coord(&state, "z")) {
+            closest = closest.min((x - 0.5).hypot(z - 12.5));
+        }
+        events = run.say("events").await;
+        if events.contains("done 1") || events.contains("failed 1") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let state = run.ask("state 1", |a| a.contains("alive")).await;
+    assert!(events.contains("done 1"), "{events} {state}");
+    assert!(closest >= 2.5, "came within {closest} of the zombie");
+    let flags = run.server("anticheat violations Botty").await;
+    assert!(
+        run.server("anticheat violations")
+            .await
+            .contains("No player has anti-cheat violations"),
+        "{flags}"
+    );
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_detours_to_pick_up_a_nearby_drop() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    open_arena(&run).await;
+    run.ask("spawnat Botty 0 150 0", |a| a.contains("spawned 1"))
+        .await;
+    run.botty_online(true).await;
+    run.server("summon minecraft:item 3.5 150 12.5 {Item:{id:\"minecraft:diamond\",count:1}}")
+        .await;
+    run.ask("goto 1 0 150 25", |a| a.contains("going 1")).await;
+    let events = run.process_end(1, 600).await;
+    assert!(events.contains("done 1"), "{events}");
+    let held = run
+        .within(PATIENCE, || async {
+            run.server("execute if items entity Botty container.* minecraft:diamond")
+                .await
+                .contains("passed")
+                .then_some(())
+        })
+        .await;
+    assert!(
+        held.is_some(),
+        "the drop was not picked up: {events} | {} | {}",
+        run.server("execute if entity @e[type=minecraft:item]")
+            .await,
+        run.server("data get entity @e[type=minecraft:item,limit=1] Pos")
+            .await
+    );
+    let flags = run.server("anticheat violations Botty").await;
+    assert!(
+        run.server("anticheat violations")
+            .await
+            .contains("No player has anti-cheat violations"),
+        "{flags}"
+    );
+    run.stop().await;
+}
+
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_bot_shoots_a_stationary_zombie_dead_at_twenty_blocks_and_flags_nothing() {

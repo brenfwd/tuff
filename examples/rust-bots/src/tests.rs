@@ -17,6 +17,39 @@ pub(crate) struct Recording {
     pub(crate) carried: Vec<crate::hands::Carried>,
     pub(crate) uses: Vec<&'static str>,
     lookups: std::collections::VecDeque<Lookup>,
+    log: Vec<String>,
+    yaws: Vec<f32>,
+    nearby: Vec<crate::danger::Nearby>,
+    nearby_calls: u32,
+    ground: Option<Ground>,
+}
+
+pub(crate) struct Ground {
+    ore: Option<(i32, i32, i32)>,
+}
+
+impl crate::world::Blocks for Ground {
+    fn class_at(&mut self, x: i32, y: i32, z: i32) -> Result<crate::world::Class, crate::world::Pending> {
+        use crate::world::Class;
+        let ore = self.ore == Some((x, y, z));
+        Ok(if y < 64 || ore {
+            Class::STANDABLE
+        } else {
+            Class::PASSABLE
+        })
+    }
+
+    fn state_at(&mut self, x: i32, y: i32, z: i32) -> Result<Option<std::rc::Rc<str>>, crate::world::Pending> {
+        Ok((self.ore == Some((x, y, z))).then(|| "minecraft:iron_ore".into()))
+    }
+
+    fn find(
+        &mut self,
+        _section: crate::world::SectionKey,
+        _wanted: &[String],
+    ) -> Result<Vec<(i32, i32, i32)>, crate::world::Pending> {
+        Ok(self.ore.into_iter().collect())
+    }
 }
 
 impl Host for Recording {
@@ -47,10 +80,27 @@ impl Host for Recording {
         }
     }
 
-    fn drive(&mut self, _: Body, _: crate::exec::Drive) {}
+    fn drive(&mut self, _: Body, drive: crate::exec::Drive) {
+        self.yaws.push(drive.yaw);
+    }
 
     fn blocks(&mut self, _: Body) -> Option<&mut dyn crate::world::Blocks> {
-        None
+        self.ground
+            .as_mut()
+            .map(|g| g as &mut dyn crate::world::Blocks)
+    }
+
+    fn select_slot(&mut self, _: Body, slot: u8) {
+        self.log.push(format!("slot {slot}"));
+    }
+
+    fn dig(&mut self, _: Body, pos: (i32, i32, i32), _: &Vec3) {
+        self.log.push(format!("dig {pos:?}"));
+    }
+
+    fn nearby(&mut self, _: Body, _: f64) -> Vec<crate::danger::Nearby> {
+        self.nearby_calls += 1;
+        self.nearby.clone()
     }
 
     fn locate(&mut self, _: Body, _: &str) -> Option<Vec3> {
@@ -457,4 +507,129 @@ fn an_unknown_target_lookup_keeps_the_fight_going_and_gone_ends_it() {
         events_of(&host, id),
         vec![Event::Spawned, Event::ProcessDone]
     );
+}
+
+fn nearby(kind: &str, x: f64, z: f64) -> crate::danger::Nearby {
+    crate::danger::Nearby {
+        kind: kind.into(),
+        pos: Vec3 { x, y: 64.0, z },
+        velocity: Vec3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        },
+    }
+}
+
+fn goto_north(host: &mut Recording, bots: &mut Bots, auto_eat: bool) -> BotId {
+    let mut sp = spec("Walker", RespawnPolicy::Owner);
+    sp.policy.auto_eat = auto_eat;
+    let id = bots.spawn(host, "a", sp).unwrap();
+    host.ground = Some(Ground { ore: None });
+    let goal = Goal::Leaf(LeafGoal::Xz(XzGoal { x: 0, z: 30 }));
+    bots.set_process("a", id, Process::Goto(goal)).unwrap();
+    id
+}
+
+#[test]
+fn a_miner_swaps_to_the_best_pickaxe_before_it_digs() {
+    let mut host = host_with(&["a"]);
+    host.carried = vec![
+        (36, "minecraft:wooden_pickaxe".into(), 1),
+        (38, "minecraft:iron_pickaxe".into(), 1),
+    ];
+    host.ground = Some(Ground {
+        ore: Some((1, 64, 0)),
+    });
+    let mut bots = Bots::default();
+    let id = bots
+        .spawn(&mut host, "a", spec("Miner", RespawnPolicy::Owner))
+        .unwrap();
+    let mine = Process::Mine(MineSpec {
+        blocks: vec!["iron_ore".into()],
+        count: 1,
+        radius: 6,
+    });
+    bots.set_process("a", id, mine).unwrap();
+    for _ in 0..10 {
+        bots.tick(&mut host);
+    }
+    let first_dig = host.log.iter().position(|l| l.starts_with("dig"));
+    let first_dig = first_dig.expect("the bot dug");
+    assert!(first_dig > 0, "{:?}", host.log);
+    assert_eq!(host.log[first_dig - 1], "slot 2", "{:?}", host.log);
+}
+
+#[test]
+fn nearby_entities_are_polled_every_few_ticks_and_not_while_idle() {
+    let mut host = host_with(&["a"]);
+    let mut bots = Bots::default();
+    let id = goto_north(&mut host, &mut bots, false);
+    for _ in 0..20 {
+        bots.tick(&mut host);
+    }
+    assert_eq!(host.nearby_calls, 4);
+    bots.stop("a", id).unwrap();
+    let calls = host.nearby_calls;
+    for _ in 0..20 {
+        bots.tick(&mut host);
+    }
+    assert_eq!(host.nearby_calls, calls);
+}
+
+fn farthest_turn(host: &Recording) -> f32 {
+    host.yaws.iter().fold(0.0_f32, |m, y| m.max(y.abs()))
+}
+
+#[test]
+fn a_zombie_ahead_turns_the_path_aside() {
+    let mut clear = host_with(&["a"]);
+    let mut bots = Bots::default();
+    goto_north(&mut clear, &mut bots, false);
+    for _ in 0..10 {
+        bots.tick(&mut clear);
+    }
+    let mut host = host_with(&["a"]);
+    host.nearby = vec![nearby("minecraft:zombie", 0.5, 6.5)];
+    let mut bots = Bots::default();
+    goto_north(&mut host, &mut bots, false);
+    for _ in 0..10 {
+        bots.tick(&mut host);
+    }
+    assert!(farthest_turn(&clear) < 5.0, "{:?}", clear.yaws);
+    assert!(farthest_turn(&host) > 10.0, "{:?}", host.yaws);
+}
+
+#[test]
+fn a_drop_beside_the_route_is_a_detour_only_with_upkeep_on() {
+    let drop = nearby("minecraft:item", 3.5, 2.5);
+    let mut off = host_with(&["a"]);
+    off.nearby = vec![drop.clone()];
+    let mut bots = Bots::default();
+    goto_north(&mut off, &mut bots, false);
+    for _ in 0..10 {
+        bots.tick(&mut off);
+    }
+    let mut on = host_with(&["a"]);
+    on.nearby = vec![drop];
+    let mut bots = Bots::default();
+    goto_north(&mut on, &mut bots, true);
+    for _ in 0..10 {
+        bots.tick(&mut on);
+    }
+    assert!(farthest_turn(&off) < 5.0, "{:?}", off.yaws);
+    assert!(farthest_turn(&on) > 20.0, "{:?}", on.yaws);
+}
+
+#[test]
+fn a_better_armor_piece_in_the_hotbar_is_put_on_once() {
+    let mut host = host_with(&["a"]);
+    host.carried = vec![(37, "minecraft:iron_helmet".into(), 1)];
+    let mut sp = spec("Dresser", RespawnPolicy::Owner);
+    sp.policy.auto_eat = true;
+    let mut bots = Bots::default();
+    bots.spawn(&mut host, "a", sp).unwrap();
+    bots.tick(&mut host);
+    assert_eq!(host.log, vec!["slot 1".to_string()]);
+    assert_eq!(host.uses, vec!["use"]);
 }
