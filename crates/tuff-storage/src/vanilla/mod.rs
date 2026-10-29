@@ -243,6 +243,39 @@ fn import_regions(paths: &WorldPaths, file: &Path) -> io::Result<()> {
     tx.commit().map_err(sql)
 }
 
+fn apply_console_rows(
+    root: &Path,
+    tx: &rusqlite::Transaction<'_>,
+    keys: &[crate::sqlite::console::ChunkKey],
+) -> io::Result<()> {
+    use rusqlite::OptionalExtension;
+    let sql = |err: rusqlite::Error| io::Error::other(err.to_string());
+    let backend = VanillaBackend::new(root);
+    for key in keys {
+        let row = |table: &str| -> io::Result<Option<Vec<u8>>> {
+            tx.query_row(
+                &format!("SELECT data FROM {table} WHERE dimension = ?1 AND x = ?2 AND z = ?3"),
+                rusqlite::params![key.dimension, key.x, key.z],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(sql)
+        };
+        let (chunk, entities, pois) = (row("chunks")?, row("entities")?, row("pois")?);
+        let pos = ChunkPos::new(key.x, key.z);
+        let mut store =
+            backend.open_region(&key.dimension, FileRegionPos::new(key.x >> 5, key.z >> 5))?;
+        match chunk {
+            Some(blob) => store.write_chunk(pos, &blob)?,
+            None => store.remove_chunk(pos)?,
+        }
+        store.write_entities(pos, entities.as_deref())?;
+        store.write_pois(pos, pois.as_deref())?;
+        store.flush()?;
+    }
+    Ok(())
+}
+
 fn import_documents(paths: &WorldPaths, tx: &rusqlite::Transaction<'_>) -> io::Result<()> {
     let sql = |err: rusqlite::Error| io::Error::other(err.to_string());
     let backend = VanillaBackend::new(paths.root());
@@ -699,9 +732,11 @@ impl WorldBackend for VanillaBackend {
 
     fn sql_console(&self) -> Option<crate::sqlite::console::SqlConsole> {
         let paths = self.paths.clone();
-        Some(crate::sqlite::console::SqlConsole::importing(Arc::new(
-            move |file| import_regions(&paths, file),
-        )))
+        let root = self.paths.root().to_path_buf();
+        Some(crate::sqlite::console::SqlConsole::importing(
+            Arc::new(move |file| import_regions(&paths, file)),
+            Arc::new(move |tx, keys| apply_console_rows(&root, tx, keys)),
+        ))
     }
 
     fn documents(&self) -> &dyn Documents {
@@ -944,8 +979,8 @@ mod tests {
 
     #[tuff_core::watchdog]
     #[test]
-    fn the_sql_console_reads_region_files_and_refuses_writes() {
-        use crate::sqlite::console::{Cancel, Limits, WriteAction};
+    fn the_sql_console_reads_region_files() {
+        use crate::sqlite::console::{Cancel, Limits};
         let dir = TestDir::new();
         let paths = WorldPaths::new(dir.path());
         for (sub, x, z) in [
@@ -965,7 +1000,7 @@ mod tests {
         level.insert("Probe", tuff_nbt::Tag::Int(1));
         Documents::write(&backend, Document::Level, level).unwrap();
         let console = backend.sql_console().unwrap();
-        assert!(!console.can_write());
+        assert!(console.can_write());
         let out = console
             .query(
                 "SELECT dimension, x, z FROM chunks".into(),
@@ -996,14 +1031,116 @@ mod tests {
             )
             .unwrap();
         assert_eq!(docs.rows.len(), 1);
+    }
+
+    fn console_fixture() -> (TestDir, VanillaBackend) {
+        let dir = TestDir::new();
+        let paths = WorldPaths::new(dir.path());
+        let sub = paths.region_dir("minecraft:overworld");
+        fs::create_dir_all(&sub).unwrap();
+        let mut mca = RegionFile::open(&sub, 0, 0, true).unwrap().unwrap();
+        let raw = RawChunk::compress(vec![10, 0, 0, 0]).unwrap();
+        mca.write(ChunkPos::new(1, 1), &raw).unwrap();
+        mca.write(ChunkPos::new(2, 2), &raw).unwrap();
+        mca.sync().unwrap();
+        let backend = VanillaBackend::new(dir.path());
+        (dir, backend)
+    }
+
+    fn region_blob(dir: &TestDir, sub: &str, x: i32, z: i32) -> Option<Vec<u8>> {
+        let paths = WorldPaths::new(dir.path());
+        let d = match sub {
+            "region" => paths.region_dir("minecraft:overworld"),
+            "entities" => paths.entities_dir("minecraft:overworld"),
+            _ => paths.poi_dir("minecraft:overworld"),
+        };
+        let mut mca = RegionFile::open(&d, x >> 5, z >> 5, false).unwrap()?;
+        mca.read(ChunkPos::new(x, z))
+            .unwrap()
+            .map(RawChunk::into_blob)
+    }
+
+    fn run_write(
+        console: &crate::sqlite::console::SqlConsole,
+        text: &str,
+        expect: Option<u64>,
+    ) -> Result<crate::sqlite::console::WriteOutput, crate::sqlite::console::ConsoleError> {
+        use crate::sqlite::console::{Limits, WriteAction};
+        let action = match expect {
+            Some(expect) => WriteAction::Commit { expect },
+            None => WriteAction::Preview,
+        };
+        console.write(text.into(), action, Limits::default())
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn the_sql_console_edits_region_files() {
+        let (dir, backend) = console_fixture();
+        let console = backend.sql_console().unwrap();
+        let blob = RawChunk::compress(vec![10, 0, 0, 0]).unwrap().into_blob();
+        let hex = blob.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        for table in ["entities", "pois", "chunks"] {
+            let out = run_write(
+                &console,
+                &format!("INSERT INTO {table}(dimension, x, z, data) VALUES ('minecraft:overworld', 5, 6, x'{hex}')"),
+                Some(1),
+            )
+            .unwrap();
+            assert!(out.committed);
+        }
+        for sub in ["region", "entities", "poi"] {
+            assert_eq!(region_blob(&dir, sub, 5, 6), Some(blob.clone()), "{sub}");
+        }
+        let other = RawChunk::compress(vec![10, 0, 1, 0, 0])
+            .unwrap()
+            .into_blob();
+        let other_hex = other.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        run_write(
+            &console,
+            &format!("UPDATE chunks SET data = x'{other_hex}' WHERE x = 1 AND z = 1"),
+            Some(1),
+        )
+        .unwrap();
+        assert_eq!(region_blob(&dir, "region", 1, 1), Some(other));
+        assert!(region_blob(&dir, "region", 2, 2).is_some());
+        run_write(&console, "DELETE FROM chunks WHERE x = 2", Some(1)).unwrap();
+        assert_eq!(region_blob(&dir, "region", 2, 2), None);
+        run_write(&console, "DELETE FROM pois", Some(1)).unwrap();
+        assert_eq!(region_blob(&dir, "poi", 5, 6), None);
+        assert!(region_blob(&dir, "entities", 5, 6).is_some());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_preview_or_mismatched_commit_leaves_region_files_untouched() {
+        let (dir, backend) = console_fixture();
+        let console = backend.sql_console().unwrap();
+        let before = region_blob(&dir, "region", 1, 1);
+        let out = run_write(&console, "DELETE FROM chunks", None).unwrap();
+        assert_eq!((out.affected, out.committed), (2, false));
+        assert_eq!(region_blob(&dir, "region", 1, 1), before);
+        assert!(run_write(&console, "DELETE FROM chunks", Some(1)).is_err());
+        assert_eq!(region_blob(&dir, "region", 1, 1), before);
+        assert!(region_blob(&dir, "region", 2, 2).is_some());
+        run_write(&console, "DELETE FROM chunks", Some(2)).unwrap();
+        assert_eq!(region_blob(&dir, "region", 1, 1), None);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn document_edits_stay_refused_on_region_files() {
+        let (_dir, backend) = console_fixture();
+        let mut level = tuff_nbt::Compound::default();
+        level.insert("Probe", tuff_nbt::Tag::Int(1));
+        Documents::write(&backend, Document::Level, level).unwrap();
+        let console = backend.sql_console().unwrap();
+        assert!(run_write(&console, "DELETE FROM documents", None).is_err());
+        assert!(run_write(&console, "DELETE FROM documents", Some(1)).is_err());
         assert!(
-            console
-                .write(
-                    "DELETE FROM chunks".into(),
-                    WriteAction::Preview,
-                    Limits::default()
-                )
-                .is_err()
+            Documents::read(&backend, Document::Level)
+                .unwrap()
+                .is_some()
         );
     }
 

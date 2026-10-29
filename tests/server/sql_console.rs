@@ -103,7 +103,7 @@ async fn write_attempts(
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_region_file_world_gets_a_read_only_console() {
+async fn a_region_file_world_console_writes_once_allowed() {
     let server = start(TempDir::new(), false).await;
     let admin = login(&server).await;
     let state = admin.get(web::SQL_ROUTE).await.json();
@@ -129,14 +129,36 @@ async fn a_region_file_world_gets_a_read_only_console() {
         &format!("tuff config {} true", web::sql::ALLOW_WRITE_KEY),
     )
     .await;
-    assert_eq!(
-        admin.get(web::SQL_ROUTE).await.json()["canWrite"],
-        false,
-        "the toggle must not enable writes on a region-file world"
-    );
-    for (sql, kind, status) in write_attempts(&admin, &statements).await {
-        assert!(status >= 400, "toggled: {kind} {sql} got {status}");
-    }
+    assert_eq!(admin.get(web::SQL_ROUTE).await.json()["canWrite"], true);
+    let (status, body) = post(
+        &admin,
+        "write",
+        json!({ "sql": "CREATE TABLE notes(x)", "action": "commit", "expect": 0 }),
+    )
+    .await;
+    assert!(status >= 400, "a schema change must not be saved: {body}");
+    let insert = "INSERT INTO chunks(dimension, x, z, data) VALUES ('minecraft:overworld', 90000, 90000, x'02789c030000000001')";
+    let (status, body) = post(
+        &admin,
+        "write",
+        json!({ "sql": insert, "action": "preview" }),
+    )
+    .await;
+    assert_eq!((status, body["chunks"].as_u64()), (200, Some(1)), "{body}");
+    let (status, body) = post(
+        &admin,
+        "write",
+        json!({ "sql": insert, "action": "commit", "expect": 1 }),
+    )
+    .await;
+    assert_eq!((status, &body["committed"]), (200, &json!(true)), "{body}");
+    let (_, page) = post(
+        &admin,
+        "query",
+        json!({ "sql": "SELECT count(*) FROM chunks WHERE x = 90000" }),
+    )
+    .await;
+    assert_eq!(page["rows"][0][0].as_u64(), Some(1), "{page}");
     stop(server).await;
 }
 
@@ -323,7 +345,17 @@ async fn the_live_world_tables_stay_read_only() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn chunk_rows_edit_only_while_their_chunks_are_unloaded() {
-    let server = start(TempDir::new(), true).await;
+    chunk_rows_edit_flow(true).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn region_file_chunk_rows_edit_only_while_their_chunks_are_unloaded() {
+    chunk_rows_edit_flow(false).await;
+}
+
+async fn chunk_rows_edit_flow(sqlite: bool) {
+    let server = start(TempDir::new(), sqlite).await;
     let admin = login(&server).await;
     run(
         &server,
@@ -352,7 +384,7 @@ async fn chunk_rows_edit_only_while_their_chunks_are_unloaded() {
     .await;
     assert_eq!(status, 400, "{body}");
     assert!(body["error"].as_str().unwrap().contains("loaded"), "{body}");
-    let insert = "INSERT INTO chunks(dimension, x, z, data) VALUES ('minecraft:overworld', 90000, 90000, x'00')";
+    let insert = "INSERT INTO chunks(dimension, x, z, data) VALUES ('minecraft:overworld', 90000, 90000, x'02789c030000000001')";
     let (status, body) = post(
         &admin,
         "write",
