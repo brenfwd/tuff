@@ -286,10 +286,12 @@ async fn finishing_blocks_early_again_and_again_is_fast_break() {
     let target = BlockPos::new(o.x + 2, 101, o.z);
     place(&mut w, &world, &[target]).await;
     for _ in 0..2 {
+        place(&mut w, &world, &[target]).await;
         mine(&mut w, target, 160).await;
         assert!(!w.session.disconnected, "stone by hand takes 150 ticks");
     }
     for _ in 0..6 {
+        place(&mut w, &world, &[target]).await;
         mine(&mut w, target, 20).await;
         if w.session.disconnected {
             break;

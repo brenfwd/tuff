@@ -41,6 +41,8 @@ movement_corpus_s79.bin 0 soul_sand,sneak,sneak_edge,cobweb,combat,stairs,powder
 movement_corpus_s82.bin 0 swim,sneak_edge,cobweb,soul_sand,hay_fall,combat,sprint_jump,sneak,slime,powder_snow,ladder,walk,strafe_back,honey,stairs,ice,slabs 7592
 movement_corpus_s90.bin 0 ladder,soul_sand,combat,honey,powder_snow,ice,strafe_back,sneak_edge,slabs,hay_fall,slime,stairs,walk,cobweb,swim,sneak,sprint_jump 7307
 movement_corpus_special.bin 0 elytra,boat,horse,bridge 841
+movement_corpus_special_mine.bin 0 mine_tunnel,mine_instant 275
+movement_corpus_special_mine_rtt100.bin 100 mine_tunnel,mine_instant 283
 movement_corpus_special_rtt100_s1.bin 100 elytra,boat,horse 2661
 movement_corpus_special_rtt100_s32.bin 100 elytra,horse,bridge 1323
 movement_corpus_special_rtt100_s41.bin 100 elytra,horse,bridge 1802

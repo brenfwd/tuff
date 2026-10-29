@@ -4,7 +4,7 @@
 //! and requires zero alerts and zero setbacks.
 
 use super::*;
-use tuff_core::protocol::play::Serverbound;
+use tuff_core::protocol::play::{PlayerActionStatus, Serverbound};
 use tuff_replay::corpus::Lane;
 
 use super::anticheat::{Walker, operator_alerts, physical_walker};
@@ -83,6 +83,7 @@ async fn replay_lane_with(
     let rockets = setup.rockets;
     let placements = setup.placements;
     let stone = setup.stone;
+    let recorded_swings = lane.packets.iter().any(|p| matches!(p, Serverbound::Punch));
     let floor = setup.floor;
     let airborne = setup.airborne
         || lane.packets.iter().find_map(|p| match p {
@@ -158,7 +159,9 @@ async fn replay_lane_with(
         }
         w.session.handle_packet(packet.clone()).await;
         if stone && matches!(packet, Serverbound::UseItemOn { .. }) {
-            w.session.handle_packet(Serverbound::Punch).await;
+            if !recorded_swings {
+                w.session.handle_packet(Serverbound::Punch).await;
+            }
             world.ticks(1).await;
             while let Ok(event) = w.events.try_recv() {
                 w.session.on_event(event).await;
@@ -573,6 +576,28 @@ async fn replay_special_lane(lane: &Lane, base: ChunkPos, origin: [i32; 3]) {
                     ..Setup::default()
                 };
             }
+            if name.starts_with("mine") {
+                let mut pickaxe = ItemStack::mint(Item::DiamondPickaxe, 1, MintReason::Test);
+                if name == "mine_instant" {
+                    pickaxe.components.enchantments = Some(tuff_item::item::Enchantments::new([(
+                        "minecraft:efficiency".to_owned(),
+                        5,
+                    )]));
+                    w.session
+                        .body
+                        .effects
+                        .add(tuff_core::world::effects::ActiveEffect::timed(
+                            tuff_vanilla_data::registry::MobEffect::Haste,
+                            2400,
+                            1,
+                        ));
+                }
+                w.session.inventory.set_hand(false, Some(pickaxe));
+                return Setup {
+                    facing: Some((-90.0, 0.0)),
+                    ..Setup::default()
+                };
+            }
             if name.starts_with("boat") {
                 let falling = state_of("minecraft:water[level=8]");
                 for x in 4..=40 {
@@ -689,6 +714,49 @@ async fn recorded_bridge_jump_never_flags() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn recorded_bridge_speed_pulse_never_flags() {
     replay_special("bridge_speed_pulse").await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn recorded_mining_never_flags() {
+    for file in [
+        "movement_corpus_special_mine.bin",
+        "movement_corpus_special_mine_rtt100.bin",
+    ] {
+        let base = ChunkPos::new(46, 46);
+        let abs = [base.x * 16 - 10, 100, base.z * 16 + 8].map(f64::from);
+        for lane in read_lanes(file, abs) {
+            let (mut starts, mut stops, mut swings, mut tick) = (0, 0, 0, 0);
+            let (mut last_swing, mut worst_gap) = (0, 0);
+            for p in &lane.packets {
+                match p {
+                    Serverbound::ClientTickEnd => tick += 1,
+                    Serverbound::Punch => {
+                        swings += 1;
+                        worst_gap = worst_gap.max(tick - last_swing);
+                        last_swing = tick;
+                    }
+                    Serverbound::PlayerAction { status, .. } => match status {
+                        PlayerActionStatus::StartDestroyBlock => starts += 1,
+                        PlayerActionStatus::StopDestroyBlock => stops += 1,
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+            eprintln!(
+                "BREAKS {file} {}: ticks {tick} starts {starts} stops {stops} swings {swings} worst swing gap {worst_gap}",
+                lane.name
+            );
+            assert!(
+                starts >= 3 && swings >= 3 && (stops >= 1 || lane.name == "mine_instant"),
+                "{file} {}",
+                lane.name
+            );
+        }
+    }
+    replay_special_file("movement_corpus_special_mine.bin", None).await;
+    replay_special_file("movement_corpus_special_mine_rtt100.bin", None).await;
 }
 
 #[tuff_core::watchdog]
