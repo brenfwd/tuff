@@ -709,6 +709,17 @@ pub fn write_checked(
     limits: Limits,
     checked: Option<&std::collections::HashSet<ChunkKey>>,
 ) -> Result<WriteOutput> {
+    write_checked_with(conn, text, action, limits, checked, None)
+}
+
+pub(super) fn write_checked_with(
+    conn: &mut Connection,
+    text: &str,
+    action: WriteAction,
+    limits: Limits,
+    checked: Option<&std::collections::HashSet<ChunkKey>>,
+    before_commit: Option<&super::Applier>,
+) -> Result<WriteOutput> {
     let tx = conn
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
         .map_err(sql)?;
@@ -734,6 +745,9 @@ pub fn write_checked(
                     "the statement now touches chunks that were not checked; nothing was committed"
                         .into(),
                 ));
+            }
+            if let Some(apply) = before_commit {
+                apply(&tx, &touched).map_err(|err| ConsoleError::Sql(err.to_string()))?;
             }
             tx.commit().map_err(sql)?;
             Ok(WriteOutput {
@@ -761,6 +775,7 @@ pub fn write_checked(
 pub struct SqlConsole {
     pub(super) db: Option<Db>,
     pub(super) source: Source,
+    pub(super) apply: Option<super::Applier>,
 }
 
 impl SqlConsole {
@@ -783,16 +798,17 @@ impl SqlConsole {
 
     /// A read-only console over a world kept in another layout, imported
     /// into a temporary SQLite file whenever a fresh view is needed.
-    pub fn importing(build: super::Importer) -> Self {
+    pub fn importing(build: super::Importer, apply: super::Applier) -> Self {
         Self {
             db: None,
             source: Source::import(build),
+            apply: Some(apply),
         }
     }
 
     /// Whether statements that change data are accepted.
     pub fn can_write(&self) -> bool {
-        self.db.is_some()
+        self.db.is_some() || self.apply.is_some()
     }
 
     /// Whether reads leave the file's thread alone.
@@ -851,9 +867,40 @@ impl SqlConsole {
         checked: Option<std::collections::HashSet<ChunkKey>>,
     ) -> Result<WriteOutput> {
         if self.db.is_none() {
-            return Err(ConsoleError::Sql(
-                "this world keeps its data in region files; the console only reads it".into(),
-            ));
+            let (Source::Import { build, .. }, Some(apply)) = (&self.source, &self.apply) else {
+                return Err(ConsoleError::Closed);
+            };
+            let snap = super::reader::SnapFile::import(build)
+                .map_err(|err| ConsoleError::Sql(err.to_string()))?;
+            let mut conn = Connection::open(snap.path()).map_err(sql)?;
+            tuff_sqlite_nbt::register(&conn).map_err(sql)?;
+            let schema_version = |conn: &Connection| -> rusqlite::Result<i64> {
+                conn.query_row("PRAGMA main.schema_version", [], |r| r.get(0))
+            };
+            let before = schema_version(&conn).map_err(sql)?;
+            let guarded: super::Applier = {
+                let apply = apply.clone();
+                Arc::new(move |tx, keys| {
+                    if schema_version(tx).map_err(io::Error::other)? != before {
+                        return Err(io::Error::other(
+                            "schema changes cannot be saved to a region-file world",
+                        ));
+                    }
+                    apply(tx, keys)
+                })
+            };
+            let out = write_checked_with(
+                &mut conn,
+                &text,
+                action,
+                limits,
+                checked.as_ref(),
+                Some(&guarded),
+            );
+            drop(conn);
+            drop(snap);
+            self.source.invalidate();
+            return out;
         }
         let out =
             self.run(move |conn| write_checked(conn, &text, action, limits, checked.as_ref()))?;

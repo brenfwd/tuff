@@ -47,7 +47,7 @@ mod config;
 pub mod console;
 pub mod inspect;
 mod reader;
-pub use reader::Importer;
+pub use reader::{Applier, Importer};
 pub mod schema;
 mod snapshot;
 
@@ -634,6 +634,7 @@ impl WorldBackend for SqliteBackend {
             } else {
                 reader::Source::snapshot(self.db.clone(), self.file.clone())
             },
+            apply: None,
         })
     }
 

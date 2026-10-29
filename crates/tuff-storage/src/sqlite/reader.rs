@@ -45,6 +45,10 @@ pub(super) enum Source {
 }
 
 /// Fills an empty server file from some other storage layout.
+pub type Applier = Arc<
+    dyn Fn(&rusqlite::Transaction<'_>, &[super::console::ChunkKey]) -> io::Result<()> + Send + Sync,
+>;
+
 pub type Importer = Arc<dyn Fn(&Path) -> io::Result<()> + Send + Sync>;
 
 impl Source {
@@ -144,7 +148,11 @@ pub(super) struct SnapFile {
 }
 
 impl SnapFile {
-    fn import(build: &Importer) -> io::Result<Self> {
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub(super) fn import(build: &Importer) -> io::Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
             "tuff-console-import-{}-{}.tmp",
