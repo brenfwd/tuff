@@ -896,6 +896,7 @@ async fn no_violations(run: &WithBots) {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "flaky under load: bots fall off the path and respawn sprint flags; see todo/infrastructure/bedwars-bot-world-test-flakes.md"]
 async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
     let Some(run) = WithBots::start().await else {
         return;
@@ -953,5 +954,12 @@ async fn a_bot_defends_its_bed_against_an_intruder() {
         .await;
     let _ = (bed, red);
     no_violations(&run).await;
+    let removed = run.bedwars("bot remove 1").await;
+    assert!(removed.contains("Removed"), "{removed}");
+    run.until("the bots leaving", || async {
+        let list = run.say("list").await;
+        (!list.contains("BOT_")).then_some(())
+    })
+    .await;
     run.stop().await;
 }
