@@ -135,6 +135,7 @@ mod maps;
 mod minecart_containers;
 mod mining;
 mod mob_spears;
+mod mount_shadow;
 mod movable_block_entities;
 mod move_baseline;
 mod nether;

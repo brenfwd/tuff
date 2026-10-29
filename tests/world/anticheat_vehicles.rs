@@ -30,7 +30,7 @@ fn flight() -> Vec<(f64, bool)> {
         .collect()
 }
 
-async fn place(
+pub(super) async fn place(
     w: &mut Walker,
     world: &TestWorld,
     blocks: Vec<(BlockPos, tuff_vanilla_data::BlockState)>,
@@ -879,7 +879,7 @@ async fn a_flood_of_boat_moves_is_set_back_and_kicked() {
     world.shutdown().await;
 }
 
-fn saddled_tame() -> Compound {
+pub(super) fn saddled_tame() -> Compound {
     use tuff_nbt::Tag;
     Compound::new()
         .with("Owner", Tag::uuid(77))
@@ -893,7 +893,7 @@ fn saddled_tame() -> Compound {
         )
 }
 
-async fn mount_at(world: &TestWorld, kind: EntityType, id: i32) -> [f64; 3] {
+pub(super) async fn mount_at(world: &TestWorld, kind: EntityType, id: i32) -> [f64; 3] {
     let region = world.region(RegionPos::new(1, 1)).await;
     mobs(&region, kind)
         .await
@@ -904,7 +904,7 @@ async fn mount_at(world: &TestWorld, kind: EntityType, id: i32) -> [f64; 3] {
 }
 
 /// Ticks the session and world once, then sends one Move Vehicle.
-async fn ride_step(w: &mut Walker, world: &TestWorld, to: [f64; 3], on_ground: bool) {
+pub(super) async fn ride_step(w: &mut Walker, world: &TestWorld, to: [f64; 3], on_ground: bool) {
     w.session.tick += 1;
     w.session.tick_driving().await;
     world.ticks(1).await;
@@ -1083,6 +1083,18 @@ async fn a_camel_pig_and_strider_driven_far_past_their_run_are_held_to_it() {
         gain < 7.0 && corrections > 0,
         "strider {gain} {corrections}"
     );
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_donkey_and_mule_driven_far_past_their_run_are_held_to_it() {
+    for (kind, chunk) in [(EntityType::Donkey, 36), (EntityType::Mule, 37)] {
+        let (gain, corrections) = run_past_the_server_run(kind, saddled_tame(), None, chunk).await;
+        assert!(
+            gain < 7.0 && corrections > 0,
+            "{kind:?} {gain} {corrections}"
+        );
+    }
 }
 
 #[tuff_core::watchdog]
