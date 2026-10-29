@@ -839,3 +839,119 @@ async fn a_bot_shoots_a_target_across_a_gap() {
     assert!(!arrow.is_empty());
     run.stop().await;
 }
+
+/// The bots as (red, blue) by where they stand after the start.
+async fn by_team(run: &WithBots, names: [&str; 2]) -> (String, String) {
+    let mut red = None;
+    for name in names {
+        let at = run.numbers(&format!("data get entity {name} Pos")).await;
+        if at.len() >= 3 && at[2] < -20.0 {
+            red = Some(name);
+        }
+    }
+    let red = red.expect("a bot stands on the red island");
+    let blue = names.into_iter().find(|n| *n != red).unwrap();
+    (red.into(), blue.into())
+}
+
+async fn start_two_bots(run: &WithBots, names: [&str; 2], levels: [&str; 2], terrain: &[&str]) {
+    for level in levels {
+        let added = run.bedwars(&format!("bot add 1 {level}")).await;
+        assert!(added.contains("Adding"), "{added}");
+    }
+    run.until("the bots coming online", || async {
+        let list = run.say("list").await;
+        names.iter().all(|n| list.contains(n)).then_some(())
+    })
+    .await;
+    run.until("the start", || async {
+        for line in terrain {
+            run.say(&format!("execute in {ARENA} run {line}")).await;
+        }
+        let said = run.bedwars("start 1").await;
+        let started = !said.contains("error:") || run.bedwars("list").await.contains("running");
+        started.then_some(())
+    })
+    .await;
+    run.until("the bots on their islands", || async {
+        let mut home = true;
+        for name in names {
+            home &= run
+                .say(&format!("data get entity {name} Dimension"))
+                .await
+                .contains(ARENA);
+        }
+        home.then_some(())
+    })
+    .await;
+}
+
+async fn no_violations(run: &WithBots) {
+    let all = run.say("anticheat violations").await;
+    assert!(
+        all.contains("No player has anti-cheat violations"),
+        "anticheat flagged a bot: {all}"
+    );
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
+    let Some(run) = WithBots::start().await else {
+        return;
+    };
+    let names = ["BOT_Ashwin", "BOT_Brakken"];
+    let terrain = [
+        "forceload add 0 -48 48 8",
+        "fill 6 64 -43 40 64 -37 minecraft:stone",
+        "fill 35 64 -43 40 64 -6 minecraft:stone",
+    ];
+    start_two_bots(&run, names, ["hard", "easy"], &terrain).await;
+    run.until_polls("an enemy bed broken", 2400, || async {
+        let mut gone = false;
+        for (kind, at) in [("blue_bed", "37 65 0"), ("red_bed", "0 65 -37")] {
+            let said = run
+                .say(&format!(
+                    "execute in {ARENA} if block {at} minecraft:{kind}"
+                ))
+                .await;
+            gone |= said.contains("Test failed");
+        }
+        gone.then_some(())
+    })
+    .await;
+    no_violations(&run).await;
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_defends_its_bed_against_an_intruder() {
+    let Some(run) = WithBots::start().await else {
+        return;
+    };
+    let names = ["BOT_Ashwin", "BOT_Brakken"];
+    start_two_bots(&run, names, ["hard", "hard"], &[]).await;
+    let (red, blue) = by_team(&run, names).await;
+    run.say(&format!("execute in {ARENA} run tp {blue} 0.5 65 -33.5"))
+        .await;
+    run.until("the intruder hurt or beaten", || async {
+        let health = run.numbers(&format!("data get entity {blue} Health")).await;
+        let beaten = run
+            .modes
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(name, mode)| *name == blue && *mode == GameMode::Spectator);
+        (beaten || health.first().is_some_and(|h| *h < 20.0)).then_some(())
+    })
+    .await;
+    let bed = run
+        .say(&format!(
+            "execute in {ARENA} if block 0 65 -37 minecraft:red_bed"
+        ))
+        .await;
+    let _ = (bed, red);
+    no_violations(&run).await;
+    run.stop().await;
+}

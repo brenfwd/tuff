@@ -7,7 +7,7 @@
 
 use super::*;
 use crate::bot::{
-    self, Bot, Difficulty, Role, Seen, Shot, Stock, View, block_center, block_of, dist,
+    self, Bot, Difficulty, Heading, Role, Seen, Shot, Stock, View, block_center, block_of, dist,
 };
 use crate::shop::{self, Offer};
 use tuff_bots_api::control::{self, BotId};
@@ -18,6 +18,7 @@ pub const NO_BOTS: &str = "Bots need the bots plugin";
 const BRIDGE_COOLDOWN: u64 = 2 * SECOND;
 const BRIDGE_AHEAD: f64 = 3.0;
 const RESEND: u64 = 2 * SECOND;
+const UNREACHABLE_BACKOFF: u64 = 10 * SECOND;
 const WOOL_STOCK: u32 = 32;
 const ARROW_STOCK: u32 = 12;
 const FIREBALL_STOCK: u32 = 2;
@@ -159,6 +160,16 @@ fn goto(at: Pos) -> control::Process {
                 z: at[2],
             },
             radius: 1.0,
+        },
+    )))
+}
+
+fn get_to_block(at: Pos) -> control::Process {
+    control::Process::Goto(control::Goal::Leaf(control::LeafGoal::GetToBlock(
+        control::BlockPos {
+            x: at[0],
+            y: at[1],
+            z: at[2],
         },
     )))
 }
@@ -357,6 +368,18 @@ impl Game {
         }
     }
 
+    /// Bot `handle`'s process failed: a bed it was rushing is left alone
+    /// for a while so the bot picks another goal.
+    pub fn bot_walk_failed(&mut self, handle: BotId) {
+        let now = self.now;
+        if let Some(bot) = self.bots.values_mut().find(|b| b.handle == Some(handle)) {
+            bot.arrived = true;
+            if let Some(Heading::Block(bed)) = bot.heading {
+                bot.unreachable = Some((bed, now + UNREACHABLE_BACKOFF));
+            }
+        }
+    }
+
     /// `id` picked something up; a bot spends its inventory at the shop
     /// (one purchase at a time) as a player would.
     pub fn bot_picked_up(&mut self, host: &mut dyn Host, id: Id) {
@@ -484,6 +507,10 @@ impl Game {
             let enemy_beds: Vec<Pos> = (0..arena.map.teams.len())
                 .filter(|&t| t != team && game.teams[t].bed)
                 .map(|t| arena.map.teams[t].bed)
+                .filter(|bed| {
+                    !bot.unreachable
+                        .is_some_and(|(b, until)| b == *bed && now < until)
+                })
                 .collect();
             let mates: Vec<u64> = mine_teams
                 .iter()
@@ -515,7 +542,9 @@ impl Game {
             };
             let intent = bot.think(&view);
             let fight = intent.fight.filter(|_| intent.aim.is_none());
-            let target = intent.goto.map(block_of).filter(|_| fight.is_none());
+            let near = intent.goto.map(block_of).filter(|_| fight.is_none());
+            let rush = intent.rush.filter(|_| fight.is_none());
+            let target = rush.map(Heading::Block).or(near.map(Heading::Near));
             if intent.aim != bot.ranged {
                 bot.ranged = intent.aim;
                 match intent.aim {
@@ -547,7 +576,7 @@ impl Game {
             if let (Some(goal), Some(handle), None, None) = (target, bot.handle, bot.ranged, fight)
                 && bot.stock.eggs > 0
                 && bot.egg_at.is_none_or(|t| now >= t + BRIDGE_COOLDOWN)
-                && let Some(ahead) = bridge_point(host, &arena.dimension, me, goal)
+                && let Some(ahead) = bridge_point(host, &arena.dimension, me, goal.pos())
             {
                 bot.stock.eggs -= 1;
                 bot.egg_at = Some(now);
@@ -601,7 +630,10 @@ impl Game {
             {
                 let process = match fight {
                     Some(id) => attack(id),
-                    None => target.map_or(control::Process::Idle, goto),
+                    None => target.map_or(control::Process::Idle, |h| match h {
+                        Heading::Near(at) => goto(at),
+                        Heading::Block(at) => get_to_block(at),
+                    }),
                 };
                 self.bot_calls.push(BotCall::Process(handle, process));
                 bot.heading = target;

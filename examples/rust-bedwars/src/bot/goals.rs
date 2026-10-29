@@ -286,7 +286,7 @@ impl Goal for RushBed {
         if dist(eye_of(view.me), center) <= BLOCK_REACH - 0.5 {
             out.dig = Some(bed);
         } else {
-            out.goto = Some([center[0], center[1] - 0.5, center[2]]);
+            out.rush = Some(bed);
         }
     }
 }

@@ -38,6 +38,15 @@ fn near(process: &control::Process) -> Option<[i32; 3]> {
     }
 }
 
+fn to_block(process: &control::Process) -> Option<[i32; 3]> {
+    match process {
+        control::Process::Goto(control::Goal::Leaf(control::LeafGoal::GetToBlock(at))) => {
+            Some([at.x, at.y, at.z])
+        }
+        _ => None,
+    }
+}
+
 /// Bot 0 was spawned by the bots plugin and is online as [`BOT`].
 fn online(game: &mut Game, host: &mut Rec) {
     game.bot_spawned(host, 0, Ok(HANDLE));
@@ -138,9 +147,9 @@ fn a_bot_walks_by_bots_api_processes_and_breaks_the_enemy_bed_by_one_break_proce
     let rush = Difficulty::Hard.skill().rush_after;
     ticks(&mut game, &mut host, rush);
     assert_eq!(
-        walks(&game).last().and_then(near),
+        walks(&game).last().and_then(to_block),
         Some([0, 65, -8]),
-        "off to the red bed"
+        "off to the red bed by a block goal"
     );
     host.at.insert(BOT, [0.5, 65.0, -5.5]);
     ticks(&mut game, &mut host, 20);
@@ -458,4 +467,40 @@ fn a_bot_without_arrows_sends_no_shoot_even_when_its_stock_claimed_a_bow() {
         .into_iter()
         .any(|p| matches!(p, control::Process::Shoot(_)));
     assert!(!shot, "{:?}", game.bot_calls);
+}
+
+#[test]
+fn rushing_sends_one_get_to_block_per_bed_and_a_failure_backs_off_then_retries() {
+    let (mut game, mut host) = against(Difficulty::Hard);
+    host.at.remove(&A);
+    let rush = Difficulty::Hard.skill().rush_after;
+    ticks(&mut game, &mut host, rush);
+    let blocks = |game: &Game| walks(game).iter().filter_map(to_block).count();
+    assert_eq!(blocks(&game), 1);
+    ticks(&mut game, &mut host, 30);
+    assert_eq!(blocks(&game), 1, "no resend storm");
+
+    game.bot_walk_failed(HANDLE);
+    ticks(&mut game, &mut host, 5);
+    assert_eq!(blocks(&game), 1, "the unreachable bed is left alone");
+    assert!(
+        walks(&game).last().is_some_and(|p| to_block(p).is_none()),
+        "another goal took over"
+    );
+    ticks(&mut game, &mut host, 10 * SECOND);
+    assert_eq!(blocks(&game), 2, "the bed is tried again after the pause");
+}
+
+#[test]
+fn a_bot_defends_its_bed_by_walking_to_it_and_attacking_an_intruder() {
+    let (mut game, mut host) = against(Difficulty::Hard);
+    ticks(&mut game, &mut host, 5);
+    host.at.insert(A, [0.5, 65.0, 8.5]);
+    ticks(&mut game, &mut host, 40);
+    let sent = walks(&game);
+    assert!(
+        sent.iter()
+            .any(|p| matches!(p, control::Process::Attack(_))),
+        "the intruder is attacked: {sent:?}"
+    );
 }
