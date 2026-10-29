@@ -62,19 +62,24 @@ fn spec_at(name: String, x: f64, y: f64, z: f64) -> control::SpawnSpec {
             click_cps_cap: 10.0,
             attack_charge: 0.9,
         },
-        policy: control::Policy {
-            allow_break: true,
-            allow_place: true,
-            allow_sprint: true,
-            allow_parkour: true,
-            max_fall: 3,
-            break_allow: vec![],
-            break_deny: vec![],
-            throwaway_items: vec!["minecraft:cobblestone".into()],
-            avoid: vec![],
-            auto_eat: true,
-        },
+        policy: policy(true),
         respawn: control::RespawnPolicy::Owner,
+    }
+}
+
+fn policy(defend: bool) -> control::Policy {
+    control::Policy {
+        allow_break: true,
+        allow_place: true,
+        allow_sprint: true,
+        allow_parkour: true,
+        max_fall: 3,
+        break_allow: vec![],
+        break_deny: vec![],
+        throwaway_items: vec!["minecraft:cobblestone".into()],
+        avoid: vec![],
+        auto_eat: true,
+        defend,
     }
 }
 
@@ -319,8 +324,12 @@ impl Plugin for Consumer {
                             .unwrap_or(0);
                         let line = match control::Control::any().state(id).await {
                             Ok(s) => format!(
-                                "state {id} alive={} x={} y={} z={}",
-                                s.alive, s.position.x, s.position.y, s.position.z
+                                "state {id} alive={} x={} y={} z={} attacking={}",
+                                s.alive,
+                                s.position.x,
+                                s.position.y,
+                                s.position.z,
+                                matches!(s.process, control::Process::Attack(_))
                             ),
                             Err(error) => describe(error),
                         };
@@ -328,6 +337,21 @@ impl Plugin for Consumer {
                     },
                 )),
             )
+            .then(literal("defend").then(argument("id", parser::word()).then(
+                argument("mode", parser::word()).executes_async(|ctx| async move {
+                    let id = ctx
+                        .get::<String>("id")
+                        .ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    let on = ctx.get::<String>("mode").is_ok_and(|m| m == "on");
+                    let line = match control::Control::any().set_policy(id, policy(on)).await {
+                        Ok(()) => format!("defend {id} {on}"),
+                        Err(error) => describe(error),
+                    };
+                    answer(&ctx, line);
+                }),
+            )))
             .then(literal("events").executes(|ctx| {
                 ctx.reply(EVENTS.with(|e| e.borrow().join(",")))?;
                 Ok(1)

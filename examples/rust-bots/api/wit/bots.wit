@@ -54,6 +54,9 @@ interface control {
         throwaway-items: list<string>,
         avoid: list<aabb>,
         auto-eat: bool,
+        /// Hit back at whoever hurts the bot, then carry on with the
+        /// process it was running.
+        defend: bool,
     }
 
     variant respawn-policy {

@@ -242,6 +242,13 @@ struct Payload {
         return ev->tag == TUFF_PLUGIN_TYPES_EVENT_PAYLOAD ? &ev->val.payload : nullptr;
     }
 };
+struct FakeHurt {
+    using payload = raw::tuff_plugin_types_fake_damage_t;
+    static constexpr raw::tuff_event_kinds_t kind = TUFF_PLUGIN_TYPES_EVENT_KINDS_FAKE_HURT;
+    static const payload *get(const raw::tuff_event_t *ev) {
+        return ev->tag == TUFF_PLUGIN_TYPES_EVENT_FAKE_HURT ? &ev->val.fake_hurt : nullptr;
+    }
+};
 } // namespace ev
 
 // Payload fields that event filters read.

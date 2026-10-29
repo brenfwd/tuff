@@ -10,6 +10,7 @@ pub mod combat;
 pub mod commands;
 pub mod core;
 pub mod danger;
+pub mod defence;
 pub mod exec;
 pub mod farm;
 pub mod flight;
@@ -400,7 +401,14 @@ impl Host for Real {
             true => Vec::new(),
             false => tuff_plugin_sdk::entity_states(&refs).unwrap_or_default(),
         };
-        let mut velocity = vec![control::Vec3 { x: 0.0, y: 0.0, z: 0.0 }; found.len()];
+        let mut velocity = vec![
+            control::Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0
+            };
+            found.len()
+        ];
         for (i, state) in moving.iter().zip(states) {
             if let Some(state) = state {
                 velocity[*i] = control::Vec3 {
@@ -553,6 +561,13 @@ impl Plugin for BotsPlugin {
         on::<ev::Explosion>(|e| {
             worlds(|w| w.exploded(&e.dimension, (e.center.x, e.center.y, e.center.z), e.radius));
             with(|bots, _| bots.mark_dirty());
+        })
+        .map_err(|e| format!("{e:?}"))?;
+        on::<ev::FakeHurt>(|h| {
+            if let Some(attacker) = h.attacker {
+                let body = (u128::from(h.fake.high) << 64) | u128::from(h.fake.low);
+                with(|bots, _| bots.hurt(body, attacker.to_string()));
+            }
         })
         .map_err(|e| format!("{e:?}"))
     }

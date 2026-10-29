@@ -239,6 +239,9 @@ pub enum Event {
     PlayerState,
     /// A client sent a custom payload; the payload is `"channel hex"`.
     Payload,
+    /// One of the plugin's fakes was hurt; the payload is
+    /// `"fake attacker_uuid_or_- damage_type health_lost"`.
+    FakeHurt,
 }
 
 fn uuid_hex(uuid: wit::Uuid) -> String {
@@ -397,6 +400,16 @@ pub fn payload(event: wit::Event) -> (Event, String) {
                 if c.item.is_empty() { "-" } else { &c.item },
                 c.count,
                 c.cancelled
+            ),
+        ),
+        wit::Event::FakeHurt(d) => (
+            Event::FakeHurt,
+            format!(
+                "{} {} {} {}",
+                uuid_hex(d.fake),
+                d.attacker.map_or_else(|| "-".to_owned(), uuid_hex),
+                d.damage_type,
+                d.health_lost
             ),
         ),
         wit::Event::Payload(m) => (

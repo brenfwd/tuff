@@ -450,6 +450,8 @@ interface types {
         /// A client sent a custom payload on a channel the plugin
         /// registered with `register-channel`.
         payload,
+        /// One of the plugin's own fakes was hurt (see `fake-damage`).
+        fake-hurt,
     }
 
     enum direction {
@@ -517,6 +519,18 @@ interface types {
         dimension: string,
     }
 
+    /// A hit on one of the plugin's fakes.
+    record fake-damage {
+        fake: uuid,
+        /// The player or mob that dealt it: the melee attacker, or the
+        /// owner of the projectile or explosion; none for the world.
+        attacker: option<uuid>,
+        /// The attacker's type, like `minecraft:zombie`.
+        attacker-kind: option<string>,
+        damage-type: string,
+        health-lost: f32,
+    }
+
     record death {
         player: player,
         damage-type: string,
@@ -572,6 +586,9 @@ interface types {
         inventory-close(inventory-window),
         player-state(state-change),
         payload(payload-message),
+        /// One of the plugin's own fakes was hurt, or died of it; heard
+        /// by the plugin that owns the fake and no other.
+        fake-hurt(fake-damage),
     }
 
     variant register-error {

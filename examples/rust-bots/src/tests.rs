@@ -29,7 +29,12 @@ pub(crate) struct Ground {
 }
 
 impl crate::world::Blocks for Ground {
-    fn class_at(&mut self, x: i32, y: i32, z: i32) -> Result<crate::world::Class, crate::world::Pending> {
+    fn class_at(
+        &mut self,
+        x: i32,
+        y: i32,
+        z: i32,
+    ) -> Result<crate::world::Class, crate::world::Pending> {
         use crate::world::Class;
         let ore = self.ore == Some((x, y, z));
         Ok(if y < 64 || ore {
@@ -39,7 +44,12 @@ impl crate::world::Blocks for Ground {
         })
     }
 
-    fn state_at(&mut self, x: i32, y: i32, z: i32) -> Result<Option<std::rc::Rc<str>>, crate::world::Pending> {
+    fn state_at(
+        &mut self,
+        x: i32,
+        y: i32,
+        z: i32,
+    ) -> Result<Option<std::rc::Rc<str>>, crate::world::Pending> {
         Ok((self.ore == Some((x, y, z))).then(|| "minecraft:iron_ore".into()))
     }
 
@@ -168,6 +178,7 @@ fn spec(name: &str, respawn: RespawnPolicy) -> SpawnSpec {
             throwaway_items: vec![],
             avoid: vec![],
             auto_eat: false,
+            defend: false,
         },
         respawn,
     }
@@ -632,4 +643,60 @@ fn a_better_armor_piece_in_the_hotbar_is_put_on_once() {
     bots.tick(&mut host);
     assert_eq!(host.log, vec!["slot 1".to_string()]);
     assert_eq!(host.uses, vec!["use"]);
+}
+
+fn defender(host: &mut Recording, bots: &mut Bots, defend: bool) -> (BotId, Process) {
+    let mut sp = spec("One", RespawnPolicy::Owner);
+    sp.policy.defend = defend;
+    let id = bots.spawn(host, "a", sp).unwrap();
+    let goto = Process::Goto(Goal::Leaf(LeafGoal::Xz(XzGoal { x: 0, z: -40 })));
+    bots.set_process("a", id, goto.clone()).unwrap();
+    (id, goto)
+}
+
+#[test]
+fn defence_a_hurt_bot_fights_then_resumes_its_process_silently() {
+    let mut host = host_with(&["a"]);
+    let mut bots = Bots::default();
+    let (id, goto) = defender(&mut host, &mut bots, true);
+    let attacker = "ab".repeat(16);
+    bots.hurt(host.next, attacker.clone());
+    host.lookups = [alive_target(), alive_target(), Lookup::Gone].into();
+    bots.tick(&mut host);
+    match bots.state("a", id).unwrap().process {
+        Process::Attack(spec) => assert_eq!(spec.target, attacker),
+        other => panic!("expected a fight, got {other:?}"),
+    }
+    bots.tick(&mut host);
+    assert_eq!(bots.state("a", id).unwrap().process, goto);
+    assert_eq!(events_of(&host, id), vec![Event::Spawned]);
+}
+
+#[test]
+fn defence_a_bot_without_the_flag_ignores_hits() {
+    let mut host = host_with(&["a"]);
+    let mut bots = Bots::default();
+    let (id, goto) = defender(&mut host, &mut bots, false);
+    bots.hurt(host.next, "ab".repeat(16));
+    host.lookups = [alive_target(), alive_target()].into();
+    bots.tick(&mut host);
+    assert_eq!(bots.state("a", id).unwrap().process, goto);
+}
+
+#[test]
+fn defence_a_forgotten_hit_ends_the_fight() {
+    let mut host = host_with(&["a"]);
+    let mut bots = Bots::default();
+    let (id, goto) = defender(&mut host, &mut bots, true);
+    bots.hurt(host.next, "ab".repeat(16));
+    host.lookups = std::iter::repeat_with(alive_target).take(400).collect();
+    bots.tick(&mut host);
+    assert!(matches!(
+        bots.state("a", id).unwrap().process,
+        Process::Attack(_)
+    ));
+    for _ in 0..=crate::defence::MEMORY_TICKS {
+        bots.tick(&mut host);
+    }
+    assert_eq!(bots.state("a", id).unwrap().process, goto);
 }

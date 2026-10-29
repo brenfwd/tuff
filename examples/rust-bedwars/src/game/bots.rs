@@ -80,6 +80,7 @@ fn policy(sprint: bool) -> control::Policy {
         throwaway_items: wools().collect(),
         avoid: Vec::new(),
         auto_eat: false,
+        defend: false,
     }
 }
 

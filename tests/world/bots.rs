@@ -719,6 +719,88 @@ async fn a_bot_routes_around_a_placed_zombie() {
     run.stop().await;
 }
 
+async fn hostile_zombie_next_to_a_bot(run: &Run) {
+    open_arena(run).await;
+    run.server("gamerule natural_health_regeneration false")
+        .await;
+    run.server("difficulty hard").await;
+    run.ask("spawnat Botty 0 150 0", |a| a.contains("spawned 1"))
+        .await;
+    run.botty_online(true).await;
+    run.server("give Botty minecraft:iron_sword").await;
+}
+
+async fn summon_hunting_zombie(run: &Run) {
+    run.server("summon minecraft:zombie 3.5 150 0.5 {PersistenceRequired:1b}")
+        .await;
+}
+
+async fn zombie_lives(run: &Run) -> bool {
+    run.server("execute if entity @e[type=minecraft:zombie]")
+        .await
+        .contains("passed")
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_fights_back_when_hit() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    hostile_zombie_next_to_a_bot(&run).await;
+    run.server("effect give Botty minecraft:resistance 999 3 true")
+        .await;
+    summon_hunting_zombie(&run).await;
+    let fought = std::sync::atomic::AtomicBool::new(false);
+    let killed = run
+        .within(PATIENCE * 4, || async {
+            run.say("state 1").await;
+            if run.say("answer").await.contains("attacking=true") {
+                fought.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            (!zombie_lives(&run).await).then_some(())
+        })
+        .await;
+    let fought = fought.into_inner();
+    assert!(
+        killed.is_some() && fought,
+        "the bot did not kill the zombie that hit it (fought: {fought}): {} | {} | {} | {}",
+        run.say("state 1").await,
+        run.say("events").await,
+        run.server("data get entity Botty Health").await,
+        run.server("data get entity @e[type=minecraft:zombie,limit=1]")
+            .await,
+    );
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_without_defend_ignores_hits() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    hostile_zombie_next_to_a_bot(&run).await;
+    run.ask("defend 1 off", |a| a.contains("defend 1 false"))
+        .await;
+    summon_hunting_zombie(&run).await;
+    let mut hit = false;
+    let mut fought = false;
+    for _ in 0..300 {
+        run.say("state 1").await;
+        fought |= run.say("answer").await.contains("attacking=true");
+        hit |= !run
+            .server("data get entity Botty Health")
+            .await
+            .contains("20.0f");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(hit, "the zombie never hurt the bot");
+    assert!(!fought, "the bot fought without the flag");
+    assert!(zombie_lives(&run).await);
+    run.stop().await;
+}
+
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_bot_detours_to_pick_up_a_nearby_drop() {

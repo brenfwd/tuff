@@ -36,5 +36,6 @@ pub fn kind_of(event: &Event) -> EventKinds {
         Event::InventoryClose(_) => EventKinds::INVENTORY_CLOSE,
         Event::PlayerState(_) => EventKinds::PLAYER_STATE,
         Event::Payload(_) => EventKinds::PAYLOAD,
+        Event::FakeHurt(_) => EventKinds::FAKE_HURT,
     }
 }
