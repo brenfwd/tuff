@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use tuff_bots_api::control::{
-    BlockPos, BotId, ControlError, FarmSpec, FlySpec, FollowSpec, GetToBlockSpec, Goal,
+    BlockPos, BotId, BuildSpec, ControlError, FarmSpec, FlySpec, FollowSpec, GetToBlockSpec, Goal,
     LeafGoal, Location, MineSpec, Model, NearGoal, Policy, Process, RespawnPolicy, Skill,
     SpawnSpec, Vec3, XzGoal,
 };
@@ -33,7 +33,55 @@ pub struct Sender {
     pub admin: bool,
 }
 
+pub enum Shape {
+    Box {
+        size: [i32; 3],
+        block: String,
+        hollow: bool,
+    },
+    Line {
+        axis: String,
+        length: i32,
+        state: String,
+    },
+}
+
+/// Blocks a build starts this far east of the commander's feet.
+pub const BUILD_GAP: i32 = 2;
+
+/// A block state like `cobblestone` or `oak_stairs[facing=east,half=top]`,
+/// namespaced.
+pub fn block_state(text: &str) -> Result<String, String> {
+    let bad = || "give a block like stone or oak_stairs[facing=east,half=top]".to_owned();
+    let (name, props) = match text.split_once('[') {
+        Some((name, rest)) => (name, Some(rest.strip_suffix(']').ok_or_else(bad)?)),
+        None => (text, None),
+    };
+    let name = name.trim_start_matches("minecraft:");
+    let word = |w: &str| {
+        !w.is_empty()
+            && w.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    };
+    if !word(name) {
+        return Err(bad());
+    }
+    if let Some(props) = props {
+        let ok = props
+            .split(',')
+            .all(|kv| kv.split_once('=').is_some_and(|(k, v)| word(k) && word(v)));
+        if !ok {
+            return Err(bad());
+        }
+    }
+    Ok(format!(
+        "minecraft:{name}{}",
+        props.map_or(String::new(), |p| format!("[{p}]"))
+    ))
+}
+
 pub enum Cmd {
+    Build(String, Shape),
     Spawn(String),
     Remove(String),
     Goto(String, Vec<i32>),
@@ -56,6 +104,7 @@ struct Entry {
 #[derive(Default)]
 pub struct Registry {
     named: BTreeMap<String, Entry>,
+    failed: BTreeMap<BotId, String>,
 }
 
 impl Registry {
@@ -280,14 +329,54 @@ pub fn run(
                 .map_err(describe)?;
             Ok(format!("{name} is mining"))
         }
+        Cmd::Build(name, shape) => {
+            let (blocks, what) = match shape {
+                Shape::Box {
+                    size: [dx, dy, dz],
+                    block,
+                    hollow,
+                } => (
+                    crate::build::box_blocks(*dx, *dy, *dz, &block_state(block)?, *hollow)?,
+                    "a box",
+                ),
+                Shape::Line {
+                    axis,
+                    length,
+                    state,
+                } => (
+                    crate::build::line_blocks(axis, *length, &block_state(state)?)?,
+                    "a line",
+                ),
+            };
+            let id = bot_of(reg, bots, name, by)?;
+            let spec = BuildSpec {
+                origin: BlockPos {
+                    x: by.pos.x.floor() as i32 + BUILD_GAP,
+                    y: by.pos.y.floor() as i32,
+                    z: by.pos.z.floor() as i32,
+                },
+                blocks,
+            };
+            bots.set_process(OWNER, id, Process::Build(spec))
+                .map_err(describe)?;
+            Ok(format!("{name} is building {what}"))
+        }
         Cmd::Farm(name, n) => {
             let [x1, y1, z1, x2, y2, z2] = n[..] else {
                 return Err("farm takes <x1 y1 z1 x2 y2 z2>".into());
             };
             let id = bot_of(reg, bots, name, by)?;
             let spec = FarmSpec {
-                min: BlockPos { x: x1.min(x2), y: y1.min(y2), z: z1.min(z2) },
-                max: BlockPos { x: x1.max(x2), y: y1.max(y2), z: z1.max(z2) },
+                min: BlockPos {
+                    x: x1.min(x2),
+                    y: y1.min(y2),
+                    z: z1.min(z2),
+                },
+                max: BlockPos {
+                    x: x1.max(x2),
+                    y: y1.max(y2),
+                    z: z1.max(z2),
+                },
                 replant: true,
             };
             bots.set_process(OWNER, id, Process::Farm(spec))
@@ -308,6 +397,7 @@ pub fn run(
         Cmd::Stop(name) => {
             let id = bot_of(reg, bots, name, by)?;
             bots.stop(OWNER, id).map_err(describe)?;
+            reg.failed.remove(&id);
             Ok(format!("{name} stopped"))
         }
         Cmd::Skill(name, preset) => {
@@ -325,8 +415,12 @@ pub fn run(
                     continue;
                 };
                 if let Ok(state) = bots.state(OWNER, id) {
+                    let failed = match (&state.process, reg.failed.get(&id)) {
+                        (Process::Idle, Some(reason)) => format!(" (failed: {reason})"),
+                        _ => String::new(),
+                    };
                     lines.push(format!(
-                        "{name}: {} at {} {} {}",
+                        "{name}: {}{failed} at {} {} {}",
                         describe_process(&state.process),
                         state.position.x.floor() as i32,
                         state.position.y.floor() as i32,
@@ -345,6 +439,25 @@ pub fn run(
 
 thread_local! {
     static REGISTRY: std::cell::RefCell<Registry> = std::cell::RefCell::new(Registry::default());
+}
+
+/// Remembers why a command bot's last process failed, for `/bots list`.
+pub fn note_event(bot: BotId, event: &crate::core::Event) {
+    use crate::core::Event;
+    REGISTRY.with(|reg| {
+        let Ok(mut reg) = reg.try_borrow_mut() else {
+            return;
+        };
+        match event {
+            Event::ProcessFailed(reason) => {
+                reg.failed.insert(bot, reason.clone());
+            }
+            Event::ProcessDone | Event::Removed => {
+                reg.failed.remove(&bot);
+            }
+            _ => {}
+        }
+    });
 }
 
 fn hex(uuid: &tuff_plugin_sdk::types::Uuid) -> String {
@@ -389,6 +502,19 @@ fn on_bot(word: &str, make: impl Fn(String) -> Cmd + Clone + 'static) -> Node {
             .suggests(names)
             .executes(move |ctx| execute(&ctx, &make)),
     )
+}
+
+fn build_box(ctx: &Ctx, hollow: bool) -> Outcome {
+    execute(ctx, |c| {
+        Ok(Cmd::Build(
+            c.get("name")?,
+            Shape::Box {
+                size: [c.get("dx")?, c.get("dy")?, c.get("dz")?],
+                block: c.get("block")?,
+                hollow,
+            },
+        ))
+    })
 }
 
 pub fn register() -> Result<(), String> {
@@ -462,28 +588,70 @@ pub fn register() -> Result<(), String> {
                 ),
             ),
         )
-        .then(named("farm", "bots.command.farm").then(
-            argument("name", parser::word()).suggests(names).then(
-                (1..=6).rev().fold(None::<Node>, |inner, i| {
-                    let key = ["a", "b", "c", "d", "e", "f"][i - 1];
-                    let mut node = number(key);
-                    node = match inner {
-                        Some(next) => node.then(next),
-                        None => node.executes(|ctx| {
-                            execute(&ctx, |c| {
-                                let n: Vec<i32> = ["a", "b", "c", "d", "e", "f"]
-                                    .iter()
-                                    .map(|k| c.get::<i32>(k))
-                                    .collect::<Result<_, _>>()?;
-                                Ok(Cmd::Farm(c.get("name")?, n))
-                            })
-                        }),
-                    };
-                    Some(node)
-                })
-                .unwrap(),
+        .then(
+            named("build", "bots.command.build").then(
+                argument("name", parser::word())
+                    .suggests(names)
+                    .then(
+                        literal("box").then(
+                            number("dx").then(
+                                number("dy").then(
+                                    number("dz").then(
+                                        argument("block", parser::word())
+                                            .executes(|ctx| build_box(&ctx, false))
+                                            .then(
+                                                literal("hollow")
+                                                    .executes(|ctx| build_box(&ctx, true)),
+                                            ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    )
+                    .then(literal("line").then(argument("axis", parser::word()).then(
+                        number("length").then(argument("state", parser::greedy()).executes(
+                            |ctx| {
+                                execute(&ctx, |c| {
+                                    Ok(Cmd::Build(
+                                        c.get("name")?,
+                                        Shape::Line {
+                                            axis: c.get("axis")?,
+                                            length: c.get("length")?,
+                                            state: c.get("state")?,
+                                        },
+                                    ))
+                                })
+                            },
+                        )),
+                    ))),
             ),
-        ))
+        )
+        .then(
+            named("farm", "bots.command.farm").then(
+                argument("name", parser::word()).suggests(names).then(
+                    (1..=6)
+                        .rev()
+                        .fold(None::<Node>, |inner, i| {
+                            let key = ["a", "b", "c", "d", "e", "f"][i - 1];
+                            let mut node = number(key);
+                            node = match inner {
+                                Some(next) => node.then(next),
+                                None => node.executes(|ctx| {
+                                    execute(&ctx, |c| {
+                                        let n: Vec<i32> = ["a", "b", "c", "d", "e", "f"]
+                                            .iter()
+                                            .map(|k| c.get::<i32>(k))
+                                            .collect::<Result<_, _>>()?;
+                                        Ok(Cmd::Farm(c.get("name")?, n))
+                                    })
+                                }),
+                            };
+                            Some(node)
+                        })
+                        .unwrap(),
+                ),
+            ),
+        )
         .then(named("find", "bots.command.find").then(
             argument("name", parser::word()).suggests(names).then(
                 argument("blocks", parser::word()).executes(|ctx| {
@@ -715,5 +883,85 @@ mod tests {
                 .is_ok()
         );
         assert_eq!(rig.bots.skill(OWNER, 1).unwrap().turn_rate, 60.0);
+    }
+
+    fn box_cmd(size: [i32; 3], block: &str, hollow: bool) -> Cmd {
+        Cmd::Build(
+            "Bob".into(),
+            Shape::Box {
+                size,
+                block: block.into(),
+                hollow,
+            },
+        )
+    }
+
+    #[test]
+    fn build_box_sets_the_process_east_of_the_commander() {
+        let mut rig = Rig::new();
+        let op = sender("aa", false);
+        rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
+        rig.run(box_cmd([3, 3, 3], "cobblestone", true), &op)
+            .unwrap();
+        let Process::Build(spec) = rig.process("Bob") else {
+            panic!("not building");
+        };
+        assert_eq!(
+            spec.origin,
+            BlockPos {
+                x: 5 + BUILD_GAP,
+                y: 64,
+                z: 5
+            }
+        );
+        assert_eq!(spec.blocks.len(), 26);
+        assert_eq!(spec.blocks[0].state, "minecraft:cobblestone");
+    }
+
+    #[test]
+    fn build_line_keeps_the_block_properties() {
+        let mut rig = Rig::new();
+        let op = sender("aa", false);
+        rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
+        rig.run(
+            Cmd::Build(
+                "Bob".into(),
+                Shape::Line {
+                    axis: "z".into(),
+                    length: 2,
+                    state: "oak_stairs[facing=east,half=top]".into(),
+                },
+            ),
+            &op,
+        )
+        .unwrap();
+        let Process::Build(spec) = rig.process("Bob") else {
+            panic!("not building");
+        };
+        assert_eq!(spec.blocks.len(), 2);
+        assert_eq!(
+            spec.blocks[1].state,
+            "minecraft:oak_stairs[facing=east,half=top]"
+        );
+    }
+
+    #[test]
+    fn build_rejects_bad_sizes_blocks_and_strangers() {
+        let mut rig = Rig::new();
+        let op = sender("aa", false);
+        rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
+        for bad in [[0, 3, 3], [20, 20, 20], [3, -1, 3]] {
+            assert!(rig.run(box_cmd(bad, "stone", false), &op).is_err());
+        }
+        assert!(
+            rig.run(box_cmd([3, 3, 3], "Not A Block", false), &op)
+                .is_err()
+        );
+        assert!(rig.run(box_cmd([3, 3, 3], "stone[", false), &op).is_err());
+        assert!(
+            rig.run(box_cmd([3, 3, 3], "stone", false), &sender("bb", false))
+                .is_err()
+        );
+        assert_eq!(rig.process("Bob"), Process::Idle);
     }
 }

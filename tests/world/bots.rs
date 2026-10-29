@@ -942,3 +942,108 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
     assert!(replanted >= 5, "replanted {replanted} of 9");
     run.stop().await;
 }
+
+impl Run {
+    async fn build_arena(&self) {
+        self.server("forceload add -16 -16 31 31").await;
+        self.fill_loaded("fill -3 149 -3 12 149 12 stone").await;
+        self.server("fill -3 150 -3 12 160 12 air").await;
+    }
+
+    async fn operator_bot(&self, op_name: &str, at_z: i32, ordinal: u32, bot: &str) -> u128 {
+        self.ask(&format!("spawnat {op_name} 0 150 {at_z}"), |a| {
+            a.contains(&format!("spawned {ordinal}"))
+        })
+        .await;
+        let op = tuff_core::world::fake::derive_uuid(
+            "bots",
+            op_name,
+            tuff_core::world::fake::Model::Wide,
+        );
+        self.eventually(|| async {
+            self.op(op, &format!("bots spawn {bot}"))
+                .await
+                .contains("Spawned")
+                .then_some(())
+        })
+        .await;
+        self.eventually(|| async { self.online().await.contains(bot).then_some(()) })
+            .await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        self.server(&format!("clear {bot}")).await;
+        op
+    }
+
+    async fn build_and_wait(&self, op: u128, bot: &str, line: &str) {
+        let reply = self.op(op, line).await;
+        assert!(reply.contains("is building"), "{reply}");
+        let idle = format!("{bot}: idle");
+        let list = self
+            .eventually(|| async {
+                let list = self.op(op, "bots list").await;
+                list.contains(&idle).then_some(list)
+            })
+            .await;
+        assert!(!list.contains("failed"), "{list}");
+    }
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bots_build_a_hollow_cube_from_inventory_blocks() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    run.build_arena().await;
+    let op = run.operator_bot("Op", 0, 1, "Mate").await;
+    run.server("give Mate cobblestone 40").await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    run.build_and_wait(op, "Mate", "bots build Mate box 3 3 3 cobblestone hollow")
+        .await;
+    for x in 2..=4 {
+        for y in 150..=152 {
+            for z in 0..=2 {
+                let shell = (x, y, z) != (3, 151, 1);
+                let want = if shell { "cobblestone" } else { "air" };
+                assert!(run.block_is(x, y, z, want).await, "{x} {y} {z} {want}");
+            }
+        }
+    }
+    let left = run.server("clear Mate cobblestone 0").await;
+    assert!(left.contains("14"), "{left}");
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bots_build_honours_stair_and_log_orientation() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    run.build_arena().await;
+    run.server("setblock 3 150 8 stone").await;
+    let op = run.operator_bot("Op", 0, 1, "Mate").await;
+    let other = run.operator_bot("Op2", 8, 3, "Mate2").await;
+    run.server("give Mate oak_stairs 4").await;
+    run.server("give Mate2 oak_log 4").await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    run.build_and_wait(
+        op,
+        "Mate",
+        "bots build Mate line z 1 oak_stairs[facing=east,half=bottom]",
+    )
+    .await;
+    assert!(
+        run.block_is(2, 150, 0, "oak_stairs[facing=east,half=bottom]")
+            .await
+    );
+    run.build_and_wait(other, "Mate2", "bots build Mate2 line x 1 oak_log[axis=x]")
+        .await;
+    assert!(run.block_is(2, 150, 8, "oak_log[axis=x]").await);
+    let flags = run.server("anticheat violations").await;
+    assert!(
+        flags.contains("No player has anti-cheat violations"),
+        "{flags}"
+    );
+    run.stop().await;
+}

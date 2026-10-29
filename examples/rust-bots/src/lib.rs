@@ -381,6 +381,7 @@ impl Host for Real {
 
     fn notify(&mut self, owner: &str, bot: control::BotId, event: Event) -> Delivery {
         if owner == commands::OWNER {
+            commands::note_event(bot, &event);
             return Delivery::Sent;
         }
         let to = events::Events::at(owner);

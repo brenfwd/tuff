@@ -580,8 +580,7 @@ impl Executor {
             && forward != 0;
         let parkour_next = after.and_then(|next| parkour_gap(waypoint, next));
         let sprint = can_sprint
-            && ((vertical == 0 && straight_on)
-                || parkour.or(parkour_next).is_some_and(|g| g > 1));
+            && ((vertical == 0 && straight_on) || parkour.or(parkour_next).is_some_and(|g| g > 1));
         let jump_at_edge = parkour.or(parkour_next).is_some();
         let jump = match parkour {
             Some(_) => false,

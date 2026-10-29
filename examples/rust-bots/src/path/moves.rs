@@ -77,11 +77,13 @@ fn step_ticks(w: &mut dyn Blocks, params: &Params, to: Pos, from: Pos) -> Result
 /// Extra cost of a cell whose head is under water: the bot is spending air there.
 fn submerged_ticks(w: &mut dyn Blocks, at: Pos) -> Result<f64, Pending> {
     let feet = w.class_at(at.0, at.1, at.2)?;
-    Ok(if feet.water() && w.class_at(at.0, at.1 + 1, at.2)?.water() {
-        SUBMERGED_TICKS
-    } else {
-        0.0
-    })
+    Ok(
+        if feet.water() && w.class_at(at.0, at.1 + 1, at.2)?.water() {
+            SUBMERGED_TICKS
+        } else {
+            0.0
+        },
+    )
 }
 
 fn push(out: &mut Vec<Edge>, params: &Params, to: Pos, cost: f64) {
