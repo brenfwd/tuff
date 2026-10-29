@@ -172,6 +172,7 @@ pub struct Builder {
     stage: Stage,
     checked: bool,
     retries: u32,
+    pub grounded: bool,
 }
 
 impl Builder {
@@ -185,6 +186,7 @@ impl Builder {
             stage: Stage::Seek,
             checked: false,
             retries: 0,
+            grounded: true,
         }
     }
 
@@ -262,6 +264,7 @@ impl Builder {
             Stage::Stripping(breaker) => breaker.tick(me, world, tools),
             Stage::Placing(placer, pos, scaffolding) => {
                 let (pos, scaffolding) = (*pos, *scaffolding);
+                placer.grounded = self.grounded;
                 match placer.tick(me, world, carried) {
                     Hands::Done => {
                         if scaffolding {

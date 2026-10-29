@@ -689,15 +689,21 @@ impl Bots {
                 let step = match host.blocks(bot.body) {
                     Some(world) => match hands {
                         HandWork::Break(b) => b.tick(&seen.pos, world, tools.as_ref()),
-                        HandWork::Place(p) => p.tick(&seen.pos, world, &carried),
-                        HandWork::Build(b) => b.tick(
+                        HandWork::Place(p) => {
+                            p.grounded = seen.on_ground || seen.in_fluid;
+                            p.tick(&seen.pos, world, &carried)
+                        }
+                        HandWork::Build(b) => {
+                            b.grounded = seen.on_ground || seen.in_fluid;
+                            b.tick(
                             &seen.pos,
                             world,
                             &carried,
                             tools.as_ref(),
                             bot.policy.allow_break,
                             &bot.policy.throwaway_items,
-                        ),
+                            )
+                        }
                     },
                     None => Hands::Wait,
                 };
