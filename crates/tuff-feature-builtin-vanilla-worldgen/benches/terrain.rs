@@ -32,8 +32,10 @@ fn main() {
         Arc::new(MultiNoise::preset("minecraft:overworld").unwrap()),
         SEED,
     );
+    let adjacent = std::env::var("TERRAIN_BENCH_MODE").is_ok_and(|mode| mode == "adjacent");
+    let step = if adjacent { 1 } else { 7 };
     let positions: Vec<ChunkPos> = (-RADIUS..=RADIUS)
-        .flat_map(|x| (-RADIUS..=RADIUS).map(move |z| ChunkPos::new(x * 7, z * 7)))
+        .flat_map(|x| (-RADIUS..=RADIUS).map(move |z| ChunkPos::new(x * step, z * step)))
         .collect();
     let mut digest = 0u64;
     for &pos in positions.iter().take(2) {
@@ -53,7 +55,8 @@ fn main() {
         );
     }
     println!(
-        "worldgen-terrain chunks={} best={:.2} chunks/s digest={digest:016x}",
+        "worldgen-terrain{} chunks={} best={:.2} chunks/s digest={digest:016x}",
+        if adjacent { "-adjacent" } else { "" },
         positions.len(),
         positions.len() as f64 / best.as_secs_f64()
     );
