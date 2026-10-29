@@ -422,12 +422,38 @@ async fn goto_swims_a_pool_climbs_a_ladder_and_jumps_a_three_block_gap() {
         .await;
     run.botty_online(true).await;
     run.ask("goto 1 0 156 28", |a| a.contains("going 1")).await;
-    let events = run.process_end(1, 1200).await;
+    let path = std::cell::RefCell::new(Vec::<String>::new());
+    let ended = run
+        .within(1200, || async {
+            let state = run.ask("state 1", |a| a.contains("alive")).await;
+            let here = state
+                .split_whitespace()
+                .filter(|w| w.starts_with(['x', 'y', 'z']))
+                .map(|w| w.split('.').next().unwrap_or(w).to_owned())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut seen = path.borrow_mut();
+            if seen.last() != Some(&here) {
+                seen.push(here);
+            }
+            let events = run.say("events").await;
+            (events.contains("done 1") || events.contains("failed 1")).then_some(events)
+        })
+        .await;
+    let events = match ended {
+        Some(events) => events,
+        None => run.say("events").await,
+    };
     let state = run.ask("state 1", |a| a.contains("alive")).await;
-    assert!(events.contains("done 1"), "{events} {state}");
+    assert!(
+        events.contains("done 1"),
+        "{events} {state} path={:?}",
+        path.borrow()
+    );
     assert!(
         state.contains("z=28.") && state.contains("y=156"),
-        "{state}"
+        "{state} path={:?}",
+        path.borrow()
     );
     let flags = run.server("anticheat violations Botty").await;
     assert!(
@@ -696,7 +722,7 @@ async fn a_bot_routes_around_a_placed_zombie() {
     let mut closest = f64::MAX;
     let mut events = String::new();
     for _ in 0..800 {
-        let state = run.say("state 1").await;
+        let state = run.ask("state 1", |a| a.contains("alive")).await;
         if let (Some(x), Some(z)) = (state_coord(&state, "x"), state_coord(&state, "z")) {
             closest = closest.min((x - 0.5).hypot(z - 12.5));
         }
@@ -1095,9 +1121,27 @@ async fn farm_wheat_field(age: u32, gives: &[&str]) -> Option<FarmResult> {
     }
     let said = run.op(op, "bots farm Mate 1 150 1 3 150 3").await;
     assert!(said.contains("farming"), "{said}");
+    let lost = std::cell::RefCell::new(String::new());
+    let trace = std::cell::RefCell::new(Vec::<String>::new());
     let finished = run
         .within(PATIENCE, || async {
             let list = run.op(op, "bots list").await;
+            {
+                let mut seen = trace.borrow_mut();
+                if seen.last() != Some(&list) {
+                    seen.push(list.clone());
+                }
+            }
+            if lost.borrow().is_empty() {
+                for (x, z) in (1..=3).flat_map(|x| (1..=3).map(move |z| (x, z))) {
+                    let cmd = format!("execute if block {x} 149 {z} farmland");
+                    if !run.server(&cmd).await.contains("passed") {
+                        let pos = run.server("data get entity Mate Pos").await;
+                        *lost.borrow_mut() = format!("farmland {x},{z} lost: {list} {pos}");
+                        break;
+                    }
+                }
+            }
             (list.contains("Mate: idle")
                 && run
                     .server("execute if block 2 150 2 wheat[age=7]")
@@ -1114,13 +1158,23 @@ async fn farm_wheat_field(age: u32, gives: &[&str]) -> Option<FarmResult> {
         let list = run.op(op, "bots list").await;
         let pos = run.server("data get entity Mate Pos").await;
         let events = run.say("events").await;
-        panic!("farm unfinished in {PATIENCE} ticks: {list} {pos} {events}");
+        panic!(
+            "farm unfinished in {PATIENCE} ticks: {list} {pos} {events} {} trace={:?}",
+            lost.borrow(),
+            trace.borrow()
+        );
     }
     let mut replanted = 0;
     let mut ripe = 0;
     let mut young = 0;
     let mut detail = run.op(op, "bots list").await;
     detail.push_str(&run.server("data get entity Mate Pos").await);
+    detail.push_str(&format!(
+        " {} trace={:?} events={}",
+        lost.borrow(),
+        trace.borrow(),
+        run.say("events").await
+    ));
     for (x, z) in (1..=3).flat_map(|x| (1..=3).map(move |z| (x, z))) {
         let ground = run
             .server(&format!("execute if block {x} 149 {z} farmland"))

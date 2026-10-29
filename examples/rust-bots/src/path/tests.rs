@@ -780,3 +780,25 @@ fn a_surface_swim_is_cheaper_than_a_submerged_one() {
     };
     assert!(cost(true) > cost(false), "{} {}", cost(true), cost(false));
 }
+
+#[test]
+fn a_bot_one_block_off_the_line_keeps_the_plan() {
+    let mut t = open(40, 12);
+    let mut planner = Planner::new(block(30, 1, 6), Params::default());
+    let mut at = (0, 1, 6);
+    for _ in 0..200 {
+        match planner.tick(at, &mut t) {
+            Advance::Waypoint(next) if next.0 >= 5 => break,
+            Advance::Waypoint(next) => at = next,
+            _ => {}
+        }
+    }
+    let length = planner.path().len();
+    let drifted = (at.0 + 1, at.1, at.2 + 1);
+    let Advance::Waypoint(next) = planner.tick(drifted, &mut t) else {
+        panic!("the plan was dropped");
+    };
+    assert!(next.0 > at.0);
+    assert_eq!(planner.path().len(), length);
+    assert!(planner.path().contains(&planner.anchor()));
+}

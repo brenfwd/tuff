@@ -23,6 +23,7 @@ pub const MAX_REPLANS: u32 = 3;
 const PROGRESS_BLOCKS: f64 = 0.25;
 const REPLAN_RESET_BLOCKS: f64 = 3.0;
 const SPRINT_FOOD: i32 = 6;
+const BRAKE_CELLS: usize = 3;
 const YAW_DEADBAND: f32 = 2.0;
 const TURN_IN_PLACE: f32 = 45.0;
 const SPRINT_ALIGNED: f32 = 12.0;
@@ -536,6 +537,7 @@ impl Executor {
             }
             Advance::Waypoint(next) => next,
         };
+        let at = self.planner.anchor();
         match need(world, at, waypoint) {
             Ok(Need::Clear) => {}
             Ok(needed) => {
@@ -579,8 +581,13 @@ impl Executor {
             && misaligned < SPRINT_ALIGNED
             && forward != 0;
         let parkour_next = after.and_then(|next| parkour_gap(waypoint, next));
+        let braking = self
+            .planner
+            .remaining(at)
+            .is_some_and(|(left, complete)| complete && left <= BRAKE_CELLS);
         let sprint = can_sprint
-            && ((vertical == 0 && straight_on) || parkour.or(parkour_next).is_some_and(|g| g > 1));
+            && ((vertical == 0 && straight_on && !braking)
+                || parkour.or(parkour_next).is_some_and(|g| g > 1));
         let jump_at_edge = parkour.or(parkour_next).is_some();
         let jump = match parkour {
             Some(_) => false,
