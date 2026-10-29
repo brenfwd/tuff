@@ -74,6 +74,11 @@ fn cases() -> Vec<Case> {
     ] {
         cases.push(case(kind, true, "animals and friendly mobs never despawn"));
     }
+    cases.push(case(
+        E::Tadpole,
+        true,
+        "tadpoles are always bucket-flagged and never despawn",
+    ));
     for kind in [
         E::Zombie,
         E::Skeleton,
