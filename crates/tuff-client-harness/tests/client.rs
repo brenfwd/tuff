@@ -3581,6 +3581,90 @@ async fn real_client_ac_vehicle_setback_echo() {
 #[tuff_core::watchdog]
 #[ignore = "launches a real vanilla client"]
 #[tokio::test(flavor = "multi_thread")]
+async fn real_client_record_boat_ride() {
+    use tuff_core::protocol::play::Serverbound;
+    use tuff_replay::corpus::Lane as Recorded;
+    use tuff_trace::ConnState;
+    use tuff_trace::Direction;
+
+    if !enabled() {
+        return;
+    }
+    let s = AcSession::join("boat_ride", "Rider").await;
+    let [x, y, z] = s.origin;
+    s.say(&format!("op {}", s.username)).await;
+    s.fill([-3, 1, -2], [75, 14, 2], "minecraft:air").await;
+    s.fill([-3, -1, -2], [75, -1, 2], "minecraft:stone").await;
+    s.fill([-3, 0, -2], [75, 0, 2], "minecraft:stone").await;
+    s.fill([-3, 0, -1], [75, 0, 1], "minecraft:water").await;
+    s.place_player(0.0, 1, 0, -90.0, 0.0).await;
+    let origin = [f64::from(x) + 0.5, f64::from(y + 1), f64::from(z) + 0.5];
+    s.say(&format!(
+        "summon minecraft:oak_boat {} {} {} {{Rotation:[-90f,0f]}}",
+        origin[0], origin[1], origin[2]
+    ))
+    .await;
+    s.client.request(Command::WaitTicks(10)).await.unwrap();
+    let started = s.say(&format!("tuff tracing {} start", s.username)).await;
+    let path = started.rsplit_once(": ").unwrap().1.trim().to_owned();
+    s.say(&format!(
+        "ride {} mount @e[type=minecraft:oak_boat,limit=1]",
+        s.username
+    ))
+    .await;
+    s.client.request(Command::WaitTicks(10)).await.unwrap();
+    s.client
+        .request(Command::Look {
+            yaw: -90.0,
+            pitch: 0.0,
+        })
+        .await
+        .unwrap();
+    s.key("forward", true).await;
+    s.client.request(Command::WaitTicks(220)).await.unwrap();
+    s.key("forward", false).await;
+    s.client.request(Command::WaitTicks(10)).await.unwrap();
+    s.say(&format!("tuff tracing {} stop", s.username)).await;
+    let violations = s.say(&format!("anticheat violations {}", s.username)).await;
+    eprintln!("boat ride violations: {violations}");
+    s.say("kill @e[type=!player]").await;
+
+    let recording =
+        tuff_trace::format::read_all(std::fs::File::open(&path).unwrap(), 1 << 30).unwrap();
+    let mut lane = Recorded {
+        name: "boat_ride_real".to_owned(),
+        spawn: Some(origin),
+        ..Recorded::default()
+    };
+    for r in &recording.records {
+        if r.tag.is_event()
+            || r.tag.state() != ConnState::Play
+            || r.tag.direction() != Direction::Serverbound
+        {
+            continue;
+        }
+        if let Ok(packet @ (Serverbound::MoveVehicle { .. } | Serverbound::PaddleBoat { .. })) =
+            Serverbound::decode(r.payload.clone())
+        {
+            lane.packets.push(packet);
+        }
+    }
+    let _ = std::fs::remove_file(&path);
+    let rides = lane
+        .packets
+        .iter()
+        .filter(|p| matches!(p, Serverbound::MoveVehicle { .. }))
+        .count();
+    assert!(rides >= 150, "the lane holds {rides} MoveVehicle packets");
+    let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/world/fixtures/mount_ride_boat.txt");
+    std::fs::write(out, lane.render(origin)).unwrap();
+    s.finish().await;
+}
+
+#[tuff_core::watchdog]
+#[ignore = "launches a real vanilla client"]
+#[tokio::test(flavor = "multi_thread")]
 async fn real_client_minecart_track_replay() {
     if !enabled() {
         return;
