@@ -133,13 +133,15 @@ impl Breaker {
             _ => {
                 let found = find_stand(
                     world,
-                    me,
-                    false,
-                    pos,
-                    &HashSet::new(),
-                    &faces,
-                    true,
-                    STAND_RADIUS,
+                    &StandQuery {
+                        me,
+                        leave_here: false,
+                        target: pos,
+                        avoid: &HashSet::new(),
+                        candidates: &faces,
+                        dig: true,
+                        slack: STAND_RADIUS,
+                    },
                 )?;
                 self.stand = found.map(|s| (pos, s));
                 found
@@ -453,16 +455,26 @@ pub(crate) fn stand_works(
 
 /// A cell the bot can walk to from which one of the faces can be clicked,
 /// the nearest first.
-fn find_stand(
-    world: &mut dyn Blocks,
-    me: &Vec3,
+struct StandQuery<'a> {
+    me: &'a Vec3,
     leave_here: bool,
     target: Pos,
-    avoid: &HashSet<Pos>,
-    candidates: &[(Pos, Face)],
+    avoid: &'a HashSet<Pos>,
+    candidates: &'a [(Pos, Face)],
     dig: bool,
     slack: f64,
-) -> Result<Option<Pos>, ()> {
+}
+
+fn find_stand(world: &mut dyn Blocks, query: &StandQuery) -> Result<Option<Pos>, ()> {
+    let StandQuery {
+        me,
+        leave_here,
+        target,
+        avoid,
+        candidates,
+        dig,
+        slack,
+    } = *query;
     let here = (
         me.x.floor() as i32,
         me.y.floor() as i32,
@@ -646,13 +658,15 @@ impl Placer {
                         avoid.extend(self.rejected.iter().copied());
                         match find_stand(
                             world,
-                            me,
-                            blocked,
-                            pos,
-                            &avoid,
-                            &candidates,
-                            false,
-                            self.slack,
+                            &StandQuery {
+                                me,
+                                leave_here: blocked,
+                                target: pos,
+                                avoid: &avoid,
+                                candidates: &candidates,
+                                dig: false,
+                                slack: self.slack,
+                            },
                         ) {
                             Err(()) => return Hands::Wait,
                             Ok(None) if self.slack > VIEW_SLACK => {
