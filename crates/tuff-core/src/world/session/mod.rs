@@ -154,6 +154,7 @@ pub(crate) const PLAYER_HALF_WIDTH: f64 = 0.3;
 pub const CLIENT_LOAD_TICKS: u64 = 60;
 /// How long a teleport may go unconfirmed before a move sends it again.
 pub const TELEPORT_RESEND_TICKS: u64 = 20;
+pub const TELEPORT_CHUNK_WAIT_TICKS: u64 = 40;
 pub const MAX_CHAT_CHARS: usize = 256;
 pub const THROW_SPEED: f64 = 0.3;
 pub const MIN_VIEW_DISTANCE: i32 = 2;
@@ -1458,7 +1459,17 @@ impl PlayerSession {
     }
 
     pub fn send_chunk_batch(&mut self) {
-        if self.view.queue.is_empty() || self.view.unacked_batches >= self.view.max_unacked_batches
+        self.send_queued_chunks();
+        self.release_deferred_teleport();
+    }
+
+    fn send_queued_chunks(&mut self) {
+        let waiting = self
+            .sync
+            .deferred_teleport
+            .is_some_and(|(chunk, _)| self.view.queue.iter().any(|q| q.pos == chunk));
+        if self.view.queue.is_empty()
+            || (!waiting && self.view.unacked_batches >= self.view.max_unacked_batches)
         {
             return;
         }

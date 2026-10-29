@@ -921,7 +921,7 @@ impl PlayerSession {
         self.pose.yaw = yaw;
         self.pose.pitch = pitch;
         self.pose.on_ground = true;
-        self.teleport(position);
+        self.teleport_after_chunk(position);
         self.update_view().await;
         self.publish(true).await;
     }

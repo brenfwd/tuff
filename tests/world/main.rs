@@ -98,6 +98,7 @@ mod entity_tick_determinism;
 mod entity_tick_scale;
 mod fake_players;
 mod fake_plugin_abi;
+mod far_teleport;
 mod fishing;
 mod floating_kick;
 mod flood;
