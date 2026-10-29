@@ -311,3 +311,42 @@ async fn an_entity_handed_over_with_a_taken_uuid_is_dropped() {
     assert_eq!(entities_with(&west, 78).await, 1);
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn selector_resolves_an_entity_between_two_regions() {
+    use tuff_core::world::commands::targets::sweep_regions;
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let (west, east) = two_regions(&world).await;
+    for round in 0..20u128 {
+        let uuid = 900 + round;
+        assert!(summon_with_uuid(&west, uuid, [510.5, 64.0, 8.5]).await);
+        let (sent, handed) = oneshot::channel();
+        run_on(&west, move |world| {
+            let id = world
+                .entity_ids()
+                .into_iter()
+                .find(|id| {
+                    world
+                        .entity(*id)
+                        .is_some_and(|t| t.entity.base().uuid == uuid)
+                })
+                .unwrap();
+            let tracked = world.remove_entity_kept(id).unwrap();
+            let seq = tracked.seq;
+            sent.send((tracked.entity, seq)).ok();
+        })
+        .await;
+        let (entity, seq) = handed.await.unwrap();
+        east.try_entity(entity, seq).ok().unwrap();
+        let regions = [west.clone(), east.clone()];
+        let (by_uuid, ()) =
+            tokio::join!(sweep_regions(&regions, false, Some(uuid)), world.ticks(3));
+        assert!(by_uuid.iter().any(|e| e.uuid == uuid), "round {round}");
+        let all = sweep_regions(&regions, false, None).await;
+        let ids: std::collections::HashSet<_> = all.iter().map(|e| e.id).collect();
+        assert_eq!(ids.len(), all.len());
+    }
+    world.shutdown().await;
+}

@@ -9,6 +9,7 @@ use tuff_vanilla_data::registry::EntityType;
 use crate::command::CommandError;
 use crate::command::args::Message;
 use crate::command::selector::{Candidate, Selector, SelectorSource};
+use crate::world::messages::RegionHandle;
 use crate::world::messages::{
     CoordinatorMessage, Directive, DirectiveReply, DirectiveSource, EntitySnapshot, ManagerMessage,
     PlayerEvent, PlayerSnapshot, RegionRequest,
@@ -140,10 +141,14 @@ pub async fn players(ctx: &Context<'_>) -> Vec<PlayerSnapshot> {
 
 /// Every entity in every running region, players aside.
 pub async fn entities(ctx: &Context<'_>) -> Vec<EntitySnapshot> {
-    region_entities(ctx, false).await
+    region_entities(ctx, false, None).await
 }
 
-async fn region_entities(ctx: &Context<'_>, nbt: bool) -> Vec<EntitySnapshot> {
+async fn region_entities(
+    ctx: &Context<'_>,
+    nbt: bool,
+    wanted: Option<u128>,
+) -> Vec<EntitySnapshot> {
     let (reply, answer) = oneshot::channel();
     if ctx
         .shared()
@@ -155,18 +160,41 @@ async fn region_entities(ctx: &Context<'_>, nbt: bool) -> Vec<EntitySnapshot> {
         return Vec::new();
     }
     let regions = answer.await.unwrap_or_default();
-    let mut found = Vec::new();
-    for region in regions {
-        let (reply, answer) = oneshot::channel();
-        let request = if nbt {
-            RegionRequest::EntitiesWithData { reply }
-        } else {
-            RegionRequest::Entities { reply }
-        };
-        if region.request(request).await
-            && let Ok(mut entities) = answer.await
-        {
-            found.append(&mut entities);
+    sweep_regions(&regions, nbt, wanted).await
+}
+
+/// Passes over the regions before an entity named by UUID that none
+/// reported counts as absent: one between two regions is in neither for a
+/// moment.
+const SWEEPS: usize = 4;
+
+pub async fn sweep_regions(
+    regions: &[RegionHandle],
+    nbt: bool,
+    wanted: Option<u128>,
+) -> Vec<EntitySnapshot> {
+    let mut found: Vec<EntitySnapshot> = Vec::new();
+    for _ in 0..SWEEPS {
+        for region in regions {
+            let (reply, answer) = oneshot::channel();
+            let request = if nbt {
+                RegionRequest::EntitiesWithData { reply }
+            } else {
+                RegionRequest::Entities { reply }
+            };
+            if region.request(request).await
+                && let Ok(entities) = answer.await
+            {
+                for entity in entities {
+                    if !found.iter().any(|e| e.id == entity.id) {
+                        found.push(entity);
+                    }
+                }
+            }
+        }
+        match wanted {
+            Some(uuid) if !found.iter().any(|e| e.uuid == uuid) => tokio::task::yield_now().await,
+            _ => break,
         }
     }
     found
@@ -269,7 +297,7 @@ pub async fn select_entities(
     let snapshots = players(ctx).await;
     let mut candidates: Vec<Candidate> = snapshots.iter().map(player_candidate).collect();
     let entities = if selector.includes_entities {
-        region_entities(ctx, selector.needs_nbt()).await
+        region_entities(ctx, selector.needs_nbt(), selector.uuid).await
     } else {
         Vec::new()
     };
