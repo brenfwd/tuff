@@ -1013,23 +1013,32 @@ async fn farm_wheat_field(age: u32, gives: &[&str]) -> Option<FarmResult> {
     }
     let said = run.op(op, "bots farm Mate 1 150 1 3 150 3").await;
     assert!(said.contains("farming"), "{said}");
-    run.eventually(|| async {
+    let finished = run
+        .within(PATIENCE, || async {
+            let list = run.op(op, "bots list").await;
+            (list.contains("Mate: idle")
+                && run
+                    .server("execute if block 2 150 2 wheat[age=7]")
+                    .await
+                    .contains("Test failed")
+                && run
+                    .server("execute if block 2 150 2 wheat[age=2]")
+                    .await
+                    .contains("Test failed"))
+            .then_some(())
+        })
+        .await;
+    if finished.is_none() {
         let list = run.op(op, "bots list").await;
-        (list.contains("Mate: idle")
-            && run
-                .server("execute if block 2 150 2 wheat[age=7]")
-                .await
-                .contains("Test failed")
-            && run
-                .server("execute if block 2 150 2 wheat[age=2]")
-                .await
-                .contains("Test failed"))
-        .then_some(())
-    })
-    .await;
+        let pos = run.server("data get entity Mate Pos").await;
+        let events = run.say("events").await;
+        panic!("farm unfinished in {PATIENCE} ticks: {list} {pos} {events}");
+    }
     let mut replanted = 0;
     let mut ripe = 0;
     let mut young = 0;
+    let mut detail = run.op(op, "bots list").await;
+    detail.push_str(&run.server("data get entity Mate Pos").await);
     for (x, z) in (1..=3).flat_map(|x| (1..=3).map(move |z| (x, z))) {
         let ground = run
             .server(&format!("execute if block {x} 149 {z} farmland"))
@@ -1050,12 +1059,25 @@ async fn farm_wheat_field(age: u32, gives: &[&str]) -> Option<FarmResult> {
             .contains("passed");
         young += usize::from(left);
         replanted += usize::from(ground && wheat);
+        if !ground {
+            for name in ["dirt", "air", "water", "stone", "farmland"] {
+                let hit = run
+                    .server(&format!("execute if block {x} 149 {z} {name}"))
+                    .await
+                    .contains("passed");
+                detail.push_str(&format!(" {name}={hit}"));
+            }
+        }
+        detail.push_str(&format!(
+            " [{x},{z} farmland={ground} wheat={wheat} ripe={old}]"
+        ));
     }
     run.stop().await;
     Some(FarmResult {
         ripe,
         replanted,
         young,
+        detail,
     })
 }
 
@@ -1063,6 +1085,7 @@ struct FarmResult {
     ripe: usize,
     replanted: usize,
     young: usize,
+    detail: String,
 }
 
 #[tuff_core::watchdog]
@@ -1072,7 +1095,11 @@ async fn a_bot_harvests_and_replants_a_wheat_field() {
         return;
     };
     assert_eq!(r.ripe, 0, "ripe wheat left");
-    assert_eq!(r.replanted, 9, "replanted {} of 9", r.replanted);
+    assert_eq!(
+        r.replanted, 9,
+        "replanted {} of 9: {}",
+        r.replanted, r.detail
+    );
 }
 
 #[tuff_core::watchdog]
@@ -1083,7 +1110,11 @@ async fn a_bot_bone_meals_young_wheat() {
     };
     assert_eq!(r.ripe, 0, "ripe wheat left");
     assert_eq!(r.young, 0, "unfertilized wheat left");
-    assert_eq!(r.replanted, 9, "replanted {} of 9", r.replanted);
+    assert_eq!(
+        r.replanted, 9,
+        "replanted {} of 9: {}",
+        r.replanted, r.detail
+    );
 }
 
 impl Run {
