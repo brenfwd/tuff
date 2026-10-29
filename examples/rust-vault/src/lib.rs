@@ -15,6 +15,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use tuff_plugin_sdk::items::Stash;
 use tuff_plugin_sdk::prelude::*;
@@ -31,11 +32,13 @@ fn key(player: &Player) -> (u64, u64) {
 fn with_vault<T>(player: &Player, f: impl FnOnce(&Stash) -> T) -> Result<T, String> {
     VAULTS.with(|vaults| {
         let mut vaults = vaults.borrow_mut();
-        if !vaults.contains_key(&key(player)) {
-            let vault = Stash::new().map_err(|err| format!("no vault: {err:?}"))?;
-            vaults.insert(key(player), vault);
-        }
-        Ok(f(&vaults[&key(player)]))
+        let vault = match vaults.entry(key(player)) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                entry.insert(Stash::new().map_err(|err| format!("no vault: {err:?}"))?)
+            }
+        };
+        Ok(f(vault))
     })
 }
 
@@ -57,23 +60,21 @@ impl Plugin for Vault {
                 Ok(contents.len() as i32)
             })
             .then(
-                literal("deposit").then(
-                    argument("item", parser::item()).then(
-                        argument("count", parser::integer_in(1..=2304)).executes(|ctx| {
-                            let player = ctx.player()?;
-                            let item: String = ctx.get("item")?;
-                            let item = item.split('[').next().unwrap_or(&item).to_owned();
-                            let count: i32 = ctx.get("count")?;
-                            let uuid = player.uuid;
-                            with_vault(player, |vault| {
-                                vault.take_from(uuid, &item, count as u32, true)
-                            })?
-                            .map_err(|err| format!("cannot deposit: {err:?}"))?;
-                            ctx.reply(format!("Depositing {count} {item}"))?;
-                            Ok(count)
-                        }),
-                    ),
-                ),
+                literal("deposit").then(argument("item", parser::item()).then(
+                    argument("count", parser::integer_in(1..=2304)).executes(|ctx| {
+                        let player = ctx.player()?;
+                        let item: String = ctx.get("item")?;
+                        let item = item.split('[').next().unwrap_or(&item).to_owned();
+                        let count: i32 = ctx.get("count")?;
+                        let uuid = player.uuid;
+                        with_vault(player, |vault| {
+                            vault.take_from(uuid, &item, count as u32, true)
+                        })?
+                        .map_err(|err| format!("cannot deposit: {err:?}"))?;
+                        ctx.reply(format!("Depositing {count} {item}"))?;
+                        Ok(count)
+                    }),
+                )),
             )
             .then(literal("withdraw").executes(|ctx| {
                 let player = ctx.player()?;
