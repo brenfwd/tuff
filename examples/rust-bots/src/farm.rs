@@ -270,7 +270,13 @@ impl Farmer {
                 Farming::Wait
             }
             Phase::Collect { pos, ticks } => {
-                let stand = self.standing_cell(me, world, pos, true);
+                let Ok(stand) = self.standing_cell(me, world, pos, true) else {
+                    self.phase = Phase::Collect {
+                        pos,
+                        ticks: ticks.saturating_sub(1),
+                    };
+                    return Farming::Wait;
+                };
                 let c = centre(pos);
                 let reach = if stand.is_some() {
                     COLLECT_REACH
@@ -372,7 +378,9 @@ impl Farmer {
                 return Some(Farming::Wait);
             }
             if !in_reach(me, pos) {
-                let goal = self.approach(me, world, pos);
+                let Ok(goal) = self.approach(me, world, pos) else {
+                    return Some(Farming::Wait);
+                };
                 if goal_reached(&goal, me) {
                     self.replants.remove(i);
                     return Some(Farming::Wait);
@@ -404,7 +412,7 @@ impl Farmer {
         world: &mut dyn Blocks,
         target: Pos,
         closest: bool,
-    ) -> Option<Pos> {
+    ) -> Result<Option<Pos>, ()> {
         let tc = centre(target);
         let mut best: Option<((f64, f64), Pos)> = None;
         for dx in -SEARCH..=SEARCH {
@@ -419,16 +427,17 @@ impl Farmer {
                     if dist2(&tc, &eyes) > (REACH - 0.4).powi(2) {
                         continue;
                     }
-                    let floor = Self::state(world, (cell.0, cell.1 - 1, cell.2));
-                    let feet = Self::state(world, cell);
-                    let head = Self::state(world, (cell.0, cell.1 + 1, cell.2));
-                    let (Ok(Some(floor)), Ok(feet), Ok(head)) = (floor, feet, head) else {
+                    let floor = Self::state(world, (cell.0, cell.1 - 1, cell.2))?;
+                    let feet = Self::state(world, cell)?;
+                    let head = Self::state(world, (cell.0, cell.1 + 1, cell.2))?;
+                    let Some(floor) = floor else {
                         continue;
                     };
                     let open = |s: Option<String>| s.is_none_or(|s| name_of(&s) == "air");
                     let solid = world
                         .class_at(cell.0, cell.1 - 1, cell.2)
-                        .is_ok_and(|c| c.has(Class::STANDABLE));
+                        .map_err(|_| ())?
+                        .has(Class::STANDABLE);
                     if solid && name_of(&floor) != "farmland" && open(feet) && open(head) {
                         let c = centre(cell);
                         let key = if closest {
@@ -443,14 +452,14 @@ impl Farmer {
                 }
             }
         }
-        best.map(|(_, c)| c)
+        Ok(best.map(|(_, c)| c))
     }
 
-    fn approach(&self, me: &Vec3, world: &mut dyn Blocks, pos: Pos) -> Goal {
-        match self.standing_cell(me, world, pos, false) {
+    fn approach(&self, me: &Vec3, world: &mut dyn Blocks, pos: Pos) -> Result<Goal, ()> {
+        Ok(match self.standing_cell(me, world, pos, false)? {
             Some(cell) => near(cell, STAND_RADIUS),
             None => near(pos, APPROACH_RADIUS),
-        }
+        })
     }
 
     fn fertilize(
@@ -495,7 +504,7 @@ impl Farmer {
             return Ok(None);
         };
         if !in_reach(me, pos) {
-            let goal = self.approach(me, world, pos);
+            let goal = self.approach(me, world, pos)?;
             if goal_reached(&goal, me) {
                 self.fertilize_tries.insert(pos, MAX_FERTILIZE_TRIES);
                 return Ok(Some(Farming::Wait));
@@ -559,7 +568,9 @@ impl Farmer {
             };
             return Farming::Dig(pos);
         }
-        let goal = self.approach(me, world, pos);
+        let Ok(goal) = self.approach(me, world, pos) else {
+            return Farming::Wait;
+        };
         if goal_reached(&goal, me) {
             self.skip_current();
             return Farming::Wait;

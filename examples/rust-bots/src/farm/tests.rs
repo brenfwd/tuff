@@ -278,3 +278,60 @@ fn bone_meal_is_not_spent_on_the_seedlings_it_just_planted() {
         }
     }
 }
+
+struct ColdCache {
+    field: Field,
+    seen: std::collections::HashSet<(bool, Pos)>,
+}
+
+impl Blocks for ColdCache {
+    fn class_at(&mut self, x: i32, y: i32, z: i32) -> Result<Class, Pending> {
+        if self.seen.insert((true, (x, y, z))) {
+            return Err(Pending);
+        }
+        self.field.class_at(x, y, z)
+    }
+
+    fn state_at(&mut self, x: i32, y: i32, z: i32) -> Result<Option<Rc<str>>, Pending> {
+        if self.seen.insert((false, (x, y, z))) {
+            return Err(Pending);
+        }
+        self.field.state_at(x, y, z)
+    }
+}
+
+#[test]
+fn a_cold_block_cache_never_sends_the_bot_across_the_farmland() {
+    let mut cold = ColdCache {
+        field: bordered(7),
+        seen: Default::default(),
+    };
+    let mut farmer = Farmer::new(&spec(true));
+    let mut me = Vec3 {
+        x: -1.5,
+        y: 1.0,
+        z: 1.5,
+    };
+    for _ in 0..400 {
+        match farmer.tick(&me, &mut cold, &seeds()) {
+            Farming::Done => break,
+            Farming::Goal(Goal::Leaf(LeafGoal::Near(n))) => {
+                let below = cold.field.0.get(&(n.pos.x, n.pos.y - 1, n.pos.z));
+                assert_ne!(
+                    below.map(String::as_str),
+                    Some("minecraft:farmland[moisture=7]"),
+                    "goal {n:?}"
+                );
+                me = Vec3 {
+                    x: f64::from(n.pos.x) + 0.5,
+                    y: f64::from(n.pos.y),
+                    z: f64::from(n.pos.z) + 0.5,
+                };
+            }
+            Farming::Dig(p) => {
+                cold.field.0.insert(p, "minecraft:air".into());
+            }
+            _ => {}
+        }
+    }
+}
