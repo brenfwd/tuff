@@ -295,3 +295,166 @@ async fn attack_filters_cancel_pvp_attacks_found_in_the_player_index() {
     );
     world.shutdown().await;
 }
+
+const GOLEM: &str = "test:golem";
+
+struct Golems;
+
+impl tuff_core::feature::Feature for Golems {
+    fn id(&self) -> &'static str {
+        "test-custom-entities"
+    }
+
+    fn load(
+        &self,
+        cx: &mut tuff_core::feature::LoadContext,
+    ) -> Result<(), tuff_item::load::LoadError> {
+        use tuff_core::custom::CustomEntityDef;
+        use tuff_core::custom::entities::EntityPart;
+        use tuff_vanilla_data::registry::EntityType;
+        if cx.phase() != tuff_item::load::Phase::Content {
+            return Ok(());
+        }
+        let def = CustomEntityDef::new(GOLEM, EntityType::IronGolem)
+            .with_part(EntityPart::hitbox(1.5, 3.0));
+        cx.registries().custom.register_entity(self.id(), def)
+    }
+}
+
+fn attack_spy() -> Vec<u8> {
+    let mut data = Data::new();
+    let subscribe = data.call("subscribe", &[EventKinds::PLAYER_ATTACK.to_value()]);
+    let body = format!(
+        "{}
+         (func {} (local $a i32) {})
+         (func {} (param $ev i32)
+           (call $clear)
+           (call $put (i32.load offset=48 (local.get $ev)) (i32.load offset=52 (local.get $ev)))
+           (call $put_char (i32.const 32))
+           (if (i32.load8_u offset=56 (local.get $ev))
+             (then (call $put (i32.load offset=60 (local.get $ev)) (i32.load offset=64 (local.get $ev))))
+             (else (call $put_char (i32.const 45))))
+           {SHOUT})
+         {}",
+        register(&mut data, &[], &subscribe),
+        export("run-command"),
+        ok_code("(i32.const 0)"),
+        export("on-event").replace(" (param i32)", ""),
+        data.wat()
+    );
+    module(&plain("attack-spy"), &body)
+}
+
+async fn start_with_golems(dir: &Path) -> TestWorld {
+    let plugin = WasmPluginsFeature {
+        directory: Some(plugins_dir(dir)),
+        limits: Limits {
+            fuel: 2_000_000,
+            ..Limits::default()
+        },
+    };
+    let world = TestWorld::start_with_features(dir, vec![Box::new(Golems), Box::new(plugin)]);
+    host(&world).sync().await;
+    world
+}
+
+async fn spawn_golem(world: &TestWorld) -> Vec<crate::world::messages::EntitySnapshot> {
+    let at = [8.5, 100.0, 8.5];
+    let mut nbt = world
+        .shared
+        .custom
+        .spawn_entity_nbt(GOLEM, at, 0.0)
+        .expect("registered");
+    nbt.insert("NoAI", true);
+    let region = world.region(RegionPos::new(0, 0)).await;
+    let (reply, summoned) = tokio::sync::oneshot::channel();
+    region
+        .request(RegionRequest::Summon {
+            nbt,
+            position: at,
+            fresh: false,
+            reply,
+        })
+        .await;
+    assert!(summoned.await.unwrap());
+    world.ticks(3).await;
+    let (reply, answer) = tokio::sync::oneshot::channel();
+    region.request(RegionRequest::Entities { reply }).await;
+    answer.await.unwrap()
+}
+
+async fn attack_report(
+    world: &TestWorld,
+    client: &mut Client,
+    target: &crate::world::messages::EntitySnapshot,
+) -> Vec<String> {
+    show(client, target).await;
+    assert_eq!(
+        Attacks
+            .intercept(&mut client.session, &Serverbound::Attack(target.id))
+            .await,
+        Verdict::Allow
+    );
+    announced(world).await
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn custom_entity_attack_on_the_part_reports_the_owner() {
+    use tuff_vanilla_data::registry::EntityType;
+    let dir = TestDir::new();
+    install(dir.path(), "spy.wasm", &attack_spy());
+    let world = start_with_golems(dir.path()).await;
+    let mut client = Client::new(&world);
+    let all = spawn_golem(&world).await;
+    let part = all
+        .iter()
+        .find(|e| e.kind == EntityType::Interaction)
+        .expect("the interaction part");
+    assert_eq!(
+        attack_report(&world, &mut client, part).await,
+        ["minecraft:iron_golem test:golem"]
+    );
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn custom_entity_attack_on_the_stand_in_reports_custom_id() {
+    use tuff_vanilla_data::registry::EntityType;
+    let dir = TestDir::new();
+    install(dir.path(), "spy.wasm", &attack_spy());
+    let world = start_with_golems(dir.path()).await;
+    let mut client = Client::new(&world);
+    let all = spawn_golem(&world).await;
+    let golem = all
+        .iter()
+        .find(|e| e.kind == EntityType::IronGolem)
+        .expect("the stand-in");
+    assert_eq!(
+        attack_report(&world, &mut client, golem).await,
+        ["minecraft:iron_golem test:golem"]
+    );
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn custom_entity_attack_on_a_plain_entity_reports_no_custom() {
+    let dir = TestDir::new();
+    install(dir.path(), "spy.wasm", &attack_spy());
+    let world = start_with_golems(dir.path()).await;
+    let mut client = Client::new(&world);
+    let cow = spawn_in(
+        &world,
+        client.session.dimension,
+        "minecraft:cow",
+        [3.5, 80.0, 3.5],
+    )
+    .await;
+    assert_eq!(
+        attack_report(&world, &mut client, &cow).await,
+        ["minecraft:cow -"]
+    );
+    world.shutdown().await;
+}
