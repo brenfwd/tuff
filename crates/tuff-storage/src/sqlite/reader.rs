@@ -44,9 +44,16 @@ pub(super) enum Source {
     Import { build: Importer, cache: SnapCache },
 }
 
-/// Fills an empty server file from some other storage layout.
+/// Called once the temporary transaction has been committed (`true`) or
+/// failed to commit (`false`). Dropping it without calling counts as failure.
+pub type Finish = Box<dyn FnOnce(bool) + Send>;
+
+/// Writes the touched rows back to some other storage layout. On success it
+/// hands back a [`Finish`] that decides whether the writes stay.
 pub type Applier = Arc<
-    dyn Fn(&rusqlite::Transaction<'_>, &[super::console::ChunkKey]) -> io::Result<()> + Send + Sync,
+    dyn Fn(&rusqlite::Transaction<'_>, &[super::console::ChunkKey]) -> io::Result<Finish>
+        + Send
+        + Sync,
 >;
 
 pub type Importer = Arc<dyn Fn(&Path) -> io::Result<()> + Send + Sync>;

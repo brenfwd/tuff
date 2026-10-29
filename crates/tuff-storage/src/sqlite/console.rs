@@ -746,10 +746,17 @@ pub(super) fn write_checked_with(
                         .into(),
                 ));
             }
-            if let Some(apply) = before_commit {
-                apply(&tx, &touched).map_err(|err| ConsoleError::Sql(err.to_string()))?;
+            let finish = match before_commit {
+                Some(apply) => {
+                    Some(apply(&tx, &touched).map_err(|err| ConsoleError::Sql(err.to_string()))?)
+                }
+                None => None,
+            };
+            let committed = tx.commit().map_err(sql);
+            if let Some(finish) = finish {
+                finish(committed.is_ok());
             }
-            tx.commit().map_err(sql)?;
+            committed?;
             Ok(WriteOutput {
                 affected,
                 committed: true,

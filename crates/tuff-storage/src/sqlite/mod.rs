@@ -47,7 +47,7 @@ mod config;
 pub mod console;
 pub mod inspect;
 mod reader;
-pub use reader::{Applier, Importer};
+pub use reader::{Applier, Finish, Importer};
 pub mod schema;
 mod snapshot;
 

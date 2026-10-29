@@ -3,6 +3,7 @@
 //! player files), so worlds move between this server and the real one.
 
 pub mod config;
+mod console_apply;
 pub mod symlinks;
 
 use std::fs::{self, File, OpenOptions};
@@ -241,39 +242,6 @@ fn import_regions(paths: &WorldPaths, file: &Path) -> io::Result<()> {
         }
     }
     tx.commit().map_err(sql)
-}
-
-fn apply_console_rows(
-    root: &Path,
-    tx: &rusqlite::Transaction<'_>,
-    keys: &[crate::sqlite::console::ChunkKey],
-) -> io::Result<()> {
-    use rusqlite::OptionalExtension;
-    let sql = |err: rusqlite::Error| io::Error::other(err.to_string());
-    let backend = VanillaBackend::new(root);
-    for key in keys {
-        let row = |table: &str| -> io::Result<Option<Vec<u8>>> {
-            tx.query_row(
-                &format!("SELECT data FROM {table} WHERE dimension = ?1 AND x = ?2 AND z = ?3"),
-                rusqlite::params![key.dimension, key.x, key.z],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(sql)
-        };
-        let (chunk, entities, pois) = (row("chunks")?, row("entities")?, row("pois")?);
-        let pos = ChunkPos::new(key.x, key.z);
-        let mut store =
-            backend.open_region(&key.dimension, FileRegionPos::new(key.x >> 5, key.z >> 5))?;
-        match chunk {
-            Some(blob) => store.write_chunk(pos, &blob)?,
-            None => store.remove_chunk(pos)?,
-        }
-        store.write_entities(pos, entities.as_deref())?;
-        store.write_pois(pos, pois.as_deref())?;
-        store.flush()?;
-    }
-    Ok(())
 }
 
 fn import_documents(paths: &WorldPaths, tx: &rusqlite::Transaction<'_>) -> io::Result<()> {
@@ -735,7 +703,7 @@ impl WorldBackend for VanillaBackend {
         let root = self.paths.root().to_path_buf();
         Some(crate::sqlite::console::SqlConsole::importing(
             Arc::new(move |file| import_regions(&paths, file)),
-            Arc::new(move |tx, keys| apply_console_rows(&root, tx, keys)),
+            Arc::new(move |tx, keys| console_apply::apply_console_rows(&root, tx, keys)),
         ))
     }
 
@@ -971,6 +939,7 @@ impl RegionStore for VanillaRegionStore {
 
 #[cfg(test)]
 mod tests {
+    use super::console_apply::{BACKUP_ROOT, FAIL_BEFORE_KEY};
     use super::*;
     use crate::files::MAX_FILE_NBT_BYTES;
     use crate::test_dir::TestDir;
@@ -1109,6 +1078,105 @@ mod tests {
         run_write(&console, "DELETE FROM pois", Some(1)).unwrap();
         assert_eq!(region_blob(&dir, "poi", 5, 6), None);
         assert!(region_blob(&dir, "entities", 5, 6).is_some());
+    }
+
+    fn world_files(dir: &TestDir) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+        fn walk(dir: &Path, out: &mut std::collections::BTreeMap<PathBuf, Vec<u8>>) {
+            for entry in fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else {
+                    let bytes = fs::read(&path).unwrap();
+                    out.insert(path, bytes);
+                }
+            }
+        }
+        let mut out = Default::default();
+        walk(dir.path(), &mut out);
+        out
+    }
+
+    fn backup_root(scratch: &TestDir) -> PathBuf {
+        let root = scratch.path().to_path_buf();
+        BACKUP_ROOT.with(|r| *r.borrow_mut() = Some(root.clone()));
+        root
+    }
+
+    fn backups_left(root: &Path) -> usize {
+        fs::read_dir(root).unwrap().count()
+    }
+
+    fn fail_before(index: Option<usize>) {
+        FAIL_BEFORE_KEY.with(|f| f.set(index));
+    }
+
+    /// Three chunks across two regions of the overworld region table.
+    fn multi_chunk_insert() -> String {
+        let blob = RawChunk::compress(vec![10, 0, 0, 0]).unwrap().into_blob();
+        let hex = blob.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        format!(
+            "INSERT INTO chunks(dimension, x, z, data) VALUES \
+             ('minecraft:overworld', 3, 3, x'{hex}'), ('minecraft:overworld', 40, 3, x'{hex}'), \
+             ('minecraft:overworld', 41, 4, x'{hex}')"
+        )
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_failed_apply_restores_every_region_file() {
+        for fail_at in [0, 1, 2] {
+            let (dir, backend) = console_fixture();
+            let console = backend.sql_console().unwrap();
+            let scratch = TestDir::new();
+            let root = backup_root(&scratch);
+            let before = world_files(&dir);
+            fail_before(Some(fail_at));
+            let result = run_write(&console, &multi_chunk_insert(), Some(3));
+            fail_before(None);
+            assert!(result.is_err(), "fail_at {fail_at}");
+            assert_eq!(world_files(&dir), before, "fail_at {fail_at}");
+            assert_eq!(backups_left(&root), 0);
+        }
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_failed_apply_removes_regions_it_created() {
+        let (dir, backend) = console_fixture();
+        let console = backend.sql_console().unwrap();
+        let scratch = TestDir::new();
+        let root = backup_root(&scratch);
+        let before = world_files(&dir);
+        fail_before(Some(2));
+        let result = run_write(&console, &multi_chunk_insert(), Some(3));
+        fail_before(None);
+        assert!(result.is_err());
+        let after = world_files(&dir);
+        assert!(!after.keys().any(|p| p.ends_with("r.1.0.mca")));
+        assert_eq!(after, before);
+        assert_eq!(backups_left(&root), 0);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn apply_leaves_no_backup_behind() {
+        let (dir, backend) = console_fixture();
+        let console = backend.sql_console().unwrap();
+        let scratch = TestDir::new();
+        let root = backup_root(&scratch);
+        assert!(
+            run_write(&console, &multi_chunk_insert(), Some(3))
+                .unwrap()
+                .committed
+        );
+        assert!(region_blob(&dir, "region", 40, 3).is_some());
+        assert_eq!(backups_left(&root), 0);
+        assert!(
+            !world_files(&dir)
+                .keys()
+                .any(|p| p.to_string_lossy().ends_with(".restore"))
+        );
     }
 
     #[tuff_core::watchdog]
