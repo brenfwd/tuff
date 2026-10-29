@@ -2712,6 +2712,9 @@ enum SpecialKind {
         jump: bool,
         pulse: bool,
     },
+    Mine {
+        fast: bool,
+    },
 }
 
 struct SpecialLane {
@@ -2772,6 +2775,27 @@ const SPECIAL_LANES: &[SpecialLane] = &[
         },
         start_dy: 1,
         fills: &[([-3, 0, 0], [0, 0, 0], "minecraft:stone")],
+    },
+    SpecialLane {
+        name: "mine_tunnel",
+        kind: SpecialKind::Mine { fast: false },
+        start_dy: 1,
+        fills: &[
+            ([-3, 0, -2], [12, 0, 2], "minecraft:stone"),
+            ([1, 2, -1], [2, 3, 1], "minecraft:stone"),
+            ([3, 2, -1], [4, 3, 1], "minecraft:dirt"),
+            ([5, 2, -1], [8, 3, 1], "minecraft:iron_ore"),
+        ],
+    },
+    SpecialLane {
+        name: "mine_instant",
+        kind: SpecialKind::Mine { fast: true },
+        start_dy: 1,
+        fills: &[
+            ([-3, 0, -2], [12, 0, 2], "minecraft:stone"),
+            ([1, 2, -1], [4, 3, 1], "minecraft:stone"),
+            ([5, 2, -1], [8, 3, 1], "minecraft:dirt"),
+        ],
     },
 ];
 
@@ -2845,7 +2869,13 @@ async fn real_client_record_special_movement_corpus() {
     let out_dir = corpus_out_dir();
     let seed = corpus_env("TUFF_CORPUS_SEED", 0);
     let rounds = corpus_env("TUFF_CORPUS_ROUNDS", 1) as u32;
-    let file = tuff_client_harness::corpus::file_name("movement_corpus_special", rtt, seed);
+    let only = std::env::var("TUFF_CORPUS_ONLY").unwrap_or_default();
+    let stem = if only.is_empty() {
+        "movement_corpus_special".to_owned()
+    } else {
+        format!("movement_corpus_special_{only}")
+    };
+    let file = tuff_client_harness::corpus::file_name(&stem, rtt, seed);
     let mut text = tuff_replay::corpus::MAGIC.to_vec();
     let mut notes = Vec::new();
     let plan: Vec<_> = (0..rounds)
@@ -2853,6 +2883,7 @@ async fn real_client_record_special_movement_corpus() {
             let mut v = Variation::new(seed, round);
             v.order(SPECIAL_LANES.len())
                 .into_iter()
+                .filter(|i| SPECIAL_LANES[*i].name.starts_with(only.as_str()))
                 .map(|i| (i, v.ticks(80, 20), v.ticks(120, 20)))
                 .collect::<Vec<_>>()
         })
@@ -2899,6 +2930,7 @@ async fn real_client_record_special_movement_corpus() {
         };
         let pitch = match spec.kind {
             SpecialKind::Bridge { .. } => 80.0,
+            SpecialKind::Mine { .. } => 0.0,
             SpecialKind::Elytra => -10.0,
             _ => 30.0,
         };
@@ -2919,6 +2951,22 @@ async fn real_client_record_special_movement_corpus() {
             }
             SpecialKind::Bridge { .. } => {
                 server_says(s, &format!("give {username} minecraft:stone 64")).await;
+            }
+            SpecialKind::Mine { fast } => {
+                server_says(
+                    s,
+                    &format!(
+                        "give {username} minecraft:diamond_pickaxe[enchantments={{efficiency:5}}]"
+                    ),
+                )
+                .await;
+                if fast {
+                    server_says(
+                        s,
+                        &format!("effect give {username} minecraft:haste 120 1 true"),
+                    )
+                    .await;
+                }
             }
             _ => {}
         }
@@ -3007,6 +3055,27 @@ async fn real_client_record_special_movement_corpus() {
                 if horse {
                     key("sprint", false).await.unwrap();
                 }
+            }
+            SpecialKind::Mine { .. } => {
+                let ticks = bridge_ticks.max(60);
+                for _ in 0..2 {
+                    client
+                        .set("mc.mouseHandler.mouseGrabbed", "true")
+                        .await
+                        .unwrap();
+                    client.request(Command::WaitTicks(2)).await.unwrap();
+                }
+                key("attack", true).await.unwrap();
+                client.request(Command::WaitTicks(ticks / 2)).await.unwrap();
+                client
+                    .request(Command::Look {
+                        yaw: -90.0,
+                        pitch: -30.0,
+                    })
+                    .await
+                    .unwrap();
+                client.request(Command::WaitTicks(ticks / 2)).await.unwrap();
+                key("attack", false).await.unwrap();
             }
             SpecialKind::Bridge { sneak, jump, pulse } => {
                 key("back", true).await.unwrap();

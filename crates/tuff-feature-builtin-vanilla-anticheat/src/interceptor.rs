@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use tuff_core::protocol::play::{self, GameMode, Movement, Serverbound};
+use tuff_core::protocol::play::{self, GameMode, Movement, PlayerActionStatus, Serverbound};
 use tuff_core::world::game_rules::{GameRules, RuleValue};
 use tuff_core::world::messages::CoordinatorMessage;
 use tuff_core::world::player::UsingItem;
@@ -552,13 +552,47 @@ fn predict_placement(session: &mut PlayerSession, packet: &Serverbound) -> bool 
     true
 }
 
+fn predict_break(session: &mut PlayerSession, packet: &Serverbound) -> bool {
+    let Serverbound::PlayerAction {
+        status, position, ..
+    } = packet
+    else {
+        return false;
+    };
+    let Some(state) = session.client_world().block_at(*position) else {
+        return false;
+    };
+    if state.block() == tuff_vanilla_data::Block::Air || state.destroy_speed().is_none() {
+        return false;
+    }
+    let breaks = match status {
+        PlayerActionStatus::StopDestroyBlock => true,
+        PlayerActionStatus::StartDestroyBlock => {
+            session.mode.abilities.instabuild
+                || tuff_core::world::player::destroy_progress(
+                    state,
+                    session.inventory.hand(false),
+                    &session.miner(),
+                    false,
+                ) >= 1.0
+        }
+        _ => false,
+    };
+    if breaks {
+        session.predict_client_block(*position, tuff_vanilla_data::Block::Air.default_state());
+    }
+    breaks
+}
+
 pub struct ActionInterceptor;
 
 impl ActionInterceptor {
     fn decide(session: &mut PlayerSession, packet: &Serverbound, echoes: u32) -> Verdict {
         let mut player = session.ext.remove::<Player>().unwrap_or_default();
         let verdict = Self::run(&mut player, session, packet, echoes);
-        if matches!(verdict, Verdict::Allow) && predict_placement(session, packet) {
+        if matches!(verdict, Verdict::Allow)
+            && (predict_placement(session, packet) || predict_break(session, packet))
+        {
             player.engine.world_ahead();
         }
         *session.ext.entry::<Player>() = player;
