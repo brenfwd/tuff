@@ -38,6 +38,7 @@ fn spec_at(x: f64, y: f64, z: f64) -> SpawnSpec {
             throwaway_items: vec![],
             avoid: vec![],
             auto_eat: false,
+            defend: false,
         },
         respawn: RespawnPolicy::Owner,
     }

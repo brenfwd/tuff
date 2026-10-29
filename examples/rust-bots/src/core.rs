@@ -9,11 +9,12 @@ use std::rc::Rc;
 use crate::build::Builder;
 use crate::combat::{Combat, Fighter, Me, Swing, Target, line_of_sight};
 use crate::danger::{self, Nearby};
+use crate::defence::{self, Hurt, Response, Situation};
 use crate::exec::{Action, Drive, Executor, Face, Kit, Step, View};
 use crate::farm::{Farmer, Farming};
 use crate::flight::{Body as FlightBody, Fly, Run};
-use crate::gear;
 use crate::follow::{Explorer, Follower, Tracking};
+use crate::gear;
 use crate::hands::{Breaker, Carried, HOTBAR, Hands, Placer};
 use crate::mine::{EXPLORE_RADIUS, Miner, Mining};
 use crate::path::{Pos, Tools};
@@ -22,8 +23,8 @@ use crate::ranged::{Archer, Draw, ItemUser, Shot, Use, UseAction};
 use crate::upkeep::{Eat, Eater};
 use crate::world::{Blocks, name_of};
 use tuff_bots_api::control::{
-    AttackSpec, BotId, BotState, ControlError, Goal, LeafGoal, LookTarget, Policy, Process,
-    RespawnPolicy, Skill, SpawnSpec, Vec3, XzGoal,
+    AttackSpec, AttackUntil, BotId, BotState, ControlError, Goal, LeafGoal, LookTarget, Policy,
+    Process, RespawnPolicy, Skill, SpawnSpec, Vec3, XzGoal,
 };
 
 /// A body the host keeps for a bot: a fake player's uuid.
@@ -179,6 +180,8 @@ struct Bot {
     pickup: Pickup,
     worked_at: Option<u64>,
     armor_wait: u32,
+    hurt: Option<Hurt>,
+    resume: Option<Process>,
 }
 
 const NEARBY_TICKS: u64 = 5;
@@ -353,6 +356,8 @@ impl Bots {
                 pickup: Pickup::default(),
                 worked_at: None,
                 armor_wait: 0,
+                hurt: None,
+                resume: None,
             },
         );
         self.send(host, owner, id, Event::Spawned);
@@ -425,6 +430,7 @@ impl Bots {
     ) -> Result<(), ControlError> {
         let b = self.owned(owner, bot)?;
         b.process = process;
+        b.resume = None;
         b.exec = None;
         b.exec_goal = None;
         b.follower = Follower::default();
@@ -465,6 +471,14 @@ impl Bots {
         Ok(())
     }
 
+    /// The body was hurt by the entity with this uuid (32 hex digits).
+    pub fn hurt(&mut self, body: Body, attacker: String) {
+        let now = self.ticks;
+        if let Some(bot) = self.bots.values_mut().find(|b| b.body == body) {
+            bot.hurt = Some(Hurt { attacker, at: now });
+        }
+    }
+
     fn send(&mut self, host: &mut impl Host, owner: &str, bot: BotId, event: Event) {
         if host.notify(owner, bot, event) == Delivery::Gone && !host.owner_loaded(owner) {
             self.drop_owner(host, owner);
@@ -495,6 +509,63 @@ impl Bots {
         let ids: Vec<BotId> = self.bots.keys().copied().collect();
         for id in ids {
             self.tick_bot(host, id);
+        }
+    }
+
+    fn resume_after_fight(bot: &mut Bot) {
+        if let Some(resumed) = bot.resume.take() {
+            bot.process = resumed;
+            bot.fighter = None;
+            bot.exec = None;
+            bot.exec_goal = None;
+        }
+    }
+
+    /// Takes up a fight with whoever hurt the bot last, setting the running
+    /// process aside until it ends, and ends it when the hit is forgotten.
+    fn defend(host: &mut impl Host, bot: &mut Bot, seen: &Perceived, now: u64, allies: &[String]) {
+        let Some(hurt) = bot.hurt.clone() else {
+            return;
+        };
+        let defending = bot.resume.is_some();
+        if now.saturating_sub(hurt.at) > defence::MEMORY_TICKS {
+            bot.hurt = None;
+            if defending {
+                Self::resume_after_fight(bot);
+            }
+            return;
+        }
+        let current = match &bot.process {
+            Process::Attack(spec) if defending => Some(spec.target.clone()),
+            _ => None,
+        };
+        if current.as_deref() == Some(hurt.attacker.as_str()) {
+            return;
+        }
+        let target = host.target(bot.body, &hurt.attacker).found();
+        let busy = !defending && matches!(bot.process, Process::Attack(_) | Process::Shoot(_));
+        let situation = Situation {
+            defend: true,
+            now,
+            health: seen.health,
+            flee_below: defence::FLEE_BELOW,
+            busy,
+            ally: allies.contains(&hurt.attacker),
+            attacker: target.as_ref(),
+        };
+        if let Response::Fight(attacker) = defence::choose_response(Some(&hurt), &situation) {
+            let spec = AttackSpec {
+                target: attacker,
+                until: AttackUntil::Death,
+                retreat_health: 0.0,
+            };
+            let before = std::mem::replace(&mut bot.process, Process::Attack(spec));
+            if !defending {
+                bot.resume = Some(before);
+            }
+            bot.fighter = None;
+            bot.exec = None;
+            bot.exec_goal = None;
         }
     }
 
@@ -532,6 +603,21 @@ impl Bots {
             return;
         }
         bot.dead_ticks = 0;
+        let allies: Vec<String> = self
+            .bots
+            .values()
+            .filter(|b| b.owner == owner)
+            .map(|b| format!("{:032x}", b.body))
+            .collect();
+        let Some(bot) = self.bots.get_mut(&id) else {
+            return;
+        };
+        if bot.policy.defend {
+            Self::defend(host, bot, &seen, self.ticks, &allies);
+        } else if let Some(resumed) = bot.resume.take() {
+            bot.process = resumed;
+            bot.fighter = None;
+        }
         let mut outcome = None;
         let mut goal = None;
         let mut dig = None;
@@ -573,7 +659,11 @@ impl Bots {
                 | Process::UseItem(_)
                 | Process::Fly(_)
         );
-        if watching && bot.nearby_at.is_none_or(|at| self.ticks - at >= NEARBY_TICKS) {
+        if watching
+            && bot
+                .nearby_at
+                .is_none_or(|at| self.ticks - at >= NEARBY_TICKS)
+        {
             bot.nearby = host.nearby(bot.body, NEARBY_RADIUS);
             bot.nearby_at = Some(self.ticks);
         }
@@ -765,12 +855,12 @@ impl Bots {
                         HandWork::Build(b) => {
                             b.grounded = seen.on_ground || seen.in_fluid;
                             b.tick(
-                            &seen.pos,
-                            world,
-                            &carried,
-                            tools.as_ref(),
-                            bot.policy.allow_break,
-                            &bot.policy.throwaway_items,
+                                &seen.pos,
+                                world,
+                                &carried,
+                                tools.as_ref(),
+                                bot.policy.allow_break,
+                                &bot.policy.throwaway_items,
                             )
                         }
                     },
@@ -928,7 +1018,9 @@ impl Bots {
                 .filter(|(slot, _, count)| (9..=44).contains(slot) && *count > 0)
                 .count()
                 < pickup::FULL_SLOTS
-                && bot.worked_at.is_none_or(|at| self.ticks >= at + WORK_PAUSE_TICKS);
+                && bot
+                    .worked_at
+                    .is_none_or(|at| self.ticks >= at + WORK_PAUSE_TICKS);
             if let Some(detour) = bot.pickup.tick(self.ticks, &seen.pos, &drops, room) {
                 goal = Some(detour);
             }
@@ -1030,6 +1122,10 @@ impl Bots {
         } else {
             bot.exec = None;
             bot.exec_goal = None;
+        }
+        if outcome.is_some() && bot.resume.is_some() {
+            outcome = None;
+            Self::resume_after_fight(bot);
         }
         if outcome.is_some() {
             if bot.archer.as_ref().is_some_and(Archer::drawing) {

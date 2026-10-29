@@ -228,7 +228,11 @@ mod tests {
 
     #[test]
     fn a_better_hotbar_piece_is_worn_and_elytra_stay_on() {
-        let carried = kit(&[(37, "iron_helmet"), (38, "iron_chestplate"), (5, "leather_helmet")]);
+        let carried = kit(&[
+            (37, "iron_helmet"),
+            (38, "iron_chestplate"),
+            (5, "leather_helmet"),
+        ]);
         assert_eq!(armor_to_wear(&carried), Some(1));
         let mut with_elytra = kit(&[(38, "iron_chestplate")]);
         with_elytra.push((6, "minecraft:elytra".into(), 1));

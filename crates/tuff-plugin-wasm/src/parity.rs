@@ -78,6 +78,7 @@ pub const SURFACES: &[(&str, Coverage)] = &[
             "event.chat",
             "event.player-hurt",
             "event.player-death",
+            "event.fake-hurt",
         ]),
     ),
     (

@@ -34,6 +34,11 @@ impl Fakes {
             .retain(|_, fake| fake.observed.has_changed().is_ok());
     }
 
+    pub fn owns(&mut self, fake: u128) -> bool {
+        self.live();
+        self.owned.contains_key(&fake)
+    }
+
     pub fn uuids(&mut self) -> Vec<Uuid> {
         self.live();
         let mut all: Vec<u128> = self.owned.keys().copied().collect();

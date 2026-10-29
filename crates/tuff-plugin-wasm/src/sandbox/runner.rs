@@ -226,6 +226,11 @@ impl Sandbox {
         {
             return Ok(Effects::default());
         }
+        if let Event::FakeHurt(hurt) = event
+            && !self.state().fakes.owns(crate::sandbox::uuid_of(hurt.fake))
+        {
+            return Ok(Effects::default());
+        }
         self.require(bindings::GUEST_ON_EVENT)?;
         self.begin(player);
         self.state().deciding_login = matches!(event, Event::Login(_));

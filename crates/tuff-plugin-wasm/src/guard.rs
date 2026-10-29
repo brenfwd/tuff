@@ -27,7 +27,7 @@ use crate::host::WasmHost;
 use crate::sandbox::{Player, uuid};
 use crate::wit::bindings::types::{
     self as wit, BlockRule, ChangeRule, ClickKind, Damage, DamageSource as WitDamage, Death,
-    Entity, Event, EventKinds, Hit, HostError, ItemUse, Rotation, Vec3,
+    Entity, Event, EventKinds, FakeDamage, Hit, HostError, ItemUse, Rotation, Vec3,
 };
 
 /// Block rules one plugin may have at once.
@@ -654,6 +654,19 @@ impl SessionHooks for Sessions {
         let Some(host) = session.shared.services.get::<WasmHost>() else {
             return;
         };
+        if session.fake.is_some() && host.listens(EventKinds::FAKE_HURT) {
+            let attacker = by.attacker.as_ref().filter(|a| a.uuid != 0);
+            host.event(
+                Event::FakeHurt(FakeDamage {
+                    fake: uuid(session.profile.id),
+                    attacker: attacker.map(|a| uuid(a.uuid)),
+                    attacker_kind: attacker.map(|a| a.kind.name().to_owned()),
+                    damage_type: by.kind.name.to_owned(),
+                    health_lost: result.health_lost,
+                }),
+                None,
+            );
+        }
         let wanted = match died {
             true => EventKinds::PLAYER_DEATH,
             false => EventKinds::PLAYER_HURT,

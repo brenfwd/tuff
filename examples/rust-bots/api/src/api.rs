@@ -171,10 +171,11 @@ pub mod control {
         pub throwaway_items: Vec<String>,
         pub avoid: Vec<Aabb>,
         pub auto_eat: bool,
+        pub defend: bool,
     }
 
     impl Wire for Policy {
-        const MIN_SIZE: usize = <bool as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE + <u32 as Wire>::MIN_SIZE + <Vec<String> as Wire>::MIN_SIZE + <Vec<String> as Wire>::MIN_SIZE + <Vec<String> as Wire>::MIN_SIZE + <Vec<Aabb> as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE;
+        const MIN_SIZE: usize = <bool as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE + <u32 as Wire>::MIN_SIZE + <Vec<String> as Wire>::MIN_SIZE + <Vec<String> as Wire>::MIN_SIZE + <Vec<String> as Wire>::MIN_SIZE + <Vec<Aabb> as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE + <bool as Wire>::MIN_SIZE;
         fn encode(&self, out: &mut Vec<u8>) {
             self.allow_break.encode(out);
             self.allow_place.encode(out);
@@ -186,6 +187,7 @@ pub mod control {
             self.throwaway_items.encode(out);
             self.avoid.encode(out);
             self.auto_eat.encode(out);
+            self.defend.encode(out);
             let _ = out;
         }
         fn decode(input: &mut &[u8]) -> Result<Self, WireError> {
@@ -200,6 +202,7 @@ pub mod control {
                 throwaway_items: Wire::decode(input)?,
                 avoid: Wire::decode(input)?,
                 auto_eat: Wire::decode(input)?,
+                defend: Wire::decode(input)?,
             })
         }
     }
@@ -929,12 +932,12 @@ pub mod control {
         }
     }
 
-    pub const SPAWN_KEY: u64 = 0x6ce8912d5d786065;
+    pub const SPAWN_KEY: u64 = 0x2f9296688072bb47;
     pub const REMOVE_KEY: u64 = 0x2b02025c627f2751;
     pub const OWNED_KEY: u64 = 0x1a8b532892cd1137;
     pub const STATE_KEY: u64 = 0xfd927bdb38d1e38a;
     pub const SET_SKILL_KEY: u64 = 0x0b0bd20e2d1ed999;
-    pub const SET_POLICY_KEY: u64 = 0xa7131853bb623468;
+    pub const SET_POLICY_KEY: u64 = 0xc96337483ed90e12;
     pub const SET_PROCESS_KEY: u64 = 0x65c190692486e26b;
     pub const STOP_KEY: u64 = 0x2ff89f29ca51fcc9;
     pub const RESPAWN_KEY: u64 = 0xa41f1f2dbfed6375;

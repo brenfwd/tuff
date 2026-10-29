@@ -107,6 +107,9 @@ pub mod ev {
 
     /// `payload` events, carrying a [`crate::types::PayloadMessage`].
     pub struct Payload;
+
+    /// `fake-hurt` events, carrying a [`crate::types::FakeDamage`].
+    pub struct FakeHurt;
 }
 
 impl Case for ev::Join {
@@ -505,6 +508,18 @@ impl Case for ev::Payload {
     }
 }
 
+impl Case for ev::FakeHurt {
+    const KIND: EventKinds = EventKinds::FAKE_HURT;
+    type Payload = types::FakeDamage;
+
+    fn get(event: &Event) -> Option<&types::FakeDamage> {
+        match event {
+            Event::FakeHurt(payload) => Some(payload),
+            _ => None,
+        }
+    }
+}
+
 /// The kind flag of `event`.
 pub fn kind(event: &Event) -> EventKinds {
     match event {
@@ -541,6 +556,7 @@ pub fn kind(event: &Event) -> EventKinds {
         Event::InventoryClose(_) => EventKinds::INVENTORY_CLOSE,
         Event::PlayerState(_) => EventKinds::PLAYER_STATE,
         Event::Payload(_) => EventKinds::PAYLOAD,
+        Event::FakeHurt(_) => EventKinds::FAKE_HURT,
     }
 }
 

@@ -258,7 +258,13 @@ fn bone_meal_is_applied_as_a_use_on_the_crop() {
         panic!("expected an action");
     };
     assert_eq!(acts[0], Action::Select(1));
-    assert!(matches!(acts[1], Action::Place { against: (0, 1, 0), .. }));
+    assert!(matches!(
+        acts[1],
+        Action::Place {
+            against: (0, 1, 0),
+            ..
+        }
+    ));
 }
 
 #[test]

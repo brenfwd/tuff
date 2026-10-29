@@ -187,6 +187,7 @@ fn spawn_spec(name: &str, at: &Sender) -> SpawnSpec {
             throwaway_items: Vec::new(),
             avoid: Vec::new(),
             auto_eat: true,
+            defend: true,
         },
         respawn: RespawnPolicy::Auto(20),
     }

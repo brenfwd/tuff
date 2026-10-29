@@ -115,10 +115,25 @@ fn in_reach(me: &Vec3, pos: Pos) -> bool {
 #[derive(Clone, Debug)]
 enum Phase {
     Seek,
-    Digging { pos: Pos, crop: String, ticks: u32 },
-    Collect { pos: Pos, ticks: u32 },
-    Planting { pos: Pos, crop: String, ticks: u32 },
-    Fertilizing { pos: Pos, age: Option<u32>, ticks: u32 },
+    Digging {
+        pos: Pos,
+        crop: String,
+        ticks: u32,
+    },
+    Collect {
+        pos: Pos,
+        ticks: u32,
+    },
+    Planting {
+        pos: Pos,
+        crop: String,
+        ticks: u32,
+    },
+    Fertilizing {
+        pos: Pos,
+        age: Option<u32>,
+        ticks: u32,
+    },
 }
 
 pub struct Farmer {
@@ -276,14 +291,15 @@ impl Farmer {
                     None => near(pos, COLLECT_RADIUS),
                 })
             }
-            Phase::Fertilizing { pos, age: before, ticks } => {
+            Phase::Fertilizing {
+                pos,
+                age: before,
+                ticks,
+            } => {
                 if ticks.is_multiple_of(2) {
                     world.refresh(&[pos]);
                 }
-                let now = Self::state(world, pos)
-                    .ok()
-                    .flatten()
-                    .and_then(|s| age(&s));
+                let now = Self::state(world, pos).ok().flatten().and_then(|s| age(&s));
                 if now != before {
                     self.phase = Phase::Seek;
                     return Farming::Wait;
@@ -413,11 +429,7 @@ impl Farmer {
                     let solid = world
                         .class_at(cell.0, cell.1 - 1, cell.2)
                         .is_ok_and(|c| c.has(Class::STANDABLE));
-                    if solid
-                        && name_of(&floor) != "farmland"
-                        && open(feet)
-                        && open(head)
-                    {
+                    if solid && name_of(&floor) != "farmland" && open(feet) && open(head) {
                         let c = centre(cell);
                         let key = if closest {
                             ((c.x - tc.x).hypot(c.z - tc.z), dist2(&c, me))

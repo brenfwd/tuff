@@ -965,6 +965,8 @@ typedef uint64_t tuff_plugin_types_event_kinds_t;
 // A client sent a custom payload on a channel the plugin
 // registered with `register-channel`.
 #define TUFF_PLUGIN_TYPES_EVENT_KINDS_PAYLOAD (1ULL << 32)
+// One of the plugin's own fakes was hurt (see `fake-damage`).
+#define TUFF_PLUGIN_TYPES_EVENT_KINDS_FAKE_HURT (1ULL << 33)
 
 typedef uint8_t tuff_plugin_types_direction_t;
 
@@ -1030,6 +1032,23 @@ typedef struct tuff_plugin_types_damage_t {
   tuff_plugin_types_vec3_t   pos;
   plugin_string_t   dimension;
 } tuff_plugin_types_damage_t;
+
+typedef struct {
+  bool is_some;
+  tuff_plugin_types_uuid_t val;
+} tuff_plugin_types_option_uuid_t;
+
+// A hit on one of the plugin's fakes.
+typedef struct tuff_plugin_types_fake_damage_t {
+  tuff_plugin_types_uuid_t   fake;
+  // The player or mob that dealt it: the melee attacker, or the
+  // owner of the projectile or explosion; none for the world.
+  tuff_plugin_types_option_uuid_t   attacker;
+  // The attacker's type, like `minecraft:zombie`.
+  plugin_option_string_t   attacker_kind;
+  plugin_string_t   damage_type;
+  float   health_lost;
+} tuff_plugin_types_fake_damage_t;
 
 typedef struct tuff_plugin_types_death_t {
   tuff_plugin_types_player_t   player;
@@ -1273,11 +1292,6 @@ typedef struct tuff_plugin_types_world_error_t {
 // or `cap.player-write`), or the advancement is outside the
 // namespaces granted with `cap.content`.
 #define TUFF_PLUGIN_TYPES_WORLD_ERROR_NOT_GRANTED 5
-
-typedef struct {
-  bool is_some;
-  tuff_plugin_types_uuid_t val;
-} tuff_plugin_types_option_uuid_t;
 
 typedef struct {
   bool is_some;
@@ -2115,6 +2129,7 @@ typedef struct tuff_plugin_types_event_t {
     tuff_plugin_types_inventory_window_t     inventory_close;
     tuff_plugin_types_state_change_t     player_state;
     tuff_plugin_types_payload_message_t     payload;
+    tuff_plugin_types_fake_damage_t     fake_hurt;
   } val;
 } tuff_plugin_types_event_t;
 
@@ -2163,6 +2178,9 @@ typedef struct tuff_plugin_types_event_t {
 #define TUFF_PLUGIN_TYPES_EVENT_INVENTORY_CLOSE 30
 #define TUFF_PLUGIN_TYPES_EVENT_PLAYER_STATE 31
 #define TUFF_PLUGIN_TYPES_EVENT_PAYLOAD 32
+// One of the plugin's own fakes was hurt, or died of it; heard
+// by the plugin that owns the fake and no other.
+#define TUFF_PLUGIN_TYPES_EVENT_FAKE_HURT 33
 
 // A box in which the server stops changes that no player makes.
 // Each flag says whether that kind of change is allowed.
@@ -3426,6 +3444,10 @@ void tuff_plugin_types_inside_free(tuff_plugin_types_inside_t *ptr);
 
 void tuff_plugin_types_damage_free(tuff_plugin_types_damage_t *ptr);
 
+void tuff_plugin_types_option_uuid_free(tuff_plugin_types_option_uuid_t *ptr);
+
+void tuff_plugin_types_fake_damage_free(tuff_plugin_types_fake_damage_t *ptr);
+
 void tuff_plugin_types_death_free(tuff_plugin_types_death_t *ptr);
 
 void tuff_plugin_types_register_error_free(tuff_plugin_types_register_error_t *ptr);
@@ -3467,8 +3489,6 @@ void tuff_plugin_types_inventory_free(tuff_plugin_types_inventory_t *ptr);
 void tuff_plugin_types_snbt_slot_free(tuff_plugin_types_snbt_slot_t *ptr);
 
 void tuff_plugin_types_world_error_free(tuff_plugin_types_world_error_t *ptr);
-
-void tuff_plugin_types_option_uuid_free(tuff_plugin_types_option_uuid_t *ptr);
 
 void tuff_plugin_types_option_vec3_free(tuff_plugin_types_option_vec3_t *ptr);
 
