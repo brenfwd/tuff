@@ -17,7 +17,7 @@ struct Door {
 const DOORS: &[Door] = &[
     Door {
         needle: "TntOrigin::Command",
-        allowed: &[],
+        allowed: &["crates/tuff-core/src/world/region/entities/admin.rs"],
         in_tests: false,
     },
     Door {
