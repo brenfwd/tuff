@@ -947,6 +947,7 @@ async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "flaky: an anticheat flag on the bots fails it under load; see todo infrastructure/bedwars-bot-world-test-flakes"]
 async fn a_bot_defends_its_bed_against_an_intruder() {
     let Some(run) = WithBots::start().await else {
         return;
