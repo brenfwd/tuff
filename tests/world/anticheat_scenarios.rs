@@ -114,6 +114,37 @@ async fn gliding_and_riptide_speeds_are_not_flagged() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_rocket_glide_the_server_ended_is_not_flagged_until_the_client_hears_it() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let mut w = walker(&world, 1, ChunkPos::new(52, 52)).await;
+    w.session.net.latency_ms = 250;
+    w.session.motion.glide.active = true;
+    w.session.pose.pitch = -10.0;
+    w.session.pose.position[1] = w.floor_y + 5.0;
+    let mut y = w.floor_y + 5.0;
+    for _ in 0..10 {
+        y += 0.3;
+        w.step(1.6, y, 0.0).await;
+    }
+    assert!(!w.flagged());
+    w.session.motion.glide.active = false;
+    for _ in 0..8 {
+        y += 0.3;
+        w.step(1.6, y, 0.0).await;
+    }
+    assert!(!w.flagged());
+    w.session.tick += 100;
+    for _ in 0..4 {
+        y += 0.3;
+        w.step(1.6, y, 0.0).await;
+    }
+    assert!(w.flagged());
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn claiming_the_ground_while_falling_is_set_back() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());

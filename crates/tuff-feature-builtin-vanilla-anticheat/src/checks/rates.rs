@@ -16,11 +16,25 @@ struct Rate {
     cost: Cost,
     resync: bool,
     weak: f64,
+    /// One click may use the main hand and then the off hand; the off
+    /// hand's packet in the tick of a counted main-hand one is free.
+    paired: bool,
+    main_hand_at: Option<u64>,
 }
 
 impl Check for Rate {
     fn examine(&mut self, facts: &Facts, packet: &Serverbound) -> Option<Flag> {
         let cost = (self.cost)(packet)?;
+        if self.paired {
+            match off_hand(packet) {
+                Some(false) => self.main_hand_at = Some(facts.tick),
+                Some(true) if self.main_hand_at == Some(facts.tick) => {
+                    self.main_hand_at = None;
+                    return None;
+                }
+                _ => {}
+            }
+        }
         if self.bucket.allow(cost, facts.tick) {
             if let Some(weight) = crate::improbable::weight_of(self.name) {
                 self.weak = crate::improbable::weak_weight(self.bucket.fill(), 1.0, weight * 0.25);
@@ -44,6 +58,9 @@ impl Check for Rate {
 }
 
 const SPAM_COST: f32 = 20.0;
+/// Right clicks a tick that placing and using may keep up: 12 a second,
+/// above the 10 a fast clicker reaches.
+const CLICK_DRAIN: f32 = 0.6;
 const SPAM_CAP: f32 = 200.0;
 
 fn rate(name: &'static str, cap: f32, drain: f32, cost: Cost, resync: bool) -> Box<dyn Check> {
@@ -53,7 +70,30 @@ fn rate(name: &'static str, cap: f32, drain: f32, cost: Cost, resync: bool) -> B
         cost,
         resync,
         weak: 0.0,
+        paired: false,
+        main_hand_at: None,
     })
+}
+
+/// [`rate`] for packets a click sends once per hand.
+fn per_click(name: &'static str, cap: f32, drain: f32, cost: Cost) -> Box<dyn Check> {
+    Box::new(Rate {
+        name,
+        bucket: Bucket::new(cap, drain),
+        cost,
+        resync: false,
+        weak: 0.0,
+        paired: true,
+        main_hand_at: None,
+    })
+}
+
+fn off_hand(packet: &Serverbound) -> Option<bool> {
+    match packet {
+        Serverbound::UseItemOn { hand, .. } => Some(*hand == 1),
+        Serverbound::UseItem { off_hand, .. } => Some(*off_hand),
+        _ => None,
+    }
 }
 
 fn action(packet: &Serverbound) -> Option<PlayerActionStatus> {
@@ -208,20 +248,12 @@ pub fn rate_checks() -> Vec<Box<dyn Check>> {
             |p| matches!(p, Serverbound::SetCarriedItem(_)).then_some(1.0),
             false,
         ),
-        rate(
-            "place_rate",
-            8.0,
-            0.4,
-            |p| matches!(p, Serverbound::UseItemOn { .. }).then_some(1.0),
-            false,
-        ),
-        rate(
-            "use_rate",
-            12.0,
-            0.5,
-            |p| matches!(p, Serverbound::UseItem { .. }).then_some(1.0),
-            false,
-        ),
+        per_click("place_rate", 8.0, CLICK_DRAIN, |p| {
+            matches!(p, Serverbound::UseItemOn { .. }).then_some(1.0)
+        }),
+        per_click("use_rate", 12.0, CLICK_DRAIN, |p| {
+            matches!(p, Serverbound::UseItem { .. }).then_some(1.0)
+        }),
         rate(
             "chat_rate",
             SPAM_CAP,
@@ -403,5 +435,92 @@ mod tests {
         let keep = Serverbound::KeepAlive(1);
         assert!(run(&keep, &[(0, 300), (1, 40)]).is_empty());
         assert!(!run(&keep, &[(0, 2000)]).is_empty());
+    }
+
+    fn place(off_hand: bool) -> Serverbound {
+        Serverbound::UseItemOn {
+            hand: i32::from(off_hand),
+            position: tuff_world_model::BlockPos::new(0, 64, 0),
+            face: tuff_world_model::Face::Up,
+            cursor: [0.5, 1.0, 0.5],
+            sequence: 0,
+        }
+    }
+
+    fn use_item(off_hand: bool) -> Serverbound {
+        Serverbound::UseItem {
+            off_hand,
+            sequence: 0,
+        }
+    }
+
+    fn run_clicks(clicks: &[(u64, Vec<Serverbound>)]) -> Vec<Flag> {
+        let mut checks = rate_checks();
+        let mut facts = facts();
+        let mut flags = Vec::new();
+        for (tick, packets) in clicks {
+            facts.tick = *tick;
+            for packet in packets {
+                for check in &mut checks {
+                    flags.extend(check.examine(&facts, packet));
+                }
+            }
+        }
+        flags
+    }
+
+    /// A click every other client tick for a minute, each a placement or
+    /// a miss, arriving in bunches of up to four ticks late.
+    fn ten_cps(click: impl Fn(u64) -> Vec<Serverbound>) -> Vec<(u64, Vec<Serverbound>)> {
+        (0..600u64)
+            .filter(|t| t % 2 == 0)
+            .map(|t| {
+                let late = (t * 7 / 2) % 5;
+                (t + late - late % 2, click(t))
+            })
+            .collect()
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_ten_cps_bridger_is_not_flagged_for_place_or_use_rate() {
+        let clicks = ten_cps(|t| {
+            if (t / 2) % 5 == 3 {
+                vec![use_item(false)]
+            } else {
+                vec![place(false)]
+            }
+        });
+        assert!(names(&run_clicks(&clicks)).is_empty());
+        let placing = ten_cps(|_| vec![place(false)]);
+        assert!(names(&run_clicks(&placing)).is_empty());
+        let missing = ten_cps(|_| vec![use_item(false)]);
+        assert!(names(&run_clicks(&missing)).is_empty());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn missed_clicks_that_use_both_hands_are_not_flagged_for_use_rate() {
+        let clicks = ten_cps(|_| vec![use_item(false), use_item(true)]);
+        assert!(names(&run_clicks(&clicks)).is_empty());
+        let failed = ten_cps(|_| vec![place(false), use_item(false), place(true), use_item(true)]);
+        assert!(names(&run_clicks(&failed)).is_empty());
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn placing_or_using_every_tick_is_still_flagged() {
+        let placer: Vec<(u64, Vec<Serverbound>)> =
+            (0..200).map(|t| (t, vec![place(false)])).collect();
+        let flags = names(&run_clicks(&placer));
+        assert!(!flags.is_empty() && flags.iter().all(|n| *n == "place_rate"));
+        let off_hands: Vec<(u64, Vec<Serverbound>)> =
+            (0..200).map(|t| (t, vec![use_item(true)])).collect();
+        assert!(names(&run_clicks(&off_hands)).contains(&"use_rate"));
+        let doubled: Vec<(u64, Vec<Serverbound>)> = (0..200)
+            .filter(|t| t % 2 == 0)
+            .map(|t| (t, vec![use_item(false), use_item(true), use_item(true)]))
+            .collect();
+        assert!(names(&run_clicks(&doubled)).contains(&"use_rate"));
     }
 }

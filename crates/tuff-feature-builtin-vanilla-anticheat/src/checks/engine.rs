@@ -69,6 +69,9 @@ pub struct Engine {
     effects_before: Option<Effects>,
     /// The last tick the server had the player gliding.
     glided: Option<u64>,
+    /// The movement attributes synced to the client, each with the tick
+    /// the server first had it, oldest first.
+    bodies: std::collections::VecDeque<(u64, Body)>,
     /// The last tick a firework pulled the player, as the server has it.
     boosted: Option<u64>,
     /// The first server velocity not yet replayed.
@@ -269,6 +272,7 @@ impl Engine {
         if facts.gliding {
             self.glided = Some(facts.tick);
         }
+        let synced_before = self.synced_before(facts);
         let glide_unsure = !facts.gliding
             && self
                 .glided
@@ -588,6 +592,11 @@ impl Engine {
                 ..rules
             });
         }
+        alternatives.extend(
+            synced_before
+                .into_iter()
+                .map(|body| Rules { body, ..rules }),
+        );
         for other in alternatives {
             if search.found.is_some() {
                 break;
@@ -743,6 +752,30 @@ impl Engine {
         });
         self.seeded = false;
         Some(prediction)
+    }
+
+    /// The slowest and fastest movement attributes, other than the
+    /// current ones, the client may still have moved under: those synced
+    /// within the round trip before this move.
+    fn synced_before(&mut self, facts: &Facts) -> Vec<Body> {
+        if self
+            .bodies
+            .back()
+            .is_none_or(|(_, body)| *body != facts.body)
+        {
+            self.bodies.push_back((facts.tick, facts.body));
+        }
+        let round_trip = u64::try_from(facts.latency_ms.max(0)).unwrap_or(0) * 2;
+        let window = (round_trip.div_ceil(50) + SYNC_CATCH_UP).min(STATE_CATCH_UP);
+        let since = facts.tick.saturating_sub(window);
+        while self.bodies.len() > 1 && self.bodies[1].0 <= since {
+            self.bodies.pop_front();
+        }
+        let older = self.bodies.iter().rev().skip(1).map(|(_, body)| *body);
+        let by_speed = |a: &Body, b: &Body| a.speed.total_cmp(&b.speed);
+        let mut picked: Vec<Body> = older.clone().max_by(by_speed).into_iter().collect();
+        picked.extend(older.min_by(by_speed).filter(|b| !picked.contains(b)));
+        picked
     }
 
     /// Forgets the replay and seeds the state from the observed move.

@@ -113,6 +113,8 @@ pub(crate) struct Client {
     pub(crate) walker: bool,
     /// Under the Weaving effect.
     pub(crate) weaving: bool,
+    /// The movement speed attribute the client last received.
+    pub(crate) speed: f64,
     /// Scales the walking acceleration, for cheats.
     pub(crate) boost: f64,
     /// Speed effect multiplier, on the ground only.
@@ -145,6 +147,7 @@ impl Client {
             reminder: 0,
             walker: false,
             weaving: false,
+            speed: 0.1,
             boost: 1.0,
             effect: 1.0,
             jump_power: 0.42,
@@ -172,7 +175,7 @@ impl Client {
         };
         let body = Body {
             movement: Attributes {
-                speed: 0.1,
+                speed: self.speed as f32,
                 gravity: 0.08,
                 step_height: 0.6,
                 jump_strength: self.jump_power,
