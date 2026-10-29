@@ -2714,6 +2714,7 @@ enum SpecialKind {
     },
     Mine {
         fast: bool,
+        walk: bool,
     },
 }
 
@@ -2778,7 +2779,10 @@ const SPECIAL_LANES: &[SpecialLane] = &[
     },
     SpecialLane {
         name: "mine_tunnel",
-        kind: SpecialKind::Mine { fast: false },
+        kind: SpecialKind::Mine {
+            fast: false,
+            walk: false,
+        },
         start_dy: 1,
         fills: &[
             ([-3, 0, -2], [12, 0, 2], "minecraft:stone"),
@@ -2788,8 +2792,23 @@ const SPECIAL_LANES: &[SpecialLane] = &[
         ],
     },
     SpecialLane {
+        name: "mine_walk",
+        kind: SpecialKind::Mine {
+            fast: false,
+            walk: true,
+        },
+        start_dy: 1,
+        fills: &[
+            ([-3, 0, -2], [60, 0, 2], "minecraft:stone"),
+            ([1, 2, -1], [8, 3, 1], "minecraft:stone"),
+        ],
+    },
+    SpecialLane {
         name: "mine_instant",
-        kind: SpecialKind::Mine { fast: true },
+        kind: SpecialKind::Mine {
+            fast: true,
+            walk: false,
+        },
         start_dy: 1,
         fills: &[
             ([-3, 0, -2], [12, 0, 2], "minecraft:stone"),
@@ -2952,7 +2971,7 @@ async fn real_client_record_special_movement_corpus() {
             SpecialKind::Bridge { .. } => {
                 server_says(s, &format!("give {username} minecraft:stone 64")).await;
             }
-            SpecialKind::Mine { fast } => {
+            SpecialKind::Mine { fast, .. } => {
                 server_says(
                     s,
                     &format!(
@@ -3066,6 +3085,9 @@ async fn real_client_record_special_movement_corpus() {
                     client.request(Command::WaitTicks(2)).await.unwrap();
                 }
                 key("attack", true).await.unwrap();
+                if matches!(spec.kind, SpecialKind::Mine { walk: true, .. }) {
+                    key("forward", true).await.unwrap();
+                }
                 client.request(Command::WaitTicks(ticks / 2)).await.unwrap();
                 client
                     .request(Command::Look {
@@ -3076,6 +3098,7 @@ async fn real_client_record_special_movement_corpus() {
                     .unwrap();
                 client.request(Command::WaitTicks(ticks / 2)).await.unwrap();
                 key("attack", false).await.unwrap();
+                key("forward", false).await.unwrap();
             }
             SpecialKind::Bridge { sneak, jump, pulse } => {
                 key("back", true).await.unwrap();

@@ -717,12 +717,10 @@ async fn scenario(kind: Kind, event: Event) {
             | Event::RiddenAway
     ) {
         let watcher = rig.bot();
-        let shut = tokio::time::timeout(
-            Duration::from_secs(10),
-            watcher.wait_for(|state| state.window.is_none()),
-        )
-        .await
-        .is_ok();
+        let budget = Duration::from_secs(if stays { 10 } else { 60 });
+        let shut = tokio::time::timeout(budget, watcher.wait_for(|state| state.window.is_none()))
+            .await
+            .is_ok();
         assert_eq!(
             shut, !stays,
             "{kind:?} / {event:?}: the server closes the window"

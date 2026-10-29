@@ -289,7 +289,7 @@ impl PlayerSession {
         let gone = self
             .client_world()
             .block_at(dig.pos)
-            .is_none_or(tuff_world_model::chunk::is_air);
+            .is_some_and(tuff_world_model::chunk::is_air);
         if gone || self.is_dead() {
             driver.dig = None;
             return;
