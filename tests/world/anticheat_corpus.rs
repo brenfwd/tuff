@@ -34,6 +34,8 @@ struct Setup {
     facing: Option<(f32, f32)>,
     summons: Vec<(&'static str, [f64; 3])>,
     placements: std::collections::BTreeMap<usize, Vec<(BlockPos, tuff_vanilla_data::BlockState)>>,
+    stone: bool,
+    floor: Option<i32>,
 }
 
 async fn replay_lane(lane: &Lane, base: ChunkPos, origin: [i32; 3]) {
@@ -53,6 +55,14 @@ async fn replay_lane_with(
         .config
         .set_text("tuff.anticheat.enforceUncalibrated", "true")
         .unwrap();
+    let board = world
+        .shared
+        .services
+        .get::<tuff_feature_builtin_vanilla_anticheat::service::Board>();
+    let mut traces = board.map(|b| {
+        b.set_debug("Player1", None, true);
+        b.traces()
+    });
     let mut w = physical_walker(&world, 1, base).await;
     let region = world.region(RegionPos::new(1, 1)).await;
     let mut blocks = Vec::new();
@@ -72,6 +82,13 @@ async fn replay_lane_with(
     let setup = prepare(&mut w, &mut blocks);
     let rockets = setup.rockets;
     let placements = setup.placements;
+    let stone = setup.stone;
+    let floor = setup.floor;
+    let airborne = setup.airborne
+        || lane.packets.iter().find_map(|p| match p {
+            Serverbound::Move(m) if m.position.is_some() => Some(!m.on_ground),
+            _ => None,
+        }) == Some(true);
     for (id, position) in &setup.summons {
         let (reply, summoned) = tokio::sync::oneshot::channel();
         region
@@ -89,12 +106,24 @@ async fn replay_lane_with(
     while let Ok(event) = w.events.try_recv() {
         w.session.on_event(event).await;
     }
+    if std::env::var("TUFF_DUMP").as_deref() == Ok(lane.name.as_str()) {
+        eprintln!("DUMP {} spawn {:?}", lane.name, lane.spawn);
+        for p in lane.packets.iter().take(130) {
+            eprintln!("DUMP {:?}", p);
+        }
+    }
     let start = setup.start.or(lane.spawn).expect("lane has a spawn");
     w.session.pose.position = start;
-    w.session.pose.on_ground = !setup.airborne;
+    w.session.pose.on_ground = !airborne;
     let (yaw, pitch) = setup.facing.unwrap_or((-90.0, 0.0));
     w.session.pose.yaw = yaw;
     w.session.pose.pitch = pitch;
+    if stone {
+        w.session.inventory.set_hand(
+            false,
+            Some(ItemStack::mint(Item::Stone, 64, MintReason::Test)),
+        );
+    }
     for (i, packet) in lane.packets.iter().enumerate() {
         if let Some(blocks) = placements.get(&i) {
             place_blocks(&world, &region, blocks.clone()).await;
@@ -111,7 +140,48 @@ async fn replay_lane_with(
                 })
                 .await;
         }
+        if let Some(floor) = floor {
+            if let Serverbound::Move(m) = packet
+                && m.position.is_some_and(|p| p[1] < f64::from(floor) - 1.5)
+            {
+                break;
+            }
+            if stone && let Serverbound::UseItemOn { position, face, .. } = packet {
+                let at = tuff_core::world::placement::step(
+                    *position,
+                    tuff_core::world::placement::facing(*face),
+                );
+                if at.y != floor || cell_overlaps_player(at, w.session.pose.position) {
+                    continue;
+                }
+            }
+        }
         w.session.handle_packet(packet.clone()).await;
+        if stone && matches!(packet, Serverbound::UseItemOn { .. }) {
+            w.session.handle_packet(Serverbound::Punch).await;
+            world.ticks(1).await;
+            while let Ok(event) = w.events.try_recv() {
+                w.session.on_event(event).await;
+            }
+            if std::env::var("TUFF_DUMP").as_deref() == Ok(lane.name.as_str())
+                && let Serverbound::UseItemOn { position, face, .. } = packet
+            {
+                {
+                    let at = tuff_core::world::placement::step(
+                        *position,
+                        tuff_core::world::placement::facing(*face),
+                    );
+                    let (reply, rx) = tokio::sync::oneshot::channel();
+                    region
+                        .request(RegionRequest::BlockAt { pos: at, reply })
+                        .await;
+                    eprintln!(
+                        "PLACE {i} {at:?} -> {:?}",
+                        rx.await.unwrap().map(|b| b.block())
+                    );
+                }
+            }
+        }
         if matches!(packet, Serverbound::ClientTickEnd) {
             tuff_feature_builtin_vanilla_anticheat::clock::advance(
                 &w.session,
@@ -119,6 +189,14 @@ async fn replay_lane_with(
             );
             if w.session.sync.pending_teleport.is_some() {
                 eprintln!("ALERTS {:?}", operator_alerts(&world).await);
+                let mut recent = Vec::new();
+                while let Some(Ok(event)) = traces.as_mut().map(|t| t.try_recv()) {
+                    recent.push(event.trace.to_string());
+                }
+                let from = recent.len().saturating_sub(6);
+                for line in &recent[from..] {
+                    eprintln!("TRACE {line}");
+                }
             }
             assert!(
                 w.session.sync.pending_teleport.is_none(),
@@ -127,6 +205,9 @@ async fn replay_lane_with(
                 packet,
                 w.session.pose.position
             );
+            if w.session.disconnected {
+                eprintln!("ALERTS {:?}", operator_alerts(&world).await);
+            }
             assert!(!w.session.disconnected, "lane {}: kicked", lane.name);
         }
     }
@@ -153,7 +234,11 @@ fn read_lanes(file: &str, origin: [f64; 3]) -> Vec<Lane> {
 }
 
 fn corpus_files() -> Vec<String> {
-    let mut names: Vec<String> = std::fs::read_dir(fixtures_dir())
+    corpus_files_in(&fixtures_dir())
+}
+
+fn corpus_files_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
         .unwrap()
         .filter_map(|e| e.ok()?.file_name().into_string().ok())
         .filter(|n| n.starts_with("movement_corpus") && n.ends_with(".bin"))
@@ -309,6 +394,15 @@ fn rocket_ticks(lane: &Lane) -> Vec<usize> {
     out
 }
 
+/// A block cannot be placed where a player stands, so a recorded placement
+/// into the player's own box was refused live and is left out of the replay.
+fn cell_overlaps_player(cell: BlockPos, feet: [f64; 3]) -> bool {
+    let overlaps = |lo: f64, hi: f64, c: i32| lo < f64::from(c + 1) && hi > f64::from(c);
+    overlaps(feet[0] - 0.3, feet[0] + 0.3, cell.x)
+        && overlaps(feet[1], feet[1] + 1.8, cell.y)
+        && overlaps(feet[2] - 0.3, feet[2] + 0.3, cell.z)
+}
+
 /// The blocks the client placed while bridging, each just before the
 /// first move that needed it. The corpus holds no use-item packets, but
 /// a grounded move whose body overlaps no block is only possible once
@@ -409,8 +503,18 @@ async fn replay_special_lane(lane: &Lane, base: ChunkPos, origin: [i32; 3]) {
                 };
             }
             if name.starts_with("bridge") {
+                let placed = lane
+                    .packets
+                    .iter()
+                    .any(|p| matches!(p, Serverbound::UseItemOn { .. }));
                 return Setup {
-                    placements: bridge_placements(lane, origin),
+                    placements: if placed {
+                        Default::default()
+                    } else {
+                        bridge_placements(lane, origin)
+                    },
+                    stone: placed,
+                    floor: Some(origin[1]),
                     facing: Some((90.0, 80.0)),
                     ..Setup::default()
                 };
@@ -438,23 +542,27 @@ async fn replay_special_lane(lane: &Lane, base: ChunkPos, origin: [i32; 3]) {
 
 /// Replays every lane of every corpus file on its own and lists the lanes
 /// that flag. With `TUFF_CORPUS_PRUNE=1` it moves them out of the fixture
-/// into `target/corpus-flagged/`. Run after recording new corpus files,
+/// into `target/corpus-flagged/`. `TUFF_CORPUS_DIR=<dir>` reads a scratch
+/// directory instead of the fixtures and never prunes; the panic message of
+/// each flagged lane (packet index, pose, alerts) goes to stderr. Run after recording new corpus files,
 /// then update `corpus_manifest.txt`.
 #[tuff_core::watchdog]
 #[ignore = "corpus triage tool, run by hand after recording"]
 #[test]
 fn triage_corpus_lanes() {
-    let prune = std::env::var("TUFF_CORPUS_PRUNE").as_deref() == Ok("1");
+    let scratch = std::env::var_os("TUFF_CORPUS_DIR").map(std::path::PathBuf::from);
+    let prune = scratch.is_none() && std::env::var("TUFF_CORPUS_PRUNE").as_deref() == Ok("1");
+    let dir = scratch.clone().unwrap_or_else(fixtures_dir);
     let only = std::env::var("TUFF_CORPUS_FILES").ok();
     let flagged_dir = fixtures_dir().join("../../../target/corpus-flagged");
     let base = ChunkPos::new(46, 46);
     let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
     let mut total = 0;
-    for file in corpus_files() {
+    for file in corpus_files_in(&dir) {
         if only.as_deref().is_some_and(|o| !file.starts_with(o)) {
             continue;
         }
-        let bytes = std::fs::read(fixtures_dir().join(&file)).unwrap();
+        let bytes = std::fs::read(dir.join(&file)).unwrap();
         let special = file.starts_with("movement_corpus_special");
         let mut kept = Lane::encode_all(&[], [0.0; 3]);
         let mut dropped = kept.clone();
@@ -527,4 +635,15 @@ async fn recorded_bridge_jump_never_flags() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn recorded_bridge_speed_pulse_never_flags() {
     replay_special("bridge_speed_pulse").await;
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn a_placement_inside_the_players_box_is_left_out_of_the_replay() {
+    let feet = [727.17, 101.0, 744.5];
+    assert!(cell_overlaps_player(BlockPos::new(727, 101, 744), feet));
+    assert!(cell_overlaps_player(BlockPos::new(726, 102, 744), feet));
+    assert!(!cell_overlaps_player(BlockPos::new(726, 100, 744), feet));
+    assert!(!cell_overlaps_player(BlockPos::new(728, 101, 744), feet));
+    assert!(!cell_overlaps_player(BlockPos::new(727, 103, 744), feet));
 }

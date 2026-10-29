@@ -2471,6 +2471,17 @@ fn corpus_out_dir() -> std::path::PathBuf {
     )
 }
 
+/// A lane whose first move is far from where the player was put is a
+/// recording race (the teleport had not landed yet): a replay starting at
+/// the spawn cannot reproduce it.
+fn starts_at_spawn(lane: &tuff_replay::corpus::Lane, vertical_too: bool) -> bool {
+    let (Some(spawn), Some(first)) = (lane.spawn, lane.start()) else {
+        return false;
+    };
+    (first[0] - spawn[0]).hypot(first[2] - spawn[2]) < 1.5
+        && (!vertical_too || (first[1] - spawn[1]).abs() < 6.0)
+}
+
 fn corpus_summary(file: &str, lane: &str, packets: usize, alive: bool, report: &str) {
     eprintln!("CORPUS SUMMARY {file} {lane} packets={packets} alive={alive} report={report}");
 }
@@ -2649,8 +2660,18 @@ async fn real_client_record_movement_corpus() {
             }
         }
         let _ = std::fs::remove_file(&path);
+        lane.packets.insert(
+            0,
+            Serverbound::Move(tuff_core::protocol::play::Movement {
+                position: None,
+                rotation: Some((yaw, 0.0)),
+                on_ground: true,
+                horizontal_collision: false,
+            }),
+        );
         let rendered = lane.encode_record([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
+        let alive = alive && starts_at_spawn(&lane, true);
         corpus_summary(&file, spec.name, lane.packets.len(), alive, &report);
         if alive && report.contains("no anti-cheat violations") {
             text.extend_from_slice(&rendered);
@@ -2994,7 +3015,10 @@ async fn real_client_record_special_movement_corpus() {
                         next_use = t + 2;
                     }
                     let now = client.state().await.unwrap();
-                    if now.screen != "none" {
+                    let fell = now
+                        .position
+                        .is_some_and(|p| p[1] < f64::from(fy + spec.start_dy) - 2.0);
+                    if now.screen != "none" || fell {
                         break;
                     }
                     t = match now.tick {
@@ -3025,7 +3049,14 @@ async fn real_client_record_special_movement_corpus() {
         let _ = std::fs::remove_file(&path);
         let rendered = lane.encode_record([f64::from(x0), f64::from(fy), f64::from(z)]);
         let report = server_says(s, &format!("anticheat violations {username}")).await;
-        let alive = client.state().await.is_ok_and(|st| st.screen == "none");
+        let mounted = !matches!(spec.kind, SpecialKind::Boat | SpecialKind::Horse)
+            || !lane
+                .packets
+                .iter()
+                .any(|p| matches!(p, Serverbound::UseItemOn { .. }));
+        let alive = mounted
+            && starts_at_spawn(&lane, spec.kind != SpecialKind::Elytra)
+            && client.state().await.is_ok_and(|st| st.screen == "none");
         corpus_summary(&file, spec.name, lane.packets.len(), alive, &report);
         if alive && report.contains("no anti-cheat violations") {
             text.extend_from_slice(&rendered);
