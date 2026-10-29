@@ -1121,19 +1121,26 @@ impl Run {
         let reply = self.op(op, line).await;
         assert!(reply.contains("is building"), "{reply}");
         let idle = format!("{bot}: idle");
+        let last = std::cell::RefCell::new(String::new());
         let list = self
             .within(BUILD_PATIENCE, || async {
                 let list = self.op(op, "bots list").await;
-                list.contains(&idle).then_some(list)
+                let done = list.contains(&idle).then(|| list.clone());
+                *last.borrow_mut() = list;
+                done
             })
             .await
-            .unwrap_or_else(|| panic!("no build finished within {BUILD_PATIENCE} server ticks"));
+            .unwrap_or_else(|| {
+                panic!(
+                    "no build finished within {BUILD_PATIENCE} server ticks: {}",
+                    last.borrow()
+                )
+            });
         assert!(!list.contains("failed"), "{list}");
     }
 }
 
 #[tuff_core::watchdog]
-#[ignore = "flaky: ~3% place_wall/sight flag or stalled build, see todo/infrastructure/flaky-tests.md"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn bots_build_a_hollow_cube_from_inventory_blocks() {
     let Some(run) = Run::start(true).await else {

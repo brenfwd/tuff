@@ -183,7 +183,6 @@ impl Host for Real {
     }
 
     fn dig(&mut self, body: Body, pos: (i32, i32, i32), from: &control::Vec3) {
-        use tuff_plugin_sdk::types::Direction;
         let Some((fake, _, _)) = self.bodies.get(&body) else {
             return;
         };
@@ -192,23 +191,7 @@ impl Host for Real {
             from.y + 1.62 - (f64::from(pos.1) + 0.5),
             from.z - (f64::from(pos.2) + 0.5),
         );
-        let face = if dx.abs() >= dy.abs() && dx.abs() >= dz.abs() {
-            if dx > 0.0 {
-                Direction::East
-            } else {
-                Direction::West
-            }
-        } else if dy.abs() >= dz.abs() {
-            if dy > 0.0 {
-                Direction::Up
-            } else {
-                Direction::Down
-            }
-        } else if dz > 0.0 {
-            Direction::South
-        } else {
-            Direction::North
-        };
+        let face = direction(exec::Face::dug_from(dx, dy, dz));
         let _ = fake.dig(
             tuff_plugin_sdk::types::BlockPos {
                 x: pos.0,

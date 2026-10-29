@@ -16,6 +16,20 @@ pub enum Face {
 }
 
 impl Face {
+    /// The face a dig packet names for a block seen from an eye offset
+    /// `(dx, dy, dz)` from the block's centre: the dominant axis.
+    pub fn dug_from(dx: f64, dy: f64, dz: f64) -> Face {
+        if dx.abs() >= dy.abs() && dx.abs() >= dz.abs() {
+            if dx > 0.0 { Face::East } else { Face::West }
+        } else if dy.abs() >= dz.abs() {
+            if dy > 0.0 { Face::Up } else { Face::Down }
+        } else if dz > 0.0 {
+            Face::South
+        } else {
+            Face::North
+        }
+    }
+
     pub fn normal(self) -> Pos {
         match self {
             Face::Down => (0, -1, 0),

@@ -22,6 +22,8 @@ const EYE: f64 = 1.62;
 const VIEW_SLACK: f64 = 0.3;
 const SETTLE_TICKS: u32 = 1;
 const STAND_RADIUS: f64 = 0.6;
+const STAND_SLACKS: [f64; 3] = [STAND_RADIUS, 0.45, VIEW_SLACK];
+const CHASE_TICKS: u32 = 200;
 const STAND_SEARCH: i32 = 4;
 const RECHECK_TICKS: u32 = 5;
 const DIG_SLACK_TICKS: u32 = 40;
@@ -92,6 +94,7 @@ pub struct Breaker {
     targets: VecDeque<Pos>,
     phase: Phase,
     stand: Option<(Pos, Pos)>,
+    chase: u32,
 }
 
 impl Breaker {
@@ -100,6 +103,7 @@ impl Breaker {
             targets: targets.iter().map(|p| (p.x, p.y, p.z)).collect(),
             phase: Phase::Seek,
             stand: None,
+            chase: 0,
         }
     }
 
@@ -118,7 +122,8 @@ impl Breaker {
                 faces.push((pos, face));
             }
         }
-        for &(against, face) in &faces {
+        let dug = dug_face(eye, pos);
+        for &(against, face) in faces.iter().filter(|(_, face)| *face == dug) {
             if clear_view(world, eye, against, face)? {
                 return Ok(None);
             }
@@ -126,7 +131,16 @@ impl Breaker {
         let stand = match self.stand {
             Some((target, stand)) if target == pos => Some(stand),
             _ => {
-                let found = find_stand(world, me, false, pos, &HashSet::new(), &faces)?;
+                let found = find_stand(
+                    world,
+                    me,
+                    false,
+                    pos,
+                    &HashSet::new(),
+                    &faces,
+                    true,
+                    STAND_RADIUS,
+                )?;
                 self.stand = found.map(|s| (pos, s));
                 found
             }
@@ -160,6 +174,7 @@ impl Breaker {
                     .is_ok_and(|c| c.passable())
                 {
                     self.targets.pop_front();
+                    self.chase = 0;
                     self.phase = Phase::Seek;
                     return Hands::Wait;
                 }
@@ -185,7 +200,10 @@ impl Breaker {
                 }
                 match self.sighted(me, world, pos) {
                     Err(()) => return Hands::Wait,
-                    Ok(Some(goal)) if !goal_reached(&goal, me) => return Hands::Goal(goal),
+                    Ok(Some(goal)) if !goal_reached(&goal, me) && self.chase < CHASE_TICKS => {
+                        self.chase += 1;
+                        return Hands::Goal(goal);
+                    }
                     Ok(_) => {}
                 }
                 let Ok(state) = world.state_at(pos.0, pos.1, pos.2) else {
@@ -279,38 +297,61 @@ pub struct Placer {
     stand: Option<Pos>,
     settled: Option<(Vec3, u32)>,
     avoid: Rc<HashSet<Pos>>,
+    rejected: HashSet<Pos>,
+    slack: f64,
+    chase: u32,
     pub grounded: bool,
 }
 
-fn stand_goal(stand: Pos) -> Goal {
+fn stand_goal(stand: Pos, radius: f64) -> Goal {
     Goal::Leaf(LeafGoal::Near(NearGoal {
         pos: BlockPos {
             x: stand.0,
             y: stand.1,
             z: stand.2,
         },
-        radius: STAND_RADIUS,
+        radius,
     }))
 }
 
 /// Whether nothing solid stands between the eyes and the middle of the
 /// clicked face, the clicked block itself aside.
+fn dug_face(eye: (f64, f64, f64), pos: Pos) -> Face {
+    Face::dug_from(
+        eye.0 - (f64::from(pos.0) + 0.5),
+        eye.1 - (f64::from(pos.1) + 0.5),
+        eye.2 - (f64::from(pos.2) + 0.5),
+    )
+}
+
 fn clear_view(
     world: &mut dyn Blocks,
     eye: (f64, f64, f64),
     against: Pos,
     face: Face,
 ) -> Result<bool, ()> {
+    clear_view_within(world, eye, against, face, VIEW_SLACK)
+}
+
+/// As `clear_view`, for a body that may stand anywhere within `slack` of
+/// `eye` on both horizontal axes.
+fn clear_view_within(
+    world: &mut dyn Blocks,
+    eye: (f64, f64, f64),
+    against: Pos,
+    face: Face,
+    slack: f64,
+) -> Result<bool, ()> {
     for (ox, oz) in [
         (0.0, 0.0),
-        (VIEW_SLACK, 0.0),
-        (-VIEW_SLACK, 0.0),
-        (0.0, VIEW_SLACK),
-        (0.0, -VIEW_SLACK),
-        (VIEW_SLACK, VIEW_SLACK),
-        (VIEW_SLACK, -VIEW_SLACK),
-        (-VIEW_SLACK, VIEW_SLACK),
-        (-VIEW_SLACK, -VIEW_SLACK),
+        (slack, 0.0),
+        (-slack, 0.0),
+        (0.0, slack),
+        (0.0, -slack),
+        (slack, slack),
+        (slack, -slack),
+        (-slack, slack),
+        (-slack, -slack),
     ] {
         if !clear_ray(world, (eye.0 + ox, eye.1, eye.2 + oz), against, face)? {
             return Ok(false);
@@ -403,7 +444,7 @@ pub(crate) fn stand_works(
         z: eye.2,
     };
     for (against, face) in candidates {
-        if in_reach(&feet, against) && clear_view(world, eye, against, face)? {
+        if in_reach(&feet, against) && clear_view_within(world, eye, against, face, STAND_RADIUS)? {
             return Ok(true);
         }
     }
@@ -419,6 +460,8 @@ fn find_stand(
     target: Pos,
     avoid: &HashSet<Pos>,
     candidates: &[(Pos, Face)],
+    dig: bool,
+    slack: f64,
 ) -> Result<Option<Pos>, ()> {
     let here = (
         me.x.floor() as i32,
@@ -442,7 +485,11 @@ fn find_stand(
                 z: eye.2,
             };
             for &(against, face) in candidates {
-                if in_reach(&feet, against) && clear_view(world, eye, against, face)? {
+                if dig && dug_face(eye, target) != face {
+                    continue;
+                }
+                if in_reach(&feet, against) && clear_view_within(world, eye, against, face, slack)?
+                {
                     return Ok(Some(cell));
                 }
             }
@@ -526,6 +573,9 @@ impl Placer {
             settled: None,
             grounded: true,
             avoid: Rc::default(),
+            rejected: HashSet::new(),
+            slack: STAND_RADIUS,
+            chase: 0,
         }
     }
 
@@ -592,18 +642,64 @@ impl Placer {
                 }
                 if support.is_none() {
                     if self.stand.is_none() {
-                        match find_stand(world, me, blocked, pos, &self.avoid, &candidates) {
+                        let mut avoid = (*self.avoid).clone();
+                        avoid.extend(self.rejected.iter().copied());
+                        match find_stand(
+                            world,
+                            me,
+                            blocked,
+                            pos,
+                            &avoid,
+                            &candidates,
+                            false,
+                            self.slack,
+                        ) {
                             Err(()) => return Hands::Wait,
+                            Ok(None) if self.slack > VIEW_SLACK => {
+                                self.slack = STAND_SLACKS
+                                    .into_iter()
+                                    .find(|s| *s < self.slack)
+                                    .unwrap_or(VIEW_SLACK);
+                                self.rejected.clear();
+                                return Hands::Wait;
+                            }
                             Ok(stand) => self.stand = stand,
                         }
                     }
                     let Some(stand) = self.stand else {
                         return Hands::Failed("no stand".into());
                     };
-                    if !goal_reached(&stand_goal(stand), me) {
-                        return Hands::Goal(stand_goal(stand));
+                    if !goal_reached(&stand_goal(stand, self.slack), me) {
+                        self.chase += 1;
+                        if self.chase > CHASE_TICKS {
+                            self.chase = 0;
+                            self.rejected.insert(stand);
+                            self.stand = None;
+                            return Hands::Wait;
+                        }
+                        return Hands::Goal(stand_goal(stand, self.slack));
                     }
-                    support = candidates.first().copied();
+                    let eye = (
+                        f64::from(stand.0) + 0.5,
+                        f64::from(stand.1) + EYE,
+                        f64::from(stand.2) + 0.5,
+                    );
+                    for &(n, face) in &candidates {
+                        match clear_view_within(world, eye, n, face, self.slack) {
+                            Err(()) => return Hands::Wait,
+                            Ok(true) => {
+                                support = Some((n, face));
+                                break;
+                            }
+                            Ok(false) => {}
+                        }
+                    }
+                    if support.is_none() {
+                        self.rejected.insert(stand);
+                        self.stand = None;
+                        self.settled = None;
+                        return Hands::Wait;
+                    }
                 }
                 let Some((against, face)) = support else {
                     return Hands::Failed("nothing to place against".into());
@@ -617,7 +713,7 @@ impl Placer {
                 if !self.grounded {
                     self.settled = None;
                     return match self.stand {
-                        Some(stand) => Hands::Goal(stand_goal(stand)),
+                        Some(stand) => Hands::Goal(stand_goal(stand, self.slack)),
                         None => Hands::Wait,
                     };
                 }
@@ -692,5 +788,52 @@ mod orient_tests {
         assert_eq!(o.clicked, [Face::Up]);
         let o = Orient::from_state("minecraft:oak_slab[type=double]");
         assert_eq!(o, Orient::default());
+    }
+}
+
+#[cfg(test)]
+mod stand_tests {
+    use super::*;
+    use crate::world::{Class, Pending, SectionKey};
+
+    struct Field {
+        solid: HashSet<Pos>,
+    }
+
+    impl Blocks for Field {
+        fn class_at(&mut self, x: i32, y: i32, z: i32) -> Result<Class, Pending> {
+            Ok(if y < 64 || self.solid.contains(&(x, y, z)) {
+                Class::STANDABLE
+            } else {
+                Class::PASSABLE
+            })
+        }
+
+        fn state_at(&mut self, _: i32, _: i32, _: i32) -> Result<Option<Rc<str>>, Pending> {
+            Ok(None)
+        }
+
+        fn find(&mut self, _: SectionKey, _: &[String]) -> Result<Vec<Pos>, Pending> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn a_stand_whose_view_was_blocked_since_it_was_chosen_is_rejected() {
+        let mut world = Field {
+            solid: HashSet::from([(3, 65, 5)]),
+        };
+        let target = BlockPos { x: 5, y: 64, z: 5 };
+        let mut placer = Placer::new(&target, "minecraft:stone");
+        placer.stand = Some((2, 64, 5));
+        let me = Vec3 {
+            x: 2.5,
+            y: 64.0,
+            z: 5.5,
+        };
+        let carried = vec![(36u8, "minecraft:stone".to_string(), 8u32)];
+        assert_eq!(placer.tick(&me, &mut world, &carried), Hands::Wait);
+        assert_eq!(placer.stand, None);
+        assert!(placer.rejected.contains(&(2, 64, 5)));
     }
 }
