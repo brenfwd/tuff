@@ -200,6 +200,8 @@ impl View<'_> {
 pub struct Intent {
     /// Where to walk, by path.
     pub goto: Option<[f64; 3]>,
+    /// An enemy bed to get to by the bots plugin's block goal.
+    pub rush: Option<Pos>,
     /// A point to look at.
     pub look: Option<[f64; 3]>,
     /// The enemy to chase and fight by an attack process.
@@ -279,6 +281,23 @@ pub fn block_of(at: [f64; 3]) -> Pos {
     ]
 }
 
+/// Where a bot was last sent to walk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Heading {
+    /// Close to a block.
+    Near(Pos),
+    /// Next to or onto a block, bridging and digging as needed.
+    Block(Pos),
+}
+
+impl Heading {
+    pub fn pos(self) -> Pos {
+        match self {
+            Heading::Near(at) | Heading::Block(at) => at,
+        }
+    }
+}
+
 /// One bot: who it is, how it plays and its brain. It is a player once
 /// the bots plugin spawned it and the game found its uuid.
 #[derive(Debug)]
@@ -295,8 +314,10 @@ pub struct Bot {
     brain: GoalSelector,
     /// Recent positions of each enemy, oldest first, for reaction delay.
     memory: BTreeMap<Id, VecDeque<(u64, [f64; 3])>>,
-    /// The block the bot was last sent to walk to.
-    pub heading: Option<Pos>,
+    /// The walk the bot was last sent on.
+    pub heading: Option<Heading>,
+    /// A bed the bots plugin could not reach, left alone until the tick.
+    pub unreachable: Option<(Pos, u64)>,
     /// The enemy an attack process was last sent for.
     pub fighting: Option<Id>,
     /// The tick the walk was sent.
@@ -327,6 +348,7 @@ impl Bot {
             brain: goals::bedwars(),
             memory: BTreeMap::new(),
             heading: None,
+            unreachable: None,
             fighting: None,
             sent_at: 0,
             egg_at: None,
