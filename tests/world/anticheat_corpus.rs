@@ -760,6 +760,42 @@ async fn recorded_mining_never_flags() {
 }
 
 #[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn mining_while_walking_never_flags() {
+    for file in [
+        "movement_corpus_special_mine_walk.bin",
+        "movement_corpus_special_mine_walk_rtt100.bin",
+    ] {
+        let base = ChunkPos::new(46, 46);
+        let abs = [base.x * 16 - 10, 100, base.z * 16 + 8].map(f64::from);
+        for lane in read_lanes(file, abs) {
+            let start = lane.start().unwrap();
+            let (mut furthest, mut stops) = (start[0], 0);
+            for p in &lane.packets {
+                match p {
+                    Serverbound::Move(tuff_core::protocol::play::Movement {
+                        position: Some(pos),
+                        ..
+                    }) => furthest = furthest.max(pos[0]),
+                    Serverbound::PlayerAction {
+                        status: PlayerActionStatus::StopDestroyBlock,
+                        ..
+                    } => stops += 1,
+                    _ => {}
+                }
+            }
+            assert!(
+                furthest - start[0] > 8.0 && stops >= 4,
+                "{file} {}: walked {} blocks, {stops} stops",
+                lane.name,
+                furthest - start[0]
+            );
+        }
+        replay_special_file(file, None).await;
+    }
+}
+
+#[tuff_core::watchdog]
 #[test]
 fn a_placement_inside_the_players_box_is_left_out_of_the_replay() {
     let feet = [727.17, 101.0, 744.5];
