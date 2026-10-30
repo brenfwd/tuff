@@ -137,13 +137,16 @@ async fn leaving_after_clicks(item: &str, selector: &str, click: Click) {
         say(&server, "kill @e[type=item]").await;
         say(&server, "clear Payer").await;
         say(&server, "gamemode survival Payer").await;
+        let teleports = bot.state().teleports;
         say(&server, "tp Payer 0.5 150 0.5 0 90").await;
         say(&server, &format!("give Payer {item} {COUNT}")).await;
         until("the stack arrives", || async {
             found(&server, "Payer", item).await == COUNT
         })
         .await;
-        bot.wait_for(|state| state.teleports > 0).await.unwrap();
+        bot.wait_for(|state| state.teleports > teleports)
+            .await
+            .unwrap();
         bot.send(Serverbound::Move(Movement {
             position: None,
             rotation: Some((0.0, 90.0)),
