@@ -62,6 +62,9 @@ impl RegionActor {
         if self.shared.entity_uuids.contains(uuid) {
             return false;
         }
+        if entity.base().kind == tuff_vanilla_data::registry::EntityType::Tnt {
+            crate::world::block_ledger::TntOrigin::Command.spend();
+        }
         if fresh {
             let summaries = self.entity_summaries();
             let mut budget = 0;

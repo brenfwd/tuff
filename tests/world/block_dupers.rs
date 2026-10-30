@@ -513,6 +513,37 @@ async fn a_falling_block_killed_mid_fall_is_gone_without_a_drop() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_summoned_primed_tnt_is_one_entity_and_not_a_duplicated_block() {
+    for dupes in [true, false] {
+        let dir = TestDir::new();
+        let b = bench(dir.path(), dupes).await;
+        let at = BlockPos::new(HELD_AT, Y, Z + 10);
+        let (reply, summoned) = oneshot::channel();
+        b.region(at)
+            .request(RegionRequest::Summon {
+                nbt: Compound::new()
+                    .with("id", "minecraft:tnt")
+                    .with("fuse", 80i16),
+                position: [
+                    f64::from(at.x) + 0.5,
+                    f64::from(at.y),
+                    f64::from(at.z) + 0.5,
+                ],
+                fresh: false,
+                reply,
+            })
+            .await;
+        assert!(summoned.await.unwrap());
+        b.world.ticks(2).await;
+        assert_eq!(b.entities_of(EntityType::Tnt).await.len(), 1);
+        let tally = b.held_tally(vec![at]).await;
+        assert_eq!(count_of(&tally, "minecraft:tnt"), 1, "{tally:?}");
+        b.world.shutdown().await;
+    }
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_falling_block_saved_and_reloaded_mid_fall_lands_once() {
     let dir = TestDir::new();
     let b = bench(dir.path(), false).await;
