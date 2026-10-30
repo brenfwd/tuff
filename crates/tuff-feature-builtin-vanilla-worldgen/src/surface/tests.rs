@@ -325,7 +325,7 @@ fn vein_windows_bound_the_density_and_narrowed_volumes_match_full_ones() {
                                 Some(i) if y >= low && y < high => {
                                     assert_eq!(part[i].to_bits(), want.to_bits(), "{x} {y} {z}");
                                 }
-                                _ => assert!(!(want > 0.0), "seed {seed} {x} {y} {z}: {want}"),
+                                _ => assert!(want <= 0.0, "seed {seed} {x} {y} {z}: {want}"),
                             }
                         }
                     }
