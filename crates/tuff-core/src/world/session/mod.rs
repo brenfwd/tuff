@@ -154,6 +154,7 @@ pub(crate) const PLAYER_HALF_WIDTH: f64 = 0.3;
 pub const CLIENT_LOAD_TICKS: u64 = 60;
 /// How long a teleport may go unconfirmed before a move sends it again.
 pub const TELEPORT_RESEND_TICKS: u64 = 20;
+pub const TELEPORT_CHUNK_WAIT_TICKS: u64 = 40;
 pub const MAX_CHAT_CHARS: usize = 256;
 pub const THROW_SPEED: f64 = 0.3;
 pub const MIN_VIEW_DISTANCE: i32 = 2;
@@ -1455,41 +1456,5 @@ impl PlayerSession {
             fall_distance: self.body.fall.distance,
             stats: std::sync::Arc::new((*self.progress.stats).clone()),
         }
-    }
-
-    pub fn send_chunk_batch(&mut self) {
-        if self.view.queue.is_empty() || self.view.unacked_batches >= self.view.max_unacked_batches
-        {
-            return;
-        }
-        let per_tick = self.view.chunks_per_tick;
-        self.view.batch_quota = (self.view.batch_quota + per_tick).min(per_tick.max(1.0));
-        if self.view.batch_quota < 1.0 {
-            return;
-        }
-        let center = self.view.center;
-        self.view.queue.make_contiguous().sort_by_key(|queued| {
-            let (dx, dz) = (
-                (queued.pos.x - center.x) as i64,
-                (queued.pos.z - center.z) as i64,
-            );
-            dx * dx + dz * dz
-        });
-        let count = (self.view.batch_quota.floor() as usize).clamp(1, self.view.queue.len());
-        self.send(&play::ChunkBatchStart);
-        for _ in 0..count {
-            let queued = self.view.queue.pop_front().unwrap();
-            self.view.sent.insert(queued.pos);
-            if let Some(chunk) = queued.snapshot {
-                self.view.mirror.insert(queued.pos, chunk);
-            }
-            if self.fake.is_none() {
-                self.send_raw(queued.packet);
-                self.send_all(queued.followups);
-            }
-        }
-        self.send(&play::ChunkBatchFinished(count as i32));
-        self.view.unacked_batches += 1;
-        self.view.batch_quota -= count as f32;
     }
 }

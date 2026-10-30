@@ -13,6 +13,9 @@ pub struct MoveSync {
     pub teleport_target: [f64; 3],
     /// The tick the unconfirmed teleport was last sent.
     pub teleport_sent: u64,
+    /// A far teleport whose PlayerPosition waits for the destination
+    /// chunk to be sent: the chunk and the tick it goes out regardless.
+    pub deferred_teleport: Option<(ChunkPos, u64)>,
     /// A position move arrived since the client's last Client Tick End.
     pub position_this_tick: bool,
     /// Until this tick, or until the client says Player Loaded, moves are
@@ -36,18 +39,51 @@ pub struct MoveSync {
 
 impl PlayerSession {
     pub fn teleport(&mut self, position: [f64; 3]) {
+        self.sync.deferred_teleport = None;
+        self.begin_teleport(position);
+        self.send_teleport();
+    }
+
+    /// Parity: a client teleported before the chunk under its destination
+    /// arrives sinks into the floor that is about to appear, so the move
+    /// is sent only after that chunk (or `TELEPORT_CHUNK_WAIT_TICKS`).
+    pub fn teleport_after_chunk(&mut self, position: [f64; 3]) {
+        self.begin_teleport(position);
+        let chunk = ChunkPos::of_position(position);
+        if self.fake.is_some() || self.view.sent.contains(&chunk) {
+            self.sync.deferred_teleport = None;
+            self.send_teleport();
+        } else {
+            self.sync.deferred_teleport = Some((chunk, self.tick + TELEPORT_CHUNK_WAIT_TICKS));
+        }
+    }
+
+    fn begin_teleport(&mut self, position: [f64; 3]) {
         self.pose.position = position;
         self.sync.teleport_target = position;
         self.sync.teleport_sent = self.tick;
         self.sync.next_teleport_id = self.sync.next_teleport_id.wrapping_add(1).max(1);
         self.sync.pending_teleport = Some(self.sync.next_teleport_id);
+    }
+
+    fn send_teleport(&mut self) {
+        self.sync.teleport_sent = self.tick;
         let packet = play::PlayerPosition {
             teleport_id: self.sync.next_teleport_id,
-            position,
+            position: self.sync.teleport_target,
             yaw: self.pose.yaw,
             pitch: self.pose.pitch,
         };
         self.send(&packet);
+    }
+
+    pub(super) fn release_deferred_teleport(&mut self) {
+        if let Some((chunk, deadline)) = self.sync.deferred_teleport
+            && (self.view.sent.contains(&chunk) || self.tick >= deadline)
+        {
+            self.sync.deferred_teleport = None;
+            self.send_teleport();
+        }
     }
 
     /// Ignores moves until the client has loaded the world (or 60 ticks
@@ -79,6 +115,7 @@ impl PlayerSession {
                 Serverbound::Move(_) | Serverbound::MoveVehicle { .. }
             )
             && self.sync.pending_teleport.is_some()
+            && self.sync.deferred_teleport.is_none()
             && self.tick.saturating_sub(self.sync.teleport_sent) > TELEPORT_RESEND_TICKS
         {
             self.teleport(self.sync.teleport_target);

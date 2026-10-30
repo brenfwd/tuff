@@ -460,7 +460,7 @@ impl PlayerSession {
                     let origin = self.pose.position;
                     self.emit_game_event(crate::world::game_event::GameEvent::Teleport, origin)
                         .await;
-                    self.teleport(position);
+                    self.teleport_after_chunk(position);
                     self.update_view().await;
                     self.publish(true).await;
                     if fall_damage > 0.0 {
