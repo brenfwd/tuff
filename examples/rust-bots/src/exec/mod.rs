@@ -504,8 +504,12 @@ impl Executor {
             && world
                 .class_at(at.0, at.1 - 1, at.2)
                 .is_ok_and(|c| !c.standable());
-        if overhang && let Some(last) = self.last_at {
-            at = last;
+        if overhang {
+            if let Some(next) = self.planner.rejoin(at) {
+                at = next;
+            } else if let Some(last) = self.last_at {
+                at = last;
+            }
         }
         self.last_at = Some(at);
         let climbing = world
