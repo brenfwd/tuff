@@ -651,7 +651,11 @@ async fn scenario(kind: Kind, event: Event) {
         Event::SecondPlayer => {
             let bot = join(&rig.server, "Taker").await;
             rig.say("gamemode survival Taker").await;
+            let teleports = bot.state().teleports;
             rig.say("tp Taker 1.5 150 1.5").await;
+            bot.wait_for(|state| state.teleports > teleports)
+                .await
+                .unwrap();
             rig.settle().await;
             let theirs = open(&bot, kind).await;
             let (container, _) = kind.layout();
