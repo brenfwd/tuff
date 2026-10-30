@@ -814,3 +814,73 @@ fn a_copper_golem_only_idles_while_the_transport_cooldown_runs() {
         assert!(waits.iter().all(|w| (30..=60).contains(w)), "{waits:?}");
     });
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn copper_golem_look_at_player_every_40_to_80_ticks_for_45_to_90() {
+    let player = |x: f64| tuff_core::world::entity::NearbyPlayer {
+        id: 4,
+        uuid: 4,
+        name: "p",
+        position: [x, 64.0, 0.5],
+        eye_height: 1.62,
+        yaw: 0.0,
+        pitch: 0.0,
+        held: [None; 2],
+        creative: false,
+        height: 1.8,
+        sneaking: false,
+        invisible: false,
+        invulnerable: false,
+        armor: [None; 4],
+        effects: 0,
+        movement: [0.0; 3],
+        vehicle: None,
+        sleeping: None,
+        last_hurt_by: None,
+        last_hurt_mob: None,
+        perchable: false,
+        sprinting: false,
+    };
+    let world = chest_world(Block::Air, Block::Air);
+    crate::tests::with_players(&world, &[], &[player(4.5)], |core, cx| {
+        let mut look = LookAtPlayer::periodic(6.0, 40, 80);
+        let mut gaps = Vec::new();
+        let mut since = 0;
+        for _ in 0..2000 {
+            since += 1;
+            if look.can_use(core, cx) {
+                gaps.push(since);
+                since = 0;
+                look.start(core, cx);
+                assert!((45..=90).contains(&look.look_time), "{}", look.look_time);
+            }
+        }
+        assert!(gaps.len() > 10, "{gaps:?}");
+        assert!(
+            gaps.iter().skip(1).all(|g| (40..=80).contains(g)),
+            "{gaps:?}"
+        );
+    });
+    crate::tests::with_players(&world, &[], &[player(9.5)], |core, cx| {
+        let mut look = LookAtPlayer::periodic(6.0, 40, 80);
+        assert!((0..500).all(|_| !look.can_use(core, cx)), "out of range");
+    });
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn brain_debug_copper_golem_lists_the_transport_cooldown() {
+    let cooldown = Cooldown::default();
+    let goal = TransportItems {
+        cooldown: cooldown.clone(),
+        ..TransportItems::default()
+    };
+    assert_eq!(goal.debug_memory(10), None);
+    cooldown.set(70);
+    assert_eq!(
+        goal.debug_memory(10).as_deref(),
+        Some("transport_items_cooldown_ticks: 60")
+    );
+    assert_eq!(goal.debug_memory(70), None);
+}

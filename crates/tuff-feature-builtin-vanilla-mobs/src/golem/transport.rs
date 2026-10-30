@@ -438,6 +438,11 @@ impl TransportItems {
 }
 
 impl Goal for TransportItems {
+    fn debug_memory(&self, tick: u64) -> Option<String> {
+        let remaining = self.cooldown.until().checked_sub(tick).filter(|r| *r > 0)?;
+        Some(format!("transport_items_cooldown_ticks: {remaining}"))
+    }
+
     fn flags(&self) -> Flags {
         Flags::MOVE
     }

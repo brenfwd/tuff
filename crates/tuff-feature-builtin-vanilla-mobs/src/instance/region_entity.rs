@@ -77,12 +77,10 @@ impl<S: Species> RegionEntity for Mob<S> {
                         .filter(|g| g.running)
                         .map(|g| g.name)
                         .collect();
+                    let mut state = self.species.brain_state(&self.core);
+                    state.memories.extend(self.core.goals.debug_memories(tick));
                     Some(crate::brain_debug::dump(
-                        &self.core,
-                        self.species.brain_state(&self.core),
-                        behaviors,
-                        tick,
-                        names,
+                        &self.core, state, behaviors, tick, names,
                     ))
                 }),
             _ => self.species.debug_value(&self.core, feed, tick),
