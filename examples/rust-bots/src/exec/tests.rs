@@ -911,3 +911,118 @@ fn a_wrong_facing_stair_is_replaced_and_a_right_one_is_left() {
     assert_eq!(run.host.digs, [(4, 1, 1)]);
     assert_eq!(run.host.placed, [(4, 1, 1)]);
 }
+
+fn state_is(run: &Run, cell: (i32, i32, i32), wanted: &str) -> bool {
+    let state = run.host.terrain.borrow().state(cell);
+    state.is_some_and(|s| crate::build::state_matches(wanted, &s))
+}
+
+fn stocked(spec: Process, items: &[(&str, u32)], throwaway: &[&str], allow_break: bool) -> Run {
+    let mut run = Run::with(Terrain::new(16, 8), (1.5, 1.0, 1.5), spec);
+    run.host.hotbar = items
+        .iter()
+        .enumerate()
+        .map(|(i, (name, count))| (u8::try_from(i + 1).unwrap(), (*name).to_owned(), *count))
+        .collect();
+    let policy = Policy {
+        allow_break,
+        throwaway_items: throwaway.iter().map(|t| (*t).to_owned()).collect(),
+        ..builder_policy()
+    };
+    run.bots.set_policy("a", run.id, policy).unwrap();
+    run.host.tools = Some(Rc::new(RefCell::new(TableTools(vec![
+        ("cobblestone", 10),
+        ("stone", 10),
+    ]))));
+    run
+}
+
+const STAIR_EAST: &str = "minecraft:oak_stairs[facing=east,half=bottom]";
+
+#[test]
+fn an_elevated_stair_gets_its_facing_from_where_the_bot_stands() {
+    let spec = build_spec(&[
+        (6, 1, 2, "minecraft:cobblestone"),
+        (6, 2, 2, "minecraft:cobblestone"),
+        (6, 3, 2, "minecraft:cobblestone"),
+        (6, 4, 2, STAIR_EAST),
+        (7, 4, 2, "minecraft:cobblestone"),
+    ]);
+    let mut run = stocked(
+        spec,
+        &[("minecraft:cobblestone", 30), ("minecraft:oak_stairs", 2)],
+        &["minecraft:cobblestone"],
+        true,
+    );
+    run.run(6000);
+    finished_with(&run, Event::ProcessDone);
+    assert!(state_is(&run, (6, 4, 2), STAIR_EAST));
+}
+
+#[test]
+fn a_floating_x_axis_log_is_placed_against_a_side_scaffold() {
+    let spec = build_spec(&[(6, 4, 2, "minecraft:oak_log[axis=x]")]);
+    let mut run = stocked(
+        spec,
+        &[("minecraft:oak_log", 1), ("minecraft:cobblestone", 20)],
+        &["minecraft:cobblestone"],
+        true,
+    );
+    run.run(6000);
+    finished_with(&run, Event::ProcessDone);
+    assert!(state_is(&run, (6, 4, 2), "minecraft:oak_log[axis=x]"));
+    let terrain = run.host.terrain.borrow();
+    for cell in run.host.placed.iter().filter(|c| **c != (6, 4, 2)) {
+        assert!(terrain.class(*cell).passable(), "scaffold left at {cell:?}");
+    }
+}
+
+#[test]
+fn scaffolding_falls_back_to_any_spare_plain_block() {
+    let spec = build_spec(&[(6, 4, 2, "minecraft:oak_log[axis=y]")]);
+    let mut run = stocked(
+        spec,
+        &[("minecraft:oak_log", 1), ("minecraft:stone", 20)],
+        &[],
+        true,
+    );
+    run.run(6000);
+    finished_with(&run, Event::ProcessDone);
+    assert!(state_is(&run, (6, 4, 2), "minecraft:oak_log[axis=y]"));
+    assert!(run.host.carried("minecraft:stone") < 20);
+}
+
+#[test]
+fn a_build_with_no_spare_plain_block_still_reports_the_missing_scaffold() {
+    let spec = build_spec(&[(6, 4, 2, "minecraft:oak_log[axis=y]")]);
+    let mut run = stocked(spec, &[("minecraft:oak_log", 1)], &[], true);
+    run.run(6000);
+    finished_with(
+        &run,
+        Event::ProcessFailed("missing materials: a scaffolding block".into()),
+    );
+}
+
+#[test]
+fn a_wrong_state_block_is_reported_when_breaking_is_not_allowed() {
+    let mut t = Terrain::new(16, 4);
+    t.block(
+        (4, 1, 1),
+        "minecraft:oak_stairs[facing=north,half=bottom]",
+        Class::STANDABLE,
+    );
+    let mut run = Run::with(t, (1.5, 1.0, 1.5), build_spec(&[(4, 1, 1, STAIR_EAST)]));
+    run.host.hotbar = vec![(1, "minecraft:oak_stairs".into(), 2)];
+    let policy = Policy {
+        allow_break: false,
+        ..builder_policy()
+    };
+    run.bots.set_policy("a", run.id, policy).unwrap();
+    run.run(500);
+    finished_with(
+        &run,
+        Event::ProcessFailed(format!(
+            "4 1 1 is minecraft:oak_stairs[facing=north,half=bottom], wanted {STAIR_EAST}"
+        )),
+    );
+}

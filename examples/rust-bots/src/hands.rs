@@ -141,6 +141,7 @@ impl Breaker {
                         candidates: &faces,
                         dig: true,
                         slack: STAND_RADIUS,
+                        orient: &Orient::default(),
                     },
                 )?;
                 self.stand = found.map(|s| (pos, s));
@@ -237,8 +238,10 @@ impl Breaker {
 /// How a placed block must face, read from the state's properties.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Orient {
-    /// Look direction (yaw, pitch) that makes the block face as wanted.
-    pub look: Option<(f32, f32)>,
+    /// Horizontal direction the placer must be aiming along when the click
+    /// lands: a placed block takes its facing from the aim at the clicked
+    /// face.
+    pub facing: Option<Face>,
     /// Faces of the support block that give the wanted orientation;
     /// empty means any.
     pub clicked: Vec<Face>,
@@ -262,13 +265,11 @@ impl Orient {
     pub fn from_state(state: &str) -> Self {
         let mut out = Orient::default();
         if let Some(facing) = prop(state, "facing") {
-            out.look = match facing {
-                "south" => Some((180.0, 0.0)),
-                "north" => Some((0.0, 0.0)),
-                "west" => Some((270.0, 0.0)),
-                "east" => Some((90.0, 0.0)),
-                "up" => Some((0.0, 90.0)),
-                "down" => Some((0.0, -90.0)),
+            out.facing = match facing {
+                "south" => Some(Face::South),
+                "north" => Some(Face::North),
+                "west" => Some(Face::West),
+                "east" => Some(Face::East),
                 _ => None,
             };
         }
@@ -289,7 +290,44 @@ impl Orient {
         }
         out
     }
+
+    /// Whether clicking `face` of `against` from `eye` turns the placed
+    /// block as wanted.
+    /// An axis block: only the sides along its axis give the right state.
+    pub fn strict(&self) -> bool {
+        self.clicked.len() == 2
+    }
+
+    pub fn aims(&self, eye: (f64, f64, f64), against: Pos, face: Face) -> bool {
+        self.facing
+            .is_none_or(|want| aim_facing(eye, against, face) == Some(want))
+    }
 }
+
+/// The horizontal direction an aim from `eye` at the centre of a face
+/// points along; `None` when too close to call.
+pub(crate) fn aim_facing(eye: (f64, f64, f64), against: Pos, face: Face) -> Option<Face> {
+    let (nx, _, nz) = face.normal();
+    let dx = f64::from(against.0) + 0.5 + f64::from(nx) * 0.5 - eye.0;
+    let dz = f64::from(against.2) + 0.5 + f64::from(nz) * 0.5 - eye.2;
+    if dx.hypot(dz) < AIM_MIN_DISTANCE {
+        return None;
+    }
+    let sector = (-dx).atan2(dz).to_degrees() / 90.0 + 0.5;
+    let within = sector - sector.floor();
+    if !(AIM_MARGIN..=1.0 - AIM_MARGIN).contains(&within) {
+        return None;
+    }
+    Some(match (sector.floor() as i64) & 3 {
+        0 => Face::South,
+        1 => Face::West,
+        2 => Face::North,
+        _ => Face::East,
+    })
+}
+
+const AIM_MIN_DISTANCE: f64 = 0.25;
+const AIM_MARGIN: f64 = 0.1;
 
 pub struct Placer {
     pos: Pos,
@@ -426,6 +464,24 @@ fn candidates(world: &mut dyn Blocks, pos: Pos, orient: &Orient) -> Result<Vec<(
     })
 }
 
+/// Whether a neighbour of `pos` offers a face that gives the wanted state.
+pub(crate) fn has_preferred(world: &mut dyn Blocks, pos: Pos, orient: &Orient) -> Result<bool, ()> {
+    for face in Face::ALL {
+        if !orient.clicked.contains(&opposite(face)) {
+            continue;
+        }
+        let (dx, dy, dz) = face.normal();
+        if world
+            .class_at(pos.0 + dx, pos.1 + dy, pos.2 + dz)
+            .map_err(|_| ())?
+            .standable()
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Whether a body standing in `stand` can click a face for the block at
 /// `target`.
 pub(crate) fn stand_works(
@@ -446,7 +502,10 @@ pub(crate) fn stand_works(
         z: eye.2,
     };
     for (against, face) in candidates {
-        if in_reach(&feet, against) && clear_view_within(world, eye, against, face, STAND_RADIUS)? {
+        if orient.aims(eye, against, face)
+            && in_reach(&feet, against)
+            && clear_view_within(world, eye, against, face, STAND_RADIUS)?
+        {
             return Ok(true);
         }
     }
@@ -463,6 +522,7 @@ struct StandQuery<'a> {
     candidates: &'a [(Pos, Face)],
     dig: bool,
     slack: f64,
+    orient: &'a Orient,
 }
 
 fn find_stand(world: &mut dyn Blocks, query: &StandQuery) -> Result<Option<Pos>, ()> {
@@ -474,6 +534,7 @@ fn find_stand(world: &mut dyn Blocks, query: &StandQuery) -> Result<Option<Pos>,
         candidates,
         dig,
         slack,
+        orient,
     } = *query;
     let here = (
         me.x.floor() as i32,
@@ -500,7 +561,9 @@ fn find_stand(world: &mut dyn Blocks, query: &StandQuery) -> Result<Option<Pos>,
                 if dig && dug_face(eye, target) != face {
                     continue;
                 }
-                if in_reach(&feet, against) && clear_view_within(world, eye, against, face, slack)?
+                if orient.aims(eye, against, face)
+                    && in_reach(&feet, against)
+                    && clear_view_within(world, eye, against, face, slack)?
                 {
                     return Ok(Some(cell));
                 }
@@ -563,7 +626,7 @@ fn overlaps_body(me: &Vec3, (x, y, z): Pos) -> bool {
         && me.z + HALF > z
 }
 
-fn opposite(face: Face) -> Face {
+pub(crate) fn opposite(face: Face) -> Face {
     match face {
         Face::Down => Face::Up,
         Face::Up => Face::Down,
@@ -642,7 +705,10 @@ impl Placer {
                 let eye = (me.x, me.y + EYE, me.z);
                 let mut support = None;
                 let blocked = overlaps_body(me, pos);
-                for &(n, face) in candidates.iter().filter(|_| !blocked) {
+                for &(n, face) in candidates
+                    .iter()
+                    .filter(|(n, f)| !blocked && self.orient.aims(eye, *n, *f))
+                {
                     match clear_view(world, eye, n, face) {
                         Err(()) => return Hands::Wait,
                         Ok(true) => {
@@ -666,6 +732,7 @@ impl Placer {
                                 candidates: &candidates,
                                 dig: false,
                                 slack: self.slack,
+                                orient: &self.orient,
                             },
                         ) {
                             Err(()) => return Hands::Wait,
@@ -698,7 +765,10 @@ impl Placer {
                         f64::from(stand.1) + EYE,
                         f64::from(stand.2) + 0.5,
                     );
-                    for &(n, face) in &candidates {
+                    for &(n, face) in candidates
+                        .iter()
+                        .filter(|(n, f)| self.orient.aims(eye, *n, *f))
+                    {
                         match clear_view_within(world, eye, n, face, self.slack) {
                             Err(()) => return Hands::Wait,
                             Ok(true) => {
@@ -720,6 +790,14 @@ impl Placer {
                 };
                 if overlaps_body(me, pos) {
                     return Hands::Failed("in the way".into());
+                }
+                if let Some(stand) = self.stand
+                    && !self.orient.aims((me.x, me.y + EYE, me.z), against, face)
+                {
+                    self.rejected.insert(stand);
+                    self.stand = None;
+                    self.settled = None;
+                    return Hands::Wait;
                 }
                 if !in_reach(me, pos) {
                     return approach(me, pos);
@@ -751,9 +829,6 @@ impl Placer {
                     limit: PLACE_VERIFY_TICKS,
                 };
                 let mut acts = vec![Action::Select(slot)];
-                if let Some((yaw, pitch)) = self.orient.look {
-                    acts.push(Action::Look { yaw, pitch });
-                }
                 if self.orient.high && face.normal().1 == 0 {
                     acts.push(Action::PlaceAt {
                         against,
@@ -776,10 +851,10 @@ mod orient_tests {
     #[test]
     fn facing_axis_and_half_are_read_from_the_state() {
         let o = Orient::from_state("minecraft:oak_stairs[facing=north,half=top]");
-        assert_eq!(o.look, Some((0.0, 0.0)));
+        assert_eq!(o.facing, Some(Face::North));
         assert_eq!(o.clicked, [Face::Down]);
         let o = Orient::from_state("minecraft:oak_log[axis=x]");
-        assert_eq!(o.look, None);
+        assert_eq!(o.facing, None);
         assert_eq!(o.clicked, [Face::East, Face::West]);
         assert_eq!(Orient::from_state("minecraft:stone"), Orient::default());
     }
@@ -795,13 +870,55 @@ mod orient_tests {
     #[test]
     fn facing_and_half_combine_and_double_slabs_have_no_preference() {
         let o = Orient::from_state("minecraft:oak_stairs[facing=east,half=top,shape=straight]");
-        assert_eq!(o.look, Some((90.0, 0.0)));
+        assert_eq!(o.facing, Some(Face::East));
         assert_eq!(o.clicked, [Face::Down]);
         let o = Orient::from_state("minecraft:oak_stairs[half=bottom,facing=west]");
-        assert_eq!(o.look, Some((270.0, 0.0)));
+        assert_eq!(o.facing, Some(Face::West));
         assert_eq!(o.clicked, [Face::Up]);
         let o = Orient::from_state("minecraft:oak_slab[type=double]");
         assert_eq!(o, Orient::default());
+    }
+}
+
+#[cfg(test)]
+mod aim_tests {
+    use super::*;
+
+    #[test]
+    fn facing_follows_the_aim_at_the_clicked_face() {
+        let against = (5, 64, 5);
+        let from = |x: f64, z: f64| aim_facing((x, 65.6, z), against, Face::Up);
+        assert_eq!(from(2.5, 5.5), Some(Face::East));
+        assert_eq!(from(8.5, 5.5), Some(Face::West));
+        assert_eq!(from(5.5, 8.5), Some(Face::North));
+        assert_eq!(from(5.5, 2.5), Some(Face::South));
+        assert_eq!(from(5.5, 5.5), None);
+    }
+
+    #[test]
+    fn a_diagonal_aim_is_too_close_to_call() {
+        assert_eq!(aim_facing((2.5, 65.6, 2.5), (5, 64, 5), Face::Up), None);
+    }
+
+    #[test]
+    fn a_side_click_aims_through_its_own_face() {
+        let aim = aim_facing((2.5, 65.6, 5.5), (6, 65, 5), Face::West);
+        assert_eq!(aim, Some(Face::East));
+    }
+
+    #[test]
+    fn orient_accepts_only_stands_that_aim_the_wanted_way() {
+        let o = Orient::from_state("minecraft:oak_stairs[facing=east,half=bottom]");
+        assert!(o.aims((2.5, 65.6, 5.5), (5, 64, 5), Face::Up));
+        assert!(!o.aims((8.5, 65.6, 5.5), (5, 64, 5), Face::Up));
+        assert!(Orient::default().aims((8.5, 65.6, 5.5), (5, 64, 5), Face::Up));
+    }
+
+    #[test]
+    fn only_axis_blocks_are_strict_about_the_clicked_face() {
+        assert!(Orient::from_state("minecraft:oak_log[axis=x]").strict());
+        assert!(!Orient::from_state("minecraft:oak_stairs[half=top]").strict());
+        assert!(!Orient::default().strict());
     }
 }
 
