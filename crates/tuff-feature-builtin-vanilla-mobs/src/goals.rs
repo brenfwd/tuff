@@ -1417,6 +1417,9 @@ mod flying_tempt_tests;
 mod follow;
 pub use follow::*;
 
+mod home;
+pub use home::*;
+
 mod look;
 pub use look::*;
 

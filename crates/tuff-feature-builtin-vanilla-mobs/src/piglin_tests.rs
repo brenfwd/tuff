@@ -340,3 +340,159 @@ fn a_piglin_gives_up_walking_to_a_loved_item_for_two_hundred_ticks() {
         assert!(seek.can_use(core, cx));
     });
 }
+
+mod brute_brain {
+    use super::*;
+    use crate::goal::Goal;
+    use crate::goals::{StrollAroundHome, WalkToHome};
+    use crate::target::{HurtByTarget, NearestAttackablePlayer};
+    use tuff_core::world::entity::{NearbyPlayer, Notice};
+
+    fn player(id: i32, x: f64) -> NearbyPlayer<'static> {
+        NearbyPlayer {
+            id,
+            uuid: id as u128,
+            name: "",
+            position: [x, 64.0, 0.5],
+            eye_height: 1.62,
+            yaw: 0.0,
+            pitch: 0.0,
+            held: [None, None],
+            creative: false,
+            height: 1.8,
+            sneaking: false,
+            invisible: false,
+            invulnerable: false,
+            armor: [None; 4],
+            effects: 0,
+            movement: [0.0; 3],
+            vehicle: None,
+            sleeping: None,
+            last_hurt_by: None,
+            last_hurt_mob: None,
+            perchable: false,
+            sprinting: false,
+        }
+    }
+
+    fn brute_hurt_by(
+        attacker: EntityType,
+        f: impl FnOnce(&mut MobCore, &mut TickContext, &mut HurtByTarget) -> bool,
+    ) -> bool {
+        let others = [
+            summary(2, attacker, 3.5, 0, true),
+            summary(3, EntityType::PiglinBrute, 6.5, 0, true),
+        ];
+        let mut result = false;
+        crate::tests::with_entities(&others, |core, cx| {
+            core.last_hurt_by_mob = Some((2, cx.tick));
+            let mut goal = HurtByTarget::new(BRUTE_ALLIES).alerting(BRUTE_ALLIES);
+            result = f(core, cx, &mut goal);
+        });
+        result
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_brute_hurt_by_a_piglin_or_brute_does_not_target_it() {
+        for kind in [EntityType::Piglin, EntityType::PiglinBrute] {
+            assert!(!brute_hurt_by(kind, |core, cx, goal| goal.can_use(core, cx)));
+        }
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_brute_hurt_by_another_mob_targets_it_and_alerts_nearby_piglins() {
+        let alerted = brute_hurt_by(EntityType::Zombie, |core, cx, goal| {
+            assert!(goal.can_use(core, cx));
+            goal.start(core, cx);
+            assert_eq!(core.target, Some(2));
+            cx.effects.iter().any(|e| {
+                matches!(
+                    e,
+                    Effect::Notify {
+                        target: 3,
+                        notice: Notice::Alert { attacker: 2 }
+                    }
+                )
+            })
+        });
+        assert!(alerted);
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_brutes_hurt_target_expires_after_600_ticks() {
+        let attacker = [summary(2, EntityType::Zombie, 3.5, 0, true)];
+        crate::tests::with_entities(&attacker, |core, cx| {
+            core.last_hurt_by_mob = Some((2, cx.tick));
+            let mut goal = HurtByTarget::new(BRUTE_ALLIES).expiring(BRUTE_ANGER_TICKS);
+            goal.start(core, cx);
+            assert_eq!(BRUTE_ANGER_TICKS, 600);
+            assert_eq!(goal.expires_at, cx.tick + 600);
+            assert!(goal.can_continue(core, cx));
+            goal.expires_at = cx.tick;
+            assert!(!goal.can_continue(core, cx));
+        });
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_brute_switches_to_the_nearest_valid_target() {
+        let block = |pos: tuff_world_model::BlockPos| {
+            Some(if pos.y < 64 {
+                tuff_vanilla_data::Block::GrassBlock.default_state()
+            } else {
+                tuff_vanilla_data::Block::Air.default_state()
+            })
+        };
+        let players = [player(7, 3.5), player(8, 6.5)];
+        crate::tests::with_players(&block, &[], &players, |core, cx| {
+            PiglinBrute::configure(core);
+            core.base.position = [0.5, 64.0, 0.5];
+            let mut goal = NearestAttackablePlayer::new(true)
+                .only_nearest(crate::target::nearest_visible_player);
+            core.target = Some(8);
+            assert!(!goal.can_continue(core, cx));
+            core.target = Some(7);
+            assert!(goal.can_continue(core, cx));
+        });
+    }
+
+    fn at_distance(x: f64, f: impl FnOnce(&mut MobCore, &mut TickContext)) {
+        crate::tests::with_context(|core, cx| {
+            PiglinBrute::configure(core);
+            core.home = Some(crate::Home {
+                pos: crate::physics::block_pos([0.5, 64.0, 0.5]),
+                radius: BRUTE_HOME_RADIUS,
+            });
+            core.base.position = [x, 64.0, 0.5];
+            f(core, cx);
+        });
+    }
+
+    fn uses_within<G: Goal>(goal: &mut G, core: &mut MobCore, cx: &mut TickContext) -> bool {
+        (0..2000).any(|_| goal.can_use(core, cx))
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn idle_brute_returns_home_from_far_away() {
+        let mut walk = WalkToHome::new(BRUTE_IDLE_SPEED, BRUTE_HOME_CLOSE, 100.0);
+        at_distance(10.5, |core, cx| {
+            assert!(uses_within(&mut walk, core, cx));
+        });
+        at_distance(2.0, |core, cx| assert!(!uses_within(&mut walk, core, cx)));
+        at_distance(150.5, |core, cx| assert!(!uses_within(&mut walk, core, cx)));
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn idle_brute_strolls_within_five_of_home() {
+        let mut stroll = StrollAroundHome::new(BRUTE_IDLE_SPEED, BRUTE_HOME_STROLL);
+        at_distance(1.5, |core, cx| {
+            assert!(uses_within(&mut stroll, core, cx));
+        });
+        at_distance(9.5, |core, cx| assert!(!uses_within(&mut stroll, core, cx)));
+    }
+}

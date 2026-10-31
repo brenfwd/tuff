@@ -278,6 +278,8 @@ pub(crate) struct Keeping {
     unseen_ticks: i32,
     unseen_memory: i32,
     held: Option<i32>,
+    /// Gives up a target that is not the one this names.
+    nearest: Option<fn(&MobCore, &TickContext) -> Option<i32>>,
 }
 
 impl Keeping {
@@ -287,6 +289,7 @@ impl Keeping {
             unseen_ticks: 0,
             unseen_memory: DEFAULT_UNSEEN_MEMORY,
             held: None,
+            nearest: None,
         }
     }
 
@@ -295,6 +298,11 @@ impl Keeping {
             return false;
         };
         if !mob.can_attack(&target, cx) || mob.allied_to(&target, cx) {
+            return false;
+        }
+        if let Some(nearest) = self.nearest
+            && nearest(mob, cx).is_some_and(|id| id != target.id)
+        {
             return false;
         }
         let within = mob.follow_range();
@@ -323,6 +331,11 @@ impl Keeping {
         mob.target = None;
         self.held = None;
     }
+}
+
+/// The nearest player the mob could target now, in sight.
+pub(crate) fn nearest_visible_player(mob: &MobCore, cx: &TickContext) -> Option<i32> {
+    NearestAttackablePlayer::new(true).find(mob, cx)
 }
 
 /// Which players a targeting goal considers.
@@ -355,6 +368,15 @@ impl NearestAttackablePlayer {
             found: None,
             when: None,
         }
+    }
+
+    /// Drops its target once `nearest` names another one.
+    pub(crate) fn only_nearest(
+        mut self,
+        nearest: fn(&MobCore, &TickContext) -> Option<i32>,
+    ) -> Self {
+        self.keeping.nearest = Some(nearest);
+        self
     }
 
     /// Only picks players `filter` accepts as the mob sees them.
@@ -463,6 +485,15 @@ impl NearestAttackableEntity {
             only: None,
             search: None,
         }
+    }
+
+    /// Drops its target once `nearest` names another one.
+    pub(crate) fn only_nearest(
+        mut self,
+        nearest: fn(&MobCore, &TickContext) -> Option<i32>,
+    ) -> Self {
+        self.keeping.nearest = Some(nearest);
+        self
     }
 
     /// Looks for targets in the mob's box grown by `search` instead of the
