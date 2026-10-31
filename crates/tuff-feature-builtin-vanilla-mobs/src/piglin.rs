@@ -1271,128 +1271,6 @@ impl Piglin {
     }
 }
 
-const BRUTE_IMMUNE_TO_ZOMBIFICATION: u8 = data::MOB_FLAGS + 1;
-const BRUTE_HOME_RADIUS: i32 = 100;
-
-/// Piglin brutes: always hostile to players (gold does not deter them),
-/// never barter, only pick up golden axes, keep to the spot they spawned
-/// at, and zombify in the overworld like piglins unless immune.
-#[derive(Debug, Default)]
-pub struct PiglinBrute {
-    immune_to_zombification: bool,
-    time_in_overworld: i32,
-}
-
-impl PiglinBrute {
-    fn take_axe(&self, core: &mut MobCore, cx: &mut TickContext) {
-        if !core.can_pick_up_loot
-            || core.equipment.get(EquipmentSlot::Mainhand).is_some()
-            || !cx.shared.game_rules.borrow().bool("mob_griefing")
-        {
-            return;
-        }
-        let reach = super::physics::inflate(core.bounds(), [1.0, 0.0, 1.0]);
-        let Some(id) = cx.entities.iter().find_map(|e| {
-            let (item, count, takeable) = e.item?;
-            (takeable
-                && count > 0
-                && item == Item::GoldenAxe
-                && super::physics::intersects(e.bounds, reach))
-            .then_some(e.id)
-        }) else {
-            return;
-        };
-        cx.effects.push(Effect::TakeItem { item: id, count: 1 });
-    }
-}
-
-impl Species for PiglinBrute {
-    fn create(_rng: &mut rand::rngs::StdRng) -> Self {
-        Self::default()
-    }
-
-    fn configure(core: &mut MobCore) {
-        core.make_monster();
-        core.xp_reward = 20;
-        let mut goals = GoalSelector::default();
-        goals.add(
-            1,
-            HurtByTarget::new(&[]).alerting(&[EntityType::Piglin, EntityType::PiglinBrute]),
-        );
-        goals.add(2, NearestAttackablePlayer::new(true));
-        goals.add(2, NearestAttackableEntity::new(NEMESES, true));
-        goals.add(3, MeleeAttack::new(1.0, false));
-        goals.add(7, RandomStroll::water_avoiding(0.6));
-        goals.add(8, LookAtPlayer::new(8.0));
-        goals.add(8, RandomLookAround::default());
-        core.goals = goals;
-    }
-
-    fn load(&mut self, _core: &mut MobCore, nbt: &mut tuff_nbt::Compound) {
-        use tuff_core::world::entity::{take_bool, take_number};
-        self.immune_to_zombification = take_bool(nbt, "IsImmuneToZombification").unwrap_or(false);
-        self.time_in_overworld = take_number(nbt, "TimeInOverworld").map_or(0, |v| v as i32);
-    }
-
-    fn save(&self, _core: &MobCore, out: &mut tuff_nbt::Compound) {
-        out.insert("IsImmuneToZombification", self.immune_to_zombification);
-        out.insert("TimeInOverworld", self.time_in_overworld);
-    }
-
-    fn metadata(&self, _core: &MobCore) -> Vec<(u8, MetadataValue)> {
-        vec![(
-            BRUTE_IMMUNE_TO_ZOMBIFICATION,
-            MetadataValue::Boolean(self.immune_to_zombification),
-        )]
-    }
-
-    fn tick(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        tick_zombification(
-            core,
-            self.immune_to_zombification,
-            &mut self.time_in_overworld,
-            cx,
-        );
-    }
-
-    fn ai_step(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        self.take_axe(core, cx);
-    }
-
-    fn took_item(&mut self, core: &mut MobCore, stack: ItemStack) {
-        if stack.item() == Item::GoldenAxe && core.equipment.get(EquipmentSlot::Mainhand).is_none()
-        {
-            core.equipment.set(EquipmentSlot::Mainhand, Some(stack));
-            core.equipment.set_drop_chance(
-                EquipmentSlot::Mainhand,
-                super::equipment::PRESERVED_DROP_CHANCE,
-            );
-            core.persistence_required = true;
-        }
-    }
-
-    fn sounds(&self, _core: &MobCore) -> MobSounds {
-        monster::sounds(
-            SoundEvent::EntityPiglinBruteAmbient,
-            SoundEvent::EntityPiglinBruteHurt,
-            SoundEvent::EntityPiglinBruteDeath,
-            Some(SoundEvent::EntityPiglinBruteStep),
-        )
-    }
-
-    fn finalize_spawn(&mut self, core: &mut MobCore, _cx: &mut TickContext) {
-        core.home = Some(super::Home {
-            pos: super::physics::block_pos(core.base.position),
-            radius: BRUTE_HOME_RADIUS,
-        });
-        #[expect(clippy::disallowed_methods, reason = "mob equipment")]
-        core.equipment.set(
-            EquipmentSlot::Mainhand,
-            Some(ItemStack::mint(Item::GoldenAxe, 1, MintReason::Spawn)),
-        );
-    }
-}
-
 /// Piglins and zombified piglins spawn anywhere but on nether wart
 /// blocks.
 fn not_on_nether_wart(
@@ -1487,6 +1365,8 @@ pub fn anger_piglins(
     }
 }
 
+mod brute;
+pub use brute::*;
 mod zombified;
 pub use zombified::*;
 
