@@ -103,10 +103,24 @@ interface control {
         radius: u32,
     }
 
+    enum heading {
+        north,
+        south,
+        east,
+        west,
+    }
+
+    /// Branch mining plan: the feet level to dig to (the start level when absent) and the direction to tunnel.
+    record branch-spec {
+        level: option<s32>,
+        heading: heading,
+    }
+
     record mine-spec {
         blocks: list<string>,
         count: u32,
         radius: u32,
+        branch: option<branch-spec>,
     }
 
     record get-to-block-spec {

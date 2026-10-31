@@ -206,6 +206,7 @@ impl Plugin for Consumer {
                             blocks: vec![ctx.get::<String>("block").unwrap_or_default()],
                             count: int(&ctx, "count") as u32,
                             radius: 16,
+                            branch: None,
                         };
                         let line = match control::Control::any()
                             .set_process(id, control::Process::Mine(spec))
@@ -217,6 +218,36 @@ impl Plugin for Consumer {
                         answer(&ctx, line);
                     }),
                 ),
+            )))
+            .then(literal("branchmine").then(argument("id", parser::word()).then(
+                argument("block", parser::word()).then(argument("level", parser::word()).then(
+                    argument("heading", parser::word()).executes_async(|ctx| async move {
+                        let id = int(&ctx, "id") as u32;
+                        let heading = match ctx.get::<String>("heading").unwrap_or_default().as_str() {
+                            "north" => control::Heading::North,
+                            "south" => control::Heading::South,
+                            "west" => control::Heading::West,
+                            _ => control::Heading::East,
+                        };
+                        let spec = control::MineSpec {
+                            blocks: vec![ctx.get::<String>("block").unwrap_or_default()],
+                            count: 1,
+                            radius: 6,
+                            branch: Some(control::BranchSpec {
+                                level: Some(int(&ctx, "level")),
+                                heading,
+                            }),
+                        };
+                        let line = match control::Control::any()
+                            .set_process(id, control::Process::Mine(spec))
+                            .await
+                        {
+                            Ok(()) => format!("mining {id}"),
+                            Err(error) => describe(error),
+                        };
+                        answer(&ctx, line);
+                    }),
+                )),
             )))
             .then(
                 literal("attack").then(argument("id", parser::word()).then(
