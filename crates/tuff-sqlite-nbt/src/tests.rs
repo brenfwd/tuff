@@ -396,3 +396,28 @@ fn entity_index_is_opt_in_and_follows_writes() {
     update_entity_index(&conn, "minecraft:overworld", 0, -1, None).unwrap();
     assert_eq!(query(&conn, "SELECT count(*) FROM entity_index"), ["0"]);
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn text_output_stops_at_the_sqlite_value_cap() {
+    let longs = vec![i64::MIN; (MAX_NBT_BYTES - 1024) / 8];
+    let blob = sector(3, Compound::new().with("a", Tag::LongArray(longs)));
+    let conn = Connection::open_in_memory().unwrap();
+    register_functions(&conn).unwrap();
+    for f in ["nbt_json", "nbt_snbt"] {
+        let err = conn
+            .query_row(&format!("SELECT {f}(?1)"), [&blob], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains(&format!("larger than {}", 64 << 20)),
+            "{f}: {err}"
+        );
+    }
+    let none: Option<String> = conn
+        .query_row("SELECT nbt_try_json(?1)", [&blob], |r| r.get(0))
+        .unwrap();
+    assert!(none.is_none());
+}

@@ -550,6 +550,13 @@ pub enum RegionRequest {
         chunks: std::sync::Arc<[tuff_storage::sqlite::console::ChunkKey]>,
         reply: oneshot::Sender<Vec<tuff_storage::sqlite::console::ChunkKey>>,
     },
+    /// Saves and unloads these stored chunks where nothing keeps them
+    /// loaded, so the SQL console can edit them; answers with the ones
+    /// still loaded.
+    Evict {
+        chunks: std::sync::Arc<[tuff_storage::sqlite::console::ChunkKey]>,
+        reply: oneshot::Sender<Vec<tuff_storage::sqlite::console::ChunkKey>>,
+    },
     /// Every entity this region owns, players aside.
     Entities {
         reply: oneshot::Sender<Vec<EntitySnapshot>>,

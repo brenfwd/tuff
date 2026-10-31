@@ -26,6 +26,8 @@ pub(super) struct Sched {
     pub(super) settle_waiters: Vec<(u64, tokio::sync::oneshot::Sender<()>)>,
     /// Flushing saves waiting for every chunk save under way to land.
     pub(super) save_waiters: Vec<tokio::sync::oneshot::Sender<()>>,
+    /// SQL console evictions waiting for their chunks' saves to land.
+    pub(super) evict_waiters: Vec<super::evict::EvictWaiter>,
 }
 
 impl Sched {
@@ -56,6 +58,7 @@ impl Sched {
             jobs_in_flight: 0,
             settle_waiters: Vec::new(),
             save_waiters: Vec::new(),
+            evict_waiters: Vec::new(),
         }
     }
 }
