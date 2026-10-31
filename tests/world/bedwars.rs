@@ -949,13 +949,46 @@ async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_bridges_a_void_gap_to_the_enemy_bed_and_breaks_it() {
+    let Some(run) = WithBots::start().await else {
+        return;
+    };
+    let names = ["BOT_Ashwin", "BOT_Brakken"];
+    let terrain = [
+        "forceload add 0 -48 48 8",
+        "fill 6 64 -43 40 64 -37 minecraft:stone",
+        "fill 35 64 -43 40 64 -29 minecraft:stone",
+        "fill 35 64 -24 40 64 -6 minecraft:stone",
+    ];
+    start_two_bots(&run, names, ["hard", "easy"], &terrain).await;
+    run.say(&format!("give {} minecraft:white_wool 64", names[0]))
+        .await;
+    run.until_polls("an enemy bed broken across the gap", 4800, || async {
+        let mut gone = false;
+        for (kind, at) in [("blue_bed", "37 65 0"), ("red_bed", "0 65 -37")] {
+            let said = run
+                .say(&format!(
+                    "execute in {ARENA} if block {at} minecraft:{kind}"
+                ))
+                .await;
+            gone |= said.contains("Test failed");
+        }
+        gone.then_some(())
+    })
+    .await;
+    no_violations(&run).await;
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_bot_defends_its_bed_against_an_intruder() {
     let Some(run) = WithBots::start().await else {
         return;
     };
     let names = ["BOT_Ashwin", "BOT_Brakken"];
     start_two_bots(&run, names, ["hard", "hard"], &[]).await;
-    let (red, blue) = by_team(&run, names).await;
+    let (_, blue) = by_team(&run, names).await;
     run.say(&format!("execute in {ARENA} run tp {blue} 0.5 65 -33.5"))
         .await;
     run.until("the intruder hurt or beaten", || async {
@@ -969,12 +1002,6 @@ async fn a_bot_defends_its_bed_against_an_intruder() {
         (beaten || health.first().is_some_and(|h| *h < 20.0)).then_some(())
     })
     .await;
-    let bed = run
-        .say(&format!(
-            "execute in {ARENA} if block 0 65 -37 minecraft:red_bed"
-        ))
-        .await;
-    let _ = (bed, red);
     no_violations(&run).await;
     let removed = run.bedwars("bot remove 1").await;
     assert!(removed.contains("Removed"), "{removed}");
