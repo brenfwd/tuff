@@ -428,8 +428,21 @@ pub fn is_halloween(zone: &Zone, unix: i64) -> bool {
     month_day(zone, unix) == (10, 31)
 }
 
+static PIN: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Forces `halloween_now` to `Some(value)` for this process, or back to the clock with `None`.
+pub fn pin_halloween(pin: Option<bool>) {
+    let code = pin.map_or(0, |value| 1 + u8::from(value));
+    PIN.store(code, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Whether it is Halloween on the server's local calendar now.
 pub fn halloween_now() -> bool {
+    match PIN.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => return false,
+        2 => return true,
+        _ => {}
+    }
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .is_ok_and(|now| is_halloween(local_zone(), now.as_secs() as i64))
@@ -551,5 +564,20 @@ mod tests {
         assert!(Zone::from_tzif(&huge).is_none());
         assert_eq!(Zone::from_tz(":UTC"), Some(Zone::utc()));
         assert!(Zone::from_tz("../../etc/passwd").is_none());
+    }
+}
+
+#[cfg(test)]
+mod pin_tests {
+    use super::*;
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_pin_overrides_the_clock_and_none_releases_it() {
+        pin_halloween(Some(true));
+        assert!(halloween_now());
+        pin_halloween(Some(false));
+        assert!(!halloween_now());
+        pin_halloween(None);
     }
 }

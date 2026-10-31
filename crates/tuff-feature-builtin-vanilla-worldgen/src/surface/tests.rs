@@ -282,3 +282,55 @@ fn the_surface_rule_interpreter_matches_the_compiled_rules() {
         );
     }
 }
+
+#[tuff_core::watchdog]
+#[test]
+fn vein_windows_bound_the_density_and_narrowed_volumes_match_full_ones() {
+    for seed in [1i64, -4_172_144_997_902_289_642, 903] {
+        let generator = NoiseGenerator::new(
+            NoiseSettings::get("minecraft:overworld").unwrap(),
+            std::sync::Arc::new(MultiNoise::preset("minecraft:overworld").unwrap()),
+            seed,
+        );
+        let shape = ChunkShape::OVERWORLD;
+        let span = GenContext {
+            min_y: shape.min_y,
+            height: shape.height,
+            sea_level: generator.span.sea_level,
+        };
+        let template = generator.surface.template(span);
+        assert!(template.lazy_ore);
+        let windowed = template.veins.iter().filter(|v| v.window.is_some()).count();
+        assert!(windowed >= 2, "overworld veins have windows");
+        for (min_x, min_z) in [(0, 0), (-13 * 16, 7 * 16)] {
+            let full = DensityVolume::blocks([16, shape.height, 16], [min_x, shape.min_y, min_z]);
+            for vein in &template.veins {
+                let Some((low, high)) = vein.window else {
+                    continue;
+                };
+                let mut ctx = Context::builder().caches().build();
+                let mut all = vec![0.0f32; full.size()];
+                vein.density.sample_volume(&mut ctx, &mut all, &full);
+                let from = low.max(full.min_y);
+                let to = high.min(full.min_y + full.size_y);
+                let narrow = DensityVolume::blocks([16, to - from, 16], [min_x, from, min_z]);
+                let mut part = vec![0.0f32; narrow.size()];
+                let mut fresh = Context::builder().caches().build();
+                vein.density.sample_volume(&mut fresh, &mut part, &narrow);
+                for x in min_x..min_x + 16 {
+                    for z in min_z..min_z + 16 {
+                        for y in full.min_y..full.min_y + full.size_y {
+                            let want = all[full.index_of_block(x, y, z).unwrap()];
+                            match narrow.index_of_block(x, y, z) {
+                                Some(i) if y >= low && y < high => {
+                                    assert_eq!(part[i].to_bits(), want.to_bits(), "{x} {y} {z}");
+                                }
+                                _ => assert!(want <= 0.0, "seed {seed} {x} {y} {z}: {want}"),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -5,9 +5,11 @@ use super::*;
 pub struct LookAtPlayer {
     pub(super) distance: f32,
     pub(super) player: Option<i32>,
-    pub(super) look_time: i32,
+    pub(crate) look_time: i32,
     pub(super) probability: f32,
     pub(super) flags: Flags,
+    pub(super) interval: Option<(i32, i32)>,
+    pub(super) countdown: i32,
 }
 
 impl LookAtPlayer {
@@ -18,6 +20,17 @@ impl LookAtPlayer {
             look_time: 0,
             probability: 0.02,
             flags: Flags::LOOK,
+            interval: None,
+            countdown: 0,
+        }
+    }
+
+    /// Looks at a player in range once every `min..=max` ticks spent near
+    /// one, for 45 to 90 ticks each time.
+    pub fn periodic(distance: f32, min: i32, max: i32) -> Self {
+        Self {
+            interval: Some((min, max)),
+            ..Self::new(distance)
         }
     }
 
@@ -38,7 +51,7 @@ impl Goal for LookAtPlayer {
     }
 
     fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
-        if cx.rng.r#gen::<f32>() >= self.probability {
+        if self.interval.is_none() && cx.rng.r#gen::<f32>() >= self.probability {
             return false;
         }
         self.player = nearest_player(
@@ -49,19 +62,37 @@ impl Goal for LookAtPlayer {
             |p| !rides(mob.base.id, p.vehicle, cx),
         )
         .map(|p| p.id);
-        self.player.is_some()
+        if self.player.is_none() {
+            return false;
+        }
+        let Some((min, max)) = self.interval else {
+            return true;
+        };
+        if self.countdown == 0 {
+            self.countdown = cx.rng.gen_range(min..=max) - 1;
+            return false;
+        }
+        self.countdown -= 1;
+        self.countdown == 0
     }
 
     fn can_continue(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
         let Some(player) = self.player.and_then(|id| player(cx, id)) else {
             return false;
         };
+        if self.interval.is_some() {
+            return self.look_time > 0;
+        }
         mob.distance_sq(player.position) <= (self.distance * self.distance) as f64
             && self.look_time > 0
     }
 
     fn start(&mut self, _mob: &mut MobCore, cx: &mut TickContext) {
-        self.look_time = self.adjusted_delay(40 + cx.rng.gen_range(0..40));
+        self.look_time = if self.interval.is_some() {
+            cx.rng.gen_range(45..=90)
+        } else {
+            self.adjusted_delay(40 + cx.rng.gen_range(0..40))
+        };
     }
 
     fn stop(&mut self, _mob: &mut MobCore, _cx: &mut TickContext) {

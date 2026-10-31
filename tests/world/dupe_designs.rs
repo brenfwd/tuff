@@ -40,6 +40,12 @@ pub type Area = ((i32, i32, i32), (i32, i32, i32));
 
 pub const COUNT_BOX: Area = ((-3, -4, -6), (9, 6, 6));
 
+const OBSERVER_KINDS: &[&str] = &[
+    "minecraft:observer",
+    "minecraft:slime_block",
+    "minecraft:tnt",
+];
+
 const PUSH: &[Part] = &[
     (-3, -1, 0, "minecraft:redstone_block"),
     (0, 0, 0, "@step:8"),
@@ -306,6 +312,52 @@ pub const DESIGNS: &[Design] = &[
             ("minecraft:observer@-1", 1),
             ("minecraft:slime_block", 1),
             ("minecraft:slime_block@-1", 1),
+        ],
+        slabs: Some(Slabs::X),
+        area: COUNT_BOX,
+    },
+    Design {
+        name: "observer_over_slime_watching_it_leave",
+        build: &[
+            (-3, 0, 0, "minecraft:sticky_piston[facing=east]"),
+            (-2, 0, 0, "minecraft:slime_block"),
+            (-2, 1, 0, "minecraft:observer[facing=down]"),
+            (-2, 2, 0, "minecraft:tnt"),
+        ],
+        trigger: PUSH,
+        steps: 4,
+        end: false,
+        kinds: OBSERVER_KINDS,
+        vanilla: &[
+            ("minecraft:observer", 1),
+            ("minecraft:observer@-1", 1),
+            ("minecraft:slime_block", 1),
+            ("minecraft:slime_block@-1", 1),
+            ("minecraft:tnt", 1),
+            ("minecraft:tnt@-2", 1),
+        ],
+        slabs: Some(Slabs::X),
+        area: COUNT_BOX,
+    },
+    Design {
+        name: "pushed_observer_driving_tnt_below",
+        build: &[
+            (-3, 0, 0, "minecraft:sticky_piston[facing=east]"),
+            (-2, 0, 0, "minecraft:slime_block"),
+            (-1, 0, 0, "minecraft:observer[facing=up]"),
+            (-1, -1, 0, "minecraft:tnt"),
+        ],
+        trigger: PUSH,
+        steps: 4,
+        end: false,
+        kinds: OBSERVER_KINDS,
+        vanilla: &[
+            ("minecraft:observer", 1),
+            ("minecraft:observer@0", 1),
+            ("minecraft:slime_block", 1),
+            ("minecraft:slime_block@-1", 1),
+            ("minecraft:tnt", 1),
+            ("minecraft:tnt@-1", 1),
         ],
         slabs: Some(Slabs::X),
         area: COUNT_BOX,
