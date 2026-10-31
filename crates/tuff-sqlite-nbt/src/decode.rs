@@ -11,7 +11,7 @@ pub const MAX_NBT_BYTES: usize = 32 << 20;
 /// Deepest nesting of lists and compounds accepted.
 pub const MAX_DEPTH: usize = 512;
 /// Largest JSON or SNBT text produced from one blob.
-pub const MAX_TEXT_BYTES: usize = 128 << 20;
+pub const MAX_TEXT_BYTES: usize = 64 << 20;
 
 const SECTOR_GZIP: u8 = 1;
 const SECTOR_ZLIB: u8 = 2;

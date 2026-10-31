@@ -493,3 +493,75 @@ async fn plugin_player_data_survives_rejoin_on_a_sqlite_world() {
     );
     counter_survives_rejoin(backend).await;
 }
+
+async fn evict(
+    region: &RegionHandle,
+    chunks: &[ChunkPos],
+) -> Vec<tuff_storage::sqlite::console::ChunkKey> {
+    let chunks = chunks
+        .iter()
+        .map(|c| tuff_storage::sqlite::console::ChunkKey {
+            dimension: "minecraft:overworld".into(),
+            x: c.x,
+            z: c.z,
+        })
+        .collect();
+    let (reply, answer) = oneshot::channel();
+    region.request(RegionRequest::Evict { chunks, reply }).await;
+    answer.await.unwrap()
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn evict_saves_unpinned_chunks_and_keeps_viewed_ones() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let pos = BlockPos::new(40, 200, 40);
+    let chunk = ChunkPos::of_block(pos);
+    let viewed = ChunkPos::new(chunk.x + 1, chunk.z);
+    let region = world.region(chunk.region()).await;
+    let (viewer, mut events) = PlayerHandle::new(100);
+    subscribe(&region, &viewer, &mut events, &[viewed]).await;
+    let (reply, answer) = oneshot::channel();
+    region
+        .request(RegionRequest::AwaitChunk { pos, reply })
+        .await;
+    answer.await.unwrap();
+    let (reply, answer) = oneshot::channel();
+    region
+        .request(RegionRequest::Blocks {
+            op: crate::world::messages::BlockOp::Set {
+                changes: vec![(pos, Block::Stone.default_state())],
+                destroy: false,
+                keep: false,
+                strict: false,
+                quiet: false,
+                data: None,
+            },
+            reply,
+        })
+        .await;
+    answer.await.unwrap();
+
+    let pinned = evict(&region, &[chunk, viewed]).await;
+    assert_eq!(pinned.len(), 1);
+    assert_eq!((pinned[0].x, pinned[0].z), (viewed.x, viewed.z));
+    assert_eq!(block_at(&region, pos).await, None, "evicted chunk unloaded");
+    assert!(
+        block_at(&region, BlockPos::new(viewed.x * 16, 200, viewed.z * 16))
+            .await
+            .is_some()
+    );
+
+    let (reply, answer) = oneshot::channel();
+    region
+        .request(RegionRequest::AwaitChunk { pos, reply })
+        .await;
+    answer.await.unwrap();
+    assert_eq!(
+        block_at(&region, pos).await.map(|s| s.block()),
+        Some(Block::Stone),
+        "the unsaved edit was saved before eviction"
+    );
+    world.shutdown().await;
+}
