@@ -11,7 +11,7 @@ use super::{Facts, Fix, Flag, Terrain};
 const BASE_WINDOW: u64 = 10;
 const MAX_ROUND_TRIP: u64 = 20;
 const MIN_COMPONENT: f64 = 0.1;
-const HORIZONTAL_TOLERANCE: f64 = 0.25;
+const HORIZONTAL_TOLERANCE: f64 = 0.4;
 const VERTICAL_TOLERANCE: f64 = 0.05;
 const ADDED_SINK: f64 = 0.08;
 const AIR_DRAG: f64 = 0.91;
@@ -272,6 +272,19 @@ mod tests {
                 assert_eq!(flag, None);
                 assert!(push.horizontal >= v);
             }
+        }
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_sprint_jump_against_the_push_still_shows_it_applied() {
+        let mut ledger = VelocityLedger::default();
+        let mut f = open();
+        knock(&mut ledger, &f, [0.28, 0.4, -0.29]);
+        let (_, flag) = walk(&mut ledger, &mut f, [0.02, 0.42, -0.12]);
+        assert_eq!(flag, None);
+        for _ in 0..12 {
+            assert_eq!(walk(&mut ledger, &mut f, [0.0; 3]).1, None);
         }
     }
 

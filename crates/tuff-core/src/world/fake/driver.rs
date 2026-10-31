@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, watch};
 
 use super::motion::{Body, Held, MotionState};
 use super::{BodyStatus, Observed};
-use crate::protocol::play::{Movement, Serverbound};
+use crate::protocol::play::{GameMode, Movement, Serverbound};
 use crate::world::session::PlayerSession;
 
 /// A move this small is not worth a packet, unless 20 ticks passed.
@@ -30,7 +30,7 @@ pub struct Driver {
     pub(super) held: Held,
     state: Option<MotionState>,
     teleports: u64,
-    impulses: u64,
+    velocities: u64,
     sent_flags: u8,
     sent_sprint: bool,
     sent_gliding: bool,
@@ -58,7 +58,7 @@ impl Driver {
             held: Held::default(),
             state: None,
             teleports: 0,
-            impulses: 0,
+            velocities: 0,
             sent_flags: 0,
             sent_sprint: false,
             sent_gliding: false,
@@ -149,9 +149,16 @@ impl PlayerSession {
         if observed.teleports == 0 || self.is_dead() {
             return Vec::new();
         }
+        if self.mode.game_mode == GameMode::Spectator {
+            // Parity: a spectator flies; it never falls, so a spectating fake stays put.
+            if let Some(state) = driver.state.as_mut() {
+                state.velocity = [0.0; 3];
+            }
+            return Vec::new();
+        }
         let state = driver.state.get_or_insert_with(|| {
             driver.teleports = observed.teleports;
-            driver.impulses = observed.impulses;
+            driver.velocities = self.motion.velocity_sent.total;
             driver.sent_position = observed.position;
             driver.sent_rotation = observed.rotation;
             let mut state = MotionState::new(observed.position);
@@ -160,15 +167,23 @@ impl PlayerSession {
         });
         if observed.teleports != driver.teleports {
             driver.teleports = observed.teleports;
-            driver.impulses = observed.impulses;
+            driver.velocities = self.motion.velocity_sent.total;
             state.position = observed.position;
             state.velocity = observed.velocity;
             state.on_ground = false;
             driver.sent_position = observed.position;
             driver.sent_rotation = observed.rotation;
-        } else if observed.impulses != driver.impulses {
-            driver.impulses = observed.impulses;
-            state.velocity = observed.velocity;
+        } else {
+            for given in self.motion.velocity_sent.since(driver.velocities) {
+                if given.added {
+                    for axis in 0..3 {
+                        state.velocity[axis] += given.velocity[axis];
+                    }
+                } else {
+                    state.velocity = given.velocity;
+                }
+            }
+            driver.velocities = self.motion.velocity_sent.total;
         }
         let held = driver.held;
         let body = Body {

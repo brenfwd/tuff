@@ -489,6 +489,7 @@ impl Game {
             let (Life::Alive, Some(me)) = (life, me) else {
                 bot.breaking = None;
                 bot.fighting = None;
+                bot.alive_since = None;
                 bot.stock = Default::default();
                 bot.ranged = None;
                 if bot.heading.take().is_some()
@@ -499,6 +500,7 @@ impl Game {
                 }
                 continue;
             };
+            let alive_since = *bot.alive_since.get_or_insert(now);
             let seen: Vec<Seen> = live
                 .iter()
                 .filter(|(_, t, _)| *t != team)
@@ -529,6 +531,7 @@ impl Game {
                 ally,
                 now,
                 elapsed: now - game.started,
+                alive_for: now - alive_since,
                 me,
                 home: center(arena.map.teams[team].spawn),
                 forge: center(arena.map.teams[team].forge),

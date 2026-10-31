@@ -30,6 +30,9 @@ pub trait SqlHost: Send + Sync {
     fn backend_name(&self) -> String;
     /// Which of `touched` the server has loaded.
     fn loaded_among<'a>(&'a self, touched: &'a [ChunkKey]) -> HostFuture<'a, Vec<ChunkKey>>;
+    /// Saves and unloads `touched` where nothing keeps them loaded;
+    /// answers with the ones still loaded.
+    fn evict_among<'a>(&'a self, touched: &'a [ChunkKey]) -> HostFuture<'a, Vec<ChunkKey>>;
 }
 
 const SAVED_FILE: &str = "web/sql-queries.json";
@@ -438,9 +441,9 @@ fn loaded_refusal(loaded: &[ChunkKey]) -> ConsoleError {
     ))
 }
 
-/// A statement that changes stored world rows: refused while any chunk it
-/// touches is loaded, and committed while saving is held so nothing
-/// overwrites it.
+/// A statement that changes stored world rows: the chunks it touches are
+/// saved and unloaded first (refused while anything keeps one loaded),
+/// and it commits while saving is held so nothing overwrites it.
 async fn write_world(
     shared: &Arc<dyn PanelHost>,
     console: SqlConsole,
@@ -454,12 +457,6 @@ async fn write_world(
         blocking(move || console.write(sql, WriteAction::Preview, limits)).await?
     };
     let touched = preview.touched;
-    if !touched.is_empty() {
-        let loaded = shared.sql().loaded_among(&touched).await;
-        if !loaded.is_empty() {
-            return Err(loaded_refusal(&loaded));
-        }
-    }
     let WriteAction::Commit { .. } = action else {
         return Ok(WorldWrite {
             affected: preview.affected,
@@ -471,6 +468,10 @@ async fn write_world(
     let hold = if touched.is_empty() {
         None
     } else {
+        let pinned = shared.sql().evict_among(&touched).await;
+        if !pinned.is_empty() {
+            return Err(loaded_refusal(&pinned));
+        }
         let hold = shared
             .clone()
             .hold_saves("the SQL console", Duration::from_secs(120))

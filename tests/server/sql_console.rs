@@ -344,13 +344,13 @@ async fn the_live_world_tables_stay_read_only() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn chunk_rows_edit_only_while_their_chunks_are_unloaded() {
+async fn chunk_rows_edit_after_evicting_unpinned_chunks() {
     chunk_rows_edit_flow(true).await;
 }
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn region_file_chunk_rows_edit_only_while_their_chunks_are_unloaded() {
+async fn region_file_chunk_rows_edit_after_evicting_unpinned_chunks() {
     chunk_rows_edit_flow(false).await;
 }
 
@@ -376,14 +376,32 @@ async fn chunk_rows_edit_flow(sqlite: bool) {
         }
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
+    let forced = "DELETE FROM chunks WHERE x = 0 AND z = 0 AND dimension = 'minecraft:overworld'";
     let (status, body) = post(
         &admin,
         "write",
-        json!({ "sql": "DELETE FROM chunks", "action": "preview" }),
+        json!({ "sql": forced, "action": "commit", "expect": 1 }),
     )
     .await;
     assert_eq!(status, 400, "{body}");
     assert!(body["error"].as_str().unwrap().contains("loaded"), "{body}");
+    let count = async |sql: &str| {
+        let (_, page) = post(&admin, "query", json!({ "sql": sql })).await;
+        page["rows"][0][0].as_u64()
+    };
+    let origin =
+        "SELECT count(*) FROM chunks WHERE x = 0 AND z = 0 AND dimension = 'minecraft:overworld'";
+    assert_eq!(count(origin).await, Some(1));
+    run(&server, "forceload remove 0 0").await;
+    let (status, body) = post(
+        &admin,
+        "write",
+        json!({ "sql": forced, "action": "commit", "expect": 1 }),
+    )
+    .await;
+    assert_eq!((status, &body["committed"]), (200, &json!(true)), "{body}");
+    run(&server, "save-all flush").await;
+    assert_eq!(count(origin).await, Some(0));
     let insert = "INSERT INTO chunks(dimension, x, z, data) VALUES ('minecraft:overworld', 90000, 90000, x'02789c030000000001')";
     let (status, body) = post(
         &admin,
