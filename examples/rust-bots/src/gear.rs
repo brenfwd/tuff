@@ -97,23 +97,39 @@ const ARMOR_SLOTS: [(ArmorSlot, u8); 4] = [
     (ArmorSlot::Feet, 8),
 ];
 
-/// The hotbar index of an armor piece to put on by using it: a better piece
-/// than the worn one (or any piece for an empty slot). Anything else worn
-/// in a slot, such as elytra, is left alone.
-pub fn armor_to_wear(carried: &[Carried]) -> Option<u8> {
+/// How to put on a carried armor piece.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wear {
+    /// Select this hotbar index and use the item.
+    Hotbar(u8),
+    /// Shift-click this inventory window slot.
+    Inventory(u8),
+}
+
+/// The armor piece to put on: a better piece than the worn one (or any piece
+/// for an empty slot). Anything else worn in a slot, such as elytra, is left
+/// alone. Hotbar pieces are preferred as they are the cheapest to wear.
+pub fn armor_to_wear(carried: &[Carried]) -> Option<Wear> {
     let worn = |slot: ArmorSlot| {
         let menu = ARMOR_SLOTS.iter().find(|(s, _)| *s == slot)?.1;
         let (_, item, _) = carried.iter().find(|(m, _, c)| *m == menu && *c > 0)?;
         Some(armor_part(name_of(item)).map_or(usize::MAX, |(_, rank)| rank))
     };
-    let hotbar: Vec<Carried> = carried
+    let held: Vec<Carried> = carried
         .iter()
-        .filter(|(m, _, _)| HOTBAR.contains(m))
+        .filter(|(m, _, _)| (9..=*HOTBAR.end()).contains(m))
         .cloned()
         .collect();
-    best_armor(&hotbar, worn)
-        .first()
-        .map(|(_, menu)| menu - HOTBAR.start())
+    let best = best_armor(&held, worn);
+    let pick = best
+        .iter()
+        .find(|(_, menu)| HOTBAR.contains(menu))
+        .or(best.first())?;
+    Some(if HOTBAR.contains(&pick.1) {
+        Wear::Hotbar(pick.1 - HOTBAR.start())
+    } else {
+        Wear::Inventory(pick.1)
+    })
 }
 
 /// The kind of tool that breaks this block fastest, if any kind matters.
@@ -233,12 +249,25 @@ mod tests {
             (38, "iron_chestplate"),
             (5, "leather_helmet"),
         ]);
-        assert_eq!(armor_to_wear(&carried), Some(1));
+        assert_eq!(armor_to_wear(&carried), Some(Wear::Hotbar(1)));
         let mut with_elytra = kit(&[(38, "iron_chestplate")]);
         with_elytra.push((6, "minecraft:elytra".into(), 1));
         assert_eq!(armor_to_wear(&with_elytra), None);
         let worn = kit(&[(37, "iron_helmet"), (5, "diamond_helmet")]);
         assert_eq!(armor_to_wear(&worn), None);
+    }
+
+    #[test]
+    fn inventory_armor_is_shift_clicked_when_better_than_the_worn_piece() {
+        let carried = kit(&[(20, "iron_chestplate")]);
+        assert_eq!(armor_to_wear(&carried), Some(Wear::Inventory(20)));
+        let worse_worn = kit(&[(20, "iron_chestplate"), (6, "leather_chestplate")]);
+        assert_eq!(armor_to_wear(&worse_worn), Some(Wear::Inventory(20)));
+        let equal_worn = kit(&[(20, "iron_chestplate"), (6, "iron_chestplate")]);
+        assert_eq!(armor_to_wear(&equal_worn), None);
+        let mut elytra = kit(&[(20, "iron_chestplate")]);
+        elytra.push((6, "minecraft:elytra".into(), 1));
+        assert_eq!(armor_to_wear(&elytra), None);
     }
 
     #[test]

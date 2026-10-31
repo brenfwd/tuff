@@ -169,6 +169,10 @@ impl Fakes {
             WitAction::ReleaseUse => FakeAction::ReleaseUse,
             WitAction::SelectSlot(slot) if slot < 9 => FakeAction::SelectSlot(i16::from(slot)),
             WitAction::SelectSlot(_) => return Err(FakeError::Invalid("slot".into())),
+            WitAction::ClickSlot(slot) if (5..=44).contains(&slot) => {
+                FakeAction::QuickMove(i16::from(slot))
+            }
+            WitAction::ClickSlot(_) => return Err(FakeError::Invalid("slot".into())),
             WitAction::SwapHands => FakeAction::SwapHands,
             WitAction::Drop(stack) => FakeAction::Drop { stack },
             WitAction::Respawn => FakeAction::Respawn,

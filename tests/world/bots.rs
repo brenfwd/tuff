@@ -905,6 +905,30 @@ async fn a_bot_detours_to_pick_up_a_nearby_drop() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_wears_better_armor_from_its_inventory() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    open_arena(&run).await;
+    run.ask("spawnat Botty 0 150 0", |a| a.contains("spawned 1"))
+        .await;
+    run.botty_online(true).await;
+    run.server("item replace entity Botty inventory.3 with minecraft:iron_chestplate")
+        .await;
+    let worn = run
+        .within(PATIENCE, || async {
+            run.server("execute if items entity Botty armor.chest minecraft:iron_chestplate")
+                .await
+                .contains("passed")
+                .then_some(())
+        })
+        .await;
+    assert!(worn.is_some(), "the chestplate was not put on");
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_bot_shoots_a_stationary_zombie_dead_at_twenty_blocks_and_flags_nothing() {
     let Some(run) = Run::start(true).await else {
         return;

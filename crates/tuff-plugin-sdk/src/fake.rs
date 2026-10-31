@@ -179,6 +179,12 @@ impl FakePlayer {
         self.act(FakeAction::SelectSlot(slot))
     }
 
+    /// Shift-clicks a slot of the inventory window (5 to 44), which moves
+    /// armor into its slot.
+    pub fn click_slot(&self, slot: u8) -> Result<(), FakeError> {
+        self.act(FakeAction::ClickSlot(slot))
+    }
+
     pub fn swap_hands(&self) -> Result<(), FakeError> {
         self.act(FakeAction::SwapHands)
     }

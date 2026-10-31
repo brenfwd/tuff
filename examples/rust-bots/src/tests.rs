@@ -104,6 +104,10 @@ impl Host for Recording {
         self.log.push(format!("slot {slot}"));
     }
 
+    fn click_slot(&mut self, _: Body, slot: u8) {
+        self.log.push(format!("click {slot}"));
+    }
+
     fn dig(&mut self, _: Body, pos: (i32, i32, i32), _: &Vec3) {
         self.log.push(format!("dig {pos:?}"));
     }
