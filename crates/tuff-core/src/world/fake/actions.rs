@@ -49,6 +49,8 @@ pub enum FakeAction {
     },
     ReleaseUse,
     SelectSlot(i16),
+    /// Shift-clicks a slot of the player inventory window.
+    QuickMove(i16),
     SwapHands,
     Drop {
         stack: bool,
@@ -183,6 +185,15 @@ impl PlayerSession {
                 ));
             }
             FakeAction::SelectSlot(slot) => out.push(Serverbound::SetCarriedItem(slot)),
+            FakeAction::QuickMove(slot) => out.push(Serverbound::ContainerClick {
+                window_id: 0,
+                state_id: 0,
+                slot,
+                button: 0,
+                mode: crate::world::menu::mode::QUICK_MOVE,
+                changed: Vec::new(),
+                carried: None,
+            }),
             FakeAction::SwapHands => out.push(driver.action(
                 PlayerActionStatus::SwapItemWithOffhand,
                 BlockPos::new(0, 0, 0),

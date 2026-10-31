@@ -808,6 +808,26 @@ mod tests {
 
     #[tuff_core::watchdog]
     #[test]
+    fn shift_clicking_inventory_armor_puts_it_in_the_armor_slot() {
+        let mut inv = Inventory::default();
+        inv.slots[12] = Some(ItemStack::mint(Item::IronChestplate, 1, MintReason::Test));
+        inv.click(
+            12,
+            0,
+            crate::world::menu::mode::QUICK_MOVE,
+            false,
+            &mut NoResult,
+            &crate::world::crafting::RecipeSet::default(),
+        );
+        assert!(inv.slots[12].is_none());
+        assert_eq!(
+            inv.slots[6].as_ref().map(|s| s.item()),
+            Some(Item::IronChestplate)
+        );
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
     fn left_and_right_click_pick_up_and_place() {
         let mut inv = Inventory::default();
         inv.slots[36] = dirt(7);

@@ -108,6 +108,8 @@ pub trait Host {
     fn dig(&mut self, _body: Body, _pos: (i32, i32, i32), _from: &Vec3) {}
     /// Selects a hotbar slot (0 to 8).
     fn select_slot(&mut self, _body: Body, _slot: u8) {}
+    /// Shift-clicks a slot of the inventory window.
+    fn click_slot(&mut self, _body: Body, _slot: u8) {}
     /// Uses the held item on a face of a block.
     fn place(&mut self, _body: Body, _against: Pos, _face: Face) {}
     /// Uses the held item on a side face at a cursor height (0 to 1).
@@ -685,10 +687,15 @@ impl Bots {
             && !fighting
             && bot.armor_wait == 0
             && !bot.eater.eating()
-            && let Some(slot) = gear::armor_to_wear(&carried)
+            && let Some(wear) = gear::armor_to_wear(&carried)
         {
-            host.select_slot(bot.body, slot);
-            host.use_held(bot.body);
+            match wear {
+                gear::Wear::Hotbar(slot) => {
+                    host.select_slot(bot.body, slot);
+                    host.use_held(bot.body);
+                }
+                gear::Wear::Inventory(slot) => host.click_slot(bot.body, slot),
+            }
             bot.armor_wait = ARMOR_TICKS;
         }
         let tools = if breaking { host.tools(bot.body) } else { None };

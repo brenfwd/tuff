@@ -1744,7 +1744,10 @@ void tuff_plugin_types_fake_action_free(tuff_plugin_types_fake_action_t *ptr) {
     case 9: {
       break;
     }
-    case 11: {
+    case 10: {
+      break;
+    }
+    case 12: {
       break;
     }
   }
@@ -9673,31 +9676,30 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
   __attribute__((__aligned__(sizeof(void*))))
   uint8_t ret_area[(4*sizeof(void*))];
   int32_t variant;
-  int64_t variant12;
   int64_t variant13;
-  int32_t variant14;
+  int64_t variant14;
   int32_t variant15;
   int32_t variant16;
-  double variant17;
+  int32_t variant17;
   double variant18;
   double variant19;
+  double variant20;
   switch ((int32_t) (*action).tag) {
     case 0: {
       const tuff_plugin_types_rotation_t *payload = &(*action).val.look;
       variant = 0;
-      variant12 = ((union float_int32){ (*payload).yaw }).b;
-      variant13 = ((union float_int32){ (*payload).pitch }).b;
-      variant14 = 0;
+      variant13 = ((union float_int32){ (*payload).yaw }).b;
+      variant14 = ((union float_int32){ (*payload).pitch }).b;
       variant15 = 0;
       variant16 = 0;
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 1: {
       variant = 1;
-      variant12 = 0;
       variant13 = 0;
       variant14 = 0;
       variant15 = 0;
@@ -9705,50 +9707,50 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 2: {
       const tuff_plugin_types_uuid_t *payload1 = &(*action).val.attack;
       variant = 2;
-      variant12 = (int64_t) ((*payload1).high);
-      variant13 = (int64_t) ((*payload1).low);
-      variant14 = 0;
+      variant13 = (int64_t) ((*payload1).high);
+      variant14 = (int64_t) ((*payload1).low);
       variant15 = 0;
       variant16 = 0;
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 3: {
       const tuff_plugin_types_fake_interact_t *payload2 = &(*action).val.interact;
       variant = 3;
-      variant12 = (int64_t) (((*payload2).entity).high);
-      variant13 = (int64_t) (((*payload2).entity).low);
-      variant14 = (*payload2).off_hand;
-      variant15 = 0;
+      variant13 = (int64_t) (((*payload2).entity).high);
+      variant14 = (int64_t) (((*payload2).entity).low);
+      variant15 = (*payload2).off_hand;
       variant16 = 0;
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 4: {
       const tuff_plugin_types_fake_dig_t *payload3 = &(*action).val.dig;
       variant = 4;
-      variant12 = (int64_t) ((*payload3).pos).x;
-      variant13 = (int64_t) ((*payload3).pos).y;
-      variant14 = ((*payload3).pos).z;
-      variant15 = (int32_t) (*payload3).face;
-      variant16 = 0;
+      variant13 = (int64_t) ((*payload3).pos).x;
+      variant14 = (int64_t) ((*payload3).pos).y;
+      variant15 = ((*payload3).pos).z;
+      variant16 = (int32_t) (*payload3).face;
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 5: {
       variant = 5;
-      variant12 = 0;
       variant13 = 0;
       variant14 = 0;
       variant15 = 0;
@@ -9756,37 +9758,37 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 6: {
       const tuff_plugin_types_fake_use_on_t *payload5 = &(*action).val.use_item_on;
       variant = 6;
-      variant12 = (int64_t) (*payload5).off_hand;
-      variant13 = (int64_t) ((*payload5).pos).x;
-      variant14 = ((*payload5).pos).y;
-      variant15 = ((*payload5).pos).z;
-      variant16 = (int32_t) (*payload5).face;
-      variant17 = ((*payload5).cursor).x;
-      variant18 = ((*payload5).cursor).y;
-      variant19 = ((*payload5).cursor).z;
+      variant13 = (int64_t) (*payload5).off_hand;
+      variant14 = (int64_t) ((*payload5).pos).x;
+      variant15 = ((*payload5).pos).y;
+      variant16 = ((*payload5).pos).z;
+      variant17 = (int32_t) (*payload5).face;
+      variant18 = ((*payload5).cursor).x;
+      variant19 = ((*payload5).cursor).y;
+      variant20 = ((*payload5).cursor).z;
       break;
     }
     case 7: {
       const bool *payload6 = &(*action).val.use_item;
       variant = 7;
-      variant12 = (int64_t) *payload6;
-      variant13 = 0;
+      variant13 = (int64_t) *payload6;
       variant14 = 0;
       variant15 = 0;
       variant16 = 0;
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 8: {
       variant = 8;
-      variant12 = 0;
       variant13 = 0;
       variant14 = 0;
       variant15 = 0;
@@ -9794,37 +9796,37 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 9: {
       const uint8_t *payload8 = &(*action).val.select_slot;
       variant = 9;
-      variant12 = (int64_t) (int32_t) (*payload8);
-      variant13 = 0;
+      variant13 = (int64_t) (int32_t) (*payload8);
       variant14 = 0;
       variant15 = 0;
       variant16 = 0;
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 10: {
+      const uint8_t *payload9 = &(*action).val.click_slot;
       variant = 10;
-      variant12 = 0;
-      variant13 = 0;
+      variant13 = (int64_t) (int32_t) (*payload9);
       variant14 = 0;
       variant15 = 0;
       variant16 = 0;
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 11: {
-      const bool *payload10 = &(*action).val.drop;
       variant = 11;
-      variant12 = (int64_t) *payload10;
       variant13 = 0;
       variant14 = 0;
       variant15 = 0;
@@ -9832,11 +9834,24 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
     case 12: {
+      const bool *payload11 = &(*action).val.drop;
       variant = 12;
-      variant12 = 0;
+      variant13 = (int64_t) *payload11;
+      variant14 = 0;
+      variant15 = 0;
+      variant16 = 0;
+      variant17 = 0;
+      variant18 = 0;
+      variant19 = 0;
+      variant20 = 0;
+      break;
+    }
+    case 13: {
+      variant = 13;
       variant13 = 0;
       variant14 = 0;
       variant15 = 0;
@@ -9844,11 +9859,12 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
       variant17 = 0;
       variant18 = 0;
       variant19 = 0;
+      variant20 = 0;
       break;
     }
   }
   uint8_t *ptr = (uint8_t *) &ret_area;
-  __wasm_import_tuff_plugin_host_fake_player_act((int64_t) ((*fake).high), (int64_t) ((*fake).low), variant, variant12, variant13, variant14, variant15, variant16, variant17, variant18, variant19, ptr);
+  __wasm_import_tuff_plugin_host_fake_player_act((int64_t) ((*fake).high), (int64_t) ((*fake).low), variant, variant13, variant14, variant15, variant16, variant17, variant18, variant19, variant20, ptr);
   tuff_plugin_host_result_void_fake_error_t result;
   switch ((int32_t) *((uint8_t*) (ptr + 0))) {
     case 0: {
@@ -9857,9 +9873,9 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
     }
     case 1: {
       result.is_err = true;
-      tuff_plugin_types_fake_error_t variant20;
-      variant20.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
-      switch ((int32_t) variant20.tag) {
+      tuff_plugin_types_fake_error_t variant21;
+      variant21.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant21.tag) {
         case 0: {
           break;
         }
@@ -9876,7 +9892,7 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
           break;
         }
         case 5: {
-          variant20.val.invalid = (plugin_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (2*sizeof(void*))))), (*((size_t*) (ptr + (3*sizeof(void*))))) };
+          variant21.val.invalid = (plugin_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (2*sizeof(void*))))), (*((size_t*) (ptr + (3*sizeof(void*))))) };
           break;
         }
         case 6: {
@@ -9884,7 +9900,7 @@ bool tuff_plugin_host_fake_player_act(tuff_plugin_host_uuid_t *fake, tuff_plugin
         }
       }
 
-      result.val.err = variant20;
+      result.val.err = variant21;
       break;
     }
   }

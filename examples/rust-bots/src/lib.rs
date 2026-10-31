@@ -221,6 +221,12 @@ impl Host for Real {
         }
     }
 
+    fn click_slot(&mut self, body: Body, slot: u8) {
+        if let Some((fake, _, _)) = self.bodies.get(&body) {
+            let _ = fake.click_slot(slot);
+        }
+    }
+
     fn place(&mut self, body: Body, against: (i32, i32, i32), face: exec::Face) {
         self.place_at(body, against, face, 0.5 + 0.5 * face.normal().1 as f32);
     }

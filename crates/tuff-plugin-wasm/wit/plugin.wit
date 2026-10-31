@@ -845,6 +845,7 @@ interface types {
         use-item(bool),
         release-use,
         select-slot(u8),
+        click-slot(u8),
         swap-hands,
         drop(bool),
         respawn,

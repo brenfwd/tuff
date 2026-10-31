@@ -1358,6 +1358,7 @@ typedef struct tuff_plugin_types_fake_action_t {
     tuff_plugin_types_fake_use_on_t     use_item_on;
     bool     use_item;
     uint8_t     select_slot;
+    uint8_t     click_slot;
     bool     drop;
   } val;
 } tuff_plugin_types_fake_action_t;
@@ -1372,9 +1373,10 @@ typedef struct tuff_plugin_types_fake_action_t {
 #define TUFF_PLUGIN_TYPES_FAKE_ACTION_USE_ITEM 7
 #define TUFF_PLUGIN_TYPES_FAKE_ACTION_RELEASE_USE 8
 #define TUFF_PLUGIN_TYPES_FAKE_ACTION_SELECT_SLOT 9
-#define TUFF_PLUGIN_TYPES_FAKE_ACTION_SWAP_HANDS 10
-#define TUFF_PLUGIN_TYPES_FAKE_ACTION_DROP 11
-#define TUFF_PLUGIN_TYPES_FAKE_ACTION_RESPAWN 12
+#define TUFF_PLUGIN_TYPES_FAKE_ACTION_CLICK_SLOT 10
+#define TUFF_PLUGIN_TYPES_FAKE_ACTION_SWAP_HANDS 11
+#define TUFF_PLUGIN_TYPES_FAKE_ACTION_DROP 12
+#define TUFF_PLUGIN_TYPES_FAKE_ACTION_RESPAWN 13
 
 typedef struct {
   plugin_option_string_t *ptr;
