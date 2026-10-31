@@ -1184,6 +1184,55 @@ fn frost_speed(tick: usize) -> f64 {
 
 #[tuff_core::watchdog]
 #[test]
+fn falling_off_a_floor_the_server_removed_before_the_client_heard_is_not_flagged() {
+    let lag = 6;
+    for removed_at in [201, 205, 209, 213, 216] {
+        let mut server = scene(|_, _| vec![(62, stone())]);
+        let mut seen = scene(|_, _| vec![(62, stone())]);
+        let start = [0.5, 63.0, 0.5];
+        let mut client = Client::new(start);
+        let mut judge = Judge::new(start);
+        judge.facts.latency_ms = 250;
+        let floor: Vec<_> = (-1..=1)
+            .flat_map(|x| {
+                (-1..=1).map(move |z| (BlockPos::new(x, 62, z), Block::Air.default_state()))
+            })
+            .collect();
+        for tick in 0..250 {
+            let now = 100 + tick as u64;
+            judge.facts.tick = now;
+            server.set_clock(now);
+            seen.set_clock(now);
+            if tick == removed_at {
+                server.apply(ChunkPos::new(0, 0), &floor);
+            }
+            if tick == removed_at + lag {
+                seen.apply(ChunkPos::new(0, 0), &floor);
+            }
+            let input = Input {
+                sneak: true,
+                yaw: 90.0,
+                pitch: 80.0,
+                ..Input::default()
+            };
+            judge.hold(&input);
+            if let Some(to) = client.tick(&seen, input) {
+                judge.report(&server, to, client.on_ground);
+            }
+            judge.tick_end();
+        }
+        assert!(client.position[1] < 58.0, "{:?}", client.position);
+        let flags: Vec<_> = judge
+            .flags
+            .iter()
+            .filter(|(_, f)| !f.starts_with("ground 0:"))
+            .collect();
+        assert!(flags.is_empty(), "removed at {removed_at}: {flags:?}");
+    }
+}
+
+#[tuff_core::watchdog]
+#[test]
 fn walking_through_powder_snow_at_high_latency_is_not_flagged() {
     let snow = Block::PowderSnow.default_state();
     let mirror = scene(move |_, _| vec![(62, stone()), (63, snow)]);

@@ -23,6 +23,7 @@ use tuff_core::world::contact::WATER_CURRENT_SCALE;
 use tuff_core::world::fluid_api::FluidBehaviors;
 use tuff_core::world::physics::{self, Aabb, modified_friction};
 use tuff_core::world::session::mirror::ChunkMirror;
+use tuff_world_model::BlockPos;
 
 use super::predict::Keys;
 use super::velocity::Impulse;
@@ -698,7 +699,7 @@ impl Engine {
             self.seeded = false;
             return Some(prediction);
         }
-        if boosting || glide_unsure || effects_unsure {
+        if boosting || glide_unsure || effects_unsure || unheard_removal(facts, mirror, from, to) {
             return self.reseed(facts, movement, from, to, &rules, &world);
         }
         let pushed =
@@ -1307,6 +1308,27 @@ fn seed_variants(state: &State, rules: &Rules, wet: bool, climbing: bool) -> Vec
 }
 
 /// An unreported tick stayed under the client's reporting threshold.
+/// Parity: a block the server removes reaches the client a round trip
+/// later, and until then the client still stands on it or bumps into it.
+fn unheard_removal(facts: &Facts, mirror: &ChunkMirror, from: [f64; 3], to: [f64; 3]) -> bool {
+    let round_trip = u64::try_from(facts.latency_ms.max(0)).unwrap_or(0) * 2;
+    let window = (round_trip.div_ceil(50) + SYNC_CATCH_UP).min(STATE_CATCH_UP);
+    let cells = |axis: usize, below: f64, above: f64| {
+        let lo = (from[axis].min(to[axis]) - below).floor() as i32;
+        let hi = (from[axis].max(to[axis]) + above).floor() as i32;
+        lo..=hi
+    };
+    cells(0, 0.3, 0.3).any(|x| {
+        cells(1, 1.0, 2.0).any(|y| {
+            cells(2, 0.3, 0.3).any(|z| {
+                let pos = BlockPos::new(x, y, z);
+                let cell = [x, y, z, x + 1, y + 1, z + 1].map(f64::from);
+                mirror.changed_at(pos, window) && mirror.colliders(cell).is_empty()
+            })
+        })
+    })
+}
+
 fn silent(start: &State, now: &State) -> bool {
     let d = [0, 1, 2].map(|a| now.position[a] - start.position[a]);
     length_sq(d) <= SILENT_SQ
