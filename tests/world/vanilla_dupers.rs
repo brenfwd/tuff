@@ -429,6 +429,7 @@ fn vanilla_script_layout() {
         let mut probes = Vec::new();
         let mut scans: Vec<(Vec<i32>, String)> = Vec::new();
         let mut end = false;
+        let mut after = 4;
         let mut slabs = None;
         let mut area = COUNT_BOX;
         let leak = |s: &str| -> &'static str { Box::leak(s.to_owned().into_boxed_str()) };
@@ -441,6 +442,7 @@ fn vanilla_script_layout() {
             match w.next().unwrap() {
                 "kinds" => kinds = w.next().unwrap().split(',').map(leak).collect(),
                 "end" => end = true,
+                "after" => after = w.next().unwrap().parse().unwrap(),
                 "slabs" => {
                     slabs = Some(match w.next().unwrap() {
                         "x" => Slabs::X,
@@ -476,7 +478,7 @@ fn vanilla_script_layout() {
             name: "script",
             build: Box::leak(build.into_boxed_slice()),
             trigger: Box::leak(trigger.into_boxed_slice()),
-            steps: 4,
+            steps: after,
             end,
             kinds: Box::leak(kinds.into_boxed_slice()),
             vanilla: &[],
