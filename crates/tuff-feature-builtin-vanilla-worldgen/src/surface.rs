@@ -5,7 +5,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use tuff_vanilla_data::worldgen::{CaveSurface, MaterialCondition, MaterialRule, VerticalAnchor};
+use tuff_vanilla_data::worldgen::{
+    Axis, CaveSurface, DensityFunction, MaterialCondition, MaterialRule, Tiling, VerticalAnchor,
+};
 use tuff_vanilla_data::{Block, BlockState};
 
 use crate::biome_zoom::BiomeLookup;
@@ -589,6 +591,60 @@ struct VeinTemplate {
     richness: Arc<Sampler>,
     gap: Arc<Sampler>,
     random: PositionalRandom,
+    window: Option<(i32, i32)>,
+}
+
+/// The block y range outside which a vein's density is a constant that is not
+/// positive, padded and aligned to whole cells so the in-window samples are
+/// the ones the full volume would give.
+fn vein_window(density: &'static DensityFunction) -> Option<(i32, i32)> {
+    const ALIGN: i32 = 8;
+    let mut f = density;
+    while let DensityFunction::Reference(named) = f {
+        f = &named.function;
+    }
+    let DensityFunction::RangeChoice {
+        input,
+        min_inclusive,
+        max_exclusive,
+        when_out_of_range,
+        ..
+    } = f
+    else {
+        return None;
+    };
+    let mut input = *input;
+    while let DensityFunction::Reference(named) = input {
+        input = &named.function;
+    }
+    let DensityFunction::Gradient {
+        axis: Axis::Y,
+        tiling: Tiling::ClampToEdge,
+        from_coordinate,
+        to_coordinate,
+        from_value,
+        to_value,
+    } = input
+    else {
+        return None;
+    };
+    if *from_value != *from_coordinate as f32 || *to_value != *to_coordinate as f32 {
+        return None;
+    }
+    let mut out = *when_out_of_range;
+    while let DensityFunction::Reference(named) = out {
+        out = &named.function;
+    }
+    match out {
+        DensityFunction::Constant(v) if *v <= 0.0 => {}
+        _ => return None,
+    }
+    if !min_inclusive.is_finite() || !max_exclusive.is_finite() || min_inclusive.abs() > 1e6 {
+        return None;
+    }
+    let low = (min_inclusive.floor() as i32 - 1).div_euclid(ALIGN) * ALIGN;
+    let high = ((max_exclusive.ceil() as i32 + 1) + ALIGN - 1).div_euclid(ALIGN) * ALIGN;
+    Some((low, high))
 }
 
 /// A set of biome ids as a bitmask.
@@ -755,6 +811,7 @@ impl<'a> TemplateBuilder<'a> {
                     richness: sampler(richness),
                     gap: sampler(filler_gap),
                     random: self.system.random_factories["minecraft:ore"],
+                    window: vein_window(density),
                 };
                 self.ops.push(Op::OreVein(self.veins.len()));
                 self.veins.push(vein);
@@ -877,6 +934,7 @@ enum Prefill {
 struct VeinValues {
     density: Prefill,
     richness: Prefill,
+    volume: DensityVolume,
 }
 
 /// A template bound to the volume being generated: the ore densities of
@@ -897,20 +955,37 @@ impl CompiledRule {
     /// Resolves every vein's density and richness over `volume`.
     fn bind_chunk(ctx: &mut Context, template: Arc<RuleTemplate>, volume: &DensityVolume) -> Self {
         let mut rule = Self::unbound(template);
-        rule.bind_eager(ctx, volume);
+        let narrow = rule.template.lazy_ore;
+        rule.bind_eager(ctx, volume, narrow);
         rule
     }
 
-    fn bind_eager(&mut self, ctx: &mut Context, volume: &DensityVolume) {
-        let fill = |sampler: &Sampler, ctx: &mut Context| {
+    fn bind_eager(&mut self, ctx: &mut Context, volume: &DensityVolume, narrow: bool) {
+        let fill = |sampler: &Sampler, ctx: &mut Context, volume: &DensityVolume| {
             let mut buffer = ctx.acquire(volume.size());
             sampler.sample_volume(ctx, &mut buffer, volume);
             Prefill::Buffer(buffer)
         };
         for vein in &self.template.veins {
-            let density = fill(&vein.density, ctx);
-            let richness = fill(&vein.richness, ctx);
-            self.ore.push(VeinValues { density, richness });
+            let volume = match vein.window {
+                Some((low, high)) if narrow && volume.step_y == 1 => {
+                    let from = low.max(volume.min_y);
+                    let to = high.min(volume.min_y + volume.size_y);
+                    DensityVolume::stepped(
+                        [volume.size_x, (to - from).max(1), volume.size_z],
+                        [volume.min_x, from, volume.min_z],
+                        [volume.step_x, 1, volume.step_z],
+                    )
+                }
+                _ => *volume,
+            };
+            let density = fill(&vein.density, ctx, &volume);
+            let richness = fill(&vein.richness, ctx, &volume);
+            self.ore.push(VeinValues {
+                density,
+                richness,
+                volume,
+            });
         }
     }
 
@@ -923,10 +998,11 @@ impl CompiledRule {
                 self.ore.push(VeinValues {
                     density: Prefill::Point(None),
                     richness: Prefill::Point(None),
+                    volume: *volume,
                 });
             }
         } else {
-            self.bind_eager(ctx, volume);
+            self.bind_eager(ctx, volume, false);
         }
     }
 
@@ -1219,7 +1295,13 @@ impl<'s> RuleContext<'s> {
         vein: &VeinTemplate,
         values: &mut VeinValues,
     ) -> Option<BlockState> {
-        let d = self.prefilled(ctx, &vein.density, &mut values.density);
+        if vein
+            .window
+            .is_some_and(|(low, high)| self.y < low || self.y >= high)
+        {
+            return None;
+        }
+        let d = self.prefilled(ctx, &vein.density, &mut values.density, &values.volume);
         if d <= 0.0 {
             return None;
         }
@@ -1227,7 +1309,7 @@ impl<'s> RuleContext<'s> {
         if random.next_float() > d {
             return None;
         }
-        let r = self.prefilled(ctx, &vein.richness, &mut values.richness);
+        let r = self.prefilled(ctx, &vein.richness, &mut values.richness, &values.volume);
         if random.next_float() >= r || vein.gap.sample_value(ctx, self.x, self.y, self.z) >= 0.0 {
             return Some(vein.filler);
         }
@@ -1238,10 +1320,22 @@ impl<'s> RuleContext<'s> {
         })
     }
 
-    fn prefilled(&self, ctx: &mut Context, sampler: &Sampler, prefill: &mut Prefill) -> f32 {
+    fn prefilled(
+        &self,
+        ctx: &mut Context,
+        sampler: &Sampler,
+        prefill: &mut Prefill,
+        held: &DensityVolume,
+    ) -> f32 {
+        if let Prefill::Buffer(buffer) = prefill {
+            return match held.index_of_block(self.x, self.y, self.z) {
+                Some(index) => buffer[index],
+                None => sampler.sample_value(ctx, self.x, self.y, self.z),
+            };
+        }
         let at = self.volume.index_of_block(self.x, self.y, self.z);
         match (prefill, at) {
-            (Prefill::Buffer(buffer), Some(index)) => buffer[index],
+            (Prefill::Buffer(_), _) => unreachable!(),
             (Prefill::Point(Some(value)), Some(_)) => *value,
             (Prefill::Point(slot), Some(_)) => {
                 let mut out = [0.0f32];

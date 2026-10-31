@@ -25,6 +25,7 @@ fn tamed() -> Compound {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_skeleton_trap_springs_four_tamed_horsemen_when_a_player_comes_near() {
+    no_halloween();
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let chunk = ChunkPos::new(0, 0);

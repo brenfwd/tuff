@@ -1155,7 +1155,7 @@ impl Species for CopperGolem {
             },
         );
         core.goals = goals;
-        core.goals.add(8, LookAtPlayer::new(6.0));
+        core.goals.add(8, LookAtPlayer::periodic(6.0, 40, 80));
         core.goals.add(8, RandomLookAround::default());
     }
 

@@ -686,6 +686,24 @@ fn sprint_jumps_a_three_block_gap_at_any_body_tick_rate() {
 }
 
 #[test]
+fn a_body_past_the_lip_between_two_plugin_ticks_keeps_running_at_the_gap() {
+    let mut t = Terrain::new(32, 1);
+    for x in 6..9 {
+        for y in -39..=0 {
+            t.set((x, y, 0), Class::PASSABLE);
+        }
+    }
+    let mut run = parkour_run(t, block(14, 1, 0));
+    while run.host.pos.x < 3.0 {
+        run.tick();
+    }
+    run.host.pos.x = 6.07;
+    run.bots.tick(&mut run.host);
+    assert!(run.host.input.forward > 0, "{}", run.trace());
+    assert!(run.host.input.jump_at_edge, "{}", run.trace());
+}
+
+#[test]
 fn walking_on_a_slightly_lowered_top_never_jumps() {
     let spec = spec_at(0.5, 1.0, 0.5);
     let mut terrain = Terrain::new(16, 1);

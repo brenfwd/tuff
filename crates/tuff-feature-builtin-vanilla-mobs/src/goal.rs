@@ -49,6 +49,11 @@ impl std::ops::BitOr for Flags {
 pub trait Goal: std::any::Any + Send + Debug {
     fn flags(&self) -> Flags;
 
+    /// A `key: value` brain memory this goal holds, for the brains feed.
+    fn debug_memory(&self, _tick: u64) -> Option<String> {
+        None
+    }
+
     /// The name the goal selector debug feed shows: the type's name,
     /// ending in `Goal`.
     fn debug_name(&self) -> String {
@@ -160,6 +165,13 @@ impl GoalSelector {
                 running: entry.running,
                 name: entry.goal.debug_name(),
             })
+            .collect()
+    }
+
+    pub fn debug_memories(&self, tick: u64) -> Vec<String> {
+        self.goals
+            .iter()
+            .filter_map(|entry| entry.goal.debug_memory(tick))
             .collect()
     }
 

@@ -704,6 +704,42 @@ async fn sand_landing_in_an_end_portal_comes_through_once_with_the_setting_off()
     assert_eq!(sand, 1);
 }
 
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sand_dropped_into_an_end_portal_reaches_the_end_when_vanilla_does() {
+    let dir = TestDir::new();
+    let b = bench(dir.path(), true).await;
+    let portal = BlockPos::new(HELD_AT, Y - 2, PORTAL_Z);
+    b.paste(BlockPos::new(HELD_AT, Y - 3, PORTAL_Z), "minecraft:stone")
+        .await;
+    b.paste(portal, "minecraft:end_portal").await;
+    b.drop_falling("minecraft:sand", portal).await;
+    let platform = BlockPos::new(100, 49, 0);
+    let end = b
+        .world
+        .region_in(
+            crate::storage::level::THE_END,
+            ChunkPos::of_block(platform).region(),
+        )
+        .await;
+    let mut arrived = None;
+    for tick in 1..=40u32 {
+        b.world.ticks(1).await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let (reply, answer) = oneshot::channel();
+        end.request(RegionRequest::Entities { reply }).await;
+        let _ = answer.await.unwrap();
+        let landed = block_at(&end, platform).await.map(|s| s.block()) == Some(Block::Sand);
+        if landed {
+            arrived = Some(tick);
+            break;
+        }
+    }
+    eprintln!("sand reached the end after {arrived:?} ticks");
+    assert!(arrived.is_some_and(|t| (6..=8).contains(&t)), "{arrived:?}");
+    b.world.shutdown().await;
+}
+
 mod designs {
     use super::*;
     use crate::dupe_designs::{DESIGNS, Design, ORIGIN, Slabs};
