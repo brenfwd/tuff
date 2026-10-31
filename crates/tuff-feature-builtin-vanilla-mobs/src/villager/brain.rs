@@ -1231,6 +1231,37 @@ mod tests {
 
     #[tuff_core::watchdog]
     #[test]
+    fn a_baby_picks_from_the_weighted_play_table_and_stands_20_to_40_ticks() {
+        let mut other = crate::target::tests::zombie(8, [-3.5, 64.0, 0.5]);
+        other.kind = EntityType::Villager;
+        crate::tests::with_entities(&[other.clone()], |core, cx| {
+            let mut villager = Villager::create(&mut StdRng::seed_from_u64(1));
+            Villager::configure(core);
+            core.base.position = [0.5, 64.0, 0.5];
+            core.base.on_ground = true;
+            let (mut greeted, mut stood) = (0, Vec::new());
+            for attempt in 0..200 {
+                cx.tick = 10_000 + attempt * 100;
+                core.navigation.stop();
+                villager.end_interaction();
+                villager.brain.wander.idle_until = 0;
+                villager.play_run_one(core, cx);
+                if villager.brain.social.interaction.is_some() {
+                    greeted += 1;
+                }
+                if villager.brain.wander.idle_until > 0 {
+                    stood.push(villager.brain.wander.idle_until - cx.tick);
+                }
+            }
+            assert!(greeted > 20, "{greeted} greetings");
+            assert!(!stood.is_empty(), "never stood still");
+            assert!(stood.iter().all(|t| (20..=40).contains(t)), "{stood:?}");
+            assert!(stood.iter().any(|t| *t < 28) && stood.iter().any(|t| *t > 32));
+        });
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
     fn an_idle_villager_sometimes_walks_to_what_it_looks_at() {
         crate::tests::with_context(|core, cx| {
             let mut villager = Villager::create(&mut StdRng::seed_from_u64(1));
