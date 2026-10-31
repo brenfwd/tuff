@@ -153,6 +153,53 @@ pub fn line_blocks(axis: &str, length: i32, state: &str) -> Result<Vec<BuildBloc
         .collect())
 }
 
+/// Largest build file `parse_blocks` accepts.
+pub const MAX_FILE_BYTES: usize = 512 * 1024;
+/// Furthest an offset in a build file may reach from the origin.
+const MAX_OFFSET: i32 = 1024;
+
+/// A build file: one block per line as `dx dy dz <state>`, offsets from the
+/// build origin; blank lines and `#` comments are skipped.
+pub fn parse_blocks(text: &str) -> Result<Vec<BuildBlock>, String> {
+    if text.len() > MAX_FILE_BYTES {
+        return Err(format!("the file is over {} KiB", MAX_FILE_BYTES / 1024));
+    }
+    let mut out = Vec::new();
+    for (i, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let at = |why: &str| format!("line {}: {why}", i + 1);
+        if out.len() >= MAX_SHAPE_BLOCKS {
+            return Err(at(&format!("more than {MAX_SHAPE_BLOCKS} blocks")));
+        }
+        let mut parts = line.splitn(4, char::is_whitespace);
+        let mut offset = [0i32; 3];
+        for slot in &mut offset {
+            *slot = parts
+                .next()
+                .and_then(|n| n.parse::<i32>().ok())
+                .filter(|n| n.abs() <= MAX_OFFSET)
+                .ok_or_else(|| {
+                    at(&format!(
+                        "expected dx dy dz as integers within {MAX_OFFSET}"
+                    ))
+                })?;
+        }
+        let state = parts.next().map(str::trim).unwrap_or("");
+        if state.is_empty() {
+            return Err(at("missing the block state"));
+        }
+        let state = crate::commands::block_state(state).map_err(|e| at(&e))?;
+        out.push(shape_block(offset[0], offset[1], offset[2], &state));
+    }
+    if out.is_empty() {
+        return Err("the file has no blocks".into());
+    }
+    Ok(out)
+}
+
 fn is_air(state: &str) -> bool {
     matches!(name_of(state), "air" | "cave_air" | "void_air")
 }
@@ -551,6 +598,48 @@ mod tests {
             offset: BlockPos { x, y, z },
             state: state.into(),
         }
+    }
+
+    #[test]
+    fn parse_reads_blocks_skipping_comments_and_blanks() {
+        let text = "# a hut\n\n0 0 0 stone\n  -1 2 3   oak_stairs[facing=east,half=top]  \n";
+        let blocks = parse_blocks(text).unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0].state, "minecraft:stone");
+        assert_eq!(blocks[1].offset, BlockPos { x: -1, y: 2, z: 3 });
+        assert_eq!(
+            blocks[1].state,
+            "minecraft:oak_stairs[facing=east,half=top]"
+        );
+    }
+
+    #[test]
+    fn parse_names_the_bad_line() {
+        for (text, line) in [
+            ("0 0 0 stone\n1 2 stone", "line 2"),
+            ("0 0 x stone", "line 1"),
+            ("\n\n0 0 0 Not A Block", "line 3"),
+            ("0 0 0 stone[", "line 1"),
+            ("0 0 0", "line 1"),
+            ("0 0 0 [facing=east]", "line 1"),
+            ("5000 0 0 stone", "line 1"),
+        ] {
+            let err = parse_blocks(text).unwrap_err();
+            assert!(err.starts_with(line), "{text:?} -> {err}");
+        }
+    }
+
+    #[test]
+    fn parse_rejects_empty_oversize_and_huge_files() {
+        assert!(parse_blocks("# nothing\n").is_err());
+        let ok: String = (0..MAX_SHAPE_BLOCKS)
+            .map(|i| format!("{} {} 0 stone\n", i % 64, i / 64))
+            .collect();
+        assert_eq!(parse_blocks(&ok).unwrap().len(), MAX_SHAPE_BLOCKS);
+        let over = format!("{ok}0 1 0 stone\n");
+        assert!(parse_blocks(&over).unwrap_err().contains("4096"));
+        let big = "#".repeat(MAX_FILE_BYTES + 1);
+        assert!(parse_blocks(&big).unwrap_err().contains("KiB"));
     }
 
     #[test]
