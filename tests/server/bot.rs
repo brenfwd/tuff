@@ -298,6 +298,18 @@ async fn spectate_command_checks_mode_and_target() {
     assert_eq!(key(lines), "commands.spectate.success.started");
     let lines = handle.run_command("spectate").await.unwrap();
     assert_eq!(key(lines), "permissions.requires.player");
+    let lines = handle
+        .run_command("execute as Tester run spectate")
+        .await
+        .unwrap();
+    assert_ne!(key(lines), "permissions.requires.player");
+    let lines = handle.run_command("gamemode creative").await.unwrap();
+    assert_eq!(key(lines), "permissions.requires.player");
+    let lines = handle
+        .run_command("execute as Other run gamemode creative")
+        .await
+        .unwrap();
+    assert_ne!(key(lines), "permissions.requires.player");
 
     let lines = handle.run_command("posteffect list Tester").await.unwrap();
     assert_eq!(key(lines), "commands.posteffect.list.empty");
