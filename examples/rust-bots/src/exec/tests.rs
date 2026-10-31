@@ -343,6 +343,7 @@ fn mine_spec(count: u32) -> Process {
         blocks: vec!["iron_ore".into()],
         count,
         radius: 32,
+        branch: None,
     })
 }
 
@@ -1025,4 +1026,155 @@ fn a_wrong_state_block_is_reported_when_breaking_is_not_allowed() {
             "4 1 1 is minecraft:oak_stairs[facing=north,half=bottom], wanted {STAIR_EAST}"
         )),
     );
+}
+
+fn stone_mass(t: &mut Terrain, ys: std::ops::RangeInclusive<i32>) {
+    for x in 0..8 {
+        for z in 0..80 {
+            for y in ys.clone() {
+                t.wall((x, y, z));
+            }
+        }
+    }
+}
+
+/// Drives a bare `Miner`: digs clear their cell and goals teleport the bot.
+fn branch_walk(
+    t: &mut Terrain,
+    start: (f64, f64, f64),
+    level: i32,
+    heading: Heading,
+    steps: usize,
+) -> Vec<(i32, i32, i32)> {
+    let mut me = Vec3 {
+        x: start.0,
+        y: start.1,
+        z: start.2,
+    };
+    let plan = BranchSpec {
+        level: Some(level),
+        heading,
+    };
+    let names = vec!["iron_ore".to_owned()];
+    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, Some(&plan), &me);
+    let mut digs = Vec::new();
+    for _ in 0..steps {
+        match miner.tick(&me, t) {
+            crate::mine::Mining::Dig(p) => {
+                digs.push(p);
+                t.dig(p);
+            }
+            crate::mine::Mining::Goal(Goal::Leaf(LeafGoal::Near(n))) => {
+                me = Vec3 {
+                    x: f64::from(n.pos.x) + 0.5,
+                    y: f64::from(n.pos.y),
+                    z: f64::from(n.pos.z) + 0.5,
+                };
+            }
+            crate::mine::Mining::Wait => {}
+            _ => break,
+        }
+    }
+    digs
+}
+
+#[test]
+fn branch_descends_a_two_high_stair_then_tunnels_north() {
+    let mut t = Terrain::new(8, 80);
+    stone_mass(&mut t, -6..=0);
+    let digs = branch_walk(&mut t, (3.5, 1.0, 76.5), -2, Heading::North, 200);
+    assert_eq!(
+        &digs[..6],
+        &[
+            (3, 0, 75),
+            (3, -1, 74),
+            (3, 0, 74),
+            (3, -2, 73),
+            (3, -1, 73),
+            (3, 0, 73),
+        ],
+        "{digs:?}"
+    );
+    assert!(digs.iter().all(|p| p.0 == 3 && p.1 >= -2), "{digs:?}");
+    assert!(digs.contains(&(3, -2, 72)) && digs.contains(&(3, -1, 72)));
+    assert!(digs.contains(&(3, -2, 40)), "{digs:?}");
+}
+
+#[test]
+fn branch_above_the_start_digs_up() {
+    let mut t = Terrain::new(8, 80);
+    stone_mass(&mut t, 1..=6);
+    for y in 1..=3 {
+        t.set((3, y, 76), Class::PASSABLE);
+    }
+    let digs = branch_walk(&mut t, (3.5, 1.0, 76.5), 3, Heading::North, 60);
+    assert_eq!(
+        &digs[..2],
+        &[(3, 2, 75), (3, 3, 75)],
+        "{digs:?}"
+    );
+    assert!(digs.contains(&(3, 3, 70)) && digs.contains(&(3, 4, 70)));
+}
+
+#[test]
+fn branch_stops_at_lava_below_the_stair() {
+    let mut t = Terrain::new(8, 80);
+    stone_mass(&mut t, -6..=0);
+    t.set((3, -2, 74), Class::DANGER);
+    let digs = branch_walk(&mut t, (3.5, 1.0, 76.5), -2, Heading::North, 200);
+    assert!(!digs.iter().any(|p| p.2 <= 74), "{digs:?}");
+}
+
+#[test]
+fn branch_heads_west_and_the_tunnel_is_capped() {
+    let mut t = Terrain::new(80, 8);
+    for x in 0..80 {
+        for z in 0..8 {
+            t.wall((x, 1, z));
+            t.wall((x, 2, z));
+        }
+    }
+    for y in 1..=2 {
+        t.set((70, y, 3), Class::PASSABLE);
+    }
+    let digs = branch_walk(&mut t, (70.5, 1.0, 3.5), 1, Heading::West, 4000);
+    assert!(digs.iter().all(|p| p.2 == 3), "{digs:?}");
+    assert_eq!(digs.iter().map(|p| p.0).min(), Some(70 - 48), "{digs:?}");
+}
+
+#[test]
+fn branch_digs_an_ore_that_the_tunnel_comes_within_reach_of() {
+    let mut t = Terrain::new(8, 80);
+    stone_mass(&mut t, -6..=0);
+    t.ore((3, -2, 60));
+    let names = vec!["iron_ore".to_owned()];
+    let mut me = Vec3 {
+        x: 3.5,
+        y: 1.0,
+        z: 76.5,
+    };
+    let plan = BranchSpec {
+        level: Some(-2),
+        heading: Heading::North,
+    };
+    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, Some(&plan), &me);
+    let mut dug = false;
+    for _ in 0..400 {
+        match miner.tick(&me, &mut t) {
+            crate::mine::Mining::Dig(p) => {
+                t.dig(p);
+                dug |= p == (3, -2, 60);
+            }
+            crate::mine::Mining::Goal(Goal::Leaf(LeafGoal::Near(n))) => {
+                me = Vec3 {
+                    x: f64::from(n.pos.x) + 0.5,
+                    y: f64::from(n.pos.y),
+                    z: f64::from(n.pos.z) + 0.5,
+                };
+            }
+            crate::mine::Mining::Goal(Goal::Leaf(LeafGoal::GetToBlock(_))) => miner.skip_current(),
+            _ => {}
+        }
+    }
+    assert!(dug);
 }

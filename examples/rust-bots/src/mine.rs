@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use tuff_bots_api::control::{BlockPos, Goal, LeafGoal, NearGoal, Vec3};
+use tuff_bots_api::control::{BlockPos, BranchSpec, Goal, Heading, LeafGoal, NearGoal, Vec3};
 
 use crate::core::goal_reached;
 use crate::world::{Blocks, SectionKey, name_of};
@@ -53,9 +53,14 @@ pub struct Miner {
     scanned: HashSet<SectionKey>,
     found: BTreeSet<Pos>,
     bad: HashSet<Pos>,
+    retried: HashSet<Pos>,
     current: Option<Pos>,
     phase: Phase,
     tunnelling: bool,
+    level: i32,
+    dx: i32,
+    dz: i32,
+    level_at: Option<i32>,
 }
 
 /// Blocks that drop when the support below them is dug away.
@@ -95,8 +100,26 @@ fn dist2(a: &Vec3, b: &Vec3) -> f64 {
 }
 
 impl Miner {
-    pub fn new(blocks: &[String], count: u32, radius: u32, dig: bool, at: &Vec3) -> Self {
+    pub fn new(
+        blocks: &[String],
+        count: u32,
+        radius: u32,
+        dig: bool,
+        branch: Option<&BranchSpec>,
+        at: &Vec3,
+    ) -> Self {
+        let y = at.y.floor() as i32;
+        let (dx, dz) = match branch.map_or(Heading::East, |b| b.heading) {
+            Heading::North => (0, -1),
+            Heading::South => (0, 1),
+            Heading::East => (1, 0),
+            Heading::West => (-1, 0),
+        };
         Self {
+            level: branch.and_then(|b| b.level).unwrap_or(y),
+            dx,
+            dz,
+            level_at: None,
             wanted: blocks.iter().map(|b| name_of(b).to_owned()).collect(),
             count,
             mined: 0,
@@ -110,6 +133,7 @@ impl Miner {
             scanned: HashSet::new(),
             found: BTreeSet::new(),
             bad: HashSet::new(),
+            retried: HashSet::new(),
             current: None,
             phase: Phase::Seek,
             tunnelling: false,
@@ -216,6 +240,35 @@ impl Miner {
         None
     }
 
+    /// A wanted block the path could not reach but a tunnel has now come
+    /// within reach of is dug once.
+    fn bad_in_reach(&mut self, me: &Vec3, world: &mut dyn Blocks) -> Option<Pos> {
+        if !self.dig {
+            return None;
+        }
+        let eyes = Vec3 {
+            y: me.y + EYE,
+            ..me.clone()
+        };
+        let mut near: Vec<Pos> = self
+            .bad
+            .iter()
+            .copied()
+            .filter(|p| !self.retried.contains(p))
+            .filter(|p| dist2(&centre(*p), &eyes) <= REACH * REACH)
+            .collect();
+        near.sort();
+        for pos in near {
+            if confirmed_gone(world, pos) {
+                self.bad.remove(&pos);
+            } else if !self.hazardous(pos, world) {
+                self.retried.insert(pos);
+                return Some(pos);
+            }
+        }
+        None
+    }
+
     pub fn tick(&mut self, me: &Vec3, world: &mut dyn Blocks) -> Mining {
         if self.dig && self.mined >= self.count && matches!(self.phase, Phase::Seek) {
             return Mining::Done;
@@ -251,9 +304,13 @@ impl Miner {
                         }
                         self.found.remove(&pos);
                         self.current = None;
-                        self.phase = Phase::Collect {
-                            pos,
-                            ticks: COLLECT_TICKS,
+                        self.phase = if self.tunnelling {
+                            Phase::Seek
+                        } else {
+                            Phase::Collect {
+                                pos,
+                                ticks: COLLECT_TICKS,
+                            }
                         };
                         return self.tick(me, world);
                     }
@@ -279,6 +336,11 @@ impl Miner {
             if !scanned_all {
                 return Mining::Wait;
             }
+            if let Some(pos) = self.bad_in_reach(me, world) {
+                self.current = Some(pos);
+                self.phase = Phase::Digging { pos, ticks: 0 };
+                return Mining::Dig(pos);
+            }
             return self.tunnel(me, world).unwrap_or(Mining::Explore);
         };
         self.current = Some(pos);
@@ -301,19 +363,42 @@ impl Miner {
         Mining::Goal(goal)
     }
 
-    /// Branch mining: with nothing known, dig a two-high tunnel along +x
-    /// at the starting level, stopping at fluid or falling blocks.
+    /// Branch mining: with nothing known, dig a two-high tunnel along the
+    /// heading at the planned level (a stair first when the bot is not
+    /// there yet), stopping at fluid or falling blocks.
     fn tunnel(&mut self, me: &Vec3, world: &mut dyn Blocks) -> Option<Mining> {
         if !self.dig {
             return None;
         }
-        let ahead = me.x.floor() as i32 + 1;
-        if ahead - self.origin.x > TUNNEL_MAX {
+        let (fx, fy, fz) = (
+            me.x.floor() as i32,
+            me.y.floor() as i32,
+            me.z.floor() as i32,
+        );
+        let step = (fy - self.level).signum();
+        let progress = |x: i32, z: i32| (x - self.origin.x) * self.dx + (z - self.origin.z) * self.dz;
+        if step == 0 {
+            let here = progress(fx, fz);
+            if progress(fx, fz) - *self.level_at.get_or_insert(here) >= TUNNEL_MAX {
+                return None;
+            }
+        }
+        let (ax, az) = (fx + self.dx, fz + self.dz);
+        let cells: Vec<Pos> = match step {
+            0 => vec![(ax, fy, az), (ax, fy + 1, az)],
+            s if s > 0 => vec![(ax, fy - 1, az), (ax, fy, az), (ax, fy + 1, az)],
+            _ => vec![(ax, fy + 1, az), (ax, fy + 2, az), (fx, fy + 2, fz)],
+        };
+        let target_y = fy - step;
+        let floor = (ax, target_y - 1, az);
+        if world
+            .class_at(floor.0, floor.1, floor.2)
+            .ok()
+            .is_none_or(|c| c.danger() || c.water() || !c.standable())
+        {
             return None;
         }
-        let (y, z) = (self.origin.y, self.origin.z);
-        for dy in 0..2 {
-            let pos = (ahead, y + dy, z);
+        for pos in cells {
             let class = world.class_at(pos.0, pos.1, pos.2).ok()?;
             if class.danger() || class.water() {
                 return None;
@@ -337,7 +422,11 @@ impl Miner {
             return Some(Mining::Dig(pos));
         }
         Some(Mining::Goal(Goal::Leaf(LeafGoal::Near(NearGoal {
-            pos: BlockPos { x: ahead, y, z },
+            pos: BlockPos {
+                x: ax,
+                y: target_y,
+                z: az,
+            },
             radius: 0.5,
         }))))
     }

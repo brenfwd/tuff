@@ -254,8 +254,8 @@ pub struct Bots {
 
 fn miner_for(process: &Process, at: &Vec3) -> Miner {
     match process {
-        Process::Mine(s) => Miner::new(&s.blocks, s.count, s.radius, true, at),
-        Process::GetToBlock(s) => Miner::new(&s.blocks, 1, s.radius, false, at),
+        Process::Mine(s) => Miner::new(&s.blocks, s.count, s.radius, true, s.branch.as_ref(), at),
+        Process::GetToBlock(s) => Miner::new(&s.blocks, 1, s.radius, false, None, at),
         _ => unreachable!("only mining processes make a miner"),
     }
 }

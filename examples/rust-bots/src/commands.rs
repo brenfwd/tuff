@@ -6,8 +6,8 @@
 use std::collections::BTreeMap;
 
 use tuff_bots_api::control::{
-    BlockPos, BotId, BuildBlock, BuildSpec, ControlError, FarmSpec, FlySpec, FollowSpec,
-    GetToBlockSpec, Goal, LeafGoal, Location, MineSpec, Model, NearGoal, Policy, Process,
+    BlockPos, BotId, BranchSpec, BuildBlock, BuildSpec, ControlError, FarmSpec, FlySpec, FollowSpec,
+    GetToBlockSpec, Goal, Heading, LeafGoal, Location, MineSpec, Model, NearGoal, Policy, Process,
     RespawnPolicy, Skill, SpawnSpec, Vec3, XzGoal,
 };
 
@@ -21,6 +21,7 @@ pub const OWNER: &str = "bots";
 pub const FOLLOW_RANGE: f64 = 3.0;
 pub const MINE_RADIUS: u32 = 48;
 pub const MAX_MINE_COUNT: u32 = 4096;
+pub const MINE_LEVELS: std::ops::RangeInclusive<i32> = -64..=319;
 pub const PRESETS: [&str; 3] = ["novice", "average", "expert"];
 const MAX_NAME: usize = 16;
 
@@ -88,7 +89,7 @@ pub enum Cmd {
     Follow(String, String),
     Fly(String, i32, i32),
     Come(String),
-    Mine(String, String, u32),
+    Mine(String, String, u32, Option<BranchSpec>),
     Find(String, String),
     Farm(String, Vec<i32>),
     Stop(String),
@@ -353,9 +354,18 @@ pub fn run(
                 .map_err(describe)?;
             Ok(format!("{name} is coming"))
         }
-        Cmd::Mine(name, blocks, count) => {
+        Cmd::Mine(name, blocks, count, branch) => {
             if !(1..=MAX_MINE_COUNT).contains(count) {
                 return Err(format!("count is 1 to {MAX_MINE_COUNT}"));
+            }
+            if let Some(level) = branch.as_ref().and_then(|b| b.level)
+                && !MINE_LEVELS.contains(&level)
+            {
+                return Err(format!(
+                    "y is {} to {}",
+                    MINE_LEVELS.start(),
+                    MINE_LEVELS.end()
+                ));
             }
             let blocks = block_names(blocks)?;
             let id = bot_of(reg, bots, name, by)?;
@@ -363,6 +373,7 @@ pub fn run(
                 blocks,
                 count: *count,
                 radius: MINE_RADIUS,
+                branch: branch.clone(),
             };
             bots.set_process(OWNER, id, Process::Mine(spec))
                 .map_err(describe)?;
@@ -552,6 +563,59 @@ fn names(_: &Suggest) -> Vec<String> {
     REGISTRY.with(|reg| reg.borrow().names())
 }
 
+fn mine_cmd(c: &Ctx, counted: bool, branch: Option<BranchSpec>) -> Result<Cmd, String> {
+    let count = if counted {
+        u32::try_from(c.get::<i32>("count")?).map_err(|_| "count must be positive".to_owned())?
+    } else {
+        16
+    };
+    Ok(Cmd::Mine(c.get("name")?, c.get("blocks")?, count, branch))
+}
+
+fn heading_nodes(counted: bool, level: bool) -> Vec<Node> {
+    [
+        ("north", Heading::North),
+        ("south", Heading::South),
+        ("east", Heading::East),
+        ("west", Heading::West),
+    ]
+    .into_iter()
+    .map(|(word, heading)| {
+        literal(word).executes(move |ctx| {
+            execute(&ctx, |c| {
+                let level = if level { Some(c.get::<i32>("level")?) } else { None };
+                mine_cmd(c, counted, Some(BranchSpec { level, heading }))
+            })
+        })
+    })
+    .collect()
+}
+
+fn mine_tail(node: Node, counted: bool) -> Node {
+    let mut node = node.executes(move |ctx| execute(&ctx, |c| mine_cmd(c, counted, None)));
+    let mut level = argument("level", parser::integer()).executes(move |ctx| {
+        execute(&ctx, |c| {
+            let level = Some(c.get::<i32>("level")?);
+            mine_cmd(
+                c,
+                counted,
+                Some(BranchSpec {
+                    level,
+                    heading: Heading::East,
+                }),
+            )
+        })
+    });
+    for n in heading_nodes(counted, true) {
+        level = level.then(n);
+    }
+    node = node.then(literal("y").then(level));
+    for n in heading_nodes(counted, false) {
+        node = node.then(n);
+    }
+    node
+}
+
 fn named(literal_name: &str, permission: &str) -> Node {
     literal(literal_name).requires(permission, 2)
 }
@@ -633,19 +697,8 @@ pub fn register() -> Result<(), String> {
         .then(
             named("mine", "bots.command.mine").then(
                 argument("name", parser::word()).suggests(names).then(
-                    argument("blocks", parser::word())
-                        .executes(|ctx| {
-                            execute(&ctx, |c| {
-                                Ok(Cmd::Mine(c.get("name")?, c.get("blocks")?, 16))
-                            })
-                        })
-                        .then(argument("count", parser::integer()).executes(|ctx| {
-                            execute(&ctx, |c| {
-                                let count = u32::try_from(c.get::<i32>("count")?)
-                                    .map_err(|_| "count must be positive".to_owned())?;
-                                Ok(Cmd::Mine(c.get("name")?, c.get("blocks")?, count))
-                            })
-                        })),
+                    mine_tail(argument("blocks", parser::word()), false)
+                        .then(mine_tail(argument("count", parser::integer()), true)),
                 ),
             ),
         )
@@ -825,7 +878,7 @@ mod tests {
         let op = sender("aa", false);
         rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
         rig.run(
-            Cmd::Mine("Bob".into(), "minecraft:iron_ore,coal_ore".into(), 3),
+            Cmd::Mine("Bob".into(), "minecraft:iron_ore,coal_ore".into(), 3, None),
             &op,
         )
         .unwrap();
@@ -838,14 +891,45 @@ mod tests {
             .unwrap();
         assert!(matches!(rig.process("Bob"), Process::GetToBlock(_)));
         assert!(
-            rig.run(Cmd::Mine("Bob".into(), "Iron Ore".into(), 3), &op)
+            rig.run(Cmd::Mine("Bob".into(), "Iron Ore".into(), 3, None), &op)
                 .is_err()
         );
         assert!(
-            rig.run(Cmd::Mine("Bob".into(), "iron_ore".into(), 0), &op)
+            rig.run(Cmd::Mine("Bob".into(), "iron_ore".into(), 0, None), &op)
                 .is_err()
         );
         assert!(rig.run(Cmd::Find("Bob".into(), "".into()), &op).is_err());
+    }
+
+    #[test]
+    fn mine_takes_a_branch_plan_and_rejects_levels_out_of_range() {
+        let mut rig = Rig::new();
+        let op = sender("aa", false);
+        rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
+        let plan = |level| {
+            Some(BranchSpec {
+                level,
+                heading: Heading::North,
+            })
+        };
+        rig.run(
+            Cmd::Mine("Bob".into(), "iron_ore".into(), 1, plan(Some(-50))),
+            &op,
+        )
+        .unwrap();
+        let Process::Mine(spec) = rig.process("Bob") else {
+            panic!("not mining");
+        };
+        assert_eq!(spec.branch, plan(Some(-50)));
+        for bad in [-65, 320] {
+            assert!(
+                rig.run(
+                    Cmd::Mine("Bob".into(), "iron_ore".into(), 1, plan(Some(bad))),
+                    &op
+                )
+                .is_err()
+            );
+        }
     }
 
     #[test]
