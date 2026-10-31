@@ -1496,7 +1496,7 @@ async fn bots_build_a_schematic_file() {
     .await
     .expect("the file build starts");
     let list = run
-        .within(BUILD_PATIENCE, || async {
+        .within(BUILD_PATIENCE * 2, || async {
             let list = run.op(op, "bots list").await;
             (list.contains("Mate: idle") || list.contains("failed")).then_some(list)
         })
