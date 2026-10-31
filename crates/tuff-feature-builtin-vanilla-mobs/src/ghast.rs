@@ -344,6 +344,74 @@ fn happy_ghast_tempts(core: &MobCore, item: tuff_vanilla_data::Item) -> bool {
     }
 }
 
+/// A baby follows the nearest player 3 to 17 blocks away, stopping 2 blocks
+/// short.
+#[derive(Debug, Default)]
+struct FollowPlayer {
+    player: Option<i32>,
+    recalculate: i32,
+}
+
+impl FollowPlayer {
+    fn in_range(mob: &MobCore, position: [f64; 3]) -> bool {
+        let distance = mob.distance_sq(position);
+        (9.0..289.0).contains(&distance)
+    }
+}
+
+impl Goal for FollowPlayer {
+    fn flags(&self) -> Flags {
+        Flags::NONE
+    }
+
+    fn can_use(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
+        let nearest = cx
+            .players
+            .iter()
+            .map(|p| (mob.distance_sq(p.position), p))
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, p)| p);
+        match nearest {
+            Some(p) if mob.is_baby() && Self::in_range(mob, p.position) => {
+                self.player = Some(p.id);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn can_continue(&mut self, mob: &mut MobCore, cx: &mut TickContext) -> bool {
+        mob.is_baby()
+            && self
+                .player
+                .and_then(|id| cx.players.iter().find(|p| p.id == id))
+                .is_some_and(|p| Self::in_range(mob, p.position))
+    }
+
+    fn start(&mut self, _mob: &mut MobCore, _cx: &mut TickContext) {
+        self.recalculate = 0;
+    }
+
+    fn stop(&mut self, _mob: &mut MobCore, _cx: &mut TickContext) {
+        self.player = None;
+    }
+
+    fn tick(&mut self, mob: &mut MobCore, cx: &mut TickContext) {
+        self.recalculate -= 1;
+        if self.recalculate > 0 {
+            return;
+        }
+        self.recalculate = self.adjusted_delay(10);
+        if let Some(p) = self
+            .player
+            .and_then(|id| cx.players.iter().find(|p| p.id == id))
+        {
+            let eye = [p.position[0], p.position[1] + p.eye_height, p.position[2]];
+            mob.move_to_entity_reach(eye, 2, 1.1, cx);
+        }
+    }
+}
+
 /// Runs the wrapped goal only while the mob is a baby.
 #[derive(Debug)]
 struct BabyOnly<G>(G);
@@ -535,6 +603,7 @@ impl Species for HappyGhast {
         );
         goals.add(4, super::goals::Breed::new(1.0));
         goals.add(5, RandomFloatAround);
+        goals.add(6, FollowPlayer::default());
         goals.add(6, super::goals::FollowParent::new(1.1));
         goals.add(7, FaceMovement);
         goals.add(8, super::goals::RandomLookAround::default());
@@ -806,6 +875,54 @@ mod tests {
         );
         let mut rng = <StdRng as rand::SeedableRng>::seed_from_u64(1);
         crate::Mob::<HappyGhast>::new(base, &mut rng)
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn baby_happy_ghast_follows_the_nearest_visible_player() {
+        let at = |x: f64| tuff_core::world::entity::NearbyPlayer {
+            id: 4,
+            uuid: 4,
+            name: "p",
+            position: [x, 70.0, 0.5],
+            eye_height: 1.62,
+            yaw: 0.0,
+            pitch: 0.0,
+            held: [None; 2],
+            creative: false,
+            height: 1.8,
+            sneaking: false,
+            invisible: false,
+            invulnerable: false,
+            armor: [None; 4],
+            effects: 0,
+            movement: [0.0; 3],
+            vehicle: None,
+            sleeping: None,
+            last_hurt_by: None,
+            last_hurt_mob: None,
+            perchable: false,
+            sprinting: false,
+        };
+        for (distance, baby, follows) in [
+            (2.0, true, false),
+            (3.5, true, true),
+            (5.0, true, true),
+            (16.5, true, true),
+            (20.0, true, false),
+            (5.0, false, false),
+        ] {
+            crate::tests::with_players(&|_| None, &[], &[at(0.5 + distance)], |core, cx| {
+                HappyGhast::configure(core);
+                core.base.position = [0.5, 70.0, 0.5];
+                core.set_baby(baby);
+                let mut goal = FollowPlayer::default();
+                assert_eq!(goal.can_use(core, cx), follows, "{distance} {baby}");
+                if follows {
+                    assert!(goal.can_continue(core, cx));
+                }
+            });
+        }
     }
 
     #[tuff_core::watchdog]
