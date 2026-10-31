@@ -11,7 +11,7 @@ use super::{CustomItemDef, item_id};
 use crate::protocol::recipe::{RecipeDisplay, SlotDisplay};
 use crate::registry::Registries;
 use crate::world::crafting::{CraftingInput, Placement, Recipe, unlock_advancement};
-use tuff_item::item::{ItemSnapshot, ItemStack, MintReason};
+use tuff_item::item::{ItemPicture, ItemSnapshot, ItemStack, MintReason};
 use tuff_item::load::LoadError;
 
 /// One grid cell's requirement.
@@ -104,7 +104,7 @@ pub struct CustomShaped {
     width: usize,
     height: usize,
     cells: Vec<Option<CustomIngredient>>,
-    pub result: ItemStack,
+    pub result: ItemPicture,
     pub category: RecipeBookCategory,
     pub group: Option<&'static str>,
 }
@@ -119,6 +119,7 @@ impl CustomShaped {
         key: &[(char, CustomIngredient)],
         result: ItemStack,
     ) -> Option<Self> {
+        let result = result.into_picture();
         let rows: Vec<Vec<char>> = pattern.iter().map(|row| row.chars().collect()).collect();
         let row_width = rows.first().map_or(0, Vec::len);
         if rows.len() > 3 || row_width > 3 || rows.iter().any(|row| row.len() != row_width) {
@@ -250,7 +251,7 @@ impl Recipe for CustomShaped {
 pub struct CustomShapeless {
     pub name: &'static str,
     pub ingredients: Vec<CustomIngredient>,
-    pub result: ItemStack,
+    pub result: ItemPicture,
     pub category: RecipeBookCategory,
     pub group: Option<&'static str>,
 }
@@ -260,7 +261,7 @@ impl CustomShapeless {
         Self {
             name,
             ingredients,
-            result,
+            result: result.into_picture(),
             category: RecipeBookCategory::CraftingMisc,
             group: None,
         }
