@@ -48,8 +48,8 @@ impl Goal for Probe {
         if self.flags.overlaps(Flags::MOVE) {
             out.goto = Some([0.0; 3]);
         }
-        if self.flags.overlaps(Flags::LOOK) {
-            out.look = Some([0.0; 3]);
+        if self.flags.overlaps(Flags::TARGET) {
+            out.fight = Some(0);
         }
     }
 }
@@ -68,13 +68,13 @@ fn goals_with_free_controls_run_together_and_higher_priorities_win() {
     let v = view([0.0; 3], &[]);
     let mut brain = GoalSelector::default();
     brain.add(3, probe("wander", Flags::MOVE));
-    brain.add(5, probe("stare", Flags::LOOK));
+    brain.add(5, probe("stare", Flags::TARGET));
     brain.tick(&v);
     assert_eq!(brain.running(), ["wander", "stare"]);
     let mut brain = GoalSelector::default();
     brain.add(3, probe("wander", Flags::MOVE));
-    brain.add(1, probe("chase", Flags::MOVE.with(Flags::LOOK)));
-    brain.add(5, probe("stare", Flags::LOOK));
+    brain.add(1, probe("chase", Flags::MOVE.with(Flags::TARGET)));
+    brain.add(5, probe("stare", Flags::TARGET));
     brain.tick(&v);
     assert_eq!(brain.running(), ["chase"], "chase holds both controls");
 }
@@ -160,7 +160,7 @@ fn archer_view<'a>(enemies: &'a [Seen], now: u64) -> View<'a> {
 }
 
 #[test]
-fn a_bow_needs_the_full_draw_and_leads_a_moving_target() {
+fn a_bow_needs_the_full_draw() {
     let mut bot = Bot::new(0, Difficulty::Hard, 1);
     let mut shot_at = None;
     for t in 0..40 {
@@ -173,9 +173,6 @@ fn a_bow_needs_the_full_draw_and_leads_a_moving_target() {
         assert!(bot.goal_names().contains(&"shoot"));
         if intent.shoot == Some(Shot::Arrow) {
             shot_at = Some(t);
-            let look = intent.look.unwrap();
-            assert!(look[2] > enemies[0].pos[2] + 1.0, "no lead: {look:?}");
-            assert!(look[1] > 65.0, "no gravity lift: {look:?}");
             break;
         }
     }

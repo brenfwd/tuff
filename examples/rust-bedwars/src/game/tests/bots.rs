@@ -364,7 +364,10 @@ fn a_bot_near_an_enemy_fights_by_one_attack_process_sent_once() {
         unreachable!()
     };
     assert_eq!(spec.target, format!("{A:032x}"));
-    assert_eq!(spec.until, control::AttackUntil::Death);
+    assert_eq!(
+        spec.until,
+        control::AttackUntil::Distance(Difficulty::Hard.skill().aggro * 1.5)
+    );
 }
 
 #[test]
@@ -489,6 +492,74 @@ fn rushing_sends_one_get_to_block_per_bed_and_a_failure_backs_off_then_retries()
     );
     ticks(&mut game, &mut host, 10 * SECOND);
     assert_eq!(blocks(&game), 2, "the bed is tried again after the pause");
+}
+
+fn attacks(game: &Game) -> usize {
+    walks(game)
+        .iter()
+        .filter(|p| matches!(p, control::Process::Attack(_)))
+        .count()
+}
+
+#[test]
+fn a_finished_or_failed_attack_is_sent_again_while_the_enemy_stays_near() {
+    let (mut game, mut host) = against(Difficulty::Hard);
+    host.at.insert(A, [0.5, 65.0, 8.5]);
+    host.at.insert(BOT, [0.5, 65.0, 6.5]);
+    ticks(&mut game, &mut host, 40);
+    assert_eq!(attacks(&game), 1);
+    for (round, end) in [Game::bot_walk_ended, Game::bot_walk_failed]
+        .into_iter()
+        .enumerate()
+    {
+        end(&mut game, HANDLE);
+        assert_eq!(game.bots[&0].fighting, None, "the ended attack is dropped");
+        ticks(&mut game, &mut host, 5);
+        assert_eq!(attacks(&game), round + 1, "no resend before the pause");
+        ticks(&mut game, &mut host, 2 * SECOND);
+        assert_eq!(attacks(&game), round + 2, "attacked again: {:?}", walks(&game));
+    }
+}
+
+#[test]
+fn a_bot_defends_its_bed_by_walking_to_it_once_then_attacking_a_close_intruder() {
+    let (mut game, mut host) = against(Difficulty::Easy);
+    host.at.insert(BOT, [0.5, 65.0, 30.5]);
+    host.at.insert(A, [0.5, 65.0, -0.5]);
+    ticks(&mut game, &mut host, 40);
+    let to_bed: Vec<_> = walks(&game)
+        .iter()
+        .filter_map(near)
+        .filter(|at| at[0] == 0 && at[2] == 8)
+        .collect();
+    assert_eq!(to_bed.len(), 1, "one walk to the bed: {:?}", walks(&game));
+    let sent = game.bot_calls.len();
+    ticks(&mut game, &mut host, 60);
+    assert_eq!(game.bot_calls.len(), sent, "nothing while the decision holds");
+    assert_eq!(attacks(&game), 0, "an intruder out of reach is not chased");
+    host.at.insert(A, [0.5, 65.0, 5.5]);
+    ticks(&mut game, &mut host, 40);
+    assert_eq!(attacks(&game), 1, "the close intruder is attacked once");
+}
+
+#[test]
+fn a_saving_bot_walks_to_its_forge_once_and_a_far_bot_guards_home_once() {
+    let (mut game, mut host) = against(Difficulty::Easy);
+    game.bots.get_mut(&0).unwrap().saving = false;
+    host.at.insert(BOT, [0.5, 65.0, 20.5]);
+    let before = walks(&game).len();
+    ticks(&mut game, &mut host, 40);
+    let home: Vec<_> = walks(&game)[before..].iter().filter_map(near).collect();
+    assert_eq!(home, vec![[0, 65, 10]], "guard walks home once");
+    game.bots.get_mut(&0).unwrap().saving = true;
+    let before = walks(&game).len();
+    ticks(&mut game, &mut host, 60);
+    let forge: Vec<_> = walks(&game)[before..]
+        .iter()
+        .filter_map(near)
+        .filter(|at| at[2] == 12)
+        .collect();
+    assert_eq!(forge, vec![[0, 65, 12]], "collect walks to the forge once");
 }
 
 #[test]

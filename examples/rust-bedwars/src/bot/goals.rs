@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! A goal selector in the style of mob AI: goals with a priority and the
-//! controls they need (move, look, target). Each tick, running goals that
+//! controls they need (move, target). Each tick, running goals that
 //! can no longer continue stop, then idle goals start when their controls
 //! are free or held only by interruptable goals of a lower priority (a
 //! larger number), and every running goal writes its part of the intent.
@@ -14,7 +14,6 @@ pub struct Flags(u8);
 
 impl Flags {
     pub const MOVE: Flags = Flags(1);
-    pub const LOOK: Flags = Flags(2);
     pub const TARGET: Flags = Flags(4);
 
     pub const fn with(self, other: Flags) -> Flags {
@@ -121,7 +120,6 @@ pub fn bedwars() -> GoalSelector {
     brain.add(4, Follow);
     brain.add(4, Collect);
     brain.add(5, Guard);
-    brain.add(6, Watch);
     brain
 }
 
@@ -158,7 +156,7 @@ impl Goal for Fight {
     }
 
     fn flags(&self) -> Flags {
-        Flags::MOVE.with(Flags::LOOK).with(Flags::TARGET)
+        Flags::MOVE.with(Flags::TARGET)
     }
 
     fn can_use(&mut self, view: &View) -> bool {
@@ -185,7 +183,6 @@ impl Goal for Fight {
             out.goto = Some(enemy.pos);
         }
         out.fight = Some(enemy.id);
-        out.look = Some([enemy.pos[0], enemy.pos[1] + 1.3, enemy.pos[2]]);
         out.sprint = dist(view.me, enemy.pos) > MELEE_SPRINT;
     }
 }
@@ -195,6 +192,8 @@ impl Goal for Fight {
 pub struct DefendBed;
 
 const BED_ALARM: f64 = 10.0;
+/// An intruder this close to the bed is attacked rather than watched.
+const BED_STRIKE: f64 = 5.0;
 
 impl DefendBed {
     fn threat(view: &View) -> Option<(Pos, Seen)> {
@@ -215,7 +214,7 @@ impl Goal for DefendBed {
     }
 
     fn flags(&self) -> Flags {
-        Flags::MOVE.with(Flags::LOOK)
+        Flags::MOVE.with(Flags::TARGET)
     }
 
     fn can_use(&mut self, view: &View) -> bool {
@@ -228,7 +227,9 @@ impl Goal for DefendBed {
         };
         let [x, y, z] = block_center(bed);
         out.goto = Some([x, y + 0.5, z]);
-        out.look = Some([enemy.pos[0], enemy.pos[1] + 1.3, enemy.pos[2]]);
+        if dist(enemy.pos, [x, y, z]) <= BED_STRIKE {
+            out.fight = Some(enemy.id);
+        }
         out.sprint = true;
     }
 }
@@ -256,7 +257,7 @@ impl Goal for RushBed {
     }
 
     fn flags(&self) -> Flags {
-        Flags::MOVE.with(Flags::LOOK)
+        Flags::MOVE
     }
 
     fn can_use(&mut self, view: &View) -> bool {
@@ -287,7 +288,6 @@ impl Goal for RushBed {
             return;
         };
         let center = block_center(bed);
-        out.look = Some(center);
         out.sprint = true;
         if dist(eye_of(view.me), center) <= BLOCK_REACH - 0.5 {
             out.dig = Some(bed);
@@ -371,57 +371,17 @@ impl Goal for Guard {
     }
 }
 
-/// Keeps an eye on the nearest enemy it knows of.
-#[derive(Debug)]
-pub struct Watch;
-
-impl Goal for Watch {
-    fn name(&self) -> &'static str {
-        "watch"
-    }
-
-    fn flags(&self) -> Flags {
-        Flags::LOOK
-    }
-
-    fn can_use(&mut self, view: &View) -> bool {
-        view.nearest_enemy(f64::INFINITY).is_some()
-    }
-
-    fn tick(&mut self, view: &View, out: &mut Intent) {
-        if let Some(enemy) = view.nearest_enemy(f64::INFINITY) {
-            out.look = Some([enemy.pos[0], enemy.pos[1] + 1.3, enemy.pos[2]]);
-        }
-    }
-}
-
 /// Ticks a bow needs to be fully drawn.
 pub const DRAW_TICKS: u32 = 20;
-pub const ARROW_SPEED: f64 = 3.0;
-const ARROW_GRAVITY: f64 = 0.05;
 const BOW_RANGE: [f64; 2] = [7.0, 36.0];
 const FIREBALL_RANGE: [f64; 2] = [3.5, 14.0];
 const FIREBALL_PAUSE: u64 = 40;
-
-/// Where to aim an arrow so it meets a target moving at `velocity`
-/// (blocks per tick), leading the target and lifting for gravity.
-pub fn arrow_aim(eye: [f64; 3], target: [f64; 3], velocity: [f64; 3]) -> [f64; 3] {
-    let mut at = target;
-    let mut ticks = 0.0;
-    for _ in 0..3 {
-        ticks = dist(eye, at) / ARROW_SPEED;
-        at = [0, 1, 2].map(|a| target[a] + velocity[a] * ticks);
-    }
-    at[1] += ARROW_GRAVITY * ticks * ticks / 2.0;
-    at
-}
 
 /// Draws the bow at an enemy out of melee reach, or throws a fire charge
 /// at one that is closer.
 #[derive(Debug, Default)]
 pub struct Shoot {
     target: Option<Id>,
-    last: Option<[f64; 3]>,
     drawn: u32,
     thrown: Option<u64>,
 }
@@ -459,7 +419,7 @@ impl Goal for Shoot {
     }
 
     fn flags(&self) -> Flags {
-        Flags::LOOK.with(Flags::TARGET)
+        Flags::TARGET
     }
 
     fn can_use(&mut self, view: &View) -> bool {
@@ -472,13 +432,11 @@ impl Goal for Shoot {
 
     fn start(&mut self, view: &View) {
         self.target = self.pick(view).map(|(e, _)| e.id);
-        self.last = None;
         self.drawn = 0;
     }
 
     fn stop(&mut self) {
         self.target = None;
-        self.last = None;
         self.drawn = 0;
     }
 
@@ -486,16 +444,9 @@ impl Goal for Shoot {
         let Some((enemy, shot)) = self.current(view) else {
             return;
         };
-        let velocity = match self.last {
-            Some(before) => [0, 1, 2].map(|a| enemy.pos[a] - before[a]),
-            None => [0.0; 3],
-        };
-        self.last = Some(enemy.pos);
         out.aim = Some((enemy.id, shot));
-        let chest = [enemy.pos[0], enemy.pos[1] + 1.0, enemy.pos[2]];
         match shot {
             Shot::Arrow => {
-                out.look = Some(arrow_aim(eye_of(view.me), chest, velocity));
                 self.drawn += 1;
                 if self.drawn >= DRAW_TICKS {
                     self.drawn = 0;
@@ -504,7 +455,6 @@ impl Goal for Shoot {
             }
             Shot::Fireball => {
                 self.drawn = 0;
-                out.look = Some(chest);
                 if self.thrown.is_none_or(|t| view.now >= t + FIREBALL_PAUSE) {
                     self.thrown = Some(view.now);
                     out.shoot = Some(Shot::Fireball);
