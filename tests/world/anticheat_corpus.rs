@@ -261,15 +261,16 @@ fn rtt_of(file: &str) -> u64 {
 
 /// Every recorded file at one latency profile except the two canonical
 /// files, which have their own tests.
-async fn replay_latency_profile(rtt: u64) {
+async fn replay_latency_profile(rtt: u64, special: bool) {
     for name in corpus_files() {
         if name == "movement_corpus.bin"
             || name == "movement_corpus_special.bin"
             || rtt_of(&name) != rtt
+            || name.starts_with("movement_corpus_special") != special
         {
             continue;
         }
-        if name.starts_with("movement_corpus_special") {
+        if special {
             replay_special_file(&name, None).await;
         } else {
             replay_base_file(&name).await;
@@ -280,19 +281,37 @@ async fn replay_latency_profile(rtt: u64) {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_recorded_latency_corpus_never_flags_rtt0() {
-    replay_latency_profile(0).await;
+    replay_latency_profile(0, false).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_special_latency_corpus_never_flags_rtt0() {
+    replay_latency_profile(0, true).await;
 }
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_recorded_latency_corpus_never_flags_rtt100() {
-    replay_latency_profile(100).await;
+    replay_latency_profile(100, false).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_special_latency_corpus_never_flags_rtt100() {
+    replay_latency_profile(100, true).await;
 }
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_recorded_latency_corpus_never_flags_rtt250() {
-    replay_latency_profile(250).await;
+    replay_latency_profile(250, false).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_special_latency_corpus_never_flags_rtt250() {
+    replay_latency_profile(250, true).await;
 }
 
 #[tuff_core::watchdog]
