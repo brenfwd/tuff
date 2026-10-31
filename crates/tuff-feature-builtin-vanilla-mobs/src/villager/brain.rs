@@ -1234,7 +1234,7 @@ mod tests {
     fn a_baby_picks_from_the_weighted_play_table_and_stands_20_to_40_ticks() {
         let mut other = crate::target::tests::zombie(8, [-3.5, 64.0, 0.5]);
         other.kind = EntityType::Villager;
-        crate::tests::with_entities(&[other.clone()], |core, cx| {
+        crate::tests::with_entities(&[other], |core, cx| {
             let mut villager = Villager::create(&mut StdRng::seed_from_u64(1));
             Villager::configure(core);
             core.base.position = [0.5, 64.0, 0.5];
