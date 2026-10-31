@@ -88,6 +88,13 @@ impl ChunkMirror {
         })
     }
 
+    /// Whether the block at `pos` was changed within the last `ticks` ticks.
+    pub fn changed_at(&self, pos: BlockPos, ticks: u64) -> bool {
+        self.recent
+            .iter()
+            .any(|(at, p)| *p == pos && self.clock.saturating_sub(*at) <= ticks)
+    }
+
     /// Records a block the client placed ahead of the server's answer; the
     /// answer, when it comes, replaces it either way.
     pub fn predict(&mut self, pos: BlockPos, state: BlockState) {
