@@ -117,3 +117,40 @@ async fn a_cart_nudge_is_recorded_without_a_motion_packet() {
     assert!(given.added);
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_push_that_lands_as_the_player_dies_is_not_held_against_them() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    world
+        .shared
+        .config
+        .set_text("tuff.anticheat.check.velocity.kickAbove", "2")
+        .unwrap();
+    let mut w = floored(&world, ChunkPos::new(59, 59)).await;
+    w.session.tick += 100;
+    for _ in 0..8 {
+        tuff_feature_builtin_vanilla_anticheat::clock::advance(
+            &w.session,
+            Duration::from_millis(1500),
+        );
+        w.session
+            .on_event(PlayerEvent::Pushed([0.5, 0.4, 0.0]))
+            .await;
+        w.session.body.health.value = 0.0;
+        for _ in 0..30 {
+            w.session.tick += 1;
+            w.step(0.0, w.floor_y, 0.0).await;
+        }
+        w.session.body.health.value = 20.0;
+        for _ in 0..30 {
+            w.session.tick += 1;
+            w.step(0.0, w.floor_y, 0.0).await;
+        }
+    }
+    assert!(!w.session.disconnected);
+    let alerts = super::anticheat::operator_alerts(&world).await;
+    assert!(alerts.is_empty(), "{alerts:?}");
+    world.shutdown().await;
+}

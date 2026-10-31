@@ -132,6 +132,10 @@ fn eye_of(feet: [f64; 3]) -> [f64; 3] {
 /// How close a fighting bot walks up to its target.
 const CLOSE_IN: f64 = 2.2;
 
+/// Inside this range a fighting bot stops sprinting: sprint hits knock far
+/// enough to throw both fighters off a bridge.
+const MELEE_SPRINT: f64 = 3.5;
+
 /// Chases and strikes the nearest enemy in aggro range.
 #[derive(Debug, Default)]
 pub struct Fight {
@@ -182,7 +186,7 @@ impl Goal for Fight {
         }
         out.fight = Some(enemy.id);
         out.look = Some([enemy.pos[0], enemy.pos[1] + 1.3, enemy.pos[2]]);
-        out.sprint = true;
+        out.sprint = dist(view.me, enemy.pos) > MELEE_SPRINT;
     }
 }
 
@@ -261,7 +265,9 @@ impl Goal for RushBed {
             Role::Rusher => view.skill.rush_after / 3,
             Role::Solo => view.skill.rush_after,
         };
-        view.elapsed >= after && Self::pick(view).is_some()
+        view.elapsed >= after
+            && view.alive_for >= view.skill.rush_after / 3
+            && Self::pick(view).is_some()
     }
 
     fn can_continue(&mut self, view: &View) -> bool {

@@ -168,6 +168,8 @@ pub struct View<'a> {
     pub now: u64,
     /// Ticks since the match started.
     pub elapsed: u64,
+    /// Ticks since the bot last spawned.
+    pub alive_for: u64,
     pub me: [f64; 3],
     pub home: [f64; 3],
     /// Where the team's resources spawn.
@@ -320,6 +322,8 @@ pub struct Bot {
     pub unreachable: Option<(Pos, u64)>,
     /// The enemy an attack process was last sent for.
     pub fighting: Option<Id>,
+    /// The tick the bot last spawned, while it lives.
+    pub alive_since: Option<u64>,
     /// The tick the walk was sent.
     pub sent_at: u64,
     /// The tick a bridge egg was last thrown.
@@ -350,6 +354,7 @@ impl Bot {
             heading: None,
             unreachable: None,
             fighting: None,
+            alive_since: None,
             sent_at: 0,
             egg_at: None,
             arrived: false,
