@@ -589,6 +589,18 @@ mod tests {
 
     #[tuff_core::watchdog]
     #[test]
+    fn seed_one_spawn() {
+        let spawn = overworld_spawn(1);
+        assert_eq!((spawn.x, spawn.y, spawn.z), (160, 70, 160));
+        assert_eq!(
+            overworld_spawn(1),
+            spawn,
+            "the spawn search is deterministic"
+        );
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
     fn a_new_worlds_spawn_is_where_vanilla_puts_it() {
         assert_eq!(
             overworld_spawn(1),
