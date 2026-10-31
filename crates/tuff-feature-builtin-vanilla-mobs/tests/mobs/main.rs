@@ -20,6 +20,10 @@ pub use std::sync::Arc;
 pub use std::time::Duration;
 pub use tokio::sync::{mpsc, oneshot};
 
+pub fn no_halloween() {
+    tuff_feature_builtin_vanilla_mobs::calendar::pin_halloween(Some(false));
+}
+
 mod aquatic;
 mod collision_cap;
 mod cramming;
