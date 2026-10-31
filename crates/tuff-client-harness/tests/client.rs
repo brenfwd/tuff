@@ -2739,12 +2739,20 @@ async fn real_client_record_movement_corpus() {
             });
         }
         tokio::time::sleep(Duration::from_millis(300)).await;
+        let falls = spec.start_dy > 1;
+        let early = if falls {
+            Some(server_says(s, &format!("tuff tracing {username} start")).await)
+        } else {
+            None
+        };
         arrive(s, &client, username, spawn, yaw, 0.0).await;
         client
             .request(Command::Look { yaw, pitch: 0.0 })
             .await
             .unwrap();
-        client.request(Command::WaitTicks(5)).await.unwrap();
+        if !falls {
+            client.request(Command::WaitTicks(5)).await.unwrap();
+        }
         if std::env::var_os("TUFF_CORPUS_DEBUG").is_some() {
             let state = client.state().await.ok();
             let floor = client
@@ -2757,7 +2765,10 @@ async fn real_client_record_movement_corpus() {
                 state.map(|s| (s.position, s.chunks))
             );
         }
-        let started = server_says(s, &format!("tuff tracing {username} start")).await;
+        let started = match early {
+            Some(started) => started,
+            None => server_says(s, &format!("tuff tracing {username} start")).await,
+        };
         let path = started.rsplit_once(": ").unwrap().1.trim().to_owned();
         let alive = drive_with(
             &client,
@@ -2787,6 +2798,13 @@ async fn real_client_record_movement_corpus() {
             }
         }
         let _ = std::fs::remove_file(&path);
+        if falls {
+            let accepted = lane
+                .packets
+                .iter()
+                .rposition(|p| matches!(p, Serverbound::AcceptTeleportation { .. }));
+            lane.packets.drain(..accepted.map_or(0, |i| i + 1));
+        }
         lane.packets.insert(
             0,
             Serverbound::Move(tuff_core::protocol::play::Movement {

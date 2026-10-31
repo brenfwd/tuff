@@ -1270,3 +1270,51 @@ fn walking_through_powder_snow_at_high_latency_is_not_flagged() {
         assert!(judge.flags.is_empty(), "seed {seed}: {:#?}", judge.flags);
     }
 }
+
+/// Walks east sprinting; from tick 20 the server has the sprint stopped
+/// while the client keeps sprint speed for `stale` more ticks.
+fn sprint_after_stop(latency_ms: i32, stale: std::ops::Range<usize>) -> Judge {
+    let mirror = scene(|_, _| vec![(63, stone())]);
+    let mut client = Client::new([0.5, 64.0, 0.5]);
+    let mut judge = Judge::new(client.position);
+    judge.facts.latency_ms = latency_ms;
+    for tick in 0..60 {
+        let walking = Input {
+            forward: true,
+            yaw: -90.0,
+            ..Input::default()
+        };
+        let told = Input {
+            sprint: tick < 20,
+            ..walking
+        };
+        let moved = Input {
+            sprint: tick < 20 || stale.contains(&tick),
+            ..walking
+        };
+        judge.facts.tick = tick as u64;
+        judge.hold(&told);
+        if let Some(to) = client.tick(&mirror, moved) {
+            judge.report(&mirror, to, client.on_ground);
+        }
+        judge.tick_end();
+        let before = client.position;
+        client.wrap();
+        if before != client.position {
+            judge.wrapped(client.sent);
+        }
+    }
+    judge
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn sprint_speed_from_a_late_attribute_sync_is_explained_within_the_round_trip() {
+    let judge = sprint_after_stop(125, 22..26);
+    assert!(judge.flags.is_empty(), "{:?}", judge.flags);
+    let late = sprint_after_stop(125, 40..44);
+    assert!(
+        !late.flags.is_empty(),
+        "sprint speed long after the stop passed"
+    );
+}
