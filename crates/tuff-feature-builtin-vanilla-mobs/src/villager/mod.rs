@@ -193,6 +193,8 @@ pub struct Villager {
     /// Lightning struck it this tick.
     struck: bool,
     pub brain: brain::Brain,
+    /// Whether the shared facts say it would spawn a golem, as of its last social upkeep.
+    wants_golem: bool,
     /// Explorer map offers waiting for their map, added once it is made.
     exploring: Vec<(tuff_core::world::exploration::Answer, MerchantOffer)>,
 }
@@ -686,6 +688,17 @@ fn overworld_day(cx: &TickContext) -> i64 {
     ticks.div_euclid(period as i64)
 }
 
+impl Villager {
+    fn inventory_summary(&self) -> String {
+        self.inventory
+            .iter()
+            .flatten()
+            .map(|s| format!("{} x{}", s.item().name(), s.count()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
 impl Species for Villager {
     fn take_items(&mut self) -> Vec<ItemStack> {
         self.inventory.iter_mut().filter_map(Option::take).collect()
@@ -733,11 +746,11 @@ impl Species for Villager {
                 xp: self.xp,
                 health: core.health,
                 max_health: core.max_health(),
-                inventory: String::new(),
-                wants_golem: false,
+                inventory: self.inventory_summary(),
+                wants_golem: self.wants_golem,
                 anger_level: -1,
                 activities,
-                behaviors: Vec::new(),
+                behaviors: self.brain.running_behaviors(),
                 memories: remembered,
                 gossips: self.gossips.debug_lines(),
                 pois,

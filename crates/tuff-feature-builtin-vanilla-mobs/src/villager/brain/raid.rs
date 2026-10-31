@@ -32,6 +32,10 @@ fn has_no_blocks_above(core: &MobCore, target: BlockPos, cx: &TickContext) -> bo
         )) <= core.base.position[1]
 }
 
+fn celebrate_strolls(sky_visible: bool, roll: u32) -> bool {
+    sky_visible || roll < CELEBRATE_STROLL_WEIGHT
+}
+
 fn launch_firework(core: &MobCore, cx: &mut TickContext) {
     let dyes = DyeColor::ALL;
     let color = dyes[cx.rng.gen_range(0..dyes.len())].firework_color();
@@ -79,6 +83,8 @@ const RING_DISTANCE: f64 = 3.0;
 const HIDE_RADIUS: i32 = 24;
 const HIDE_CLOSE: f64 = 1.0;
 const GATHER_CLOSE: i32 = 2;
+const CELEBRATE_WEIGHTS: u32 = 7;
+const CELEBRATE_STROLL_WEIGHT: u32 = 2;
 const SKY_TRIES: u32 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -179,23 +185,33 @@ impl Villager {
 
     fn celebrate(&mut self, core: &mut MobCore, cx: &mut TickContext) {
         let here = block_pos(core.base.position);
-        if cx.rng.gen_range(0..100) == 0 {
-            core.sound(SoundEvent::EntityVillagerCelebrate, 1.0, 1.0, cx);
-        }
-        if cx.rng.gen_range(0..200) == 0 && core.can_see_sky(here, cx) {
-            launch_firework(core, cx);
+        let under_sky = has_no_blocks_above(core, here, cx);
+        if under_sky {
+            if cx.rng.gen_range(0..100) == 0 {
+                core.sound(SoundEvent::EntityVillagerCelebrate, 1.0, 1.0, cx);
+            }
+            if cx.rng.gen_range(0..200) == 0 {
+                launch_firework(core, cx);
+            }
         }
         if !core.navigation.is_done() {
             return;
         }
-        if core.can_see_sky(here, cx) {
-            if cx.rng.gen_range(0..60) == 0
-                && let Some(target) = random_pos::land_pos(core, 10, 7, cx)
-            {
-                core.move_to_position(target, CELEBRATE_STROLL_SPEED, cx);
-            }
-            return;
+        let sky_visible = core.can_see_sky(here, cx);
+        if celebrate_strolls(sky_visible, cx.rng.gen_range(0..CELEBRATE_WEIGHTS)) {
+            self.celebrate_stroll(core, cx);
+        } else {
+            self.seek_sky_spot(core, cx, here);
         }
+    }
+
+    fn celebrate_stroll(&mut self, core: &mut MobCore, cx: &mut TickContext) {
+        if let Some(target) = random_pos::land_pos(core, 10, 7, cx) {
+            core.move_to_position(target, CELEBRATE_STROLL_SPEED, cx);
+        }
+    }
+
+    fn seek_sky_spot(&mut self, core: &mut MobCore, cx: &mut TickContext, here: BlockPos) {
         for _ in 0..SKY_TRIES {
             let target = BlockPos::new(
                 here.x + cx.rng.gen_range(0..20) - 10,
@@ -261,5 +277,17 @@ mod tests {
             villager.update_activity(core, cx);
             assert_eq!(villager.brain.activity, Some(Activity::PreRaid));
         });
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_celebrating_villager_under_the_sky_always_strolls_and_indoors_strolls_two_in_seven() {
+        for roll in 0..CELEBRATE_WEIGHTS {
+            assert!(celebrate_strolls(true, roll));
+        }
+        let strolls = (0..CELEBRATE_WEIGHTS)
+            .filter(|roll| celebrate_strolls(false, *roll))
+            .count();
+        assert_eq!(strolls, 2);
     }
 }
