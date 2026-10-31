@@ -1463,7 +1463,13 @@ const HUT: &str = "# stairs and stone, a log over a gap\n\
 1 0 0 stone\n\
 0 1 0 stone\n\
 1 2 0 oak_log[axis=y]\n\
-1 3 0 stone\n";
+1 3 0 stone\n\
+3 0 0 stone\n\
+3 1 0 stone\n\
+3 2 0 stone\n\
+3 3 0 oak_stairs[facing=east,half=bottom]\n\
+5 2 0 oak_log[axis=x]\n\
+5 3 0 stone\n";
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1473,7 +1479,7 @@ async fn bots_build_a_schematic_file() {
     };
     run.build_arena().await;
     let op = run.operator_bot("Op", 0, 1, "Mate").await;
-    run.server("give Mate stone 16").await;
+    run.server("give Mate stone 32").await;
     run.server("give Mate oak_stairs 4").await;
     run.server("give Mate oak_log 4").await;
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1492,10 +1498,13 @@ async fn bots_build_a_schematic_file() {
     let list = run
         .within(BUILD_PATIENCE, || async {
             let list = run.op(op, "bots list").await;
-            list.contains("Mate: idle").then_some(list)
+            (list.contains("Mate: idle") || list.contains("failed")).then_some(list)
         })
-        .await
-        .expect("the file build finishes");
+        .await;
+    let list = match list {
+        Some(list) => list,
+        None => panic!("the file build finishes: {}", run.op(op, "bots list").await),
+    };
     assert!(!list.contains("failed"), "{list}");
     assert!(
         run.block_is(2, 150, 0, "oak_stairs[facing=east,half=bottom]")
@@ -1506,6 +1515,12 @@ async fn bots_build_a_schematic_file() {
     assert!(run.block_is(3, 152, 0, "oak_log[axis=y]").await);
     assert!(run.block_is(3, 153, 0, "stone").await);
     assert!(run.block_is(3, 151, 0, "air").await);
+    assert!(
+        run.block_is(5, 153, 0, "oak_stairs[facing=east,half=bottom]")
+            .await
+    );
+    assert!(run.block_is(7, 152, 0, "oak_log[axis=x]").await);
+    assert!(run.block_is(7, 153, 0, "stone").await);
     let flags = run.server("anticheat violations").await;
     assert!(
         flags.contains("No player has anti-cheat violations"),

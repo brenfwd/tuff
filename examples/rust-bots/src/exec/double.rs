@@ -291,7 +291,9 @@ impl Host for Double {
             return;
         }
         held.2 -= 1;
-        let name: &'static str = Box::leak(held.1.clone().into_boxed_str());
+        let eye = (self.pos.x, self.pos.y + 1.62, self.pos.z);
+        let state = placed_state(&held.1, eye, against, face, cursor_y);
+        let name: &'static str = Box::leak(state.into_boxed_str());
         terrain.block(at, name, Class::STANDABLE);
         self.placed.push(at);
     }
@@ -320,4 +322,37 @@ impl Host for Double {
         self.events.push((bot, event));
         Delivery::Sent
     }
+}
+
+/// The state a server gives a block placed by this click.
+fn placed_state(
+    item: &str,
+    eye: (f64, f64, f64),
+    against: Pos,
+    face: Face,
+    cursor_y: f32,
+) -> String {
+    if item.ends_with("_stairs") {
+        let facing = match crate::hands::aim_facing(eye, against, face) {
+            Some(Face::North) => "north",
+            Some(Face::East) => "east",
+            Some(Face::West) => "west",
+            _ => "south",
+        };
+        let top = face == Face::Down || (face != Face::Up && cursor_y > 0.5);
+        let half = if top { "top" } else { "bottom" };
+        return format!("{item}[facing={facing},half={half}]");
+    }
+    if item.ends_with("_log") {
+        let (nx, ny, _) = face.normal();
+        let axis = if nx != 0 {
+            "x"
+        } else if ny != 0 {
+            "y"
+        } else {
+            "z"
+        };
+        return format!("{item}[axis={axis}]");
+    }
+    item.to_owned()
 }

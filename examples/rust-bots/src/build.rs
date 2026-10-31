@@ -10,7 +10,7 @@ use std::rc::Rc;
 use tuff_bots_api::control::{BlockPos, BuildBlock, BuildSpec, Vec3};
 
 use crate::exec::Face;
-use crate::hands::{Breaker, Carried, Hands, Orient, Placer, prop, stand_works};
+use crate::hands::{self, Breaker, Carried, Hands, Orient, Placer, prop, stand_works};
 use crate::path::{Pos, Tools};
 use crate::world::{Blocks, name_of};
 
@@ -23,6 +23,29 @@ const PILLAR_DROP: i32 = 4;
 /// The tallest standing staircase a build may raise.
 const PILLAR_HEIGHT: i32 = 3;
 const MAX_RETRIES: u32 = 20;
+/// How often a cell whose block came out in the wrong state is cleared and
+/// placed again before the build fails.
+const MAX_REDO: u8 = 2;
+/// Full blocks a bot may burn as scaffolding when the build brings none.
+const PLAIN_MATERIALS: [&str; 17] = [
+    "stone",
+    "cobblestone",
+    "dirt",
+    "netherrack",
+    "andesite",
+    "diorite",
+    "granite",
+    "tuff",
+    "cobbled_deepslate",
+    "deepslate",
+    "blackstone",
+    "_planks",
+    "_wool",
+    "_concrete",
+    "_terracotta",
+    "sandstone",
+    "bricks",
+];
 
 /// Targets bottom-up, a row at a time in alternating directions so the
 /// walk between placements stays short. A later entry for the same cell
@@ -204,6 +227,16 @@ fn is_air(state: &str) -> bool {
     matches!(name_of(state), "air" | "cave_air" | "void_air")
 }
 
+fn is_plain_material(name: &str) -> bool {
+    PLAIN_MATERIALS.iter().any(|m| {
+        if m.starts_with('_') {
+            name.ends_with(m)
+        } else {
+            name == *m || (*m == "bricks" && name.ends_with("bricks") && !name.contains("stair"))
+        }
+    })
+}
+
 enum Stage {
     Seek,
     Clearing(Breaker),
@@ -219,6 +252,7 @@ pub struct Builder {
     stage: Stage,
     checked: bool,
     retries: u32,
+    redone: HashMap<Pos, u8>,
     pub grounded: bool,
 }
 
@@ -233,6 +267,7 @@ impl Builder {
             stage: Stage::Seek,
             checked: false,
             retries: 0,
+            redone: HashMap::new(),
             grounded: true,
         }
     }
@@ -269,7 +304,8 @@ impl Builder {
         Ok(false)
     }
 
-    /// A throwaway block, or else a plain block of the build itself.
+    /// A throwaway block, a plain block of the build itself, or else the
+    /// most plentiful spare full block the bot carries.
     fn scaffold_item(&self, throwaway: &[String], carried: &[Carried]) -> Option<String> {
         let stocked = carried.iter().filter(|(_, _, count)| *count > 0);
         stocked
@@ -283,6 +319,33 @@ impl Builder {
                 })
             })
             .map(|(_, held, _)| held.clone())
+            .or_else(|| self.spare_plain_block(carried))
+    }
+
+    fn spare_plain_block(&self, carried: &[Carried]) -> Option<String> {
+        let pending: Vec<(Pos, String)> = self.todo.iter().cloned().collect();
+        let needed = needs(&pending);
+        let mut best: Option<(u32, String)> = None;
+        for (_, held, _) in carried {
+            let name = name_of(held);
+            if !is_plain_material(name) || best.as_ref().is_some_and(|(_, b)| name_of(b) == name) {
+                continue;
+            }
+            let have: u32 = carried
+                .iter()
+                .filter(|(_, other, _)| name_of(other) == name)
+                .map(|(_, _, c)| *c)
+                .sum();
+            let need = needed
+                .iter()
+                .find(|(n, _)| n == name)
+                .map_or(0, |(_, c)| *c);
+            let spare = have.saturating_sub(need);
+            if spare > 0 && best.as_ref().is_none_or(|(most, _)| spare > *most) {
+                best = Some((spare, held.clone()));
+            }
+        }
+        best.map(|(_, item)| item)
     }
 
     pub fn tick(
@@ -316,8 +379,6 @@ impl Builder {
                     Hands::Done => {
                         if scaffolding {
                             self.scaffolds.push(pos);
-                        } else {
-                            self.todo.retain(|(p, _)| *p != pos);
                         }
                         self.stage = Stage::Seek;
                         Hands::Wait
@@ -413,6 +474,17 @@ impl Builder {
             }
             let occupied = !class.passable() || class.climbable();
             if occupied {
+                let wrong_state = actual.as_ref().filter(|a| name_of(a) == wanted);
+                if let Some(actual) = wrong_state {
+                    let redone = self.redone.entry(pos).or_insert(0);
+                    if !allow_break || *redone >= MAX_REDO {
+                        return Hands::Failed(format!(
+                            "{} {} {} is {actual}, wanted {state}",
+                            pos.0, pos.1, pos.2
+                        ));
+                    }
+                    *redone += 1;
+                }
                 if !allow_break {
                     return Hands::Failed("occupied".into());
                 }
@@ -427,7 +499,12 @@ impl Builder {
                 self.todo.remove(i);
                 continue;
             }
-            match Self::supported(world, pos) {
+            let orient = Orient::from_state(&state);
+            let supported = match Self::supported(world, pos) {
+                Ok(true) if orient.strict() => hands::has_preferred(world, pos, &orient),
+                other => other,
+            };
+            match supported {
                 Err(()) => return Hands::Wait,
                 Ok(true) => {
                     self.stage = Stage::Placing(
@@ -453,6 +530,14 @@ impl Builder {
             }
         }
         if let Some(pos) = deferred {
+            let orient = Orient::from_state(&self.state_of(pos));
+            if orient.strict() {
+                match self.plan_side_scaffold(world, pos, &orient) {
+                    Err(()) => return Hands::Wait,
+                    Ok(true) => return Hands::Wait,
+                    Ok(false) => {}
+                }
+            }
             return self.plan_scaffold(world, pos);
         }
         if self.scaffolds.is_empty() {
@@ -564,6 +649,67 @@ impl Builder {
             }
         }
         Ok(Some(plan))
+    }
+
+    fn state_of(&self, pos: Pos) -> String {
+        self.todo
+            .iter()
+            .find(|(p, _)| *p == pos)
+            .map(|(_, s)| s.clone())
+            .unwrap_or_default()
+    }
+
+    /// Queues a scaffold cell beside (or above or below) `target` whose
+    /// face gives the wanted axis, with a column under it when it has
+    /// nothing to rest on; false when no such cell is free.
+    fn plan_side_scaffold(
+        &mut self,
+        world: &mut dyn Blocks,
+        target: Pos,
+        orient: &Orient,
+    ) -> Result<bool, ()> {
+        let mut faces: Vec<Face> = Face::ALL
+            .into_iter()
+            .filter(|f| orient.clicked.contains(&hands::opposite(*f)))
+            .collect();
+        faces.sort_by_key(|f| f.normal().1 != 0);
+        for face in faces {
+            let (dx, dy, dz) = face.normal();
+            let cell = (target.0 + dx, target.1 + dy, target.2 + dz);
+            if self.targets.contains(&cell) || self.scaffolds.contains(&cell) {
+                continue;
+            }
+            let class = world.class_at(cell.0, cell.1, cell.2).map_err(|_| ())?;
+            if !class.passable() || class.climbable() {
+                continue;
+            }
+            let mut column = vec![cell];
+            if !Self::supported(world, cell)? {
+                let mut grounded = false;
+                for d in 1..=MAX_SCAFFOLD {
+                    let below = (cell.0, cell.1 - d, cell.2);
+                    if self.targets.contains(&below) {
+                        break;
+                    }
+                    if world
+                        .class_at(below.0, below.1, below.2)
+                        .map_err(|_| ())?
+                        .standable()
+                    {
+                        grounded = true;
+                        break;
+                    }
+                    column.push(below);
+                }
+                if !grounded {
+                    continue;
+                }
+            }
+            column.reverse();
+            self.scaffold = column.into();
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     fn plan_scaffold(&mut self, world: &mut dyn Blocks, target: Pos) -> Hands {
