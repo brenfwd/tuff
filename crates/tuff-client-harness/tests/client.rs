@@ -2505,6 +2505,120 @@ fn save_flagged(file: &str, record: &[u8]) {
 #[tuff_core::watchdog]
 #[ignore = "launches a real vanilla client"]
 #[tokio::test(flavor = "multi_thread")]
+async fn real_client_far_teleport_keeps_floor() {
+    if !enabled() {
+        return;
+    }
+    let name = "real_client_far_tp_floor";
+    let srv = start_server("127.0.0.1:0", "corpus").await;
+    let addr = srv.game.to_string();
+    let platform = Platform::current();
+    let cache = cache_dir();
+    let files = tokio::task::spawn_blocking({
+        let platform = platform.clone();
+        let cache = cache.clone();
+        move || {
+            ensure_client(
+                &HttpSource::new()?,
+                &cache,
+                tuff_vanilla_data::version::NAME,
+                AssetProfile::from_env()?,
+                &platform,
+            )
+        }
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    let java = resolve_java(&cache, &files.meta.java_version.component).unwrap();
+    let run = RunDir::create(&default_run_base(), name).unwrap();
+    let username = "Floor";
+    let client = launch(
+        &LaunchSpec {
+            java: &java,
+            files: &files,
+            run: &run,
+            username,
+            address: &addr,
+            platform: &platform,
+            hook_args: &[],
+            hook_dir: None,
+        },
+        name,
+        default_lock_path(),
+    )
+    .await
+    .unwrap();
+    let state = until(&client, JOIN_TIMEOUT, "join", |s| {
+        s.connected && s.screen == "none" && s.chunks.unwrap_or(0) > 4
+    })
+    .await;
+    let s = &srv.handle;
+    server_says(s, &format!("gamemode survival {username}")).await;
+    let [px, py, pz] = state.position.unwrap();
+    let (x0, fy, z0) = (px.floor() as i32, py.floor() as i32 + 40, pz.floor() as i32);
+    let far = z0 + 100;
+    let near = z0 + 10;
+    let strip = |z: i32, block: &str| {
+        format!(
+            "fill {} {fy} {} {} {fy} {} {block}",
+            x0 - 4,
+            z - 4,
+            x0 + 4,
+            z + 4
+        )
+    };
+    server_says(s, &strip(far, "minecraft:stone")).await;
+    let mut lowest = f64::MAX;
+    for round in 0..10 {
+        arrive(
+            s,
+            &client,
+            username,
+            [f64::from(x0) + 0.5, f64::from(fy + 1), f64::from(far) + 0.5],
+            0.0,
+            0.0,
+        )
+        .await;
+        client.request(Command::WaitTicks(40)).await.unwrap();
+        server_says(s, &strip(near, "minecraft:air")).await;
+        server_says(s, &strip(near, "minecraft:stone")).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let spawn_y = f64::from(fy + 1);
+        arrive(
+            s,
+            &client,
+            username,
+            [f64::from(x0) + 0.5, spawn_y, f64::from(near) + 0.5],
+            0.0,
+            0.0,
+        )
+        .await;
+        for tick in 0..40 {
+            client.request(Command::WaitTicks(1)).await.unwrap();
+            let y = client.state().await.unwrap().position.unwrap()[1];
+            lowest = lowest.min(y);
+            assert!(
+                y >= spawn_y - 0.5,
+                "round {round} tick {tick}: client sank to {y} (spawn {spawn_y})"
+            );
+        }
+        let floor = client.block(x0, fy, near).await.unwrap();
+        assert!(
+            format!("{floor:?}").contains("stone"),
+            "round {round}: floor under the client reads {floor:?}"
+        );
+    }
+    let report = server_says(s, &format!("anticheat violations {username}")).await;
+    eprintln!("FAR TP FLOOR lowest y {lowest} report {report}");
+    client.quit().await;
+    let _ = std::fs::remove_dir_all(&run.root);
+    assert!(!report.contains("phase"), "phase flagged: {report}");
+}
+
+#[tuff_core::watchdog]
+#[ignore = "launches a real vanilla client"]
+#[tokio::test(flavor = "multi_thread")]
 async fn real_client_record_movement_corpus() {
     use tuff_core::protocol::play::Serverbound;
     use tuff_replay::corpus::{Fill, Lane as Recorded};
