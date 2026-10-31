@@ -175,10 +175,10 @@ fn get_to_block(at: Pos) -> control::Process {
     )))
 }
 
-fn attack(target: Id) -> control::Process {
+fn attack(target: Id, range: f64) -> control::Process {
     control::Process::Attack(control::AttackSpec {
         target: format!("{target:032x}"),
-        until: control::AttackUntil::Death,
+        until: control::AttackUntil::Distance(range),
         retreat_health: 0.0,
     })
 }
@@ -364,8 +364,13 @@ impl Game {
 
     /// Bot `handle` finished or gave up its walk.
     pub fn bot_walk_ended(&mut self, handle: BotId) {
+        let now = self.now;
         if let Some(bot) = self.bots.values_mut().find(|b| b.handle == Some(handle)) {
             bot.arrived = true;
+            if bot.fighting.take().is_some() {
+                bot.heading = None;
+                bot.sent_at = now;
+            }
         }
     }
 
@@ -375,6 +380,10 @@ impl Game {
         let now = self.now;
         if let Some(bot) = self.bots.values_mut().find(|b| b.handle == Some(handle)) {
             bot.arrived = true;
+            if bot.fighting.take().is_some() {
+                bot.heading = None;
+                bot.sent_at = now;
+            }
             if let Some(Heading::Block(bed)) = bot.heading {
                 bot.unreachable = Some((bed, now + UNREACHABLE_BACKOFF));
             }
@@ -627,13 +636,18 @@ impl Game {
             }
             let again = bot.ranged.is_none()
                 && bot.arrived
-                && target.is_some()
+                && (target.is_some() || fight.is_some())
                 && now >= bot.sent_at + RESEND;
-            if (target != bot.heading || fight != bot.fighting || again)
+            let lost_fight = bot.arrived
+                && bot.fighting.is_none()
+                && bot.heading.is_none()
+                && fight.is_some()
+                && now < bot.sent_at + RESEND;
+            if ((!lost_fight && (target != bot.heading || fight != bot.fighting)) || again)
                 && let Some(handle) = bot.handle
             {
                 let process = match fight {
-                    Some(id) => attack(id),
+                    Some(id) => attack(id, bot.skill().aggro * 1.5),
                     None => target.map_or(control::Process::Idle, |h| match h {
                         Heading::Near(at) => goto(at),
                         Heading::Block(at) => get_to_block(at),

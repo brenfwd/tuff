@@ -711,7 +711,7 @@ pub fn start(meter: Option<Arc<dyn Meter>>) -> (HttpHandle, Server) {
     let (tx, rx) = mpsc::channel(256);
     let server = Server {
         rx,
-        tx: tx.clone(),
+        tx: tx.downgrade(),
         meter,
         listeners: HashMap::new(),
     };
@@ -721,7 +721,7 @@ pub fn start(meter: Option<Arc<dyn Meter>>) -> (HttpHandle, Server) {
 /// The HTTP actor's state; see [`start`].
 pub struct Server {
     rx: mpsc::Receiver<Command>,
-    tx: mpsc::Sender<Command>,
+    tx: mpsc::WeakSender<Command>,
     meter: Option<HttpMeter>,
     listeners: HashMap<String, Listener>,
 }
@@ -741,7 +741,7 @@ impl Server {
 
 async fn run(
     rx: &mut mpsc::Receiver<Command>,
-    tx: &mpsc::Sender<Command>,
+    tx: &mpsc::WeakSender<Command>,
     meter: &Option<HttpMeter>,
     listeners: &mut HashMap<String, Listener>,
 ) {
@@ -916,7 +916,8 @@ fn longest<'a, T>(table: &'a HashMap<String, T>, path: &str) -> Option<(&'a str,
     best.map(|(p, v)| (p.as_str(), v))
 }
 
-async fn bind(name: &str, config: HttpConfig, tx: &mpsc::Sender<Command>) -> Result<Bound> {
+async fn bind(name: &str, config: HttpConfig, tx: &mpsc::WeakSender<Command>) -> Result<Bound> {
+    let tx = tx.upgrade().context("the http server is closing")?;
     let mut sockets: Vec<TcpListener> = Vec::new();
     let mut port = config.port;
     for host in &config.hosts {

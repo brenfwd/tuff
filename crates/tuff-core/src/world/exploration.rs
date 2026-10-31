@@ -200,7 +200,7 @@ pub type Locate =
 pub struct ExplorationMaps {
     explore: Explore,
     locate: Option<Locate>,
-    shared: OnceLock<Arc<Shared>>,
+    shared: OnceLock<std::sync::Weak<Shared>>,
 }
 
 impl ExplorationMaps {
@@ -225,8 +225,8 @@ impl ExplorationMaps {
         origin: BlockPos,
         spec: ExplorationSpec,
     ) -> Option<oneshot::Receiver<Option<BlockPos>>> {
-        let shared = self.shared.get()?;
-        Some((self.locate?)(shared, dimension, origin, spec))
+        let shared = self.shared.get()?.upgrade()?;
+        Some((self.locate?)(&shared, dimension, origin, spec))
     }
 
     /// Starts making a map for `spec` searched from `origin`; the answer is
@@ -237,14 +237,14 @@ impl ExplorationMaps {
         origin: BlockPos,
         spec: ExplorationSpec,
     ) -> Option<oneshot::Receiver<Option<ExploredMap>>> {
-        let shared = self.shared.get()?;
-        Some((self.explore)(shared, dimension, origin, spec))
+        let shared = self.shared.get()?.upgrade()?;
+        Some((self.explore)(&shared, dimension, origin, spec))
     }
 }
 
 impl WorldService for ExplorationMaps {
     fn start(&self, shared: &Arc<Shared>) {
-        let _ = self.shared.set(shared.clone());
+        let _ = self.shared.set(Arc::downgrade(shared));
     }
 }
 

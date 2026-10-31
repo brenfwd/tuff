@@ -204,13 +204,11 @@ pub struct Intent {
     pub goto: Option<[f64; 3]>,
     /// An enemy bed to get to by the bots plugin's block goal.
     pub rush: Option<Pos>,
-    /// A point to look at.
-    pub look: Option<[f64; 3]>,
     /// The enemy to chase and fight by an attack process.
     pub fight: Option<Id>,
     pub dig: Option<Pos>,
     pub sprint: bool,
-    /// Release the drawn bow or throw a fire charge along the look.
+    /// Release the drawn bow or throw a fire charge at the aimed enemy.
     pub shoot: Option<Shot>,
     /// The enemy and weapon of a ranged attack is aimed at.
     pub aim: Option<(Id, Shot)>,

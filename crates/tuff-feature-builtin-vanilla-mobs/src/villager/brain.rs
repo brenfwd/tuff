@@ -192,6 +192,7 @@ impl Memories {
 /// What a villager at its job site may do next.
 #[derive(Debug, Clone, Copy)]
 enum Chore {
+    WorkAtPoi,
     StrollAround,
     StrollToSite,
     StrollToField,
@@ -244,6 +245,50 @@ pub struct Brain {
     gift: gift::State,
     show: Option<show::State>,
     wander: wander::State,
+    chore: Option<Chore>,
+}
+
+/// The bell gate shuffles socialising and strolling with equal weights, so
+/// socialising is tried first on half the ticks.
+fn socializes_before_strolling(roll: u32) -> bool {
+    roll == 0
+}
+
+impl Brain {
+    pub(super) fn running_behaviors(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        if self.sleeping.is_some() {
+            names.push("SleepInBed".to_owned());
+        }
+        if self.breeding.is_some() {
+            names.push("VillagerMakeLove".to_owned());
+        }
+        if self.social.interaction.is_some() {
+            names.push("InteractWith".to_owned());
+        }
+        match self.activity {
+            Some(Activity::Work) => {
+                names.push("WorkAtPoi".to_owned());
+                if let Some(chore) = self.chore {
+                    names.push(
+                        match chore {
+                            Chore::WorkAtPoi => "WorkAtPoi",
+                            Chore::StrollAround => "StrollAroundPoi",
+                            Chore::StrollToSite => "StrollToPoi",
+                            Chore::StrollToField => "StrollToPoiList",
+                            Chore::Harvest => "HarvestFarmland",
+                            Chore::Bonemeal => "UseBonemeal",
+                        }
+                        .to_owned(),
+                    );
+                }
+            }
+            Some(Activity::Meet) => names.push("GoToBell".to_owned()),
+            Some(Activity::Panic) => names.push("VillagerPanicTrigger".to_owned()),
+            _ => {}
+        }
+        names
+    }
 }
 
 /// When an unreachable point may be tried again: the delay grows by 40 to 79
@@ -884,24 +929,6 @@ impl Villager {
         if self.go_to(core, cx, site.pos, 9, 100) {
             return;
         }
-        if cx.tick >= self.brain.last_work_check + WORK_CHECK_INTERVAL && cx.rng.r#gen::<bool>() {
-            self.brain.last_work_check = cx.tick;
-            if distance_sq(center(site.pos), core.base.position) < WORK_DISTANCE.powi(2) {
-                self.brain.memories.last_worked_at_poi = Some(cx.tick as i64);
-                core.look_at_point(center(site.pos));
-                if let Some(sound) = self.data.profession.info().work_sound {
-                    core.sound(sound, 1.0, core.voice_pitch(cx.rng), cx);
-                }
-                self.bake_bread(core, site.pos, cx);
-                if self.is_farmer() {
-                    self.compost_seeds(core.base.id, site.pos, cx);
-                }
-                if self.should_restock(core, cx) {
-                    self.restock(core, cx);
-                }
-                return;
-            }
-        }
         if !core.navigation.is_done() {
             return;
         }
@@ -910,6 +937,9 @@ impl Villager {
         let farmer = self.is_farmer();
         let mut options: Vec<(u32, Chore)> =
             vec![(2, Chore::StrollAround), (5, Chore::StrollToSite)];
+        if cx.tick >= self.brain.last_work_check + WORK_CHECK_INTERVAL {
+            options.push((7, Chore::WorkAtPoi));
+        }
         if fields && near_site {
             options.push((5, Chore::StrollToField));
         }
@@ -917,31 +947,63 @@ impl Villager {
             options.push((if farmer { 2 } else { 5 }, Chore::Harvest));
         }
         options.push((if farmer { 4 } else { 7 }, Chore::Bonemeal));
-        let total: u32 = options.iter().map(|(w, _)| w).sum();
-        let mut roll = cx.rng.gen_range(0..total);
-        let chore = options
-            .iter()
-            .find(|(weight, _)| {
-                if roll < *weight {
-                    true
-                } else {
-                    roll -= weight;
-                    false
+        while !options.is_empty() {
+            let total: u32 = options.iter().map(|(w, _)| w).sum();
+            let mut roll = cx.rng.gen_range(0..total);
+            let at = options
+                .iter()
+                .position(|(weight, _)| {
+                    if roll < *weight {
+                        true
+                    } else {
+                        roll -= weight;
+                        false
+                    }
+                })
+                .unwrap_or(0);
+            let (_, chore) = options.remove(at);
+            self.brain.chore = Some(chore);
+            match chore {
+                Chore::WorkAtPoi => {
+                    if self.work_at_poi(core, cx, &site) {
+                        return;
+                    }
+                    continue;
                 }
-            })
-            .map(|(_, chore)| *chore)
-            .unwrap_or(Chore::StrollAround);
-        match chore {
-            Chore::StrollAround => self.stroll_around(core, cx, site.pos, 4.0),
-            Chore::StrollToSite => self.stroll_to_site(core, cx, &site),
-            Chore::StrollToField => self.stroll_to_field(core, cx),
-            Chore::Harvest => {
-                self.start_harvest(core, cx);
+                Chore::StrollAround => self.stroll_around(core, cx, site.pos, 4.0),
+                Chore::StrollToSite => self.stroll_to_site(core, cx, &site),
+                Chore::StrollToField => self.stroll_to_field(core, cx),
+                Chore::Harvest => {
+                    self.start_harvest(core, cx);
+                }
+                Chore::Bonemeal => {
+                    self.start_bonemeal(core, cx);
+                }
             }
-            Chore::Bonemeal => {
-                self.start_bonemeal(core, cx);
-            }
+            return;
         }
+    }
+
+    fn work_at_poi(&mut self, core: &mut MobCore, cx: &mut TickContext, site: &GlobalPos) -> bool {
+        self.brain.last_work_check = cx.tick;
+        if !cx.rng.r#gen::<bool>()
+            || distance_sq(center(site.pos), core.base.position) >= WORK_DISTANCE.powi(2)
+        {
+            return false;
+        }
+        self.brain.memories.last_worked_at_poi = Some(cx.tick as i64);
+        core.look_at_point(center(site.pos));
+        if let Some(sound) = self.data.profession.info().work_sound {
+            core.sound(sound, 1.0, core.voice_pitch(cx.rng), cx);
+        }
+        self.bake_bread(core, site.pos, cx);
+        if self.is_farmer() {
+            self.compost_seeds(core.base.id, site.pos, cx);
+        }
+        if self.should_restock(core, cx) {
+            self.restock(core, cx);
+        }
+        true
     }
 
     fn meet(&mut self, core: &mut MobCore, cx: &mut TickContext) {
@@ -954,7 +1016,11 @@ impl Villager {
         if self.go_to(core, cx, bell.pos, 6, 100) {
             return;
         }
-        self.socialize_at_bell(core, cx);
+        if self.brain.social.interaction.is_some()
+            || socializes_before_strolling(cx.rng.gen_range(0..2))
+        {
+            self.socialize_at_bell(core, cx);
+        }
         if self.brain.social.interaction.is_none() {
             self.stroll_around(core, cx, bell.pos, 40.0);
         }
@@ -1376,5 +1442,14 @@ mod tests {
         assert_eq!(retry.delay, 400);
         assert!(retry.still_valid(2399));
         assert!(!retry.still_valid(2400));
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn the_bell_gate_tries_socialising_first_on_half_the_ticks() {
+        assert_eq!(
+            (0..2).filter(|r| socializes_before_strolling(*r)).count(),
+            1
+        );
     }
 }
