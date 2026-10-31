@@ -335,6 +335,7 @@ mod crafter;
 mod debug;
 mod entities;
 mod entity_containers;
+mod evict;
 mod exploring;
 mod explosions;
 mod far_chunks;
@@ -569,6 +570,7 @@ impl RegionActor {
             self.pump_io();
             self.pump_light();
             self.answer_settled();
+            self.answer_evictions();
             if !self.sched.save_waiters.is_empty() && self.columns.values().all(|c| c.saving == 0) {
                 for done in self.sched.save_waiters.drain(..) {
                     let _ = done.send(());
@@ -994,6 +996,7 @@ impl RegionActor {
                     .collect();
                 let _ = reply.send(found);
             }
+            RegionRequest::Evict { chunks, reply } => self.evict(&chunks, reply),
             RegionRequest::Entities { reply } => {
                 let _ = reply.send(self.entity_snapshots(false));
             }

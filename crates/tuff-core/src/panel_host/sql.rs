@@ -10,6 +10,27 @@ use tuff_web_ui::host::HostFuture;
 use tuff_web_ui::sql::SqlHost;
 
 pub async fn loaded_among(shared: &Shared, touched: &[ChunkKey]) -> Vec<ChunkKey> {
+    ask_regions(shared, touched, |chunks, reply| {
+        RegionRequest::LoadedAmong { chunks, reply }
+    })
+    .await
+}
+
+/// Saves and unloads the touched chunks nothing keeps loaded, and answers
+/// with the ones still loaded.
+pub async fn evict_among(shared: &Shared, touched: &[ChunkKey]) -> Vec<ChunkKey> {
+    ask_regions(shared, touched, |chunks, reply| RegionRequest::Evict {
+        chunks,
+        reply,
+    })
+    .await
+}
+
+async fn ask_regions(
+    shared: &Shared,
+    touched: &[ChunkKey],
+    request: impl Fn(Arc<[ChunkKey]>, tokio::sync::oneshot::Sender<Vec<ChunkKey>>) -> RegionRequest,
+) -> Vec<ChunkKey> {
     let (reply, answer) = tokio::sync::oneshot::channel();
     if shared
         .manager
@@ -23,12 +44,7 @@ pub async fn loaded_among(shared: &Shared, touched: &[ChunkKey]) -> Vec<ChunkKey
     let mut loaded = Vec::new();
     for region in answer.await.unwrap_or_default() {
         let (reply, answer) = tokio::sync::oneshot::channel();
-        let asked = region
-            .request(RegionRequest::LoadedAmong {
-                chunks: chunks.clone(),
-                reply,
-            })
-            .await;
+        let asked = region.request(request(chunks.clone(), reply)).await;
         if asked && let Ok(mut found) = answer.await {
             loaded.append(&mut found);
         }
@@ -49,5 +65,9 @@ impl SqlHost for Shared {
 
     fn loaded_among<'a>(&'a self, touched: &'a [ChunkKey]) -> HostFuture<'a, Vec<ChunkKey>> {
         Box::pin(loaded_among(self, touched))
+    }
+
+    fn evict_among<'a>(&'a self, touched: &'a [ChunkKey]) -> HostFuture<'a, Vec<ChunkKey>> {
+        Box::pin(evict_among(self, touched))
     }
 }
