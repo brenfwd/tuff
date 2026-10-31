@@ -73,6 +73,8 @@ pub struct Engine {
     /// The movement attributes synced to the client, each with the tick
     /// the server first had it, oldest first.
     bodies: std::collections::VecDeque<(u64, Body)>,
+    /// The last tick the server had the player sprinting.
+    sprinted: Option<u64>,
     /// The last tick a firework pulled the player, as the server has it.
     boosted: Option<u64>,
     /// The first server velocity not yet replayed.
@@ -274,6 +276,7 @@ impl Engine {
             self.glided = Some(facts.tick);
         }
         let synced_before = self.synced_before(facts);
+        let sprint_synced = self.sprint_synced(facts);
         let glide_unsure = !facts.gliding
             && self
                 .glided
@@ -509,12 +512,19 @@ impl Engine {
             }
         }
         if search.found.is_none() {
-            // Only toward slower movement: a desync that would make the
-            // client faster is a cheat's claim, not an explanation.
+            // Only toward slower movement, or back to sprint speed within
+            // a round trip of the server having the player sprinting.
             let toggles = [
                 (
                     Input {
                         sprint: false,
+                        ..base
+                    },
+                    Tags::SPRINT_RESYNC,
+                ),
+                (
+                    Input {
+                        sprint: base.sprint || sprint_synced,
                         ..base
                     },
                     Tags::SPRINT_RESYNC,
@@ -755,6 +765,18 @@ impl Engine {
         Some(prediction)
     }
 
+    /// Compatibility: a client that stops sprinting still moves at sprint
+    /// speed when an attribute sync the server sent while it was sprinting
+    /// lands after the stop, so sprint speed stays explained for one round
+    /// trip after the server last had the player sprinting.
+    fn sprint_synced(&mut self, facts: &Facts) -> bool {
+        if facts.sprinting {
+            self.sprinted = Some(facts.tick);
+        }
+        self.sprinted
+            .is_some_and(|at| facts.tick.saturating_sub(at) <= sync_window(facts))
+    }
+
     /// The slowest and fastest movement attributes, other than the
     /// current ones, the client may still have moved under: those synced
     /// within the round trip before this move.
@@ -766,9 +788,7 @@ impl Engine {
         {
             self.bodies.push_back((facts.tick, facts.body));
         }
-        let round_trip = u64::try_from(facts.latency_ms.max(0)).unwrap_or(0) * 2;
-        let window = (round_trip.div_ceil(50) + SYNC_CATCH_UP).min(STATE_CATCH_UP);
-        let since = facts.tick.saturating_sub(window);
+        let since = facts.tick.saturating_sub(sync_window(facts));
         while self.bodies.len() > 1 && self.bodies[1].0 <= since {
             self.bodies.pop_front();
         }
@@ -1368,4 +1388,9 @@ impl Check for Predicted {
             fix: Fix::Teleport(facts.position),
         })
     }
+}
+
+fn sync_window(facts: &Facts) -> u64 {
+    let round_trip = u64::try_from(facts.latency_ms.max(0)).unwrap_or(0) * 2;
+    (round_trip.div_ceil(50) + SYNC_CATCH_UP).min(STATE_CATCH_UP)
 }
