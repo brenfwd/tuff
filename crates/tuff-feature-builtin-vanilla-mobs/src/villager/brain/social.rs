@@ -194,6 +194,7 @@ impl Villager {
             last_gossip: None,
         };
         cx.state.get::<Facts>().publish(id, cx.tick, now);
+        self.wants_golem = cx.state.get::<Facts>().wants_golem(id, cx.tick);
         let grudges = cx
             .players
             .iter()
@@ -734,6 +735,121 @@ mod tests {
             assert!(golem_spawn_allowed(spot, cx));
             assert!(!golem_spawn_allowed(BlockPos::new(5, 70, 0), cx));
             assert!(!golem_spawn_allowed(BlockPos::new(0, 69, 0), cx));
+        });
+    }
+
+    fn feed(
+        villager: &Villager,
+        core: &MobCore,
+        tick: u64,
+    ) -> tuff_core::protocol::play::DebugBrain {
+        use crate::Species;
+        match villager.debug_value(
+            core,
+            tuff_vanilla_data::registry::DebugSubscription::Brains,
+            tick,
+        ) {
+            Some(tuff_core::protocol::play::DebugValue::Brain(b)) => *b,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    fn fresh_villager() -> Villager {
+        use crate::Species;
+        Villager::create(&mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1))
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn villager_brain_debug_lists_the_inventory() {
+        use tuff_item::item::MintReason;
+        let mut villager = fresh_villager();
+        let core = MobCore::new(tuff_core::world::entity::EntityBase::new(
+            EntityType::Villager,
+            1,
+            1,
+            [0.0; 3],
+            [0.0; 3],
+        ));
+        assert_eq!(feed(&villager, &core, 0).inventory, "");
+        villager.add_item(ItemStack::mint(Item::Bread, 3, MintReason::Test));
+        villager.add_item(ItemStack::mint(Item::Wheat, 5, MintReason::Test));
+        let inventory = feed(&villager, &core, 0).inventory;
+        assert!(inventory.contains("bread x3"), "{inventory}");
+        assert!(inventory.contains("wheat x5"), "{inventory}");
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn villager_brain_debug_wants_golem_after_sleeping() {
+        let world = |_: BlockPos| Some(Block::Air.default_state());
+        crate::tests::with_world(&world, &[], |core, cx| {
+            let mut villager = fresh_villager();
+            cx.tick = 1000;
+            villager.brain.social.next_golem_scan = u64::MAX;
+            villager.social_upkeep(core, cx);
+            assert!(!feed(&villager, core, cx.tick).wants_golem);
+            villager.brain.memories.last_slept = Some(900);
+            villager.social_upkeep(core, cx);
+            assert!(feed(&villager, core, cx.tick).wants_golem);
+            let id = core.base.id;
+            cx.state.get::<Facts>().detected_golem(id, cx.tick);
+            cx.tick += 1;
+            villager.social_upkeep(core, cx);
+            assert!(!feed(&villager, core, cx.tick).wants_golem);
+            cx.tick += GOLEM_MEMORY;
+            villager.social_upkeep(core, cx);
+            assert!(feed(&villager, core, cx.tick).wants_golem);
+            cx.tick = 900 + GOLEM_SLEEP_WINDOW as u64;
+            villager.social_upkeep(core, cx);
+            assert!(!feed(&villager, core, cx.tick).wants_golem);
+        });
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn villager_brain_debug_lists_running_behaviors() {
+        let mut villager = fresh_villager();
+        let core = MobCore::new(tuff_core::world::entity::EntityBase::new(
+            EntityType::Villager,
+            1,
+            1,
+            [0.0; 3],
+            [0.0; 3],
+        ));
+        assert!(feed(&villager, &core, 0).behaviors.is_empty());
+        villager.brain.activity = Some(tuff_vanilla_data::registry::Activity::Work);
+        villager.brain.chore = Some(super::super::Chore::Harvest);
+        assert_eq!(
+            feed(&villager, &core, 0).behaviors,
+            vec!["WorkAtPoi".to_owned(), "HarvestFarmland".to_owned()]
+        );
+        villager.brain.activity = Some(tuff_vanilla_data::registry::Activity::Meet);
+        assert_eq!(
+            feed(&villager, &core, 0).behaviors,
+            vec!["GoToBell".to_owned()]
+        );
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn work_at_poi_is_a_weighted_chore_that_needs_the_station_within_reach() {
+        let world = |_: BlockPos| Some(Block::Air.default_state());
+        crate::tests::with_world(&world, &[], |core, cx| {
+            let mut villager = fresh_villager();
+            let site = super::super::GlobalPos {
+                dimension: super::super::dimension_key(cx),
+                pos: BlockPos::new(10, 64, 10),
+            };
+            cx.tick = 1000;
+            core.base.position = [30.5, 64.0, 30.5];
+            assert!(!villager.work_at_poi(core, cx, &site));
+            assert_eq!(villager.brain.memories.last_worked_at_poi, None);
+            assert_eq!(villager.brain.last_work_check, 1000);
+            core.base.position = [10.5, 64.0, 10.5];
+            let worked = (0..64).any(|_| villager.work_at_poi(core, cx, &site));
+            assert!(worked);
+            assert_eq!(villager.brain.memories.last_worked_at_poi, Some(1000));
         });
     }
 }
