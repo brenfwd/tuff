@@ -8,6 +8,7 @@ fn view<'a>(me: [f64; 3], enemies: &'a [Seen]) -> View<'a> {
         ally: None,
         now: 0,
         elapsed: 0,
+        alive_for: u64::MAX,
         me,
         home: me,
         forge: me,
@@ -255,4 +256,30 @@ fn followers_trail_a_distant_teammate() {
     assert_eq!(goals::bedwars().tick(&v).goto, v.ally);
     v.ally = Some([2.0, 64.0, 0.0]);
     assert_eq!(goals::bedwars().tick(&v).goto, None);
+}
+
+#[test]
+fn a_fighting_bot_stops_sprinting_in_melee_range() {
+    let near = [Seen { id: 1, pos: [2.0, 0.0, 0.0] }];
+    let far = [Seen { id: 1, pos: [8.0, 0.0, 0.0] }];
+    let mut fight = goals::Fight::default();
+    for (enemies, sprints) in [(&near, false), (&far, true)] {
+        let v = view([0.0; 3], enemies);
+        fight.start(&v);
+        let mut out = Intent::default();
+        fight.tick(&v, &mut out);
+        assert_eq!(out.sprint, sprints);
+    }
+}
+
+#[test]
+fn a_respawned_bot_regroups_before_it_rushes_again() {
+    let beds = [[10, 64, 10]];
+    let mut v = view([0.0, 64.0, 0.0], &[]);
+    v.enemy_beds = &beds;
+    v.elapsed = v.skill.rush_after * 2;
+    v.alive_for = 0;
+    assert!(goals::bedwars().tick(&v).rush.is_none());
+    v.alive_for = v.skill.rush_after / 3;
+    assert_eq!(goals::bedwars().tick(&v).rush, Some(beds[0]));
 }

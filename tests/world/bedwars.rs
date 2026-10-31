@@ -862,14 +862,17 @@ async fn a_bot_shoots_a_target_across_a_gap() {
 
 /// The bots as (red, blue) by where they stand after the start.
 async fn by_team(run: &WithBots, names: [&str; 2]) -> (String, String) {
-    let mut red = None;
-    for name in names {
-        let at = run.numbers(&format!("data get entity {name} Pos")).await;
-        if at.len() >= 3 && at[2] < -20.0 {
-            red = Some(name);
-        }
-    }
-    let red = red.expect("a bot stands on the red island");
+    let red = run
+        .until("a bot on the red island", || async {
+            for name in names {
+                let at = run.numbers(&format!("data get entity {name} Pos")).await;
+                if at.len() >= 3 && at[2] < -20.0 {
+                    return Some(name);
+                }
+            }
+            None
+        })
+        .await;
     let blue = names.into_iter().find(|n| *n != red).unwrap();
     (red.into(), blue.into())
 }
@@ -916,7 +919,6 @@ async fn no_violations(run: &WithBots) {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "flaky: bots fight instead of reaching the bed (about 1 in 3 alone); see todo infrastructure/bedwars-bot-world-test-flakes"]
 async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
     let Some(run) = WithBots::start().await else {
         return;
@@ -947,7 +949,6 @@ async fn a_bot_walks_to_the_enemy_bed_by_a_block_goal_and_breaks_it() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "flaky: an anticheat flag on the bots fails it under load; see todo infrastructure/bedwars-bot-world-test-flakes"]
 async fn a_bot_defends_its_bed_against_an_intruder() {
     let Some(run) = WithBots::start().await else {
         return;

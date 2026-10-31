@@ -605,6 +605,12 @@ impl ActionInterceptor {
         packet: &Serverbound,
         echoes: u32,
     ) -> Verdict {
+        if session.is_dead() || session.mode.game_mode == GameMode::Spectator {
+            player
+                .velocity
+                .record(&session.motion.velocity_sent, session.net.latency_ms);
+            player.velocity.excuse_all();
+        }
         let mut settings = player.settings(session);
         if !movement_checked(
             &session.shared.game_rules.borrow(),
