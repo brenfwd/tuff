@@ -18,7 +18,6 @@ use tuff_world_model::BlockPos;
 const INTERACT_RANGE_SQ: f64 = 64.0;
 const INTERACT_DISTANCE_SQ: f64 = 5.0;
 const INTERACT_TIMEOUT: u64 = 200;
-const INTERACT_CHANCE: u32 = 20;
 const BELL_SOCIAL_CHANCE: u32 = 100;
 const BELL_SOCIAL_SPEED: f64 = 0.3;
 const BELL_SOCIAL_NEAR: f64 = 4.0;
@@ -268,19 +267,6 @@ impl Villager {
 
     /// Wanders up to a villager close by now and then, and deals with the
     /// one it has walked up to.
-    pub(super) fn interact_with_villagers(&mut self, core: &mut MobCore, cx: &mut TickContext) {
-        if let Some(interaction) = self.brain.social.interaction {
-            self.interact_step(core, cx, interaction);
-            return;
-        }
-        if !core.navigation.is_done() || cx.rng.gen_range(0..INTERACT_CHANCE) != 0 {
-            return;
-        }
-        if !self.start_villager_interaction(core, cx) {
-            self.start_cat_interaction(core, cx);
-        }
-    }
-
     /// Continues a walk up to a villager or cat; false when there is none.
     pub(super) fn interaction_step(&mut self, core: &mut MobCore, cx: &mut TickContext) -> bool {
         let Some(interaction) = self.brain.social.interaction else {

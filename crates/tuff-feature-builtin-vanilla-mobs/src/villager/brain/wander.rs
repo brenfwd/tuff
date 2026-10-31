@@ -222,11 +222,29 @@ impl Villager {
     /// village-bound stroll, walking to the look target, a baby bouncing
     /// on a bed, or standing still 30-60 ticks, tried until one starts.
     pub(super) fn idle_run_one(&mut self, core: &mut MobCore, cx: &mut TickContext) {
+        self.run_one(core, cx, &IDLE, 30..=60);
+    }
+
+    /// A baby's day: the same shuffle with a heavier bed and standing still
+    /// for 20-40 ticks.
+    pub(super) fn play_run_one(&mut self, core: &mut MobCore, cx: &mut TickContext) {
+        self.run_one(core, cx, &PLAY, 20..=40);
+    }
+
+    fn run_one(
+        &mut self,
+        core: &mut MobCore,
+        cx: &mut TickContext,
+        table: &[(Idle, u32)],
+        nothing: std::ops::RangeInclusive<u64>,
+    ) {
         if cx.tick < self.brain.wander.idle_until || !core.navigation.is_done() {
             return;
         }
-        let mut order =
-            IDLE.map(|(idle, weight)| (cx.rng.r#gen::<f32>().powf(1.0 / weight as f32), idle));
+        let mut order: Vec<(f32, Idle)> = table
+            .iter()
+            .map(|&(idle, weight)| (cx.rng.r#gen::<f32>().powf(1.0 / weight as f32), idle))
+            .collect();
         order.sort_by(|a, b| b.0.total_cmp(&a.0));
         for (_, idle) in order {
             match idle {
@@ -257,7 +275,7 @@ impl Villager {
                     }
                 }
                 Idle::Nothing => {
-                    self.brain.wander.idle_until = cx.tick + cx.rng.gen_range(30..=60);
+                    self.brain.wander.idle_until = cx.tick + cx.rng.gen_range(nothing);
                     return;
                 }
             }
@@ -272,6 +290,15 @@ const IDLE: [(Idle, u32); 6] = [
     (Idle::LookWalk, 1),
     (Idle::Bed, 1),
     (Idle::Nothing, 1),
+];
+
+const PLAY: [(Idle, u32); 6] = [
+    (Idle::Villager, 2),
+    (Idle::Cat, 1),
+    (Idle::Stroll, 1),
+    (Idle::LookWalk, 1),
+    (Idle::Bed, 2),
+    (Idle::Nothing, 2),
 ];
 
 #[derive(Clone, Copy)]

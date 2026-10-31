@@ -54,8 +54,7 @@ impl Villager {
         if self.bounce_step(core, cx) {
             return;
         }
-        self.interact_with_villagers(core, cx);
-        if self.brain.social.interaction.is_some() || !core.navigation.is_done() {
+        if self.interaction_step(core, cx) || !core.navigation.is_done() {
             return;
         }
         if cx.tick < self.brain.play.next_choice {
@@ -64,15 +63,19 @@ impl Villager {
         if self.play_tag(core, cx) {
             return;
         }
-        match cx.rng.gen_range(0..4) {
-            0 => {
-                self.brain.play.next_choice = cx.tick + cx.rng.gen_range(20..=40);
-            }
-            1 => self.stroll(core, cx, SPEED),
-            _ => {
-                self.start_bounce(core, cx);
-            }
+        if self.other_baby_villager_near(core, cx) {
+            return;
         }
+        self.play_run_one(core, cx);
+    }
+
+    fn other_baby_villager_near(&self, core: &MobCore, cx: &TickContext) -> bool {
+        cx.entities.iter().any(|e| {
+            e.kind == EntityType::Villager
+                && e.id != core.base.id
+                && e.living.as_ref().is_some_and(|l| l.alive && l.age < 0)
+                && distance_sq(e.position, core.base.position) <= TAG_RANGE_SQ
+        })
     }
 
     fn play_tag(&mut self, core: &mut MobCore, cx: &mut TickContext) -> bool {

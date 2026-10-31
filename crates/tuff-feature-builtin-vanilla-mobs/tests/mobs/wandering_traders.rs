@@ -276,3 +276,111 @@ async fn the_trader_timer_survives_a_restart_in_sqlite() {
         Arc::new(tuff_storage::sqlite::SqliteBackend::open(dir.path().join("world.tuff")).unwrap());
     timer_survives_restart(backend).await;
 }
+
+async fn trader_in_pen(
+    world: &TestWorld,
+    region: &RegionHandle,
+    nbt: Compound,
+) -> crate::world::messages::EntitySnapshot {
+    place_blocks(world, region, pen(0, 40)).await;
+    summon(
+        region,
+        EntityType::WanderingTrader,
+        nbt.with("DespawnDelay", 48_000),
+        [3.5, SKY as f64 + 1.0, 3.5],
+    )
+    .await;
+    mobs(region, EntityType::WanderingTrader).await[0].clone()
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_trader_sent_to_a_position_walks_towards_it() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let chunk = ChunkPos::new(0, 0);
+    let region = world.region(chunk.region()).await;
+    let (player, mut events) = PlayerHandle::new(100);
+    subscribe(&region, &player, &mut events, &[chunk]).await;
+    let target = Tag::IntArray(vec![30, SKY + 1, 3]);
+    let trader = trader_in_pen(
+        &world,
+        &region,
+        Compound::new().with("wander_target", target),
+    )
+    .await;
+    let id = trader.id;
+    let found = wait_for(&world, &region, 200, |found| {
+        found
+            .iter()
+            .any(|s| s.id == id && s.position[0] > trader.position[0] + 4.0)
+    })
+    .await;
+    assert!(found.iter().any(|s| s.id == id));
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_trader_runs_from_a_zombie() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let chunk = ChunkPos::new(0, 0);
+    let region = world.region(chunk.region()).await;
+    let (player, mut events) = PlayerHandle::new(100);
+    subscribe(&region, &player, &mut events, &[chunk]).await;
+    let trader = trader_in_pen(&world, &region, Compound::new()).await;
+    summon(
+        &region,
+        EntityType::Zombie,
+        Compound::new().with("NoAI", true),
+        [8.5, SKY as f64 + 1.0, 3.5],
+    )
+    .await;
+    let id = trader.id;
+    let start = trader.position;
+    wait_for(&world, &region, 100, |found| {
+        found
+            .iter()
+            .any(|s| s.id == id && (s.position[0] - 8.5).abs() > (start[0] - 8.5).abs() + 2.0)
+    })
+    .await;
+    world.shutdown().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_hurt_trader_panics_and_runs() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let chunk = ChunkPos::new(0, 0);
+    let region = world.region(chunk.region()).await;
+    let (player, mut events) = PlayerHandle::new(100);
+    subscribe(&region, &player, &mut events, &[chunk]).await;
+    let trader = trader_in_pen(&world, &region, Compound::new()).await;
+    region
+        .request(player_at(
+            &player,
+            [5.5, SKY as f64 + 1.0, 3.5],
+            PlayerLooks::default(),
+        ))
+        .await;
+    world.ticks(2).await;
+    region
+        .request(RegionRequest::AttackEntity {
+            attacker: player.clone(),
+            target: trader.id,
+            attack: attack(1.0, None),
+            sweep: None,
+        })
+        .await;
+    let (id, start) = (trader.id, trader.position);
+    wait_for(&world, &region, 100, |found| {
+        found.iter().any(|s| {
+            let moved = (s.position[0] - start[0]).hypot(s.position[2] - start[2]);
+            s.id == id && moved > 2.0
+        })
+    })
+    .await;
+    world.shutdown().await;
+}

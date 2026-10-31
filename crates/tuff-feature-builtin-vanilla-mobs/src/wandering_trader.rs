@@ -716,4 +716,50 @@ mod tests {
             assert!(!invisible(core), "milk clears it");
         });
     }
+
+    fn with_trader(f: impl FnOnce(&mut Mob<WanderingTrader>, &mut TickContext)) {
+        crate::tests::with_context(|_, cx| {
+            let base = EntityBase::new(
+                EntityType::WanderingTrader,
+                2,
+                2,
+                [0.5, 64.0, 0.5],
+                [0.0; 3],
+            );
+            let mut mob = Mob::<WanderingTrader>::new(base, cx.rng);
+            f(&mut mob, cx);
+        });
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn it_walks_ten_blocks_at_a_time_to_a_far_wander_target_and_stops_within_two() {
+        with_trader(|mob, cx| {
+            let mut goal = WanderToPosition { stop_distance: 2.0 };
+            assert!(!goal.can_use(&mut mob.core, cx), "no target, no walk");
+            mob.core.homeward = true;
+            mob.core.bound_origin = Some(BlockPos::new(30, 64, 0));
+            assert!(goal.can_use(&mut mob.core, cx));
+            mob.core.bound_origin = Some(BlockPos::new(1, 64, 0));
+            assert!(!goal.can_use(&mut mob.core, cx), "within two blocks");
+            goal.stop(&mut mob.core, cx);
+            assert!(!mob.core.homeward);
+            assert!(mob.core.navigation.is_done());
+        });
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn trading_holds_it_still() {
+        with_trader(|mob, cx| {
+            mob.core.base.on_ground = true;
+            mob.core.signal = 0;
+            let mut goal = TradeWithPlayer;
+            assert!(!goal.can_use(&mut mob.core, cx), "nobody trading");
+            mob.core.move_to_position([8.5, 64.0, 0.5], 0.35, cx);
+            assert!(!mob.core.navigation.is_done());
+            goal.start(&mut mob.core, cx);
+            assert!(mob.core.navigation.is_done());
+        });
+    }
 }
