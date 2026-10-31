@@ -89,7 +89,7 @@ impl Planner {
 
     /// The path cell a bot one block off the line stands beside: a stride
     /// that drifts sideways under a lagging view must not stop the run.
-    fn rejoin(&self, at: Pos) -> Option<Pos> {
+    pub fn rejoin(&self, at: Pos) -> Option<Pos> {
         let end = self.path.len().saturating_sub(1);
         self.path[..end]
             .iter()

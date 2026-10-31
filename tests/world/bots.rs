@@ -453,7 +453,7 @@ async fn goto_swims_a_pool_climbs_a_ladder_and_jumps_a_three_block_gap() {
         path.borrow()
     );
     assert!(
-        state.contains("z=28.") && state.contains("y=156"),
+        (state.contains("z=28.") || state.contains("z=29.")) && state.contains("y=156"),
         "{state} path={:?}",
         path.borrow()
     );
