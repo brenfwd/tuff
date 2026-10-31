@@ -6,8 +6,9 @@
 use super::*;
 use tuff_core::protocol::play::{PlayerActionStatus, Serverbound};
 use tuff_replay::corpus::Lane;
+use tuff_storage::admin::PermissionLevel;
 
-use super::anticheat::{Walker, operator_alerts, physical_walker};
+use super::anticheat::{Walker, operator_alerts};
 
 fn state_of(text: &str) -> tuff_vanilla_data::BlockState {
     let (name, props) = match text.split_once('[') {
@@ -38,33 +39,119 @@ struct Setup {
     floor: Option<i32>,
 }
 
-async fn replay_lane(lane: &Lane, base: ChunkPos, origin: [i32; 3]) {
-    replay_lane_with(lane, base, origin, |_, _| Setup::default()).await;
+/// Each world start keeps a few MB for the life of the process, so lanes
+/// share worlds: a world hosts up to this many lanes, each in its own region
+/// with its own player.
+const LANES_PER_WORLD: usize = 8;
+
+struct Host {
+    _dir: TestDir,
+    world: TestWorld,
+}
+
+impl Host {
+    fn start() -> Self {
+        let dir = TestDir::new();
+        let world = TestWorld::start(dir.path());
+        world
+            .shared
+            .config
+            .set_text("tuff.anticheat.enforceUncalibrated", "true")
+            .unwrap();
+        Self { _dir: dir, world }
+    }
+
+    async fn shutdown(self) {
+        self.world.shutdown().await;
+    }
+}
+
+/// The base chunk and block origin of a lane in slot `slot` of its world:
+/// the same spot inside region `(1 + slot, 1)`.
+fn slot_place(slot: usize) -> (ChunkPos, [i32; 3]) {
+    let base = ChunkPos::new(46 + 32 * i32::try_from(slot).unwrap(), 46);
+    (base, [base.x * 16 - 10, 100, base.z * 16 + 8])
+}
+
+fn region_of(base: ChunkPos) -> RegionPos {
+    RegionPos::new(base.x.div_euclid(32), base.z.div_euclid(32))
+}
+
+async fn slot_walker(world: &TestWorld, id: i32, base: ChunkPos) -> Walker {
+    let region = world.region(region_of(base)).await;
+    let (mut session, frames) = session_with_outbound(world, id);
+    session.mode.permission = PermissionLevel::All;
+    let (handle, mut events) = PlayerHandle::new(id);
+    let chunks: Vec<_> = (-1..=1)
+        .flat_map(|dx| (-1..=1).map(move |dz| ChunkPos::new(base.x + dx, base.z + dz)))
+        .collect();
+    session.view.subscribed.extend(chunks.iter().copied());
+    region
+        .request(RegionRequest::Subscribe {
+            player: handle.clone(),
+            chunks: chunks.clone(),
+        })
+        .await;
+    let mut waiting = chunks.len();
+    while waiting > 0 {
+        let event = events.recv().await.expect("region events");
+        waiting -= usize::from(matches!(event, PlayerEvent::Chunk { .. }));
+        session.on_event(event).await;
+    }
+    while !session.view.queue.is_empty() {
+        session.view.unacked_batches = 0;
+        session.send_chunk_batch();
+    }
+    let (x, z) = (
+        f64::from(base.x * 16 + 8) + 0.5,
+        f64::from(base.z * 16 + 8) + 0.5,
+    );
+    let floor = BlockPos::new(x as i32, 100, z as i32);
+    place_blocks(
+        world,
+        &region,
+        [(floor, tuff_vanilla_data::Block::Stone.default_state())],
+    )
+    .await;
+    while let Ok(event) = events.try_recv() {
+        session.on_event(event).await;
+    }
+    session.pose.position = [x, 101.0, z];
+    session.pose.on_ground = true;
+    Walker {
+        session,
+        frames,
+        events,
+        handle,
+        floor_y: 101.0,
+        x,
+        z,
+    }
+}
+
+async fn replay_lane(world: &TestWorld, slot: usize, lane: &Lane) {
+    replay_lane_with(world, slot, lane, |_, _| Setup::default()).await;
 }
 
 async fn replay_lane_with(
+    world: &TestWorld,
+    slot: usize,
     lane: &Lane,
-    base: ChunkPos,
-    origin: [i32; 3],
     prepare: impl FnOnce(&mut Walker, &mut Vec<(BlockPos, tuff_vanilla_data::BlockState)>) -> Setup,
 ) {
-    let dir = TestDir::new();
-    let world = TestWorld::start(dir.path());
-    world
-        .shared
-        .config
-        .set_text("tuff.anticheat.enforceUncalibrated", "true")
-        .unwrap();
+    let (base, origin) = slot_place(slot);
+    let id = i32::try_from(slot).unwrap() + 1;
+    let alerted = operator_alerts(world).await.len();
     let board = world
         .shared
         .services
         .get::<tuff_feature_builtin_vanilla_anticheat::service::Board>();
     let mut traces = board.map(|b| {
-        b.set_debug("Player1", None, true);
+        b.set_debug(&format!("Player{id}"), None, true);
         b.traces()
     });
-    let mut w = physical_walker(&world, 1, base).await;
-    let region = world.region(RegionPos::new(1, 1)).await;
+    let mut w = slot_walker(world, id, base).await;
+    let region = world.region(region_of(base)).await;
     let mut blocks = Vec::new();
     for f in &lane.fills {
         let state = state_of(&f.state);
@@ -102,7 +189,7 @@ async fn replay_lane_with(
             .await;
         assert!(summoned.await.unwrap(), "{id} summons");
     }
-    place_blocks(&world, &region, blocks).await;
+    place_blocks(world, &region, blocks).await;
     world.ticks(2).await;
     while let Ok(event) = w.events.try_recv() {
         w.session.on_event(event).await;
@@ -127,7 +214,7 @@ async fn replay_lane_with(
     }
     for (i, packet) in lane.packets.iter().enumerate() {
         if let Some(blocks) = placements.get(&i) {
-            place_blocks(&world, &region, blocks.clone()).await;
+            place_blocks(world, &region, blocks.clone()).await;
             world.ticks(1).await;
             while let Ok(event) = w.events.try_recv() {
                 w.session.on_event(event).await;
@@ -191,7 +278,7 @@ async fn replay_lane_with(
                 std::time::Duration::from_millis(50),
             );
             if w.session.sync.pending_teleport.is_some() {
-                eprintln!("ALERTS {:?}", operator_alerts(&world).await);
+                eprintln!("ALERTS {:?}", operator_alerts(world).await);
                 let mut recent = Vec::new();
                 while let Some(Ok(event)) = traces.as_mut().map(|t| t.try_recv()) {
                     recent.push(event.trace.to_string());
@@ -209,14 +296,13 @@ async fn replay_lane_with(
                 w.session.pose.position
             );
             if w.session.disconnected {
-                eprintln!("ALERTS {:?}", operator_alerts(&world).await);
+                eprintln!("ALERTS {:?}", operator_alerts(world).await);
             }
             assert!(!w.session.disconnected, "lane {}: kicked", lane.name);
         }
     }
-    let alerts = operator_alerts(&world).await;
+    let alerts = operator_alerts(world).await.split_off(alerted);
     assert!(alerts.is_empty(), "lane {}: {alerts:?}", lane.name);
-    world.shutdown().await;
 }
 
 #[tuff_core::watchdog]
@@ -261,15 +347,16 @@ fn rtt_of(file: &str) -> u64 {
 
 /// Every recorded file at one latency profile except the two canonical
 /// files, which have their own tests.
-async fn replay_latency_profile(rtt: u64) {
+async fn replay_latency_profile(rtt: u64, special: bool) {
     for name in corpus_files() {
         if name == "movement_corpus.bin"
             || name == "movement_corpus_special.bin"
             || rtt_of(&name) != rtt
+            || name.starts_with("movement_corpus_special") != special
         {
             continue;
         }
-        if name.starts_with("movement_corpus_special") {
+        if special {
             replay_special_file(&name, None).await;
         } else {
             replay_base_file(&name).await;
@@ -280,19 +367,37 @@ async fn replay_latency_profile(rtt: u64) {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_recorded_latency_corpus_never_flags_rtt0() {
-    replay_latency_profile(0).await;
+    replay_latency_profile(0, false).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_special_latency_corpus_never_flags_rtt0() {
+    replay_latency_profile(0, true).await;
 }
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_recorded_latency_corpus_never_flags_rtt100() {
-    replay_latency_profile(100).await;
+    replay_latency_profile(100, false).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_special_latency_corpus_never_flags_rtt100() {
+    replay_latency_profile(100, true).await;
 }
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_recorded_latency_corpus_never_flags_rtt250() {
-    replay_latency_profile(250).await;
+    replay_latency_profile(250, false).await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_recorded_special_latency_corpus_never_flags_rtt250() {
+    replay_latency_profile(250, true).await;
 }
 
 #[tuff_core::watchdog]
@@ -402,23 +507,36 @@ fn corpus_manifest_matches_fixtures() {
 }
 
 async fn replay_base_file(file: &str) {
-    let base = ChunkPos::new(46, 46);
-    let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
-    let abs = [
-        f64::from(origin[0]),
-        f64::from(origin[1]),
-        f64::from(origin[2]),
-    ];
-    let lanes = read_lanes(file, abs);
+    let lanes = replay_file(file, None, false).await;
     let canonical = file == "movement_corpus.bin";
     assert!(
-        lanes.len() >= if canonical { 11 } else { 1 },
-        "{file}: expected all recorded lanes, got {}",
-        lanes.len()
+        lanes >= if canonical { 11 } else { 1 },
+        "{file}: expected all recorded lanes, got {lanes}"
     );
-    for lane in &lanes {
-        replay_lane(lane, base, origin).await;
+}
+
+/// Replays the lanes of `file` (only the one named `only`, if given) and
+/// returns how many lanes the file holds.
+async fn replay_file(file: &str, only: Option<&str>, special: bool) -> usize {
+    let decoded: Vec<Vec<Lane>> = (0..LANES_PER_WORLD)
+        .map(|slot| read_lanes(file, slot_place(slot).1.map(f64::from)))
+        .collect();
+    let picked: Vec<usize> = (0..decoded[0].len())
+        .filter(|&i| only.is_none_or(|name| decoded[0][i].name == name))
+        .collect();
+    for group in picked.chunks(LANES_PER_WORLD) {
+        let host = Host::start();
+        for (slot, &i) in group.iter().enumerate() {
+            let lane = &decoded[slot][i];
+            if special {
+                replay_special_lane(&host.world, slot, lane).await;
+            } else {
+                replay_lane(&host.world, slot, lane).await;
+            }
+        }
+        host.shutdown().await;
     }
+    decoded[0].len()
 }
 
 /// Packet indices where a rocket was fired, read off the recording: the
@@ -519,27 +637,19 @@ async fn replay_special(only: &str) {
 }
 
 async fn replay_special_file(file: &str, only: Option<&str>) {
-    let base = ChunkPos::new(46, 46);
-    let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
-    let abs = origin.map(f64::from);
-    let lanes = read_lanes(file, abs);
+    let lanes = replay_file(file, only, true).await;
     let canonical = file == "movement_corpus_special.bin";
     assert!(
-        lanes.len() >= if canonical { 6 } else { 1 },
+        lanes >= if canonical { 6 } else { 1 },
         "{file}: expected every special lane"
     );
-    for lane in lanes
-        .iter()
-        .filter(|l| only.is_none_or(|name| l.name == name))
-    {
-        replay_special_lane(lane, base, origin).await;
-    }
 }
 
-async fn replay_special_lane(lane: &Lane, base: ChunkPos, origin: [i32; 3]) {
+async fn replay_special_lane(world: &TestWorld, slot: usize, lane: &Lane) {
     let name = lane.name.clone();
+    let origin = slot_place(slot).1;
     {
-        replay_lane_with(lane, base, origin, |w, blocks| {
+        replay_lane_with(world, slot, lane, |w, blocks| {
             if name.starts_with("elytra") {
                 w.session.inventory.set_slot(
                     crate::world::inventory::Inventory::armor_slot(
@@ -634,8 +744,7 @@ fn triage_corpus_lanes() {
     let dir = scratch.clone().unwrap_or_else(fixtures_dir);
     let only = std::env::var("TUFF_CORPUS_FILES").ok();
     let flagged_dir = fixtures_dir().join("../../../target/corpus-flagged");
-    let base = ChunkPos::new(46, 46);
-    let origin = [base.x * 16 - 10, 100, base.z * 16 + 8];
+    let origin = slot_place(0).1;
     let mut total = 0;
     for file in corpus_files_in(&dir) {
         if only.as_deref().is_some_and(|o| !file.starts_with(o)) {
@@ -656,11 +765,13 @@ fn triage_corpus_lanes() {
                     .build()
                     .unwrap();
                 rt.block_on(async {
+                    let host = Host::start();
                     if special {
-                        replay_special_lane(&lane, base, origin).await;
+                        replay_special_lane(&host.world, 0, &lane).await;
                     } else {
-                        replay_lane(&lane, base, origin).await;
+                        replay_lane(&host.world, 0, &lane).await;
                     }
+                    host.shutdown().await;
                 });
             });
             if run.join().is_ok() {
