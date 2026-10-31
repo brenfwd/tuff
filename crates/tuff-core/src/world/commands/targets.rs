@@ -336,8 +336,12 @@ pub async fn select_entity(
 
 /// The source as a target, for commands that default to `@s`.
 pub async fn source_player(ctx: &mut Context<'_>) -> Result<PlayerSnapshot, CommandError> {
-    let SourceKind::Player { id, .. } = ctx.source.kind else {
-        return Err(CommandError::simple("permissions.requires.player"));
+    let id = match ctx.source.kind {
+        SourceKind::Player { id, .. } => id,
+        SourceKind::Console(_) => ctx
+            .source
+            .entity
+            .ok_or_else(|| CommandError::simple("permissions.requires.player"))?,
     };
     players(ctx)
         .await
