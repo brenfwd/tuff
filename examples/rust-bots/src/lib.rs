@@ -587,6 +587,7 @@ plugin!(BotsPlugin {
     requests: [
         "cap.cross-plugin = all -- serves the bots API and notifies owners",
         "cap.player-read = all -- locates follow and attack targets",
+        "cap.files = 1 MiB -- reads build files",
     ],
 });
 

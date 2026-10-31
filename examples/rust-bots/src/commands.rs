@@ -6,9 +6,9 @@
 use std::collections::BTreeMap;
 
 use tuff_bots_api::control::{
-    BlockPos, BotId, BuildSpec, ControlError, FarmSpec, FlySpec, FollowSpec, GetToBlockSpec, Goal,
-    LeafGoal, Location, MineSpec, Model, NearGoal, Policy, Process, RespawnPolicy, Skill,
-    SpawnSpec, Vec3, XzGoal,
+    BlockPos, BotId, BuildBlock, BuildSpec, ControlError, FarmSpec, FlySpec, FollowSpec,
+    GetToBlockSpec, Goal, LeafGoal, Location, MineSpec, Model, NearGoal, Policy, Process,
+    RespawnPolicy, Skill, SpawnSpec, Vec3, XzGoal,
 };
 
 use tuff_plugin_sdk::command::{Node, Suggest, argument, command, literal, parser};
@@ -238,6 +238,44 @@ fn describe_process(process: &Process) -> &'static str {
     }
 }
 
+/// The spec for `blocks` relative to the commander's position.
+pub fn build_spec(by: &Sender, blocks: Vec<BuildBlock>) -> BuildSpec {
+    BuildSpec {
+        origin: BlockPos {
+            x: by.pos.x.floor() as i32 + BUILD_GAP,
+            y: by.pos.y.floor() as i32,
+            z: by.pos.z.floor() as i32,
+        },
+        blocks,
+    }
+}
+
+pub fn start_build(
+    reg: &mut Registry,
+    bots: &mut Bots,
+    name: &str,
+    by: &Sender,
+    blocks: Vec<BuildBlock>,
+) -> Result<(), String> {
+    let id = bot_of(reg, bots, name, by)?;
+    bots.set_process(OWNER, id, Process::Build(build_spec(by, blocks)))
+        .map_err(describe)
+}
+
+/// A path inside the plugin's file store: relative, `/` separated.
+pub fn file_path(path: &str) -> Result<String, String> {
+    let path = path.trim();
+    let bad = path.is_empty()
+        || path.len() > 200
+        || path.starts_with('/')
+        || path.contains(['\\', ':'])
+        || path.split('/').any(|s| matches!(s, "" | "." | ".."));
+    if bad {
+        return Err("give a relative file path like houses/hut.txt".into());
+    }
+    Ok(path.to_owned())
+}
+
 pub fn run(
     cmd: Cmd,
     by: &Sender,
@@ -349,17 +387,7 @@ pub fn run(
                     "a line",
                 ),
             };
-            let id = bot_of(reg, bots, name, by)?;
-            let spec = BuildSpec {
-                origin: BlockPos {
-                    x: by.pos.x.floor() as i32 + BUILD_GAP,
-                    y: by.pos.y.floor() as i32,
-                    z: by.pos.z.floor() as i32,
-                },
-                blocks,
-            };
-            bots.set_process(OWNER, id, Process::Build(spec))
-                .map_err(describe)?;
+            start_build(reg, bots, name, by, blocks)?;
             Ok(format!("{name} is building {what}"))
         }
         Cmd::Farm(name, n) => {
@@ -465,11 +493,11 @@ fn hex(uuid: &tuff_plugin_sdk::types::Uuid) -> String {
     format!("{:016x}{:016x}", uuid.high, uuid.low)
 }
 
-fn execute(ctx: &Ctx, cmd: impl FnOnce(&Ctx) -> Result<Cmd, String>) -> Outcome {
+fn sender_of(ctx: &Ctx) -> Result<Sender, String> {
     let player = ctx.player()?;
     let uuid = hex(&player.uuid);
     let at = tuff_plugin_sdk::players::location(&uuid).ok_or("you are not in a world")?;
-    let by = Sender {
+    Ok(Sender {
         uuid,
         dimension: at.dimension,
         pos: Vec3 {
@@ -479,12 +507,44 @@ fn execute(ctx: &Ctx, cmd: impl FnOnce(&Ctx) -> Result<Cmd, String>) -> Outcome 
         },
         admin: tuff_plugin_sdk::world::acting::has_permission("bots.command.admin")
             .unwrap_or(false),
-    };
+    })
+}
+
+fn execute(ctx: &Ctx, cmd: impl FnOnce(&Ctx) -> Result<Cmd, String>) -> Outcome {
+    let by = sender_of(ctx)?;
     let cmd = cmd(ctx)?;
     let text = crate::with(|bots, host| {
         REGISTRY.with(|reg| run(cmd, &by, &mut reg.borrow_mut(), bots, host))
     })?;
     ctx.reply(text).map_err(|e| format!("{e:?}"))?;
+    Ok(1)
+}
+
+fn build_file(ctx: &Ctx) -> Outcome {
+    let by = sender_of(ctx)?;
+    let name: String = ctx.get("name")?;
+    let path = file_path(&ctx.get::<String>("path")?)?;
+    let replier = ctx.replier();
+    crate::with(|bots, _| REGISTRY.with(|reg| bot_of(&mut reg.borrow_mut(), bots, &name, &by)))?;
+    ctx.reply(format!("{name} is reading {path}"))
+        .map_err(|e| format!("{e:?}"))?;
+    tuff_plugin_sdk::exec::spawn(async move {
+        let text = match tuff_plugin_sdk::files::read_string(&path).await {
+            Ok(text) => text,
+            Err(e) => {
+                let _ = replier.reply(&format!("cannot read {path}: {e:?}"));
+                return;
+            }
+        };
+        let answer = crate::build::parse_blocks(&text).and_then(|blocks| {
+            let count = blocks.len();
+            crate::with(|bots, _| {
+                REGISTRY.with(|reg| start_build(&mut reg.borrow_mut(), bots, &name, &by, blocks))
+            })
+            .map(|()| format!("{name} is building {count} blocks from {path}"))
+        });
+        let _ = replier.reply(&answer.unwrap_or_else(|e| format!("{path}: {e}")));
+    });
     Ok(1)
 }
 
@@ -607,6 +667,11 @@ pub fn register() -> Result<(), String> {
                                     ),
                                 ),
                             ),
+                        ),
+                    )
+                    .then(
+                        literal("file").then(
+                            argument("path", parser::greedy()).executes(|ctx| build_file(&ctx)),
                         ),
                     )
                     .then(literal("line").then(argument("axis", parser::word()).then(
@@ -962,6 +1027,58 @@ mod tests {
         assert!(
             rig.run(box_cmd([3, 3, 3], "stone", false), &sender("bb", false))
                 .is_err()
+        );
+        assert_eq!(rig.process("Bob"), Process::Idle);
+    }
+
+    #[test]
+    fn file_paths_stay_inside_the_store() {
+        assert_eq!(file_path(" houses/hut.txt ").unwrap(), "houses/hut.txt");
+        for bad in [
+            "",
+            "/etc/passwd",
+            "../x",
+            "a/../x",
+            "a//b",
+            "./a",
+            "a\\b",
+            "c:x",
+            "a/",
+        ] {
+            assert!(file_path(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_file_build_starts_east_of_the_commander() {
+        let mut rig = Rig::new();
+        let op = sender("aa", false);
+        rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
+        let blocks = crate::build::parse_blocks("0 0 0 stone\n1 1 0 oak_log[axis=x]").unwrap();
+        start_build(&mut rig.reg, &mut rig.bots, "Bob", &op, blocks).unwrap();
+        let Process::Build(spec) = rig.process("Bob") else {
+            panic!("not building");
+        };
+        assert_eq!(spec.origin.x, 5 + BUILD_GAP);
+        assert_eq!(spec.blocks.len(), 2);
+    }
+
+    #[test]
+    fn a_bad_file_or_stranger_leaves_the_process_alone() {
+        let mut rig = Rig::new();
+        let op = sender("aa", false);
+        rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
+        assert!(crate::build::parse_blocks("0 0 stone").is_err());
+        let blocks = crate::build::parse_blocks("0 0 0 stone").unwrap();
+        assert!(
+            start_build(
+                &mut rig.reg,
+                &mut rig.bots,
+                "Bob",
+                &sender("bb", false),
+                blocks
+            )
+            .is_err()
         );
         assert_eq!(rig.process("Bob"), Process::Idle);
     }

@@ -90,6 +90,11 @@ struct Run {
 
 impl Run {
     async fn start(with_bots: bool) -> Option<Run> {
+        Self::start_with(with_bots, &[]).await
+    }
+
+    /// `files` are written to the bots plugin's `files/` store first.
+    async fn start_with(with_bots: bool, files: &[(&str, &str)]) -> Option<Run> {
         let consumer = built(
             "crates/tuff-plugin-wasm/tests/guests/rust-bots-consumer",
             "rust_bots_consumer.wasm",
@@ -102,12 +107,20 @@ impl Run {
         if with_bots {
             std::fs::write(plugins.join("bots.wasm"), &bots).unwrap();
         }
+        for (name, text) in files {
+            let path = plugins.join("bots").join("files").join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
         let backend = Arc::new(
             tuff_storage::sqlite::SqliteBackend::open(dir.path().join("world.mcserver")).unwrap(),
         );
         let config = backend.config().expect("sqlite keeps the config");
         config
-            .write_plugin_grant("bots", Some("cross-plugin = all\nplayer-read = all"))
+            .write_plugin_grant(
+                "bots",
+                Some("cross-plugin = all\nplayer-read = all\nfiles = 1 MiB"),
+            )
             .unwrap();
         config
             .write_plugin_grant(
@@ -550,7 +563,11 @@ impl Run {
             .command(player, line.to_owned())
             .await
             .expect("the bots plugin owns /bots");
-        outcome.replies.join("\n")
+        let mut text = outcome.replies.join("\n");
+        if let Err(reason) = outcome.result {
+            text.push_str(&reason);
+        }
+        text
     }
 }
 
@@ -1409,6 +1426,62 @@ async fn bots_build_honours_stair_and_log_orientation() {
     run.build_and_wait(other, "Mate2", "bots build Mate2 line x 1 oak_log[axis=x]")
         .await;
     assert!(run.block_is(2, 150, 8, "oak_log[axis=x]").await);
+    let flags = run.server("anticheat violations").await;
+    assert!(
+        flags.contains("No player has anti-cheat violations"),
+        "{flags}"
+    );
+    run.stop().await;
+}
+
+const HUT: &str = "# stairs and stone, a log over a gap\n\
+0 0 0 oak_stairs[facing=east,half=bottom]\n\
+1 0 0 stone\n\
+0 1 0 stone\n\
+1 2 0 oak_log[axis=y]\n\
+1 3 0 stone\n";
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bots_build_a_schematic_file() {
+    let Some(run) = Run::start_with(true, &[("houses/hut.txt", HUT)]).await else {
+        return;
+    };
+    run.build_arena().await;
+    let op = run.operator_bot("Op", 0, 1, "Mate").await;
+    run.server("give Mate stone 16").await;
+    run.server("give Mate oak_stairs 4").await;
+    run.server("give Mate oak_log 4").await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let bad = run.op(op, "bots build Mate file ../world.mcserver").await;
+    assert!(bad.contains("relative file path"), "{bad}");
+    let reply = run.op(op, "bots build Mate file houses/hut.txt").await;
+    assert!(reply.contains("reading"), "{reply}");
+    run.within(BUILD_PATIENCE, || async {
+        run.op(op, "bots list")
+            .await
+            .contains("Mate: building")
+            .then_some(())
+    })
+    .await
+    .expect("the file build starts");
+    let list = run
+        .within(BUILD_PATIENCE, || async {
+            let list = run.op(op, "bots list").await;
+            list.contains("Mate: idle").then_some(list)
+        })
+        .await
+        .expect("the file build finishes");
+    assert!(!list.contains("failed"), "{list}");
+    assert!(
+        run.block_is(2, 150, 0, "oak_stairs[facing=east,half=bottom]")
+            .await
+    );
+    assert!(run.block_is(3, 150, 0, "stone").await);
+    assert!(run.block_is(2, 151, 0, "stone").await);
+    assert!(run.block_is(3, 152, 0, "oak_log[axis=y]").await);
+    assert!(run.block_is(3, 153, 0, "stone").await);
+    assert!(run.block_is(3, 151, 0, "air").await);
     let flags = run.server("anticheat violations").await;
     assert!(
         flags.contains("No player has anti-cheat violations"),
