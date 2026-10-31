@@ -45,6 +45,9 @@ name = "allocator"
 name = "bench_memory"
 
 [[test]]
+name = "world_leak"
+
+[[test]]
 name = "timings_overhead"
 
 [[bench]]
