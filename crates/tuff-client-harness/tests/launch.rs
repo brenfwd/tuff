@@ -252,19 +252,20 @@ async fn supervisor_streams_events_and_releases_lock_after_reap() {
     })
     .unwrap();
     let mut rx = handle.subscribe();
-    let chat = handle
-        .wait_event(&mut rx, Duration::from_secs(10), |e| {
-            matches!(e, ClientEvent::Chat(_))
-        })
-        .await
-        .unwrap();
-    assert_eq!(chat, ClientEvent::Chat("hello".into()));
-    handle
-        .wait_event(&mut rx, Duration::from_secs(10), |e| {
-            matches!(e, ClientEvent::ProtocolError(_))
-        })
-        .await
-        .unwrap();
+    let (mut chat, mut protocol_error) = (None, false);
+    while chat.is_none() || !protocol_error {
+        match handle
+            .wait_event(&mut rx, Duration::from_secs(10), |e| {
+                matches!(e, ClientEvent::Chat(_) | ClientEvent::ProtocolError(_))
+            })
+            .await
+            .unwrap()
+        {
+            ClientEvent::ProtocolError(_) => protocol_error = true,
+            event => chat = Some(event),
+        }
+    }
+    assert_eq!(chat, Some(ClientEvent::Chat("hello".into())));
     assert!(
         ClientLock::try_acquire(&lock_path, LockOwner::current("x"))
             .unwrap()
