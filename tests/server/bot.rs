@@ -391,3 +391,53 @@ async fn list_shows_team_decorated_names() {
     handle.shutdown().await.unwrap();
     task.await.unwrap().unwrap();
 }
+
+#[tuff_core::watchdog]
+#[tokio::test]
+async fn execute_as_runs_raid_from_console() {
+    let instance = TempDir::new();
+    let mut features = tuff::vanilla_features::all();
+    features.extend(tuff::features::make(&["raid-command".to_string()]).unwrap());
+    let server = Server::builder()
+        .features(features)
+        .instance_dir(instance.path().to_path_buf())
+        .binds(vec!["127.0.0.1:0".into()])
+        .online_mode(false)
+        .whitelist(false)
+        .view_distance(2)
+        .seed(1)
+        .build();
+    let handle = server.handle();
+    let task = tokio::spawn(server.run());
+    let addr = handle.local_addrs().await.unwrap()[0];
+    let bot = Bot::connect(
+        addr,
+        BotConfig {
+            view_distance: 2,
+            ..BotConfig::new("Tester")
+        },
+    )
+    .await
+    .unwrap();
+    bot.wait_for(|state| state.chunks > 0).await.unwrap();
+    let key = |lines: Vec<tuff_item::text::TextComponent>| {
+        lines[0].to_value()["translate"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
+
+    let lines = handle.run_command("raid check").await.unwrap();
+    assert_eq!(key(lines), "permissions.requires.player");
+    for command in ["raid check", "raid stop"] {
+        let lines = handle
+            .run_command(&format!("execute as Tester run {command}"))
+            .await
+            .unwrap();
+        assert_ne!(key(lines), "permissions.requires.player", "{command}");
+    }
+
+    drop(bot);
+    handle.shutdown().await.unwrap();
+    task.await.unwrap().unwrap();
+}
