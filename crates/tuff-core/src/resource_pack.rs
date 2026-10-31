@@ -334,7 +334,7 @@ impl ResourcePacks {
         let (events, _) = broadcast::channel(256);
         let actor = Actor {
             rx,
-            me: tx.clone(),
+            me: tx.downgrade(),
             base_url,
             config,
             entries: HashMap::new(),
@@ -531,7 +531,7 @@ impl ResourcePacks {
 
 struct Actor {
     rx: mpsc::Receiver<Message>,
-    me: mpsc::Sender<Message>,
+    me: mpsc::WeakSender<Message>,
     base_url: crate::public_ip::BaseUrl,
     config: crate::config::ConfigStore,
     entries: HashMap<u128, Entry>,
@@ -580,6 +580,9 @@ impl Actor {
         let me = self.me.clone();
         tokio::task::spawn_blocking(move || {
             let result = build(&source);
+            let Some(me) = me.upgrade() else {
+                return;
+            };
             let _ = me.blocking_send(Message::Built {
                 id,
                 generation,
