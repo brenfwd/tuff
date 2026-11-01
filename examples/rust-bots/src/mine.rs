@@ -208,10 +208,13 @@ impl Miner {
 
     /// Gives up on the block being worked on (unreachable or stuck).
     pub fn skip_current(&mut self) {
-        if let Some(pos) = self.current.take() {
+        if let Some(pos) = self.current.take()
+            && !self.tunnelling
+        {
             self.found.remove(&pos);
             self.bad.insert(pos);
         }
+        self.tunnelling = false;
         self.phase = Phase::Seek;
     }
 
@@ -518,5 +521,50 @@ impl Miner {
             },
             radius: 0.5,
         }))))
+    }
+}
+
+#[cfg(test)]
+mod tunnel_tests {
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::world::{Class, Pending};
+
+    struct Air;
+
+    impl Blocks for Air {
+        fn class_at(&mut self, _: i32, _: i32, _: i32) -> Result<Class, Pending> {
+            Ok(Class::PASSABLE)
+        }
+
+        fn state_at(&mut self, _: i32, _: i32, _: i32) -> Result<Option<Rc<str>>, Pending> {
+            Ok(None)
+        }
+
+        fn find(&mut self, _: SectionKey, _: &[String]) -> Result<Vec<Pos>, Pending> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn v(x: f64, y: f64, z: f64) -> Vec3 {
+        Vec3 { x, y, z }
+    }
+
+    #[test]
+    fn a_tunnel_cell_given_up_on_is_never_dug_later_as_a_wanted_block() {
+        let me = v(0.5, 64.0, 0.5);
+        let mut miner = Miner::new(&["minecraft:iron_ore".into()], 1, 6, true, None, None, &me);
+        miner.tunnelling = true;
+        miner.current = Some((0, 64, -1));
+        miner.phase = Phase::Digging {
+            pos: (0, 64, -1),
+            ticks: 3,
+        };
+        miner.skip_current();
+        assert!(miner.bad.is_empty());
+        assert!(!miner.tunnelling);
+        assert_eq!(miner.bad_in_reach(&me, &mut Air), None);
+        assert_eq!(miner.mined, 0);
     }
 }
