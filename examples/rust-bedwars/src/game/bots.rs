@@ -152,6 +152,49 @@ fn bridge_point(host: &mut dyn Host, dimension: &str, me: [f64; 3], goal: Pos) -
     open.then_some([ahead[0], me[1], ahead[2]])
 }
 
+fn is_drop(host: &mut dyn Host, dimension: &str, column: Pos) -> bool {
+    let [x, y, z] = column;
+    host.block_at(dimension, [x, y - 1, z]).as_deref() == Some("minecraft:air")
+        && host.block_at(dimension, [x, y - 2, z]).as_deref() == Some("minecraft:air")
+}
+
+const NEIGHBOURS: [(i32, i32); 8] = [
+    (-1, -1),
+    (-1, 0),
+    (-1, 1),
+    (0, -1),
+    (0, 1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+];
+const EDGE_SEARCH: i32 = 3;
+
+/// The centre of the nearest column with a solid 3x3 floor within
+/// `EDGE_SEARCH` blocks, when the bot stands within a block of a drop.
+pub(super) fn safe_ground(host: &mut dyn Host, dimension: &str, me: [f64; 3]) -> Option<[f64; 3]> {
+    let [bx, by, bz] = block_of(me);
+    let near_drop = NEIGHBOURS
+        .iter()
+        .any(|&(dx, dz)| is_drop(host, dimension, [bx + dx, by, bz + dz]));
+    if !near_drop {
+        return None;
+    }
+    let mut cells: Vec<(i32, i32)> = (-EDGE_SEARCH..=EDGE_SEARCH)
+        .flat_map(|dx| (-EDGE_SEARCH..=EDGE_SEARCH).map(move |dz| (dx, dz)))
+        .filter(|&(dx, dz)| dx.abs() > 1 || dz.abs() > 1)
+        .collect();
+    cells.sort_by_key(|&(dx, dz)| dx * dx + dz * dz);
+    let (dx, dz) = cells.into_iter().find(|&(dx, dz)| {
+        let (cx, cz) = (bx + dx, bz + dz);
+        !is_drop(host, dimension, [cx, by, cz])
+            && NEIGHBOURS
+                .iter()
+                .all(|&(ax, az)| !is_drop(host, dimension, [cx + ax, by, cz + az]))
+    })?;
+    Some([f64::from(bx + dx) + 0.5, me[1], f64::from(bz + dz) + 0.5])
+}
+
 fn goto(at: Pos) -> control::Process {
     control::Process::Goto(control::Goal::Leaf(control::LeafGoal::Near(
         control::NearGoal {
@@ -535,8 +578,14 @@ impl Game {
                 .filter(|(v, t, _)| *t == team && *v != id)
                 .map(|l| l.2)
                 .min_by(|a, b| dist(*a, me).total_cmp(&dist(*b, me)));
+            let edge = enemies
+                .iter()
+                .any(|e| dist(e.pos, me) <= bot.skill().aggro * 1.5)
+                .then(|| safe_ground(host, &arena.dimension, me))
+                .flatten();
             let view = View {
                 role,
+                edge,
                 ally,
                 now,
                 elapsed: now - game.started,

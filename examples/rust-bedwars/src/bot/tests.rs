@@ -10,6 +10,7 @@ fn view<'a>(me: [f64; 3], enemies: &'a [Seen]) -> View<'a> {
         elapsed: 0,
         alive_for: u64::MAX,
         me,
+        edge: None,
         home: me,
         forge: me,
         saving: false,
@@ -279,4 +280,47 @@ fn a_respawned_bot_regroups_before_it_rushes_again() {
     assert!(goals::bedwars().tick(&v).rush.is_none());
     v.alive_for = v.skill.rush_after / 3;
     assert_eq!(goals::bedwars().tick(&v).rush, Some(beds[0]));
+}
+
+#[test]
+fn a_fighting_bot_at_an_edge_retreats_instead_of_chasing() {
+    let enemies = [Seen { id: 1, pos: [2.0, 0.0, 0.0] }];
+    let mut v = view([0.0; 3], &enemies);
+    v.edge = Some([-3.5, 0.0, 0.5]);
+    let mut fight = goals::Fight::default();
+    fight.start(&v);
+    let mut out = Intent::default();
+    fight.tick(&v, &mut out);
+    assert_eq!(out.goto, Some([-3.5, 0.0, 0.5]));
+    assert_eq!(out.fight, None);
+    assert!(!out.sprint);
+}
+
+#[test]
+fn a_fighting_bot_away_from_an_edge_still_chases() {
+    let enemies = [Seen { id: 1, pos: [8.0, 0.0, 0.0] }];
+    let v = view([0.0; 3], &enemies);
+    let mut fight = goals::Fight::default();
+    fight.start(&v);
+    let mut out = Intent::default();
+    fight.tick(&v, &mut out);
+    assert_eq!(out.goto, Some([8.0, 0.0, 0.0]));
+    assert_eq!(out.fight, Some(1));
+}
+
+#[test]
+fn a_bed_defender_at_an_edge_retreats_unless_the_bed_is_close() {
+    let enemies = [Seen { id: 1, pos: [10.0, 64.0, 0.0] }];
+    let mut v = view([0.0, 64.0, 0.0], &enemies);
+    v.bed = Some([10, 64, 0]);
+    v.edge = Some([-3.5, 64.0, 0.5]);
+    let mut defend = goals::DefendBed;
+    let mut out = Intent::default();
+    defend.tick(&v, &mut out);
+    assert_eq!(out.goto, Some([-3.5, 64.0, 0.5]));
+    assert_eq!(out.fight, None);
+    v.bed = Some([2, 64, 0]);
+    let mut out = Intent::default();
+    defend.tick(&v, &mut out);
+    assert_eq!(out.goto, Some([2.5, 65.0, 0.5]));
 }

@@ -171,6 +171,9 @@ pub struct View<'a> {
     /// Ticks since the bot last spawned.
     pub alive_for: u64,
     pub me: [f64; 3],
+    /// The closest solid-ground cell centre to retreat to while the bot is
+    /// within 1 block of a drop, else None.
+    pub edge: Option<[f64; 3]>,
     pub home: [f64; 3],
     /// Where the team's resources spawn.
     pub forge: [f64; 3],
