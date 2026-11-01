@@ -842,6 +842,7 @@ impl PlayerSession {
                 }
             }
             ActionOutcome::Rejected(corrections) => {
+                self.view.mirror.revert_predictions(sequence);
                 self.send_all(corrections.iter().cloned());
                 self.send_inventory();
             }

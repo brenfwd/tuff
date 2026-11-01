@@ -18,29 +18,41 @@ pub struct ChunkMirror {
     chunks: ChunkMap<Arc<Chunk>>,
     clock: u64,
     recent: VecDeque<(u64, BlockPos)>,
+    predicted: Vec<(i32, BlockPos, BlockState)>,
 }
 
 /// Ticks a delivered block change stays in the recent window.
 pub const RECENT_TICKS: u64 = 20;
 const RECENT_CAP: usize = 256;
+const PREDICTED_CAP: usize = 64;
 
 impl ChunkMirror {
     /// Records `chunk` as sent to the client.
     pub fn insert(&mut self, pos: ChunkPos, chunk: Arc<Chunk>) {
+        self.forget_predictions_in(pos);
         self.chunks.insert(pos, chunk);
     }
 
     pub(super) fn remove(&mut self, pos: ChunkPos) {
+        self.forget_predictions_in(pos);
         self.chunks.remove(&pos);
     }
 
     pub(super) fn clear(&mut self) {
+        self.predicted.clear();
         self.chunks.clear();
+    }
+
+    fn forget_predictions_in(&mut self, pos: ChunkPos) {
+        self.predicted
+            .retain(|(_, at, _)| ChunkPos::of_block(*at) != pos);
     }
 
     pub fn apply(&mut self, pos: ChunkPos, changes: &[(BlockPos, BlockState)]) {
         if let Some(chunk) = self.chunks.get_mut(&pos) {
             apply_changes(chunk, changes);
+            self.predicted
+                .retain(|(_, at, _)| !changes.iter().any(|(changed, _)| changed == at));
             for (at, _) in changes {
                 if self.recent.len() >= RECENT_CAP {
                     self.recent.pop_front();
@@ -95,11 +107,41 @@ impl ChunkMirror {
             .any(|(at, p)| *p == pos && self.clock.saturating_sub(*at) <= ticks)
     }
 
-    /// Records a block the client placed ahead of the server's answer; the
-    /// answer, when it comes, replaces it either way.
-    pub fn predict(&mut self, pos: BlockPos, state: BlockState) {
-        if let Some(chunk) = self.chunks.get_mut(&ChunkPos::of_block(pos)) {
-            apply_changes(chunk, &[(pos, state)]);
+    /// Records a block the client placed ahead of the server's answer; a
+    /// delivered change replaces it, and a refusal restores what was sent.
+    pub fn predict(&mut self, sequence: i32, pos: BlockPos, state: BlockState) {
+        let Some(chunk) = self.chunks.get_mut(&ChunkPos::of_block(pos)) else {
+            return;
+        };
+        if !chunk.shape().contains_y(pos.y) {
+            return;
+        }
+        let prior = match self.predicted.iter().position(|(_, at, _)| *at == pos) {
+            Some(index) => self.predicted.remove(index).2,
+            None => chunk.get(pos.x, pos.y, pos.z),
+        };
+        if self.predicted.len() >= PREDICTED_CAP {
+            self.predicted.remove(0);
+        }
+        self.predicted.push((sequence, pos, prior));
+        apply_changes(chunk, &[(pos, state)]);
+    }
+
+    /// Puts back the blocks last sent for the predictions of the action
+    /// numbered `sequence` that no delivered change has settled: the server
+    /// refused it, so the world still holds them and the client is resent
+    /// them.
+    pub fn revert_predictions(&mut self, sequence: i32) {
+        let mut index = 0;
+        while index < self.predicted.len() {
+            if self.predicted[index].0 != sequence {
+                index += 1;
+                continue;
+            }
+            let (_, pos, state) = self.predicted.remove(index);
+            if let Some(chunk) = self.chunks.get_mut(&ChunkPos::of_block(pos)) {
+                apply_changes(chunk, &[(pos, state)]);
+            }
         }
     }
 
