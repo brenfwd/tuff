@@ -131,6 +131,11 @@ impl Run {
         );
         let config = backend.config().expect("sqlite keeps the config");
         config
+            .write_properties(&tuff_storage::admin::ServerProperties::parse(
+                "level-type=minecraft:flat\n",
+            ))
+            .unwrap();
+        config
             .write_plugin_grant(
                 "bots",
                 Some("cross-plugin = all\nplayer-read = all\nfiles = 1 MiB"),
@@ -168,6 +173,7 @@ impl Run {
             _dir: dir,
         };
         run.host().sync().await;
+        run.server("gamerule spawn_mobs false").await;
         Some(run)
     }
 
@@ -1447,8 +1453,8 @@ async fn a_bot_bone_meals_young_wheat() {
 impl Run {
     async fn build_arena(&self) {
         self.server("forceload add -16 -16 31 31").await;
-        self.fill_loaded("fill -3 149 -3 12 149 12 stone").await;
-        self.server("fill -3 150 -3 12 160 12 air").await;
+        self.fill_loaded("fill -12 149 -12 21 149 21 stone").await;
+        self.server("fill -12 150 -12 21 160 21 air").await;
     }
 
     async fn operator_bot(&self, op_name: &str, at_z: i32, ordinal: u32, bot: &str) -> u128 {
