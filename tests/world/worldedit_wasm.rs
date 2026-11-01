@@ -13,6 +13,18 @@ use tuff_world_model::pos::ChunkPos;
 const BUILD: &str = "examples/rust-worldedit/target/wasm32-unknown-unknown/release/worldedit.wasm";
 
 pub(crate) fn build_example(dir: &Path) -> bool {
+    static BUILT: std::sync::Mutex<Option<std::collections::HashMap<std::path::PathBuf, bool>>> =
+        std::sync::Mutex::new(None);
+    let mut guard = BUILT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *guard
+        .get_or_insert_default()
+        .entry(dir.to_path_buf())
+        .or_insert_with(|| cargo_build_example(dir))
+}
+
+fn cargo_build_example(dir: &Path) -> bool {
     std::process::Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
         .args([
             "build",
