@@ -350,6 +350,7 @@ pub struct Placer {
     rejected: HashSet<Pos>,
     slack: f64,
     chase: u32,
+    resent: bool,
     pub grounded: bool,
 }
 
@@ -661,6 +662,7 @@ impl Placer {
             rejected: HashSet::new(),
             slack: STAND_RADIUS,
             chase: 0,
+            resent: false,
         }
     }
 
@@ -691,7 +693,13 @@ impl Placer {
                     return Hands::Done;
                 }
                 if ticks > limit {
-                    return Hands::Failed("not placed".into());
+                    if self.resent {
+                        return Hands::Failed("not placed".into());
+                    }
+                    self.resent = true;
+                    self.settled = None;
+                    self.phase = Phase::Seek;
+                    return Hands::Wait;
                 }
                 self.phase = Phase::Working { pos, ticks, limit };
                 Hands::Wait
@@ -1022,5 +1030,35 @@ mod stand_tests {
         let next = placer.tick(&me, &mut world, &carried);
         assert!(matches!(next, Hands::Goal(_)), "{next:?}");
         assert!(placer.stand.is_some_and(|s| s != (4, 64, 5)));
+    }
+
+    #[test]
+    fn a_click_the_server_dropped_is_sent_once_more_before_giving_up() {
+        let mut world = Field {
+            solid: HashSet::new(),
+        };
+        let target = BlockPos { x: 5, y: 64, z: 5 };
+        let mut placer = Placer::new(&target, "minecraft:stone");
+        let me = Vec3 {
+            x: 3.5,
+            y: 64.0,
+            z: 5.5,
+        };
+        let carried = vec![(36u8, "minecraft:stone".to_string(), 8u32)];
+        let mut clicks = 0;
+        let mut outcome = Hands::Wait;
+        for _ in 0..200 {
+            outcome = placer.tick(&me, &mut world, &carried);
+            match &outcome {
+                Hands::Act(_) => clicks += 1,
+                Hands::Wait => {}
+                _ => break,
+            }
+            if clicks == 2 {
+                world.solid.insert((5, 64, 5));
+            }
+        }
+        assert_eq!(clicks, 2);
+        assert_eq!(outcome, Hands::Done);
     }
 }
