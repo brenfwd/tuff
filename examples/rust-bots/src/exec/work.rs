@@ -69,6 +69,8 @@ pub enum Action {
     Select(u8),
     /// Starts digging a block; the body keeps digging until it breaks.
     Dig(Pos),
+    /// Starts digging a block through this face.
+    DigFace(Pos, Face),
     /// Uses the held item on a face of a block.
     Place { against: Pos, face: Face },
     /// Uses the held item on a side face at this height (0 to 1) of the

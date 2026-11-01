@@ -185,15 +185,19 @@ impl Host for Real {
     }
 
     fn dig(&mut self, body: Body, pos: (i32, i32, i32), from: &control::Vec3) {
-        let Some((fake, _, _)) = self.bodies.get(&body) else {
-            return;
-        };
         let (dx, dy, dz) = (
             from.x - (f64::from(pos.0) + 0.5),
             from.y + 1.62 - (f64::from(pos.1) + 0.5),
             from.z - (f64::from(pos.2) + 0.5),
         );
-        let face = direction(exec::Face::dug_from(dx, dy, dz));
+        self.dig_face(body, pos, exec::Face::dug_from(dx, dy, dz), from);
+    }
+
+    fn dig_face(&mut self, body: Body, pos: (i32, i32, i32), face: exec::Face, _: &control::Vec3) {
+        let Some((fake, _, _)) = self.bodies.get(&body) else {
+            return;
+        };
+        let face = direction(face);
         let _ = fake.dig(
             tuff_plugin_sdk::types::BlockPos {
                 x: pos.0,
