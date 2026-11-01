@@ -186,6 +186,15 @@ impl RegionActor {
             })
     }
 
+    /// What clients are sent in place of the concealed block at `pos`.
+    pub(super) fn anti_xray_stand_in(&self, pos: BlockPos) -> Option<BlockState> {
+        if !self.anti_xray_conceals(pos) {
+            return None;
+        }
+        let plan = self.chunk_io.anti_xray.plan.as_ref()?;
+        Some(plan.stand_in_at(pos, |at| self.block(at)))
+    }
+
     /// Whether a block entity update at `pos` may go out, now that its
     /// update has been taken off the queue.
     pub(super) fn anti_xray_allows_entity_data(&mut self, pos: BlockPos) -> bool {
