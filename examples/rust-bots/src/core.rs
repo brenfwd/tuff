@@ -120,6 +120,11 @@ pub trait Host {
     fn inventory(&mut self, _body: Body) -> Vec<Carried> {
         Vec::new()
     }
+    /// The enchantments (id and level) on the stack in a menu slot of the
+    /// body's inventory, at most 16.
+    fn enchantments(&mut self, _body: Body, _slot: u8) -> Vec<(String, u32)> {
+        Vec::new()
+    }
     /// How the body breaks blocks with its hotbar.
     fn tools(&mut self, _body: Body) -> Option<Rc<RefCell<dyn Tools>>> {
         None

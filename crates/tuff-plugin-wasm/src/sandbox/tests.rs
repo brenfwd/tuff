@@ -764,13 +764,70 @@ fn locations_world_calls_and_messages_without_a_world() {
     );
     assert_eq!(state.host_acting_inventory(), Ok(None));
     state.caller.as_mut().unwrap().items = Some(Items {
-        held: Some(("minecraft:stick".into(), 1)),
-        slots: vec![(36, "minecraft:stick".into(), 1)],
+        held: Some(("minecraft:stick".into(), 1, Vec::new())),
+        slots: vec![(36, "minecraft:stick".into(), 1, Vec::new())],
         stacks: Vec::new(),
     });
     let inventory = state.host_acting_inventory().unwrap().unwrap();
     assert_eq!(inventory.held.unwrap().item, "minecraft:stick");
     assert_eq!(inventory.slots[0].index, 36);
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn acting_inventory_reports_enchantments() {
+    let mut state = state();
+    acting(&mut state, steve());
+    let many: Vec<(String, i32)> = (0..20)
+        .map(|i| (format!("minecraft:e{i:02}"), i + 1))
+        .collect();
+    state.caller.as_mut().unwrap().items = Some(Items {
+        held: Some((
+            "minecraft:iron_pickaxe".into(),
+            1,
+            vec![("minecraft:silk_touch".into(), 1)],
+        )),
+        slots: vec![
+            (
+                36,
+                "minecraft:iron_pickaxe".into(),
+                1,
+                vec![("minecraft:silk_touch".into(), 1)],
+            ),
+            (37, "minecraft:diamond_sword".into(), 1, many),
+            (38, "minecraft:stick".into(), 1, Vec::new()),
+        ],
+        stacks: Vec::new(),
+    });
+    let inventory = state.host_acting_inventory().unwrap().unwrap();
+    let held = inventory.held.unwrap();
+    assert_eq!(held.enchantments.len(), 1);
+    assert_eq!(held.enchantments[0].id, "minecraft:silk_touch");
+    assert_eq!(held.enchantments[0].level, 1);
+    assert_eq!(
+        inventory.slots[0].stack.enchantments[0].id,
+        "minecraft:silk_touch"
+    );
+    assert_eq!(inventory.slots[1].stack.enchantments.len(), 16);
+    assert_eq!(inventory.slots[1].stack.enchantments[15].level, 16);
+    assert!(inventory.slots[2].stack.enchantments.is_empty());
+}
+
+#[tuff_core::watchdog]
+#[test]
+fn stash_contents_report_enchantments() {
+    use tuff_item::item::{ItemStack, MintReason, enchanting::enchant};
+    let mut state = State::new("test", Limits::default());
+    let stash = state.stashes.create().unwrap();
+    let pick = enchant(
+        ItemStack::mint(tuff_vanilla_data::Item::IronPickaxe, 1, MintReason::Test),
+        &[("minecraft:fortune", 3)],
+    );
+    state.stashes.fill(stash, vec![pick]);
+    let contents = state.host_stash_contents(stash).unwrap().unwrap();
+    assert_eq!(contents[0].enchantments.len(), 1);
+    assert_eq!(contents[0].enchantments[0].id, "minecraft:fortune");
+    assert_eq!(contents[0].enchantments[0].level, 3);
 }
 
 #[tuff_core::watchdog]

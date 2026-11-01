@@ -257,6 +257,27 @@ impl Host for Real {
         );
     }
 
+    fn enchantments(&mut self, body: Body, slot: u8) -> Vec<(String, u32)> {
+        let Some((fake, _, _)) = self.bodies.get(&body) else {
+            return Vec::new();
+        };
+        let Some(inventory) = fake.inventory() else {
+            return Vec::new();
+        };
+        inventory
+            .slots
+            .into_iter()
+            .find(|s| s.index == slot)
+            .map(|s| {
+                s.stack
+                    .enchantments
+                    .into_iter()
+                    .map(|e| (e.id, e.level))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     fn inventory(&mut self, body: Body) -> Vec<hands::Carried> {
         let Some((fake, _, _)) = self.bodies.get(&body) else {
             return Vec::new();
