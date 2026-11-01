@@ -966,9 +966,14 @@ async fn a_bot_bridges_a_void_gap_to_the_enemy_bed_and_breaks_it() {
         "fill 35 64 -24 40 64 -6 minecraft:stone",
     ];
     start_two_bots(&run, names, ["hard", "easy"], &terrain).await;
-    run.say(&format!("give {} minecraft:white_wool 64", names[0]))
-        .await;
     run.until_polls("an enemy bed broken across the gap", 4800, || async {
+        let held = run
+            .say(&format!("clear {} minecraft:white_wool 0", names[0]))
+            .await;
+        if !held.contains("Found") {
+            run.say(&format!("give {} minecraft:white_wool 64", names[0]))
+                .await;
+        }
         let mut gone = false;
         for (kind, at) in [("blue_bed", "37 65 0"), ("red_bed", "0 65 -37")] {
             let said = run

@@ -517,7 +517,12 @@ fn a_finished_or_failed_attack_is_sent_again_while_the_enemy_stays_near() {
         ticks(&mut game, &mut host, 5);
         assert_eq!(attacks(&game), round + 1, "no resend before the pause");
         ticks(&mut game, &mut host, 2 * SECOND);
-        assert_eq!(attacks(&game), round + 2, "attacked again: {:?}", walks(&game));
+        assert_eq!(
+            attacks(&game),
+            round + 2,
+            "attacked again: {:?}",
+            walks(&game)
+        );
     }
 }
 
@@ -535,7 +540,11 @@ fn a_bot_defends_its_bed_by_walking_to_it_once_then_attacking_a_close_intruder()
     assert_eq!(to_bed.len(), 1, "one walk to the bed: {:?}", walks(&game));
     let sent = game.bot_calls.len();
     ticks(&mut game, &mut host, 60);
-    assert_eq!(game.bot_calls.len(), sent, "nothing while the decision holds");
+    assert_eq!(
+        game.bot_calls.len(),
+        sent,
+        "nothing while the decision holds"
+    );
     assert_eq!(attacks(&game), 0, "an intruder out of reach is not chased");
     host.at.insert(A, [0.5, 65.0, 5.5]);
     ticks(&mut game, &mut host, 40);

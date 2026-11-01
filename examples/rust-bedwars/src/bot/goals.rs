@@ -160,11 +160,11 @@ impl Goal for Fight {
     }
 
     fn can_use(&mut self, view: &View) -> bool {
-        view.nearest_enemy(view.skill.aggro).is_some()
+        RushBed::in_reach(view).is_none() && view.nearest_enemy(view.skill.aggro).is_some()
     }
 
     fn can_continue(&mut self, view: &View) -> bool {
-        self.current(view).is_some()
+        RushBed::in_reach(view).is_none() && self.current(view).is_some()
     }
 
     fn start(&mut self, view: &View) {
@@ -244,6 +244,9 @@ impl Goal for DefendBed {
     }
 }
 
+/// An enemy bed this close is dug before any fight, with room for knockback during the dig.
+const BED_GRAB: f64 = BLOCK_REACH - 1.5;
+
 /// Walks to the nearest enemy bed and breaks it.
 #[derive(Debug, Default)]
 pub struct RushBed {
@@ -257,6 +260,16 @@ impl RushBed {
             .min_by(|a, b| {
                 dist(block_center(**a), view.me).total_cmp(&dist(block_center(**b), view.me))
             })
+            .copied()
+    }
+
+    fn in_reach(view: &View) -> Option<Pos> {
+        if matches!(view.role, Role::Defender | Role::Follower) {
+            return None;
+        }
+        view.enemy_beds
+            .iter()
+            .find(|b| dist(eye_of(view.me), block_center(**b)) <= BED_GRAB)
             .copied()
     }
 }
@@ -276,6 +289,9 @@ impl Goal for RushBed {
             Role::Rusher => view.skill.rush_after / 3,
             Role::Solo => view.skill.rush_after,
         };
+        if Self::in_reach(view).is_some() {
+            return true;
+        }
         view.elapsed >= after
             && view.alive_for >= view.skill.rush_after / 3
             && Self::pick(view).is_some()
@@ -286,7 +302,7 @@ impl Goal for RushBed {
     }
 
     fn start(&mut self, view: &View) {
-        self.bed = Self::pick(view);
+        self.bed = Self::in_reach(view).or_else(|| Self::pick(view));
     }
 
     fn stop(&mut self) {
