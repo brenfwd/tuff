@@ -1342,8 +1342,8 @@ async fn plugins_hear_entity_events_and_query_entities_and_items() {
         Some(ItemStack::mint(Item::Stick, 3, MintReason::Test));
     *client.session.inventory.slot_mut(0) = Some(ItemStack::mint(Item::Stone, 9, MintReason::Test));
     let items = tuff_plugin_wasm::sandbox::Items {
-        held: Some(("minecraft:stick".to_owned(), 3)),
-        slots: vec![(0, "minecraft:stone".to_owned(), 9)],
+        held: Some(("minecraft:stick".to_owned(), 3, Vec::new())),
+        slots: vec![(0, "minecraft:stone".to_owned(), 9, Vec::new())],
         ..Default::default()
     };
     let with_items = Player {
