@@ -59,10 +59,20 @@ impl Pair {
         );
         let dir = TestDir::new();
         let plugins = dir.path().join("plugins");
-        std::fs::create_dir_all(&plugins).unwrap();
-        std::fs::write(plugins.join("messaging_client.wasm"), &client).unwrap();
+        let put = |path: std::path::PathBuf, bytes: &[u8]| {
+            std::fs::write(&path, bytes).unwrap_or_else(|e| {
+                panic!(
+                    "writing {} ({} bytes) failed: {e}",
+                    path.display(),
+                    bytes.len()
+                )
+            });
+        };
+        std::fs::create_dir_all(&plugins)
+            .unwrap_or_else(|e| panic!("creating {} failed: {e}", plugins.display()));
+        put(plugins.join("messaging_client.wasm"), &client);
         if with_greeter {
-            std::fs::write(plugins.join("greeter.wasm"), &greeter).unwrap();
+            put(plugins.join("greeter.wasm"), &greeter);
         }
         let backend = Arc::new(
             tuff_storage::sqlite::SqliteBackend::open(dir.path().join("world.mcserver")).unwrap(),

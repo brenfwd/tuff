@@ -40,6 +40,22 @@ fn threads() -> usize {
     std::fs::read_dir("/proc/self/task").map_or(0, Iterator::count)
 }
 
+async fn settled_threads(limit: Option<usize>) -> usize {
+    let mut last = threads();
+    for _ in 0..200 {
+        if limit.is_some_and(|l| last <= l) {
+            return last;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let now = threads();
+        if limit.is_none() && now == last {
+            return now;
+        }
+        last = now;
+    }
+    last
+}
+
 fn dump_sites(path: &str) {
     use std::fmt::Write as _;
     let mut out = String::new();
@@ -83,7 +99,7 @@ async fn world_start_drop_keeps_heap_bounded() {
         start_and_drop().await;
     }
     let before = settled_live_bytes().await;
-    let threads_before = threads();
+    let threads_before = settled_threads(None).await;
     if profile.is_some() {
         alloc::sample_every(64 << 10);
     }
@@ -100,9 +116,9 @@ async fn world_start_drop_keeps_heap_bounded() {
         grown < BOUND_PER_WORLD * worlds as u64,
         "{worlds} world starts kept {grown} bytes live"
     );
+    let threads_after = settled_threads(Some(threads_before + 2)).await;
     assert!(
-        threads() <= threads_before + 2,
-        "threads grew from {threads_before} to {}",
-        threads()
+        threads_after <= threads_before + 2,
+        "threads grew from {threads_before} to {threads_after}"
     );
 }
