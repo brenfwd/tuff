@@ -508,6 +508,7 @@ fn the_cache_recomputes_when_a_closed_side_gets_its_neighbour() {
 }
 
 #[tuff_core::watchdog]
+#[test]
 fn the_stand_in_for_one_cell_equals_what_the_chunk_encode_sends() {
     for mode in [Mode::Hide, Mode::Fill] {
         let mut chunk = solid_chunk();
