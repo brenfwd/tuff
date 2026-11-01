@@ -16,6 +16,20 @@ use tuff_plugin_wasm::{WasmHost, WasmPluginsFeature};
 use tuff_storage::admin::PermissionLevel;
 
 pub(super) fn built(dir: &str, wasm: &str) -> Option<Vec<u8>> {
+    type Key = (String, String);
+    static BUILT: std::sync::Mutex<Option<std::collections::HashMap<Key, Option<Vec<u8>>>>> =
+        std::sync::Mutex::new(None);
+    let mut guard = BUILT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    guard
+        .get_or_insert_default()
+        .entry((dir.to_string(), wasm.to_string()))
+        .or_insert_with(|| build_guest(dir, wasm))
+        .clone()
+}
+
+fn build_guest(dir: &str, wasm: &str) -> Option<Vec<u8>> {
     let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
     let dir = root.join(dir);
     let ok = std::process::Command::new(std::env::var_os("CARGO").unwrap_or("cargo".into()))
