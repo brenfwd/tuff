@@ -506,3 +506,31 @@ fn the_cache_recomputes_when_a_closed_side_gets_its_neighbour() {
     assert_eq!(second.get(0, 10, 5), diamond);
     assert!(stats.computed > 0);
 }
+
+#[tuff_core::watchdog]
+fn the_stand_in_for_one_cell_equals_what_the_chunk_encode_sends() {
+    for mode in [Mode::Hide, Mode::Fill] {
+        let mut chunk = solid_chunk();
+        let diamond = Block::DiamondOre.default_state();
+        for (x, y, z) in [(5, 10, 5), (6, 10, 5), (9, 20, 9), (2, 30, 12)] {
+            chunk.set(x, y, z, diamond);
+        }
+        chunk.set(9, 21, 9, Block::Granite.default_state());
+        let plan = overworld_plan(mode);
+        let out = sent(&chunk, &surrounded(), &plan);
+        let base = SHAPE.min_y;
+        for (x, y, z) in [(5, 10, 5), (6, 10, 5), (9, 20, 9), (2, 30, 12)] {
+            let at = |p: BlockPos| {
+                let (lx, lz) = (p.x - POS.x * 16, p.z - POS.z * 16);
+                ((0..16).contains(&lx) && (0..16).contains(&lz) && p.y >= base)
+                    .then(|| chunk.get(lx, p.y, lz))
+            };
+            let pos = BlockPos::new(POS.x * 16 + x, y, POS.z * 16 + z);
+            assert_eq!(
+                plan.stand_in_at(pos, at),
+                out.get(x, y, z),
+                "{mode:?} {x} {y} {z}"
+            );
+        }
+    }
+}

@@ -16,6 +16,7 @@ use tuff_vanilla_data::{Block, BlockState};
 
 use crate::config::{ConfigStore, Key, Value};
 use crate::world::dimension::Dimension;
+use tuff_world_model::block_pos::BlockPos;
 use tuff_world_model::chunk::{BlockMask, Chunk, MASK_WORDS, Section};
 use tuff_world_model::pos::ChunkPos;
 
@@ -274,6 +275,34 @@ impl Plan {
     #[inline]
     pub fn may_alter(&self, state: BlockState) -> bool {
         self.altered.contains(state)
+    }
+
+    /// What a client is sent for the enclosed hidden block at `pos`.
+    pub fn stand_in_at(
+        &self,
+        pos: BlockPos,
+        block_at: impl Fn(BlockPos) -> Option<BlockState>,
+    ) -> BlockState {
+        let (x, y, z) = (pos.x, pos.y, pos.z);
+        self.stand_in(
+            || {
+                [
+                    (0, -1, 0),
+                    (0, 1, 0),
+                    (-1, 0, 0),
+                    (1, 0, 0),
+                    (0, 0, -1),
+                    (0, 0, 1),
+                ]
+                .map(|(dx, dy, dz)| {
+                    block_at(BlockPos::new(x + dx, y + dy, z + dz))
+                        .map_or(Side::Closed, Side::Block)
+                })
+            },
+            x,
+            y,
+            z,
+        )
     }
 
     fn stand_in(&self, sides: impl FnOnce() -> [Side; 6], x: i32, y: i32, z: i32) -> BlockState {

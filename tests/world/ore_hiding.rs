@@ -501,3 +501,77 @@ async fn an_unchanged_setting_resends_nothing() {
     assert_eq!(v.chunks_received(), 0, "only the real change resent");
     world.shutdown().await;
 }
+
+async fn refused_break(
+    world: &TestWorld,
+    region: &RegionHandle,
+    at: BlockPos,
+) -> Vec<bytes::Bytes> {
+    let (miner, mut answers) = PlayerHandle::new(2000);
+    region
+        .request(RegionRequest::Break {
+            player: miner,
+            pos: at,
+            tool: None,
+            mode: BreakMode::Finish,
+            sequence: 1,
+        })
+        .await;
+    let outcome = expect(&mut answers, |event| match event {
+        PlayerEvent::ActionResult { outcome, .. } => Some(outcome),
+        _ => None,
+    })
+    .await;
+    world.ticks(1).await;
+    match outcome {
+        ActionOutcome::Rejected(packets) => packets.iter().cloned().collect(),
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_refused_break_of_a_hidden_cell_resends_the_stand_in() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    enable(&world, true);
+    world
+        .shared
+        .config
+        .set_text(&anti_xray::hidden_key("overworld"), "minecraft:bedrock")
+        .unwrap();
+    world.ticks(1).await;
+    let region = world.region(RegionPos::new(1, 1)).await;
+    let center = ChunkPos::new(44, 44);
+    let hidden = BlockPos::new(center.x * 16 + 8, 25, center.z * 16 + 8);
+    let exposed = offset(hidden, 4, 0, 0);
+    let bedrock = Block::Bedrock.default_state();
+    let mut loader = viewer(&world, 1000);
+    loader.subscribe(&region, &around(center)).await;
+    place_blocks(
+        &world,
+        &region,
+        [
+            (hidden, bedrock),
+            (exposed, bedrock),
+            (offset(exposed, 0, 1, 0), Block::Air.default_state()),
+        ],
+    )
+    .await;
+    let mut v = viewer(&world, 1001);
+    v.subscribe(&region, &around(center)).await;
+    assert_eq!(v.sees(hidden), Some(stone()));
+    assert_eq!(v.sees(exposed), Some(bedrock));
+
+    let update = |pos, state: BlockState| {
+        framed(&protocol::play::BlockUpdate {
+            position: pos,
+            state: state.id(),
+        })
+    };
+    let packets = refused_break(&world, &region, hidden).await;
+    assert_eq!(packets, vec![update(hidden, stone())]);
+    let packets = refused_break(&world, &region, exposed).await;
+    assert_eq!(packets, vec![update(exposed, bedrock)]);
+    world.shutdown().await;
+}
