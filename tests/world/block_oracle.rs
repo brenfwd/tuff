@@ -98,7 +98,7 @@ async fn destroy_actions_far_away_or_in_unsent_chunks_reveal_nothing() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn corrections_do_not_reveal_enclosed_hidden_blocks() {
+async fn corrections_do_not_tell_enclosed_hidden_blocks_from_stone() {
     let dir = TestDir::new();
     let world = TestWorld::start(dir.path());
     let config = &world.shared.config;
@@ -140,7 +140,11 @@ async fn corrections_do_not_reveal_enclosed_hidden_blocks() {
     w.session
         .handle_packet(action(PlayerActionStatus::AbortDestroyBlock, ore))
         .await;
-    assert_eq!(pump(&mut w).await, 0, "the enclosed ore is not");
+    assert_eq!(
+        pump(&mut w).await,
+        1,
+        "the enclosed ore is corrected the same way, as its stand-in"
+    );
     world.shutdown().await;
 }
 
