@@ -253,6 +253,7 @@ pub struct Builder {
     checked: bool,
     retries: u32,
     redone: HashMap<Pos, u8>,
+    refused: Vec<Pos>,
     pub grounded: bool,
 }
 
@@ -268,6 +269,7 @@ impl Builder {
             checked: false,
             retries: 0,
             redone: HashMap::new(),
+            refused: Vec::new(),
             grounded: true,
         }
     }
@@ -393,6 +395,15 @@ impl Builder {
                             let item = self.todo.remove(i).unwrap();
                             self.todo.push_back(item);
                         }
+                        self.stage = Stage::Seek;
+                        Hands::Wait
+                    }
+                    Hands::Failed(reason)
+                        if reason == "not placed" && scaffolding && self.retries < MAX_RETRIES =>
+                    {
+                        self.retries += 1;
+                        self.refused.push(pos);
+                        self.scaffold.clear();
                         self.stage = Stage::Seek;
                         Hands::Wait
                     }
@@ -629,8 +640,9 @@ impl Builder {
             let top = if i == h - 1 { y + i + 4 } else { y + i + 1 };
             for cy in y..top {
                 let class = world.class_at(x, cy, z).map_err(|_| ())?;
-                let building =
-                    self.targets.contains(&(x, cy, z)) || self.scaffold.contains(&(x, cy, z));
+                let building = self.targets.contains(&(x, cy, z))
+                    || self.scaffold.contains(&(x, cy, z))
+                    || self.refused.contains(&(x, cy, z));
                 let free = class.passable() && !class.climbable();
                 if building || !free {
                     return Ok(None);
@@ -738,6 +750,7 @@ impl Builder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::world::{Class, Pending, SectionKey};
 
     fn block(x: i32, y: i32, z: i32, state: &str) -> BuildBlock {
         BuildBlock {
@@ -868,5 +881,49 @@ mod tests {
         assert!(line_blocks("x", 0, "minecraft:stone").is_err());
         let line = line_blocks("z", 3, "minecraft:stone").unwrap();
         assert_eq!(line[2].offset, BlockPos { x: 0, y: 0, z: 2 });
+    }
+
+    struct Flat;
+
+    impl Blocks for Flat {
+        fn class_at(&mut self, x: i32, y: i32, z: i32) -> Result<Class, Pending> {
+            Ok(if y < 64 || (x, z) == (5, 5) && y < 67 {
+                Class::STANDABLE
+            } else {
+                Class::PASSABLE
+            })
+        }
+
+        fn state_at(&mut self, _: i32, _: i32, _: i32) -> Result<Option<Rc<str>>, Pending> {
+            Ok(None)
+        }
+
+        fn find(&mut self, _: SectionKey, _: &[String]) -> Result<Vec<Pos>, Pending> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn a_staircase_cell_whose_click_the_server_refused_is_planned_around() {
+        let spec = BuildSpec {
+            origin: BlockPos { x: 0, y: 0, z: 0 },
+            blocks: vec![block(5, 67, 5, "minecraft:stone")],
+        };
+        let mut builder = Builder::new(&spec);
+        let me = Vec3 {
+            x: 2.5,
+            y: 64.0,
+            z: 5.5,
+        };
+        let first = builder
+            .plan_pillar(&me, &mut Flat, (5, 67, 5), "minecraft:stone")
+            .unwrap()
+            .expect("a staircase");
+        builder.refused.push(first[0]);
+        let second = builder
+            .plan_pillar(&me, &mut Flat, (5, 67, 5), "minecraft:stone")
+            .unwrap()
+            .expect("another staircase");
+        assert!(!second.contains(&first[0]), "{first:?} {second:?}");
     }
 }
