@@ -63,6 +63,11 @@ struct World {
 
 async fn start() -> World {
     let instance = TestDir::new();
+    std::fs::write(
+        instance.path().join("server.properties"),
+        "level-type=minecraft:flat\n",
+    )
+    .unwrap();
     let cell = Cell::default();
     let mut features = tuff::vanilla_features::all();
     features.push(Box::new(CaptureSharedFeature(cell.clone())));

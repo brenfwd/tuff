@@ -106,7 +106,7 @@ async fn served_hash(handle: &tuff::ServerHandle, body: &[u8]) -> String {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn generated_pack_is_offered_served_and_repushed() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let mut features = tuff::vanilla_features::all();
     features.push(Box::new(AssetFeature));
     let server = Server::builder()
@@ -248,7 +248,7 @@ async fn generated_pack_is_offered_served_and_repushed() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn no_pack_is_asked_for_without_custom_content() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())

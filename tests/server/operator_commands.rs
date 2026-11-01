@@ -13,7 +13,7 @@ async fn join(
     Bot,
     TempDir,
 ) {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let overrides = if offline_ops {
         vec![("tuff.offlineOps".to_string(), "true".to_string())]
     } else {

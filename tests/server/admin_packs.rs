@@ -175,7 +175,7 @@ fn pack<'a>(list: &'a Value, id: &str) -> Option<&'a Value> {
 }
 
 async fn data_packs_round_trip(storage: Storage) {
-    let server = start(TempDir::new(), storage).await;
+    let server = start(TempDir::flat(), storage).await;
     let admin = login(&server).await;
     let list = admin.get(DATAPACKS).await;
     assert_eq!(list.status, 200, "{}", list.body);
@@ -360,7 +360,7 @@ fn files_under(dir: &Path) -> Vec<PathBuf> {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hostile_pack_uploads_are_refused_and_leave_nothing_behind() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let datapacks = instance.path().join("world/datapacks");
     let resourcepacks = instance.path().join("resourcepacks");
     let server = start(instance, Storage::Folder).await;
@@ -524,7 +524,7 @@ async fn public_get(
 }
 
 async fn resource_packs_round_trip(storage: Storage) {
-    let server = start(TempDir::new(), storage).await;
+    let server = start(TempDir::flat(), storage).await;
     let admin = login(&server).await;
     let bytes = pack_zip();
     let uploaded = put(
@@ -667,7 +667,7 @@ async fn player_packs(admin: &AdminClient, name: &str) -> Value {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn players_get_uploaded_packs_and_their_status_is_listed() {
-    let server = start(TempDir::new(), Storage::Folder).await;
+    let server = start(TempDir::flat(), Storage::Folder).await;
     let admin = login(&server).await;
     let uploaded = put(&admin, &format!("{PACKS}/upload?name=Joined"), &pack_zip()).await;
     assert_eq!(uploaded.status, 200, "{}", uploaded.body);
@@ -746,7 +746,7 @@ async fn players_get_uploaded_packs_and_their_status_is_listed() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn pack_pages_need_their_scopes() {
-    let server = start(TempDir::new(), Storage::Folder).await;
+    let server = start(TempDir::flat(), Storage::Folder).await;
     let admin = login(&server).await;
     for route in [DATAPACKS, PACKS] {
         let anonymous = AdminClient::new(admin.addr);

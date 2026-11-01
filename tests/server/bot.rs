@@ -9,7 +9,7 @@ use tuff_world_model::pos::ChunkPos;
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn bot_joins_receives_chunks_and_follows_teleports() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())
@@ -64,7 +64,7 @@ async fn bot_joins_receives_chunks_and_follows_teleports() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn live_metrics_follow_a_connected_player() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())
@@ -143,7 +143,7 @@ async fn game_time(handle: &tuff::ServerHandle) -> i64 {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_frozen_server_still_loads_chunks_and_runs_commands() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())
@@ -203,7 +203,7 @@ async fn a_frozen_server_still_loads_chunks_and_runs_commands() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn idle_and_walking_bots_survive_the_floating_kick() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())
@@ -252,7 +252,7 @@ async fn idle_and_walking_bots_survive_the_floating_kick() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn spectate_command_checks_mode_and_target() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())
@@ -351,7 +351,7 @@ async fn spectate_command_checks_mode_and_target() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn list_shows_team_decorated_names() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())
@@ -395,7 +395,7 @@ async fn list_shows_team_decorated_names() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn execute_as_runs_raid_from_console() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let mut features = tuff::vanilla_features::all();
     features.extend(tuff::features::make(&["raid-command".to_string()]).unwrap());
     let server = Server::builder()
@@ -440,4 +440,44 @@ async fn execute_as_runs_raid_from_console() {
     drop(bot);
     handle.shutdown().await.unwrap();
     task.await.unwrap().unwrap();
+}
+
+#[tuff_core::watchdog]
+#[tokio::test]
+async fn flat_instance_generates_flat_terrain_at_spawn() {
+    let instance = TempDir::flat();
+    let server = Server::builder()
+        .features(tuff::vanilla_features::all())
+        .instance_dir(instance.path().to_path_buf())
+        .binds(vec!["127.0.0.1:0".into()])
+        .online_mode(false)
+        .whitelist(false)
+        .view_distance(2)
+        .seed(1)
+        .build();
+    let handle = server.handle();
+    let task = tokio::spawn(server.run());
+    let addr = handle.local_addrs().await.unwrap()[0];
+    let bot = Bot::connect(
+        addr,
+        BotConfig {
+            view_distance: 2,
+            ..BotConfig::new("Tester")
+        },
+    )
+    .await
+    .unwrap();
+    bot.wait_for(|state| state.chunks > 0).await.unwrap();
+    for (line, passes) in [
+        ("execute if block 0 -61 0 minecraft:grass_block", true),
+        ("execute if block 0 -62 0 minecraft:dirt", true),
+        ("execute if block 0 -60 0 minecraft:air", true),
+        ("execute if block 0 64 0 minecraft:air", true),
+        ("execute if block 0 -60 0 minecraft:grass_block", false),
+    ] {
+        let out = format!("{:?}", handle.run_command(line).await.unwrap());
+        assert_eq!(out.contains("conditional.pass"), passes, "{line}: {out}");
+    }
+    handle.shutdown().await.unwrap();
+    let _ = task.await;
 }

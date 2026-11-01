@@ -21,7 +21,7 @@ async fn said(handle: &tuff_core::ServerHandle, line: &str) -> String {
 #[tokio::test]
 async fn restart_cancel_then_stops_the_server_and_flags_a_restart() {
     let _serial = SERIAL.lock().await;
-    let dir = TempDir::new();
+    let dir = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(dir.path().to_path_buf())
@@ -132,7 +132,7 @@ fn chats(bot: &tuff_bot::Bot) -> u64 {
 async fn countdown_and_cancel_reach_every_player_only_when_broadcast_is_on() {
     let _serial = SERIAL.lock().await;
     for on in [true, false] {
-        let dir = TempDir::new();
+        let dir = TempDir::flat();
         let server = start(
             &dir,
             vec![("tuff.restart.broadcast_countdown".into(), on.to_string())],
@@ -160,7 +160,7 @@ async fn countdown_and_cancel_reach_every_player_only_when_broadcast_is_on() {
 async fn restart_disconnects_players_with_the_restart_text_only_when_enabled() {
     let _serial = SERIAL.lock().await;
     for on in [true, false] {
-        let dir = TempDir::new();
+        let dir = TempDir::flat();
         let server = start(
             &dir,
             vec![("tuff.restart.disconnect_message".into(), on.to_string())],

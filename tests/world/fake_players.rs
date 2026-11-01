@@ -13,7 +13,7 @@ use tuff_core::world::messages::PlayerId;
 use tuff_vanilla_data::packet::play::Clientbound as C;
 
 async fn start() -> TestServer {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())

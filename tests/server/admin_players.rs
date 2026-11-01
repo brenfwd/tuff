@@ -14,7 +14,7 @@ use tuff_web_ui::Principal;
 const PLAYERS: &str = web::PLAYERS_ROUTE;
 
 async fn start() -> TestServer {
-    start_in(TempDir::new()).await
+    start_in(TempDir::flat()).await
 }
 
 async fn start_in(instance: TempDir) -> TestServer {

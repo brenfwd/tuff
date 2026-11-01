@@ -34,7 +34,7 @@ fn find<'a>(nodes: &'a [ReportNode], name: &str) -> Vec<&'a ReportNode> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_recording_writes_a_report_with_ticks_network_and_regions() {
     let _serial = tuff_timings::serial_async().await;
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = Server::builder()
         .features(tuff::vanilla_features::all())
         .instance_dir(instance.path().to_path_buf())

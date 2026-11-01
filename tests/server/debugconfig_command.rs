@@ -46,7 +46,7 @@ fn count(ids: &[i32], packet: Config) -> usize {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn debugconfig_holds_a_player_in_configuration_and_returns_them() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = server(&instance);
     let handle = server.handle();
     let task = tokio::spawn(server.run());
@@ -105,7 +105,7 @@ async fn debugconfig_holds_a_player_in_configuration_and_returns_them() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_reconfiguration_without_hold_resyncs_and_rejoins_at_once() {
     use tuff_core::world::messages::PhaseRequest;
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = server(&instance);
     let handle = server.handle();
     let task = tokio::spawn(server.run());
