@@ -747,9 +747,18 @@ interface types {
         data: list<u8>,
     }
 
+    /// One enchantment on a stack: a namespaced id and its level.
+    record enchantment {
+        id: string,
+        level: u32,
+    }
+
     record item-stack {
         item: string,
         count: u8,
+        /// The stack's enchantments, at most 16 (extra ones are dropped).
+        /// Stored enchantments of enchanted books are not included.
+        enchantments: list<enchantment>,
     }
 
     record slot {
@@ -845,6 +854,7 @@ interface types {
         use-item(bool),
         release-use,
         select-slot(u8),
+        click-slot(u8),
         swap-hands,
         drop(bool),
         respawn,

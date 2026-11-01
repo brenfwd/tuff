@@ -45,6 +45,9 @@ pub const API_VERSION: u32 = 0;
 pub const UNAVAILABLE: u16 = u16::MAX;
 
 /// Most blocks one `blocks-get` may cover.
+/// Most enchantments one item stack reports to a plugin.
+pub const MAX_ENCHANTMENTS: usize = 16;
+
 pub const MAX_BOX_VOLUME: u64 = 1 << 15;
 
 /// How deep messages sent from message handlers are followed.

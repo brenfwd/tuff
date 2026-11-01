@@ -51,10 +51,30 @@ pub(crate) fn player(session: &PlayerSession) -> Player {
     }
 }
 
+/// Clamps and caps a stack's enchantments for the plugin ABI.
+pub fn wit_enchantments(
+    entries: &[(String, i32)],
+) -> Vec<crate::wit::bindings::types::Enchantment> {
+    entries
+        .iter()
+        .take(crate::abi::MAX_ENCHANTMENTS)
+        .map(|(id, level)| crate::wit::bindings::types::Enchantment {
+            id: id.clone(),
+            level: (*level).max(0) as u32,
+        })
+        .collect()
+}
+
 fn items(session: &PlayerSession) -> Items {
     let slots = session.inventory.slots();
-    let named =
-        |stack: &tuff_item::item::ItemStack| (stack.item().name().to_owned(), stack.count());
+    let named = |stack: &tuff_item::item::ItemStack| {
+        let enchantments = stack
+            .components
+            .enchantments
+            .as_ref()
+            .map_or_else(Vec::new, |e| e.entries().to_vec());
+        (stack.item().name().to_owned(), stack.count(), enchantments)
+    };
     Items {
         held: slots[Inventory::hotbar_slot(session.inventory.selected())]
             .as_ref()
@@ -63,8 +83,8 @@ fn items(session: &PlayerSession) -> Items {
             .iter()
             .enumerate()
             .filter_map(|(slot, stack)| {
-                let (item, count) = named(stack.as_ref()?);
-                Some((slot as u8, item, count))
+                let (item, count, enchantments) = named(stack.as_ref()?);
+                Some((slot as u8, item, count, enchantments))
             })
             .collect(),
         stacks: slots

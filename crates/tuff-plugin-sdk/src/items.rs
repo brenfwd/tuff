@@ -100,3 +100,13 @@ impl Stash {
         host::take_into_stash(player, item, count, all_or_nothing, self.0)
     }
 }
+
+impl types::ItemStack {
+    /// The level of an enchantment on the stack (`minecraft:silk_touch`), 0 when absent.
+    pub fn enchantment_level(&self, id: &str) -> u32 {
+        self.enchantments
+            .iter()
+            .find(|enchantment| enchantment.id == id)
+            .map_or(0, |enchantment| enchantment.level)
+    }
+}

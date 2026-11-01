@@ -345,17 +345,31 @@ fn rtt_of(file: &str) -> u64 {
         .unwrap_or(0)
 }
 
-/// Every recorded file at one latency profile except the two canonical
-/// files, which have their own tests.
-async fn replay_latency_profile(rtt: u64, special: bool) {
-    for name in corpus_files() {
-        if name == "movement_corpus.bin"
-            || name == "movement_corpus_special.bin"
-            || rtt_of(&name) != rtt
-            || name.starts_with("movement_corpus_special") != special
-        {
-            continue;
-        }
+/// Files of one latency profile, except the two canonical files, which
+/// have their own tests.
+fn latency_profile_files(rtt: u64, special: bool) -> Vec<String> {
+    let mut files: Vec<String> = corpus_files()
+        .into_iter()
+        .filter(|name| {
+            name != "movement_corpus.bin"
+                && name != "movement_corpus_special.bin"
+                && rtt_of(name) == rtt
+                && name.starts_with("movement_corpus_special") == special
+        })
+        .collect();
+    let size = |name: &String| std::fs::metadata(fixtures_dir().join(name)).map_or(0, |m| m.len());
+    files.sort_by_key(|name| std::cmp::Reverse(size(name)));
+    files
+}
+
+/// Replays every `shards`-th file, largest first, of a latency profile
+/// starting at `shard`, so one profile spreads evenly over parallel tests.
+async fn replay_latency_profile(rtt: u64, special: bool, shard: usize, shards: usize) {
+    for name in latency_profile_files(rtt, special)
+        .into_iter()
+        .skip(shard)
+        .step_by(shards)
+    {
         if special {
             replay_special_file(&name, None).await;
         } else {
@@ -364,40 +378,90 @@ async fn replay_latency_profile(rtt: u64, special: bool) {
     }
 }
 
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn every_recorded_latency_corpus_never_flags_rtt0() {
-    replay_latency_profile(0, false).await;
+const BASE_SHARDS: usize = 6;
+const SPECIAL_SHARDS: usize = 3;
+
+macro_rules! latency_shards {
+    ($rtt:expr, $special:expr, $shards:expr, $($name:ident = $shard:expr),+ $(,)?) => {
+        $(
+            #[tuff_core::watchdog]
+            #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+            async fn $name() {
+                replay_latency_profile($rtt, $special, $shard, $shards).await;
+            }
+        )+
+    };
 }
 
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn every_recorded_special_latency_corpus_never_flags_rtt0() {
-    replay_latency_profile(0, true).await;
-}
+latency_shards!(
+    0,
+    false,
+    BASE_SHARDS,
+    every_recorded_latency_corpus_never_flags_rtt0_shard0 = 0,
+    every_recorded_latency_corpus_never_flags_rtt0_shard1 = 1,
+    every_recorded_latency_corpus_never_flags_rtt0_shard2 = 2,
+    every_recorded_latency_corpus_never_flags_rtt0_shard3 = 3,
+    every_recorded_latency_corpus_never_flags_rtt0_shard4 = 4,
+    every_recorded_latency_corpus_never_flags_rtt0_shard5 = 5,
+);
+latency_shards!(
+    100,
+    false,
+    BASE_SHARDS,
+    every_recorded_latency_corpus_never_flags_rtt100_shard0 = 0,
+    every_recorded_latency_corpus_never_flags_rtt100_shard1 = 1,
+    every_recorded_latency_corpus_never_flags_rtt100_shard2 = 2,
+    every_recorded_latency_corpus_never_flags_rtt100_shard3 = 3,
+    every_recorded_latency_corpus_never_flags_rtt100_shard4 = 4,
+    every_recorded_latency_corpus_never_flags_rtt100_shard5 = 5,
+);
+latency_shards!(
+    250,
+    false,
+    BASE_SHARDS,
+    every_recorded_latency_corpus_never_flags_rtt250_shard0 = 0,
+    every_recorded_latency_corpus_never_flags_rtt250_shard1 = 1,
+    every_recorded_latency_corpus_never_flags_rtt250_shard2 = 2,
+    every_recorded_latency_corpus_never_flags_rtt250_shard3 = 3,
+    every_recorded_latency_corpus_never_flags_rtt250_shard4 = 4,
+    every_recorded_latency_corpus_never_flags_rtt250_shard5 = 5,
+);
+latency_shards!(
+    0,
+    true,
+    SPECIAL_SHARDS,
+    every_recorded_special_latency_corpus_never_flags_rtt0_shard0 = 0,
+    every_recorded_special_latency_corpus_never_flags_rtt0_shard1 = 1,
+    every_recorded_special_latency_corpus_never_flags_rtt0_shard2 = 2,
+);
+latency_shards!(
+    100,
+    true,
+    SPECIAL_SHARDS,
+    every_recorded_special_latency_corpus_never_flags_rtt100_shard0 = 0,
+    every_recorded_special_latency_corpus_never_flags_rtt100_shard1 = 1,
+    every_recorded_special_latency_corpus_never_flags_rtt100_shard2 = 2,
+);
+latency_shards!(
+    250,
+    true,
+    SPECIAL_SHARDS,
+    every_recorded_special_latency_corpus_never_flags_rtt250_shard0 = 0,
+    every_recorded_special_latency_corpus_never_flags_rtt250_shard1 = 1,
+    every_recorded_special_latency_corpus_never_flags_rtt250_shard2 = 2,
+);
 
 #[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn every_recorded_latency_corpus_never_flags_rtt100() {
-    replay_latency_profile(100, false).await;
-}
-
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn every_recorded_special_latency_corpus_never_flags_rtt100() {
-    replay_latency_profile(100, true).await;
-}
-
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn every_recorded_latency_corpus_never_flags_rtt250() {
-    replay_latency_profile(250, false).await;
-}
-
-#[tuff_core::watchdog]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn every_recorded_special_latency_corpus_never_flags_rtt250() {
-    replay_latency_profile(250, true).await;
+#[test]
+fn every_latency_profile_shard_replays_at_least_one_file() {
+    for rtt in [0, 100, 250] {
+        for (special, shards) in [(false, BASE_SHARDS), (true, SPECIAL_SHARDS)] {
+            assert!(
+                latency_profile_files(rtt, special).len() >= shards,
+                "rtt{rtt} special={special}: fewer files than shards"
+            );
+        }
+    }
 }
 
 #[tuff_core::watchdog]

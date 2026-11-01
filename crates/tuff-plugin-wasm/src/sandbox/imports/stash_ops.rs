@@ -61,6 +61,13 @@ impl State {
                 .map(|stack| StackPicture {
                     item: stack.item().name().to_owned(),
                     count: stack.count(),
+                    enchantments: crate::bridge::wit_enchantments(
+                        stack
+                            .components
+                            .enchantments
+                            .as_ref()
+                            .map_or(&[][..], |e| e.entries()),
+                    ),
                 })
                 .collect()
         }))

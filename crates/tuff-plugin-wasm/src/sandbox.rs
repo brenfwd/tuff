@@ -128,13 +128,15 @@ pub struct Player {
     pub items: Option<Items>,
 }
 
+pub type Enchants = Vec<(String, i32)>;
+
 /// A player's inventory as of the start of a call.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Items {
     /// The selected hotbar slot's stack: item id and count.
-    pub held: Option<(String, u8)>,
-    /// Every occupied slot: its index, item id and count.
-    pub slots: Vec<(u8, String, u8)>,
+    pub held: Option<(String, u8, Enchants)>,
+    /// Every occupied slot: its index, item id, count and enchantments.
+    pub slots: Vec<(u8, String, u8, Enchants)>,
     /// Every occupied slot's whole stack.
     pub stacks: Vec<(u8, tuff_item::item::ItemSnapshot)>,
 }
