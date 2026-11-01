@@ -446,8 +446,13 @@ impl PlayerSession {
         &mut self.view.mirror
     }
 
-    pub fn predict_client_block(&mut self, pos: BlockPos, state: tuff_vanilla_data::BlockState) {
-        self.view.mirror.predict(pos, state);
+    pub fn predict_client_block(
+        &mut self,
+        sequence: i32,
+        pos: BlockPos,
+        state: tuff_vanilla_data::BlockState,
+    ) {
+        self.view.mirror.predict(sequence, pos, state);
     }
 }
 

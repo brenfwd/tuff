@@ -359,3 +359,56 @@ async fn attacking_a_mob_through_a_wall_is_flagged() {
     assert!(w.session.disconnected);
     world.shutdown().await;
 }
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_refused_finish_leaves_the_mirror_on_the_world_block() {
+    let dir = TestDir::new();
+    let world = TestWorld::start(dir.path());
+    let mut w = strict_walker(&world).await;
+    let target = BlockPos::new(origin(&w).x + 3, 101, origin(&w).z);
+    place(&mut w, &world, &[target]).await;
+    let region = world.region(RegionPos::new(1, 1)).await;
+    let key = (w.session.dimension, RegionPos::new(1, 1));
+    w.session.view.regions.insert(key, region.clone());
+    while w.frames.try_recv().is_ok() {}
+    w.session
+        .handle_packet(Serverbound::PlayerAction {
+            status: PlayerActionStatus::StopDestroyBlock,
+            position: target,
+            face: 1,
+            sequence: 3,
+        })
+        .await;
+    let stone = tuff_vanilla_data::Block::Stone.default_state();
+    let update = framed(&tuff_core::protocol::play::BlockUpdate {
+        position: target,
+        state: stone.id(),
+    });
+    let mut told = false;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !told {
+        tokio::select! {
+            Some(frame) = w.frames.recv() => {
+                told |= frame.windows(update.len()).any(|bytes| bytes == &update[..]);
+            }
+            Some(event) = w.events.recv() => w.session.on_event(event).await,
+            Some(event) = w.session.conn.events.recv() => w.session.on_event(event).await,
+            () = tokio::time::sleep_until(deadline) => break,
+        }
+    }
+    while let Ok(event) = w.events.try_recv() {
+        w.session.on_event(event).await;
+    }
+    assert_eq!(w.session.client_world().block_at(target), Some(stone));
+    assert!(told, "the client is resent the block it still has");
+    assert!(!w.session.disconnected);
+    assert!(w.session.actions.destroying.is_none());
+    let (reply, rx) = tokio::sync::oneshot::channel();
+    region
+        .request(RegionRequest::BlockAt { pos: target, reply })
+        .await;
+    assert_eq!(rx.await.unwrap(), Some(stone));
+    assert_eq!(w.session.client_world().block_at(target), Some(stone));
+    world.shutdown().await;
+}

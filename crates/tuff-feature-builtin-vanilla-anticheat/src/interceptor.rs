@@ -526,6 +526,7 @@ fn predict_placement(session: &mut PlayerSession, packet: &Serverbound) -> bool 
         hand,
         position,
         face,
+        sequence,
         ..
     } = packet
     else {
@@ -548,13 +549,16 @@ fn predict_placement(session: &mut PlayerSession, packet: &Serverbound) -> bool 
     {
         return false;
     }
-    session.predict_client_block(cell, block.default_state());
+    session.predict_client_block(*sequence, cell, block.default_state());
     true
 }
 
 fn predict_break(session: &mut PlayerSession, packet: &Serverbound) -> bool {
     let Serverbound::PlayerAction {
-        status, position, ..
+        status,
+        position,
+        sequence,
+        ..
     } = packet
     else {
         return false;
@@ -579,7 +583,11 @@ fn predict_break(session: &mut PlayerSession, packet: &Serverbound) -> bool {
         _ => false,
     };
     if breaks {
-        session.predict_client_block(*position, tuff_vanilla_data::Block::Air.default_state());
+        session.predict_client_block(
+            *sequence,
+            *position,
+            tuff_vanilla_data::Block::Air.default_state(),
+        );
     }
     breaks
 }

@@ -65,7 +65,7 @@ fn wall(w: &Walker, dx: i32) -> Vec<(BlockPos, tuff_vanilla_data::BlockState)> {
 
 async fn build(w: &mut Walker, blocks: Vec<(BlockPos, tuff_vanilla_data::BlockState)>) {
     for (pos, state) in blocks {
-        w.session.client_world_mut().predict(pos, state);
+        w.session.client_world_mut().predict(0, pos, state);
     }
 }
 
