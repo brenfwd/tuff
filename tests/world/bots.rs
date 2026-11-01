@@ -661,7 +661,7 @@ async fn a_bot_branch_mines_down_to_a_level_and_finds_ore() {
     run.fill_loaded("fill -3 120 -50 3 149 14 stone").await;
     for line in [
         "fill -3 150 -50 3 160 14 air",
-        "setblock 0 144 -40 iron_ore",
+        "setblock 0 144 -24 iron_ore",
         "gamerule natural_health_regeneration false",
     ] {
         run.server(line).await;
@@ -689,8 +689,9 @@ async fn a_bot_branch_mines_down_to_a_level_and_finds_ore() {
     let state = run.ask("state 1", |a| a.contains("alive")).await;
     assert!(
         held.contains("Found 1"),
-        "{held} | {state} | {}",
-        run.say("events").await
+        "{held} | {state} | {} | {}",
+        run.say("events").await,
+        run.server("anticheat violations Botty").await
     );
     run.stop().await;
 }

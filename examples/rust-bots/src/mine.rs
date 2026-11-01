@@ -87,6 +87,26 @@ fn confirmed_gone(world: &mut dyn Blocks, pos: Pos) -> bool {
             .is_ok_and(|c| !c.standable())
 }
 
+/// Whether a face of the block at `pos` borders open space. A buried block
+/// is reached by digging toward it instead: struck through other blocks it
+/// is out of sight, and its drop would be sealed in.
+fn exposed(world: &mut dyn Blocks, (x, y, z): Pos) -> bool {
+    [
+        (1, 0, 0),
+        (-1, 0, 0),
+        (0, 1, 0),
+        (0, -1, 0),
+        (0, 0, 1),
+        (0, 0, -1),
+    ]
+    .iter()
+    .any(|(dx, dy, dz)| {
+        world
+            .class_at(x + dx, y + dy, z + dz)
+            .is_ok_and(|c| !c.standable())
+    })
+}
+
 fn centre((x, y, z): Pos) -> Vec3 {
     Vec3 {
         x: f64::from(x) + 0.5,
@@ -348,7 +368,7 @@ impl Miner {
             y: me.y + EYE,
             ..me.clone()
         };
-        if self.dig && dist2(&centre(pos), &eyes) <= REACH * REACH {
+        if self.dig && dist2(&centre(pos), &eyes) <= REACH * REACH && exposed(world, pos) {
             self.phase = Phase::Digging { pos, ticks: 0 };
             return Mining::Dig(pos);
         }
@@ -376,7 +396,8 @@ impl Miner {
             me.z.floor() as i32,
         );
         let step = (fy - self.level).signum();
-        let progress = |x: i32, z: i32| (x - self.origin.x) * self.dx + (z - self.origin.z) * self.dz;
+        let progress =
+            |x: i32, z: i32| (x - self.origin.x) * self.dx + (z - self.origin.z) * self.dz;
         if step == 0 {
             let here = progress(fx, fz);
             if progress(fx, fz) - *self.level_at.get_or_insert(here) >= TUNNEL_MAX {
@@ -386,7 +407,7 @@ impl Miner {
         let (ax, az) = (fx + self.dx, fz + self.dz);
         let cells: Vec<Pos> = match step {
             0 => vec![(ax, fy, az), (ax, fy + 1, az)],
-            s if s > 0 => vec![(ax, fy - 1, az), (ax, fy, az), (ax, fy + 1, az)],
+            s if s > 0 => vec![(ax, fy + 1, az), (ax, fy, az), (ax, fy - 1, az)],
             _ => vec![(ax, fy + 1, az), (ax, fy + 2, az), (fx, fy + 2, fz)],
         };
         let target_y = fy - step;
