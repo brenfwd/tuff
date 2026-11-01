@@ -1,6 +1,7 @@
 //! Choosing the best armor and tools from what a bot carries. Free of host
 //! calls so the decisions are plain functions.
 
+use crate::drops::Need;
 use crate::hands::{Carried, HOTBAR};
 use crate::world::name_of;
 
@@ -204,6 +205,65 @@ pub fn tool_for(carried: &[Carried], block: &str) -> Option<u8> {
     HOTBAR.contains(&menu).then(|| menu - HOTBAR.start())
 }
 
+/// Why no tool can collect an item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolFail {
+    /// Every suitable tool held has silk touch, which would drop the block.
+    OnlySilk,
+    /// No held tool has silk touch, which the block's own item needs.
+    NoSilk,
+}
+
+/// The hotbar index of the tool to break `block` with so that it drops
+/// what `need` says. `silk` reads the silk touch level of a menu slot and
+/// is only asked about held tools.
+pub fn collect_tool(
+    carried: &[Carried],
+    silk: &mut dyn FnMut(u8) -> u32,
+    block: &str,
+    need: Need,
+) -> Result<Option<u8>, ToolFail> {
+    if need == Need::Either {
+        return Ok(tool_for(carried, block));
+    }
+    let wanted = tool_kind(block);
+    let mut tools: Vec<(u8, bool, usize)> = carried
+        .iter()
+        .filter(|(menu, _, count)| *count > 0 && HOTBAR.contains(menu))
+        .filter_map(|(menu, item, _)| {
+            let (tier, kind) = name_of(item).split_once('_')?;
+            let rank = TOOL_TIERS.iter().position(|t| *t == tier)?;
+            Some((*menu, wanted == Some(kind), rank))
+        })
+        .collect();
+    tools.sort_by_key(|(_, right, rank)| std::cmp::Reverse((*right, *rank)));
+    let hotbar = |menu: u8| menu - HOTBAR.start();
+    match need {
+        Need::Plain => {
+            let mut any = false;
+            for (menu, right, _) in tools {
+                if !right {
+                    continue;
+                }
+                any = true;
+                if silk(menu) == 0 {
+                    return Ok(Some(hotbar(menu)));
+                }
+            }
+            if any {
+                Err(ToolFail::OnlySilk)
+            } else {
+                Ok(None)
+            }
+        }
+        _ => tools
+            .into_iter()
+            .find(|(menu, _, _)| silk(*menu) > 0)
+            .map(|(menu, _, _)| Some(hotbar(menu)))
+            .ok_or(ToolFail::NoSilk),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,5 +339,53 @@ mod tests {
         assert_eq!(tool_kind("minecraft:poppy"), None);
         let carried = kit(&[(36, "wooden_pickaxe"), (40, "iron_pickaxe")]);
         assert_eq!(tool_for(&carried, "minecraft:stone"), Some(4));
+    }
+
+    fn silk_in(slots: &'static [u8]) -> impl FnMut(u8) -> u32 {
+        move |s| u32::from(slots.contains(&s))
+    }
+
+    #[test]
+    fn collect_tool_prefers_the_plain_tool_for_a_drop() {
+        let carried = kit(&[(36, "iron_pickaxe"), (37, "diamond_pickaxe")]);
+        assert_eq!(
+            collect_tool(&carried, &mut silk_in(&[37]), "iron_ore", Need::Plain),
+            Ok(Some(0))
+        );
+        assert_eq!(
+            collect_tool(&carried, &mut silk_in(&[]), "iron_ore", Need::Plain),
+            Ok(Some(1))
+        );
+    }
+
+    #[test]
+    fn collect_tool_fails_when_only_silk_tools_can_dig_the_drop() {
+        let carried = kit(&[(37, "diamond_pickaxe"), (38, "diamond_axe")]);
+        assert_eq!(
+            collect_tool(&carried, &mut silk_in(&[37, 38]), "iron_ore", Need::Plain),
+            Err(ToolFail::OnlySilk)
+        );
+    }
+
+    #[test]
+    fn collect_tool_wants_silk_touch_for_the_block_itself() {
+        let carried = kit(&[(36, "iron_pickaxe"), (37, "diamond_pickaxe")]);
+        assert_eq!(
+            collect_tool(&carried, &mut silk_in(&[37]), "iron_ore", Need::Silk),
+            Ok(Some(1))
+        );
+        assert_eq!(
+            collect_tool(&carried, &mut silk_in(&[]), "iron_ore", Need::Silk),
+            Err(ToolFail::NoSilk)
+        );
+    }
+
+    #[test]
+    fn collect_tool_takes_any_silk_tool_for_hand_blocks() {
+        let carried = kit(&[(36, "iron_axe")]);
+        assert_eq!(
+            collect_tool(&carried, &mut silk_in(&[36]), "clay", Need::Silk),
+            Ok(Some(0))
+        );
     }
 }

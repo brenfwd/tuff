@@ -11,6 +11,7 @@ pub mod commands;
 pub mod core;
 pub mod danger;
 pub mod defence;
+pub mod drops;
 pub mod exec;
 pub mod farm;
 pub mod flight;

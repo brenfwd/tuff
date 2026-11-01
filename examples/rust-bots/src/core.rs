@@ -10,6 +10,7 @@ use crate::build::Builder;
 use crate::combat::{Combat, Fighter, Me, Swing, Target, line_of_sight};
 use crate::danger::{self, Nearby};
 use crate::defence::{self, Hurt, Response, Situation};
+use crate::drops::{self, Need};
 use crate::exec::{Action, Drive, Executor, Face, Kit, Step, View};
 use crate::farm::{Farmer, Farming};
 use crate::flight::{Body as FlightBody, Fly, Run};
@@ -259,8 +260,16 @@ pub struct Bots {
 
 fn miner_for(process: &Process, at: &Vec3) -> Miner {
     match process {
-        Process::Mine(s) => Miner::new(&s.blocks, s.count, s.radius, true, s.branch.as_ref(), at),
-        Process::GetToBlock(s) => Miner::new(&s.blocks, 1, s.radius, false, None, at),
+        Process::Mine(s) => Miner::new(
+            &s.blocks,
+            s.count,
+            s.radius,
+            true,
+            s.branch.as_ref(),
+            s.collect.as_deref(),
+            at,
+        ),
+        Process::GetToBlock(s) => Miner::new(&s.blocks, 1, s.radius, false, None, None, at),
         _ => unreachable!("only mining processes make a miner"),
     }
 }
@@ -818,8 +827,15 @@ impl Bots {
             },
             p @ (Process::Mine(_) | Process::GetToBlock(_)) => {
                 let miner = bot.miner.get_or_insert_with(|| miner_for(&p, &seen.pos));
+                let held = miner.collecting().map_or(0, |item| {
+                    carried
+                        .iter()
+                        .filter(|(_, c, _)| name_of(c) == item)
+                        .map(|(_, _, n)| *n)
+                        .sum()
+                });
                 let step = match host.blocks(bot.body) {
-                    Some(world) => miner.tick(&seen.pos, world),
+                    Some(world) => miner.tick(&seen.pos, world, held),
                     None => Mining::Wait,
                 };
                 match step {
@@ -827,9 +843,13 @@ impl Bots {
                     Mining::Goal(g) => goal = Some(g),
                     Mining::Dig(pos) => dig = Some(pos),
                     Mining::Wait => {}
+                    Mining::Failed(why) => outcome = Some(Event::ProcessFailed(why)),
                     Mining::Explore => {
                         match bot.explorer.next(&seen.pos, miner.origin(), EXPLORE_RADIUS) {
-                            None => outcome = Some(Event::ProcessFailed("none found".into())),
+                            None => {
+                                let why = miner.exhausted();
+                                outcome = Some(Event::ProcessFailed(why));
+                            }
                             Some(g) => goal = Some(g),
                         }
                     }
@@ -1162,10 +1182,53 @@ impl Bots {
             let state = host
                 .blocks(bot.body)
                 .and_then(|w| w.state_at(pos.0, pos.1, pos.2).ok().flatten());
-            if let Some(slot) = state.and_then(|s| gear::tool_for(&carried, &s)) {
-                host.select_slot(bot.body, slot);
+            let collecting = bot
+                .miner
+                .as_ref()
+                .and_then(|m| m.collecting())
+                .map(str::to_owned);
+            let mut tool = None;
+            let mut failed = None;
+            match (collecting.as_deref(), state) {
+                (Some(item), Some(state)) => {
+                    let need = drops::need_for(&state, item).unwrap_or(Need::Either);
+                    let body = bot.body;
+                    let mut silk = |slot: u8| {
+                        host.enchantments(body, slot)
+                            .iter()
+                            .filter(|(id, _)| name_of(id) == "silk_touch")
+                            .map(|(_, level)| *level)
+                            .max()
+                            .unwrap_or(0)
+                    };
+                    match gear::collect_tool(&carried, &mut silk, &state, need) {
+                        Ok(slot) => tool = slot,
+                        Err(gear::ToolFail::OnlySilk) => {
+                            failed = Some(format!(
+                                "only a silk touch tool for {}; cannot get {item}",
+                                name_of(&state)
+                            ));
+                        }
+                        Err(gear::ToolFail::NoSilk) => {
+                            failed = Some(format!("no silk touch tool held to collect {item}"));
+                        }
+                    }
+                }
+                (None, Some(state)) => tool = gear::tool_for(&carried, &state),
+                _ => {}
             }
-            host.dig(bot.body, pos, &seen.pos);
+            if let Some(why) = failed {
+                bot.process = Process::Idle;
+                bot.miner = None;
+                bot.exec = None;
+                bot.exec_goal = None;
+                outcome = Some(Event::ProcessFailed(why));
+            } else {
+                if let Some(slot) = tool {
+                    host.select_slot(bot.body, slot);
+                }
+                host.dig(bot.body, pos, &seen.pos);
+            }
         }
         perform(host, bot.body, &seen.pos, acts);
         if (!active || matches!(bot.process, Process::Idle))

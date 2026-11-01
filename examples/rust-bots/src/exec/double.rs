@@ -44,6 +44,8 @@ pub struct Double {
     /// Menu slot and the enchantments on its stack.
     pub enchanted: Vec<(u8, Vec<(String, u32)>)>,
     pub selected: u8,
+    /// What a dig adds to the hotbar: item and count.
+    pub dig_drop: Option<(String, u32)>,
     pub placed: Vec<Pos>,
     /// Each click: support block, face, cursor height and eye height.
     pub clicks: Vec<(Pos, Face, f32, f64)>,
@@ -102,6 +104,7 @@ impl Double {
             hotbar: Vec::new(),
             enchanted: Vec::new(),
             selected: 0,
+            dig_drop: None,
             placed: Vec::new(),
             clicks: Vec::new(),
             tools: None,
@@ -261,6 +264,14 @@ impl Host for Double {
     fn dig(&mut self, _: Body, pos: (i32, i32, i32), _: &Vec3) {
         self.digs.push(pos);
         self.terrain.borrow_mut().dig(pos);
+        if let Some((item, n)) = self.dig_drop.clone() {
+            if let Some(entry) = self.hotbar.iter_mut().find(|(_, h, _)| *h == item) {
+                entry.2 += n;
+            } else if let Some(free) = (0..9).find(|s| !self.hotbar.iter().any(|(h, _, _)| h == s))
+            {
+                self.hotbar.push((free, item, n));
+            }
+        }
     }
 
     fn select_slot(&mut self, _: Body, slot: u8) {

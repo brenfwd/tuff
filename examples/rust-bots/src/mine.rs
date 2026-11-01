@@ -34,6 +34,22 @@ pub enum Mining {
     Wait,
     /// Nothing known within the radius: walk somewhere new.
     Explore,
+    Failed(String),
+}
+
+/// Verified breaks in a row that gave nothing before collecting gives up.
+pub const COLLECT_STALL: u32 = 6;
+/// Ticks to let the inventory view catch up before the baseline is read.
+const BASELINE_SETTLE: u32 = 10;
+
+/// Progress of a collect-mode miner: the wanted item is counted as an
+/// increase over what was held on the first tick.
+struct Collect {
+    item: String,
+    baseline: Option<u32>,
+    settled: u32,
+    last_held: u32,
+    breaks_without_gain: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -47,6 +63,7 @@ pub struct Miner {
     wanted: Vec<String>,
     count: u32,
     mined: u32,
+    collect: Option<Collect>,
     radius: u32,
     dig: bool,
     origin: BlockPos,
@@ -126,6 +143,7 @@ impl Miner {
         radius: u32,
         dig: bool,
         branch: Option<&BranchSpec>,
+        collect: Option<&str>,
         at: &Vec3,
     ) -> Self {
         let y = at.y.floor() as i32;
@@ -143,6 +161,13 @@ impl Miner {
             wanted: blocks.iter().map(|b| name_of(b).to_owned()).collect(),
             count,
             mined: 0,
+            collect: collect.map(|item| Collect {
+                item: name_of(item).to_owned(),
+                baseline: None,
+                settled: 0,
+                last_held: 0,
+                breaks_without_gain: 0,
+            }),
             radius: radius.max(1),
             dig,
             origin: BlockPos {
@@ -157,6 +182,19 @@ impl Miner {
             current: None,
             phase: Phase::Seek,
             tunnelling: false,
+        }
+    }
+
+    /// The item being collected, when in collect mode.
+    pub fn collecting(&self) -> Option<&str> {
+        self.collect.as_ref().map(|c| c.item.as_str())
+    }
+
+    /// Why the process fails when the whole search area has been walked.
+    pub fn exhausted(&self) -> String {
+        match self.collecting() {
+            Some(item) => format!("nothing nearby drops {item}"),
+            None => "none found".into(),
         }
     }
 
@@ -289,9 +327,36 @@ impl Miner {
         None
     }
 
-    pub fn tick(&mut self, me: &Vec3, world: &mut dyn Blocks) -> Mining {
-        if self.dig && self.mined >= self.count && matches!(self.phase, Phase::Seek) {
-            return Mining::Done;
+    /// `held` is how many of the collected item the bot carries now.
+    pub fn tick(&mut self, me: &Vec3, world: &mut dyn Blocks, held: u32) -> Mining {
+        let mut stalled = false;
+        let done = match self.collect.as_mut() {
+            Some(c) => {
+                if c.baseline.is_none() && c.settled < BASELINE_SETTLE {
+                    c.settled += 1;
+                    return Mining::Wait;
+                }
+                let baseline = *c.baseline.get_or_insert(held);
+                if held > c.last_held.max(baseline) {
+                    c.breaks_without_gain = 0;
+                }
+                c.last_held = held;
+                stalled = c.breaks_without_gain >= COLLECT_STALL;
+                held >= baseline.saturating_add(self.count)
+            }
+            None => self.mined >= self.count,
+        };
+        if self.dig && matches!(self.phase, Phase::Seek) {
+            if done {
+                return Mining::Done;
+            }
+            if stalled {
+                let item = self.collect.as_ref().map(|c| c.item.clone());
+                return Mining::Failed(format!(
+                    "{COLLECT_STALL} breaks gave no {}",
+                    item.unwrap_or_default()
+                ));
+            }
         }
         match self.phase {
             Phase::Collect { pos, ticks } => {
@@ -300,7 +365,7 @@ impl Miner {
                     && (c.y - me.y).abs() <= 1.5;
                 if ticks == 0 || (near && ticks <= COLLECT_TICKS - PICKUP_DELAY) {
                     self.phase = Phase::Seek;
-                    return self.tick(me, world);
+                    return self.tick(me, world, held);
                 }
                 self.phase = Phase::Collect {
                     pos,
@@ -321,6 +386,9 @@ impl Miner {
                     if confirmed_gone(world, pos) {
                         if !self.tunnelling {
                             self.mined += 1;
+                            if let Some(c) = self.collect.as_mut() {
+                                c.breaks_without_gain += 1;
+                            }
                         }
                         self.found.remove(&pos);
                         self.current = None;
@@ -332,7 +400,7 @@ impl Miner {
                                 ticks: COLLECT_TICKS,
                             }
                         };
-                        return self.tick(me, world);
+                        return self.tick(me, world, held);
                     }
                 }
                 if ticks >= DIG_TIMEOUT {

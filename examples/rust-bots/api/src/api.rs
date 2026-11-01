@@ -471,15 +471,17 @@ pub mod control {
         pub count: u32,
         pub radius: u32,
         pub branch: Option<BranchSpec>,
+        pub collect: Option<String>,
     }
 
     impl Wire for MineSpec {
-        const MIN_SIZE: usize = <Vec<String> as Wire>::MIN_SIZE + <u32 as Wire>::MIN_SIZE + <u32 as Wire>::MIN_SIZE + <Option<BranchSpec> as Wire>::MIN_SIZE;
+        const MIN_SIZE: usize = <Vec<String> as Wire>::MIN_SIZE + <u32 as Wire>::MIN_SIZE + <u32 as Wire>::MIN_SIZE + <Option<BranchSpec> as Wire>::MIN_SIZE + <Option<String> as Wire>::MIN_SIZE;
         fn encode(&self, out: &mut Vec<u8>) {
             self.blocks.encode(out);
             self.count.encode(out);
             self.radius.encode(out);
             self.branch.encode(out);
+            self.collect.encode(out);
             let _ = out;
         }
         fn decode(input: &mut &[u8]) -> Result<Self, WireError> {
@@ -488,6 +490,7 @@ pub mod control {
                 count: Wire::decode(input)?,
                 radius: Wire::decode(input)?,
                 branch: Wire::decode(input)?,
+                collect: Wire::decode(input)?,
             })
         }
     }
@@ -983,10 +986,10 @@ pub mod control {
     pub const SPAWN_KEY: u64 = 0x2f9296688072bb47;
     pub const REMOVE_KEY: u64 = 0x2b02025c627f2751;
     pub const OWNED_KEY: u64 = 0x1a8b532892cd1137;
-    pub const STATE_KEY: u64 = 0xfb6394662e6a9f60;
+    pub const STATE_KEY: u64 = 0x91fb29c6ef885c3a;
     pub const SET_SKILL_KEY: u64 = 0x0b0bd20e2d1ed999;
     pub const SET_POLICY_KEY: u64 = 0xc96337483ed90e12;
-    pub const SET_PROCESS_KEY: u64 = 0xf4ce74cb399b08d5;
+    pub const SET_PROCESS_KEY: u64 = 0x214240958ef133f3;
     pub const STOP_KEY: u64 = 0x2ff89f29ca51fcc9;
     pub const RESPAWN_KEY: u64 = 0xa41f1f2dbfed6375;
 
