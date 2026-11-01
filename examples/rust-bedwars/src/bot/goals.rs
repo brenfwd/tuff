@@ -179,6 +179,10 @@ impl Goal for Fight {
         let Some(enemy) = self.current(view) else {
             return;
         };
+        if let Some(safe) = view.edge {
+            out.goto = Some(safe);
+            return;
+        }
         if dist(view.me, enemy.pos) > CLOSE_IN {
             out.goto = Some(enemy.pos);
         }
@@ -226,6 +230,12 @@ impl Goal for DefendBed {
             return;
         };
         let [x, y, z] = block_center(bed);
+        if let Some(safe) = view.edge
+            && dist(view.me, [x, y, z]) > 3.0
+        {
+            out.goto = Some(safe);
+            return;
+        }
         out.goto = Some([x, y + 0.5, z]);
         if dist(enemy.pos, [x, y, z]) <= BED_STRIKE {
             out.fight = Some(enemy.id);

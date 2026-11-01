@@ -1072,3 +1072,27 @@ fn building_clears_saved_shopkeepers_first() {
     let (_game, host) = built(1);
     assert_eq!(host.cleared_shops, 1);
 }
+
+fn floor(rec: &mut Rec, from: i32, to: i32) {
+    for x in from..=to {
+        for z in from..=to {
+            rec.blocks.insert([x, 63, z], "minecraft:stone".into());
+        }
+    }
+}
+
+#[test]
+fn safe_ground_finds_solid_floor_only_beside_a_drop() {
+    let mut rec = Rec::default();
+    floor(&mut rec, -6, 0);
+    let interior = super::bots::safe_ground(&mut rec, "w", [-4.5, 64.0, -4.5]);
+    assert_eq!(interior, None);
+    let rim = super::bots::safe_ground(&mut rec, "w", [0.5, 64.0, -3.5]).expect("edge");
+    assert!(rim[0] <= -1.5 && (rim[1] - 64.0).abs() < 1e-9, "{rim:?}");
+}
+
+#[test]
+fn safe_ground_is_none_when_the_void_is_everywhere() {
+    let mut rec = Rec::default();
+    assert_eq!(super::bots::safe_ground(&mut rec, "w", [0.5, 64.0, 0.5]), None);
+}
