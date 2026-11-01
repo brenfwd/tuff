@@ -70,7 +70,7 @@ fn received(bot: &Bot, id: Id) -> u64 {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn scoreboard_and_team_commands_reach_clients_and_persist() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     let bot = connect(&server, "Tester").await;
 
@@ -292,7 +292,7 @@ async fn wait_for_score(
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn criteria_objectives_follow_play() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     let bot = connect(&server, "Tester").await;
     run(&server, "scoreboard objectives add deaths deathCount").await;
@@ -318,7 +318,7 @@ async fn criteria_objectives_follow_play() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn hidden_death_messages_reach_only_the_victims_teammates() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     let victim = connect(&server, "Victim").await;
     let mate = connect(&server, "Mate").await;
@@ -384,7 +384,7 @@ async fn hidden_death_messages_reach_only_the_victims_teammates() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn killed_entity_loses_scores_and_team() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     run(&server, "forceload add 0 0").await;
     run(&server, "setblock 0 100 0 stone").await;

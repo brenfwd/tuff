@@ -52,6 +52,17 @@ impl TempDir {
         Self(path)
     }
 
+    /// An instance directory whose new world is flat, so spawn generation is cheap.
+    pub fn flat() -> Self {
+        let dir = Self::new();
+        std::fs::write(
+            dir.path().join("server.properties"),
+            "level-type=minecraft:flat\n",
+        )
+        .unwrap();
+        dir
+    }
+
     pub fn path(&self) -> &Path {
         &self.0
     }

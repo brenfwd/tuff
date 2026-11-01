@@ -103,7 +103,7 @@ async fn result_of(server: &Running, line: &str) -> String {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn bossbar_commands_answer_like_the_game_and_reach_their_players() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     let bot = connect(&server, "Tester").await;
 
@@ -233,7 +233,7 @@ async fn bossbar_commands_answer_like_the_game_and_reach_their_players() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn bars_are_saved_and_shown_again_when_their_players_return() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     let bot = connect(&server, "Tester").await;
     run(&server, "bossbar add custom:kept \"Kept\"").await;

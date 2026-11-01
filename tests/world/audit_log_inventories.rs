@@ -59,7 +59,7 @@ impl Feature for CaptureFeature {
 }
 
 async fn start() -> (TestServer, Arc<Shared>) {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let slot = Slot::default();
     let mut features = tuff::vanilla_features::all();
     features.push(Box::new(AuditLogFeature::at(

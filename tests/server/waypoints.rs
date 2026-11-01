@@ -67,7 +67,7 @@ fn last(packets: &[TrackedWaypoint]) -> &TrackedWaypoint {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn players_track_each_other_and_icons_rule_and_leaving_update_the_bar() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     let alice = connect(&server, "Alice").await;
     let bob = connect(&server, "Bob").await;

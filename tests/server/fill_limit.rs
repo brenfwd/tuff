@@ -82,7 +82,7 @@ async fn filled(server: &Running, block: &str) {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn bossbar_shows_only_above_the_vanilla_size_and_the_limit_is_configurable() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance, &[]).await;
     run(&server, "gamerule max_block_modifications 2147483647").await;
     let bot = connect(&server).await;
@@ -120,7 +120,7 @@ async fn bossbar_shows_only_above_the_vanilla_size_and_the_limit_is_configurable
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_default_limit_follows_the_game_rule() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance, &[]).await;
     let big = run(&server, "fill 0 0 0 100 100 100 stone").await;
     assert_eq!(big[0].translate.as_deref(), Some("commands.fill.toobig"));
@@ -131,7 +131,7 @@ async fn the_default_limit_follows_the_game_rule() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn clone_rejects_above_the_default_limit() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance, &[]).await;
     let big = run(&server, "clone 0 0 0 100 100 100 200 0 0").await;
     assert_eq!(big[0].translate.as_deref(), Some("commands.clone.toobig"));
@@ -142,7 +142,7 @@ async fn clone_rejects_above_the_default_limit() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn clone_bar_shows_only_above_the_vanilla_size_when_the_limit_is_lifted() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance, &[]).await;
     run(&server, "gamerule max_block_modifications 2147483647").await;
     let bot = connect(&server).await;
@@ -178,7 +178,7 @@ async fn clone_bar_shows_only_above_the_vanilla_size_when_the_limit_is_lifted() 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn fill_across_regions_needs_loaded_chunks_then_changes_every_block() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance, &[]).await;
     let rejected = run(&server, "fill -300 100 -2 300 100 2 stone").await;
     assert_eq!(

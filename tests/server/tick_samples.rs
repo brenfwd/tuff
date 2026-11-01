@@ -78,7 +78,7 @@ async fn none_within_a_second(
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn tick_time_samples_reach_only_permitted_subscribers() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = start(&instance).await;
     let (_op, mut op_samples) = subscriber(&server, "Op").await;
     let (_plain, mut plain_samples) = subscriber(&server, "Plain").await;

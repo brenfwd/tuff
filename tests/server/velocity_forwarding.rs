@@ -127,7 +127,7 @@ async fn assert_refused(conn: &mut Connection) {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn a_signed_answer_logs_in_with_the_forwarded_identity() {
-    let server = start_forwarding(TempDir::new()).await;
+    let server = start_forwarding(TempDir::flat()).await;
     let mut conn = answer(server.addr, Some(signed("203.0.113.9"))).await;
     let compression: SetCompression = conn.expect().await.unwrap();
     conn.enable_compression(compression.threshold as usize);
@@ -145,7 +145,7 @@ async fn a_signed_answer_logs_in_with_the_forwarded_identity() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn bad_missing_and_malformed_answers_are_refused() {
-    let server = start_forwarding(TempDir::new()).await;
+    let server = start_forwarding(TempDir::flat()).await;
 
     let wrong = velocity::encode(&Secret::new(&b"other"[..]).unwrap(), &forwarded("1.2.3.4"));
     assert_refused(&mut answer(server.addr, Some(wrong)).await).await;
@@ -173,7 +173,7 @@ async fn bad_missing_and_malformed_answers_are_refused() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn ip_bans_apply_to_the_forwarded_address() {
-    let server = start_forwarding(TempDir::new()).await;
+    let server = start_forwarding(TempDir::flat()).await;
     let banned = server
         .server
         .run_command("ban-ip 198.51.100.4")
@@ -197,7 +197,7 @@ async fn ip_bans_apply_to_the_forwarded_address() {
 #[tuff_core::watchdog]
 #[tokio::test]
 async fn offline_mode_on_a_public_address_needs_an_opt_in_or_forwarding() {
-    let refused = start(TempDir::new(), &[], "0.0.0.0:0").await;
+    let refused = start(TempDir::flat(), &[], "0.0.0.0:0").await;
     let error = format!(
         "{:#}",
         refused.err().expect("public offline must be refused")
@@ -205,14 +205,14 @@ async fn offline_mode_on_a_public_address_needs_an_opt_in_or_forwarding() {
     assert!(error.contains("tuff.allowPublicOffline"), "{error}");
 
     start(
-        TempDir::new(),
+        TempDir::flat(),
         &[("tuff.allowPublicOffline", "true")],
         "0.0.0.0:0",
     )
     .await
     .unwrap();
     start(
-        TempDir::new(),
+        TempDir::flat(),
         &[
             (velocity::ENABLED_KEY, "true"),
             (velocity::SECRET_KEY, SECRET),
@@ -221,10 +221,10 @@ async fn offline_mode_on_a_public_address_needs_an_opt_in_or_forwarding() {
     )
     .await
     .unwrap();
-    start(TempDir::new(), &[], "127.0.0.1:0").await.unwrap();
+    start(TempDir::flat(), &[], "127.0.0.1:0").await.unwrap();
 
     let missing = start(
-        TempDir::new(),
+        TempDir::flat(),
         &[(velocity::ENABLED_KEY, "true")],
         "127.0.0.1:0",
     )
@@ -244,7 +244,7 @@ async fn permission(server: &Running, uuid: u128) -> PermissionLevel {
 }
 
 fn ops_file(uuid: u128) -> TempDir {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let hex = format!("{uuid:032x}");
     let dashed = format!(
         "{}-{}-{}-{}-{}",
@@ -308,7 +308,7 @@ async fn offline_login(addr: std::net::SocketAddr, name: &str) -> Connection {
 #[tokio::test]
 async fn duplicate_logins_can_be_refused_instead_of_kicking() {
     let server = start(
-        TempDir::new(),
+        TempDir::flat(),
         &[("tuff.refuseDuplicateLogin", "true")],
         "127.0.0.1:0",
     )

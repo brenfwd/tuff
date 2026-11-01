@@ -570,6 +570,11 @@ impl WithBots {
         let backend = Arc::new(SqliteBackend::open(dir.path().join("world.mcserver")).unwrap());
         let config = backend.config().expect("sqlite keeps the config");
         config
+            .write_properties(&tuff_storage::admin::ServerProperties::parse(
+                "level-type=minecraft:flat\n",
+            ))
+            .unwrap();
+        config
             .write_plugin_grant("bots", Some("cross-plugin = all\nplayer-read = all"))
             .unwrap();
         config

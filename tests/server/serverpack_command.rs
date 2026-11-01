@@ -33,7 +33,7 @@ fn name_uuids_follow_the_version_three_layout() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn serverpack_pushes_and_pops_packs_for_every_player() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = server(&instance);
     let handle = server.handle();
     let task = tokio::spawn(server.run());

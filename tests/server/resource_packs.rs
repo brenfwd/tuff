@@ -45,7 +45,7 @@ async fn start(
     std::net::SocketAddr,
     TempDir,
 ) {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let mut features = tuff::vanilla_features::all();
     features.push(Box::new(PackFeature { required, on_join }));
     let server = Server::builder()

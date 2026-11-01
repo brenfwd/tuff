@@ -124,7 +124,7 @@ enum Event {
 }
 
 async fn start() -> TestServer {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let mut features = tuff::vanilla_features::all();
     features.retain(|feature| !feature.id().contains("anticheat"));
     let server = Server::builder()

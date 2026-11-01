@@ -32,7 +32,7 @@ fn noise(len: usize) -> String {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_full_view_distance_join_fits_the_default_outbound_cap() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = server(&instance, 32, Vec::new());
     let handle = server.handle();
     let task = tokio::spawn(server.run());
@@ -62,7 +62,7 @@ async fn a_full_view_distance_join_fits_the_default_outbound_cap() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_stalled_client_is_removed_through_the_leave_path() {
-    let instance = TempDir::new();
+    let instance = TempDir::flat();
     let server = server(
         &instance,
         8,

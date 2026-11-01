@@ -182,7 +182,7 @@ async fn moved_into_chest(dir: &Path) -> (Running, tuff_bot::Bot) {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_crash_after_the_autosave_never_leaves_an_item_in_both_chest_and_player() {
-    let dir = TempDir::new();
+    let dir = TempDir::flat();
     let (server, bot) = moved_into_chest(dir.path()).await;
     let handle = &server.handle;
     let world = dir.path().join("world");
@@ -202,7 +202,7 @@ async fn a_crash_after_the_autosave_never_leaves_an_item_in_both_chest_and_playe
     }
     assert!(written, "the autosave wrote both the player and the chunks");
     tokio::time::sleep(Duration::from_millis(200)).await;
-    let crashed = TempDir::new();
+    let crashed = TempDir::flat();
     copy_dir(dir.path(), crashed.path());
     drop(bot);
     server.handle.shutdown().await.unwrap();
@@ -222,7 +222,7 @@ async fn a_crash_after_the_autosave_never_leaves_an_item_in_both_chest_and_playe
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn save_off_stops_player_autosaves() {
-    let dir = TempDir::new();
+    let dir = TempDir::flat();
     let (server, bot) = moved_into_chest(dir.path()).await;
     let handle = &server.handle;
     handle.run_command("save-off").await.unwrap();

@@ -122,7 +122,7 @@ async fn diamonds_after_restart(dir: &Path) -> i64 {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_io_error_during_a_save_keeps_the_item_count_after_a_restart() {
-    let dir = TempDir::new();
+    let dir = TempDir::flat();
     let (server, bot) = moved_out_of_the_chest(dir.path()).await;
     let journal = journal(&server).await;
     journal.set_faults(Faults {
@@ -137,7 +137,7 @@ async fn an_io_error_during_a_save_keeps_the_item_count_after_a_restart() {
         committed,
         "a save with a failed chunk write never commits"
     );
-    let crashed = TempDir::new();
+    let crashed = TempDir::flat();
     copy_dir(dir.path(), crashed.path());
     journal.set_faults(Faults::default());
     stop(server, bot).await;
@@ -149,7 +149,7 @@ async fn an_io_error_during_a_save_keeps_the_item_count_after_a_restart() {
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_crash_between_the_player_write_and_the_chunk_write_keeps_the_item_count() {
-    let dir = TempDir::new();
+    let dir = TempDir::flat();
     let (server, bot) = moved_out_of_the_chest(dir.path()).await;
     let journal = journal(&server).await;
     let players = dir.path().join("world/players/data");
@@ -168,7 +168,7 @@ async fn a_crash_between_the_player_write_and_the_chunk_write_keeps_the_item_cou
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert!(written, "the save wrote the player");
-    let crashed = TempDir::new();
+    let crashed = TempDir::flat();
     copy_dir(dir.path(), crashed.path());
     journal.set_faults(Faults::default());
     stop(server, bot).await;
@@ -183,7 +183,7 @@ async fn a_drop_whose_check_fails_is_refused_and_keeps_the_item_count() {
     use tuff::protocol::play::{PlayerActionStatus, Serverbound};
     use tuff_core::world::conservation::Transfer;
 
-    let dir = TempDir::new();
+    let dir = TempDir::flat();
     let server = started(dir.path()).await;
     let bot = join(&server, "Steve").await;
     server
