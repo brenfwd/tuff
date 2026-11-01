@@ -15,6 +15,7 @@ pub(crate) struct Recording {
     respawned: Vec<Body>,
     gone_owners: Vec<String>,
     pub(crate) carried: Vec<crate::hands::Carried>,
+    pub(crate) enchanted: Vec<(u8, Vec<(String, u32)>)>,
     pub(crate) uses: Vec<&'static str>,
     lookups: std::collections::VecDeque<Lookup>,
     log: Vec<String>,
@@ -119,6 +120,14 @@ impl Host for Recording {
 
     fn locate(&mut self, _: Body, _: &str) -> Option<Vec3> {
         None
+    }
+
+    fn enchantments(&mut self, _: Body, slot: u8) -> Vec<(String, u32)> {
+        self.enchanted
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .map(|(_, e)| e.clone())
+            .unwrap_or_default()
     }
 
     fn inventory(&mut self, _: Body) -> Vec<crate::hands::Carried> {
@@ -704,4 +713,17 @@ fn defence_a_forgotten_hit_ends_the_fight() {
         bots.tick(&mut host);
     }
     assert_eq!(bots.state("a", id).unwrap().process, goto);
+}
+
+#[test]
+fn the_host_double_reports_a_slots_enchantments() {
+    let mut host = Recording {
+        enchanted: vec![(36, vec![("minecraft:silk_touch".into(), 1)])],
+        ..Default::default()
+    };
+    assert_eq!(
+        host.enchantments(0, 36),
+        vec![("minecraft:silk_touch".to_string(), 1)]
+    );
+    assert!(host.enchantments(0, 37).is_empty());
 }

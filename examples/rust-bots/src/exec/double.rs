@@ -41,6 +41,8 @@ pub struct Double {
     pub digs: Vec<(i32, i32, i32)>,
     /// Hotbar slot (0 to 8), item and count.
     pub hotbar: Vec<(u8, String, u32)>,
+    /// Menu slot and the enchantments on its stack.
+    pub enchanted: Vec<(u8, Vec<(String, u32)>)>,
     pub selected: u8,
     pub placed: Vec<Pos>,
     /// Each click: support block, face, cursor height and eye height.
@@ -98,6 +100,7 @@ impl Double {
             target: None,
             digs: Vec::new(),
             hotbar: Vec::new(),
+            enchanted: Vec::new(),
             selected: 0,
             placed: Vec::new(),
             clicks: Vec::new(),
@@ -296,6 +299,14 @@ impl Host for Double {
         let name: &'static str = Box::leak(state.into_boxed_str());
         terrain.block(at, name, Class::STANDABLE);
         self.placed.push(at);
+    }
+
+    fn enchantments(&mut self, _: Body, slot: u8) -> Vec<(String, u32)> {
+        self.enchanted
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .map(|(_, e)| e.clone())
+            .unwrap_or_default()
     }
 
     fn inventory(&mut self, _: Body) -> Vec<Carried> {

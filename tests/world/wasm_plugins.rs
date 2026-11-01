@@ -1207,7 +1207,7 @@ fn watcher() -> Vec<u8> {
               (call $put_int (i32.load8_u (i32.const {r16})))
               {SAY}
               (return {zero})))
-          (local.set $e (i32.load (i32.const {r20})))
+          (local.set $e (i32.load (i32.const {r28})))
           (call $put_int (i32.load8_u (local.get $e)))
           (call $put_char (i32.const 32))
           (call $put (i32.load offset=4 (local.get $e)) (i32.load offset=8 (local.get $e)))
@@ -1242,11 +1242,11 @@ fn watcher() -> Vec<u8> {
         r8 = RET + 8,
         r12 = RET + 12,
         r16 = RET + 16,
-        r20 = RET + 20,
+        r28 = RET + 28,
         zero = ok_code("(i32.const 0)"),
         none = ok_code("(i32.const -1)"),
         listed = ok_code(&format!("(i32.load (i32.const {}))", RET + 8)),
-        slots = ok_code(&format!("(i32.load (i32.const {}))", RET + 24)),
+        slots = ok_code(&format!("(i32.load (i32.const {}))", RET + 32)),
         x = coordinate("(f64.load offset=24 (local.get $e))"),
         y = coordinate("(f64.load offset=32 (local.get $e))"),
         z = coordinate("(f64.load offset=40 (local.get $e))"),
@@ -1342,8 +1342,8 @@ async fn plugins_hear_entity_events_and_query_entities_and_items() {
         Some(ItemStack::mint(Item::Stick, 3, MintReason::Test));
     *client.session.inventory.slot_mut(0) = Some(ItemStack::mint(Item::Stone, 9, MintReason::Test));
     let items = tuff_plugin_wasm::sandbox::Items {
-        held: Some(("minecraft:stick".to_owned(), 3)),
-        slots: vec![(0, "minecraft:stone".to_owned(), 9)],
+        held: Some(("minecraft:stick".to_owned(), 3, Vec::new())),
+        slots: vec![(0, "minecraft:stone".to_owned(), 9, Vec::new())],
         ..Default::default()
     };
     let with_items = Player {

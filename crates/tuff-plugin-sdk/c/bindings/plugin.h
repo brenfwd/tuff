@@ -1239,9 +1239,23 @@ typedef struct tuff_plugin_types_payload_message_t {
   plugin_list_u8_t   data;
 } tuff_plugin_types_payload_message_t;
 
+// One enchantment on a stack: a namespaced id and its level.
+typedef struct tuff_plugin_types_enchantment_t {
+  plugin_string_t   id;
+  uint32_t   level;
+} tuff_plugin_types_enchantment_t;
+
+typedef struct {
+  tuff_plugin_types_enchantment_t *ptr;
+  size_t len;
+} tuff_plugin_types_list_enchantment_t;
+
 typedef struct tuff_plugin_types_item_stack_t {
   plugin_string_t   item;
   uint8_t   count;
+  // The stack's enchantments, at most 16 (extra ones are dropped).
+  // Stored enchantments of enchanted books are not included.
+  tuff_plugin_types_list_enchantment_t   enchantments;
 } tuff_plugin_types_item_stack_t;
 
 typedef struct tuff_plugin_types_slot_t {
@@ -3477,6 +3491,10 @@ void tuff_plugin_types_item_action_free(tuff_plugin_types_item_action_t *ptr);
 void tuff_plugin_types_items_taken_free(tuff_plugin_types_items_taken_t *ptr);
 
 void tuff_plugin_types_payload_message_free(tuff_plugin_types_payload_message_t *ptr);
+
+void tuff_plugin_types_enchantment_free(tuff_plugin_types_enchantment_t *ptr);
+
+void tuff_plugin_types_list_enchantment_free(tuff_plugin_types_list_enchantment_t *ptr);
 
 void tuff_plugin_types_item_stack_free(tuff_plugin_types_item_stack_t *ptr);
 

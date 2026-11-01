@@ -1663,8 +1663,24 @@ void tuff_plugin_types_payload_message_free(tuff_plugin_types_payload_message_t 
   plugin_list_u8_free(&ptr->data);
 }
 
+void tuff_plugin_types_enchantment_free(tuff_plugin_types_enchantment_t *ptr) {
+  plugin_string_free(&ptr->id);
+}
+
+void tuff_plugin_types_list_enchantment_free(tuff_plugin_types_list_enchantment_t *ptr) {
+  size_t list_len = ptr->len;
+  if (list_len > 0) {
+    tuff_plugin_types_enchantment_t *list_ptr = ptr->ptr;
+    for (size_t i = 0; i < list_len; i++) {
+      tuff_plugin_types_enchantment_free(&list_ptr[i]);
+    }
+    free(list_ptr);
+  }
+}
+
 void tuff_plugin_types_item_stack_free(tuff_plugin_types_item_stack_t *ptr) {
   plugin_string_free(&ptr->item);
+  tuff_plugin_types_list_enchantment_free(&ptr->enchantments);
 }
 
 void tuff_plugin_types_slot_free(tuff_plugin_types_slot_t *ptr) {
@@ -5172,7 +5188,7 @@ bool tuff_plugin_host_has_permission(plugin_string_t *node, bool *ret) {
 
 bool tuff_plugin_host_acting_inventory(tuff_plugin_host_inventory_t *ret) {
   __attribute__((__aligned__(sizeof(void*))))
-  uint8_t ret_area[(7*sizeof(void*))];
+  uint8_t ret_area[(9*sizeof(void*))];
   uint8_t *ptr = (uint8_t *) &ret_area;
   __wasm_import_tuff_plugin_host_acting_inventory(ptr);
   tuff_plugin_host_option_inventory_t option0;
@@ -5194,6 +5210,7 @@ bool tuff_plugin_host_acting_inventory(tuff_plugin_host_inventory_t *ret) {
           option.val = (tuff_plugin_types_item_stack_t) {
             (plugin_string_t) (plugin_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (2*sizeof(void*))))), (*((size_t*) (ptr + (3*sizeof(void*))))) },
             (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (4*sizeof(void*))))),
+            (tuff_plugin_types_list_enchantment_t) (tuff_plugin_types_list_enchantment_t) { (tuff_plugin_types_enchantment_t*)(*((uint8_t **) (ptr + (5*sizeof(void*))))), (*((size_t*) (ptr + (6*sizeof(void*))))) },
           };
           break;
         }
@@ -5201,7 +5218,7 @@ bool tuff_plugin_host_acting_inventory(tuff_plugin_host_inventory_t *ret) {
 
       option0.val = (tuff_plugin_types_inventory_t) {
         (tuff_plugin_types_option_item_stack_t) option,
-        (tuff_plugin_types_list_slot_t) (tuff_plugin_types_list_slot_t) { (tuff_plugin_types_slot_t*)(*((uint8_t **) (ptr + (5*sizeof(void*))))), (*((size_t*) (ptr + (6*sizeof(void*))))) },
+        (tuff_plugin_types_list_slot_t) (tuff_plugin_types_list_slot_t) { (tuff_plugin_types_slot_t*)(*((uint8_t **) (ptr + (7*sizeof(void*))))), (*((size_t*) (ptr + (8*sizeof(void*))))) },
       };
       break;
     }
@@ -9958,7 +9975,7 @@ bool tuff_plugin_host_fake_player_state(tuff_plugin_host_uuid_t *fake, tuff_plug
 
 bool tuff_plugin_host_fake_player_inventory(tuff_plugin_host_uuid_t *fake, tuff_plugin_host_inventory_t *ret) {
   __attribute__((__aligned__(sizeof(void*))))
-  uint8_t ret_area[(7*sizeof(void*))];
+  uint8_t ret_area[(9*sizeof(void*))];
   uint8_t *ptr = (uint8_t *) &ret_area;
   __wasm_import_tuff_plugin_host_fake_player_inventory((int64_t) ((*fake).high), (int64_t) ((*fake).low), ptr);
   tuff_plugin_host_option_inventory_t option0;
@@ -9980,6 +9997,7 @@ bool tuff_plugin_host_fake_player_inventory(tuff_plugin_host_uuid_t *fake, tuff_
           option.val = (tuff_plugin_types_item_stack_t) {
             (plugin_string_t) (plugin_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (2*sizeof(void*))))), (*((size_t*) (ptr + (3*sizeof(void*))))) },
             (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (4*sizeof(void*))))),
+            (tuff_plugin_types_list_enchantment_t) (tuff_plugin_types_list_enchantment_t) { (tuff_plugin_types_enchantment_t*)(*((uint8_t **) (ptr + (5*sizeof(void*))))), (*((size_t*) (ptr + (6*sizeof(void*))))) },
           };
           break;
         }
@@ -9987,7 +10005,7 @@ bool tuff_plugin_host_fake_player_inventory(tuff_plugin_host_uuid_t *fake, tuff_
 
       option0.val = (tuff_plugin_types_inventory_t) {
         (tuff_plugin_types_option_item_stack_t) option,
-        (tuff_plugin_types_list_slot_t) (tuff_plugin_types_list_slot_t) { (tuff_plugin_types_slot_t*)(*((uint8_t **) (ptr + (5*sizeof(void*))))), (*((size_t*) (ptr + (6*sizeof(void*))))) },
+        (tuff_plugin_types_list_slot_t) (tuff_plugin_types_list_slot_t) { (tuff_plugin_types_slot_t*)(*((uint8_t **) (ptr + (7*sizeof(void*))))), (*((size_t*) (ptr + (8*sizeof(void*))))) },
       };
       break;
     }

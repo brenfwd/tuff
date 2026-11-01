@@ -975,7 +975,7 @@ fn holder(look: [f32; 2], held: &str) -> Player {
     let mut player = Editor::player(PermissionLevel::Gamemasters, [5.5, 103.0, 5.5]);
     player.position.as_mut().unwrap().look = Some(look);
     player.items = Some(Items {
-        held: Some((held.to_owned(), 1)),
+        held: Some((held.to_owned(), 1, Vec::new())),
         slots: Vec::new(),
         ..Default::default()
     });

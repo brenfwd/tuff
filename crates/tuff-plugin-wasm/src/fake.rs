@@ -225,23 +225,19 @@ impl Fakes {
         let handle = self.owned.get(&uuid_of(fake))?;
         let observed = handle.observed.borrow();
         let body = &observed.body;
-        let stack = |stack: &tuff_item::item::ItemPicture| WitStack {
-            item: stack.item().name().to_owned(),
-            count: stack.count(),
-        };
         let held = HOTBAR_START + body.selected_slot;
         Some(Inventory {
             held: body
                 .items
                 .iter()
                 .find(|(slot, _)| *slot == held)
-                .map(|(_, s)| stack(s)),
+                .map(|(_, s)| picture_stack(s)),
             slots: body
                 .items
                 .iter()
                 .map(|(index, s)| Slot {
                     index: *index,
-                    stack: stack(s),
+                    stack: picture_stack(s),
                 })
                 .collect(),
         })
@@ -355,6 +351,20 @@ fn face(direction: Direction) -> Face {
     }
 }
 
+fn picture_stack(stack: &tuff_item::item::ItemPicture) -> WitStack {
+    WitStack {
+        item: stack.item().name().to_owned(),
+        count: stack.count(),
+        enchantments: crate::bridge::wit_enchantments(
+            stack
+                .components
+                .enchantments
+                .as_ref()
+                .map_or(&[][..], |e| e.entries()),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tuff_core::world::player::Miner;
@@ -397,5 +407,31 @@ mod tests {
         let wool = Block::WhiteWool.default_state();
         let soft = best_tool(wool, wool.destroy_speed().unwrap(), &items, &miner, 0).unwrap();
         assert_eq!(soft, BreakTool { ticks: 24, slot: 0 });
+    }
+
+    #[tuff_core::watchdog]
+    #[test]
+    fn a_fakes_inventory_stack_reports_its_enchantments() {
+        use tuff_item::item::{ItemPicture, enchanting::enchant};
+        let pick = enchant(
+            ItemStack::mint(Item::IronPickaxe, 1, MintReason::Test),
+            &[("minecraft:efficiency", 5), ("minecraft:fortune", 3)],
+        );
+        let wit = picture_stack(&ItemPicture::of(&pick));
+        let got: Vec<_> = wit
+            .enchantments
+            .iter()
+            .map(|e| (e.id.as_str(), e.level))
+            .collect();
+        assert_eq!(
+            got,
+            vec![("minecraft:efficiency", 5), ("minecraft:fortune", 3)]
+        );
+        let plain = picture_stack(&ItemPicture::of(&ItemStack::mint(
+            Item::Stick,
+            1,
+            MintReason::Test,
+        )));
+        assert!(plain.enchantments.is_empty());
     }
 }

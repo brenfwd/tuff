@@ -511,18 +511,22 @@ impl State {
         let Some(items) = self.acting().ok().and_then(|p| p.items.as_ref()) else {
             return Ok(None);
         };
-        let stack = |item: &str, count: u8| ItemStack {
+        let stack = |item: &str, count: u8, enchantments: &[(String, i32)]| ItemStack {
             item: item.to_owned(),
             count,
+            enchantments: crate::bridge::wit_enchantments(enchantments),
         };
         Ok(Some(Inventory {
-            held: items.held.as_ref().map(|(item, count)| stack(item, *count)),
+            held: items
+                .held
+                .as_ref()
+                .map(|(item, count, e)| stack(item, *count, e)),
             slots: items
                 .slots
                 .iter()
-                .map(|(index, item, count)| Slot {
+                .map(|(index, item, count, e)| Slot {
                     index: *index,
-                    stack: stack(item, *count),
+                    stack: stack(item, *count, e),
                 })
                 .collect(),
         }))
