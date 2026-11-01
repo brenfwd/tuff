@@ -717,8 +717,10 @@ fn defence_a_forgotten_hit_ends_the_fight() {
 
 #[test]
 fn the_host_double_reports_a_slots_enchantments() {
-    let mut host = Recording::default();
-    host.enchanted = vec![(36, vec![("minecraft:silk_touch".into(), 1)])];
+    let mut host = Recording {
+        enchanted: vec![(36, vec![("minecraft:silk_touch".into(), 1)])],
+        ..Default::default()
+    };
     assert_eq!(
         host.enchantments(0, 36),
         vec![("minecraft:silk_touch".to_string(), 1)]
