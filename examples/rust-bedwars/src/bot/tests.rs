@@ -258,8 +258,14 @@ fn followers_trail_a_distant_teammate() {
 
 #[test]
 fn a_fighting_bot_stops_sprinting_in_melee_range() {
-    let near = [Seen { id: 1, pos: [2.0, 0.0, 0.0] }];
-    let far = [Seen { id: 1, pos: [8.0, 0.0, 0.0] }];
+    let near = [Seen {
+        id: 1,
+        pos: [2.0, 0.0, 0.0],
+    }];
+    let far = [Seen {
+        id: 1,
+        pos: [8.0, 0.0, 0.0],
+    }];
     let mut fight = goals::Fight::default();
     for (enemies, sprints) in [(&near, false), (&far, true)] {
         let v = view([0.0; 3], enemies);
@@ -283,8 +289,28 @@ fn a_respawned_bot_regroups_before_it_rushes_again() {
 }
 
 #[test]
+fn a_bot_beside_an_enemy_bed_breaks_it_instead_of_fighting_its_defender() {
+    let beds = [[2, 64, 0]];
+    let enemies = [Seen {
+        id: 1,
+        pos: [1.0, 64.0, 1.0],
+    }];
+    let mut v = view([0.5, 64.0, 0.5], &enemies);
+    v.enemy_beds = &beds;
+    let mut brain = goals::bedwars();
+    let out = brain.tick(&v);
+    assert_eq!(out.dig, Some(beds[0]));
+    assert_eq!(out.fight, None);
+    v.enemy_beds = &[];
+    assert_eq!(brain.tick(&v).fight, Some(1));
+}
+
+#[test]
 fn a_fighting_bot_at_an_edge_retreats_instead_of_chasing() {
-    let enemies = [Seen { id: 1, pos: [2.0, 0.0, 0.0] }];
+    let enemies = [Seen {
+        id: 1,
+        pos: [2.0, 0.0, 0.0],
+    }];
     let mut v = view([0.0; 3], &enemies);
     v.edge = Some([-3.5, 0.0, 0.5]);
     let mut fight = goals::Fight::default();
@@ -298,7 +324,10 @@ fn a_fighting_bot_at_an_edge_retreats_instead_of_chasing() {
 
 #[test]
 fn a_fighting_bot_away_from_an_edge_still_chases() {
-    let enemies = [Seen { id: 1, pos: [8.0, 0.0, 0.0] }];
+    let enemies = [Seen {
+        id: 1,
+        pos: [8.0, 0.0, 0.0],
+    }];
     let v = view([0.0; 3], &enemies);
     let mut fight = goals::Fight::default();
     fight.start(&v);
@@ -310,7 +339,10 @@ fn a_fighting_bot_away_from_an_edge_still_chases() {
 
 #[test]
 fn a_bed_defender_at_an_edge_retreats_unless_the_bed_is_close() {
-    let enemies = [Seen { id: 1, pos: [10.0, 64.0, 0.0] }];
+    let enemies = [Seen {
+        id: 1,
+        pos: [10.0, 64.0, 0.0],
+    }];
     let mut v = view([0.0, 64.0, 0.0], &enemies);
     v.bed = Some([10, 64, 0]);
     v.edge = Some([-3.5, 64.0, 0.5]);

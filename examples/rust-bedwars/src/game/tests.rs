@@ -1094,5 +1094,8 @@ fn safe_ground_finds_solid_floor_only_beside_a_drop() {
 #[test]
 fn safe_ground_is_none_when_the_void_is_everywhere() {
     let mut rec = Rec::default();
-    assert_eq!(super::bots::safe_ground(&mut rec, "w", [0.5, 64.0, 0.5]), None);
+    assert_eq!(
+        super::bots::safe_ground(&mut rec, "w", [0.5, 64.0, 0.5]),
+        None
+    );
 }

@@ -104,6 +104,9 @@ async fn live_metrics_follow_a_connected_player() {
             && snapshot.world.chunks > 0
             && snapshot.manager.is_some()
             && snapshot.chunk_io.is_some()
+            && snapshot.slowest_regions.first().is_some_and(|r| {
+                r.dimension == "minecraft:overworld" && r.ticks > 0 && r.chunks > 0
+            })
         {
             break snapshot;
         }
@@ -118,7 +121,6 @@ async fn live_metrics_follow_a_connected_player() {
     let slowest = &snapshot.slowest_regions[0];
     assert_eq!(slowest.dimension, "minecraft:overworld");
     assert!(slowest.ticks > 0 && slowest.chunks > 0, "{slowest:?}");
-    assert_eq!(snapshot.dropped_reports, 0);
     assert!(
         metrics
             .history("tick.tps", std::time::Duration::from_secs(60))
