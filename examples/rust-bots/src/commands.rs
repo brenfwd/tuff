@@ -6,21 +6,26 @@
 use std::collections::BTreeMap;
 
 use tuff_bots_api::control::{
-    BlockPos, BotId, BranchSpec, BuildBlock, BuildSpec, ControlError, FarmSpec, FlySpec, FollowSpec,
-    GetToBlockSpec, Goal, Heading, LeafGoal, Location, MineSpec, Model, NearGoal, Policy, Process,
-    RespawnPolicy, Skill, SpawnSpec, Vec3, XzGoal,
+    BlockPos, BotId, BranchSpec, BuildBlock, BuildSpec, ControlError, FarmSpec, FlySpec,
+    FollowSpec, GetToBlockSpec, Goal, Heading, LeafGoal, Location, MineSpec, Model, NearGoal,
+    Policy, Process, RespawnPolicy, Skill, SpawnSpec, Vec3, XzGoal,
 };
 
 use tuff_plugin_sdk::command::{Node, Suggest, argument, command, literal, parser};
 use tuff_plugin_sdk::prelude::{Ctx, Outcome, Player, arg};
 
 use crate::core::{Bots, Host};
+use crate::drops;
 
 /// The owner id of bots made by commands.
 pub const OWNER: &str = "bots";
 pub const FOLLOW_RANGE: f64 = 3.0;
 pub const MINE_RADIUS: u32 = 48;
 pub const MAX_MINE_COUNT: u32 = 4096;
+
+const MINE_ABOUT: &str = "Mines blocks; count is blocks verifiably broken, not items held (use /bots collect to count items held)";
+const COLLECT_ABOUT: &str =
+    "Mines blocks until the bot holds count more of an item than when it started";
 pub const MINE_LEVELS: std::ops::RangeInclusive<i32> = -64..=319;
 pub const PRESETS: [&str; 3] = ["novice", "average", "expert"];
 const MAX_NAME: usize = 16;
@@ -90,6 +95,7 @@ pub enum Cmd {
     Fly(String, i32, i32),
     Come(String),
     Mine(String, String, u32, Option<BranchSpec>),
+    Collect(String, String, u32),
     Find(String, String),
     Farm(String, Vec<i32>),
     Stop(String),
@@ -374,6 +380,37 @@ pub fn run(
                 count: *count,
                 radius: MINE_RADIUS,
                 branch: branch.clone(),
+                collect: None,
+            };
+            bots.set_process(OWNER, id, Process::Mine(spec))
+                .map_err(describe)?;
+            Ok(format!("{name} is mining"))
+        }
+        Cmd::Collect(name, item, count) => {
+            if !(1..=MAX_MINE_COUNT).contains(count) {
+                return Err(format!("count is 1 to {MAX_MINE_COUNT}"));
+            }
+            let item = format!(
+                "minecraft:{}",
+                item.trim().trim_start_matches("minecraft:").to_lowercase()
+            );
+            let blocks: Vec<String> = drops::blocks_dropping(&item)
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+            if blocks.is_empty() {
+                return Err(format!(
+                    "nothing known drops {}",
+                    item.trim_start_matches("minecraft:")
+                ));
+            }
+            let id = bot_of(reg, bots, name, by)?;
+            let spec = MineSpec {
+                blocks,
+                count: *count,
+                radius: MINE_RADIUS,
+                branch: None,
+                collect: Some(item),
             };
             bots.set_process(OWNER, id, Process::Mine(spec))
                 .map_err(describe)?;
@@ -581,31 +618,41 @@ fn heading_nodes(counted: bool, level: bool) -> Vec<Node> {
     ]
     .into_iter()
     .map(|(word, heading)| {
-        literal(word).executes(move |ctx| {
-            execute(&ctx, |c| {
-                let level = if level { Some(c.get::<i32>("level")?) } else { None };
-                mine_cmd(c, counted, Some(BranchSpec { level, heading }))
+        literal(word)
+            .executes(move |ctx| {
+                execute(&ctx, |c| {
+                    let level = if level {
+                        Some(c.get::<i32>("level")?)
+                    } else {
+                        None
+                    };
+                    mine_cmd(c, counted, Some(BranchSpec { level, heading }))
+                })
             })
-        })
+            .about(MINE_ABOUT)
     })
     .collect()
 }
 
 fn mine_tail(node: Node, counted: bool) -> Node {
-    let mut node = node.executes(move |ctx| execute(&ctx, |c| mine_cmd(c, counted, None)));
-    let mut level = argument("level", parser::integer()).executes(move |ctx| {
-        execute(&ctx, |c| {
-            let level = Some(c.get::<i32>("level")?);
-            mine_cmd(
-                c,
-                counted,
-                Some(BranchSpec {
-                    level,
-                    heading: Heading::East,
-                }),
-            )
+    let mut node = node
+        .executes(move |ctx| execute(&ctx, |c| mine_cmd(c, counted, None)))
+        .about(MINE_ABOUT);
+    let mut level = argument("level", parser::integer())
+        .executes(move |ctx| {
+            execute(&ctx, |c| {
+                let level = Some(c.get::<i32>("level")?);
+                mine_cmd(
+                    c,
+                    counted,
+                    Some(BranchSpec {
+                        level,
+                        heading: Heading::East,
+                    }),
+                )
+            })
         })
-    });
+        .about(MINE_ABOUT);
     for n in heading_nodes(counted, true) {
         level = level.then(n);
     }
@@ -699,6 +746,23 @@ pub fn register() -> Result<(), String> {
                 argument("name", parser::word()).suggests(names).then(
                     mine_tail(argument("blocks", parser::word()), false)
                         .then(mine_tail(argument("count", parser::integer()), true)),
+                ),
+            ),
+        )
+        .then(
+            named("collect", "bots.command.collect").then(
+                argument("name", parser::word()).suggests(names).then(
+                    argument("item", parser::word()).then(
+                        argument("count", parser::integer())
+                            .executes(|ctx| {
+                                execute(&ctx, |c| {
+                                    let count = u32::try_from(c.get::<i32>("count")?)
+                                        .map_err(|_| "count must be positive".to_owned())?;
+                                    Ok(Cmd::Collect(c.get("name")?, c.get("item")?, count))
+                                })
+                            })
+                            .about(COLLECT_ABOUT),
+                    ),
                 ),
             ),
         )
@@ -899,6 +963,37 @@ mod tests {
                 .is_err()
         );
         assert!(rig.run(Cmd::Find("Bob".into(), "".into()), &op).is_err());
+    }
+
+    #[test]
+    fn mine_help_says_count_is_blocks_broken_not_items_held() {
+        assert!(MINE_ABOUT.contains("blocks verifiably broken, not items held"));
+        assert!(MINE_ABOUT.contains("/bots collect"));
+    }
+
+    #[test]
+    fn collect_sets_a_collecting_mine_and_rejects_unknown_items() {
+        let mut rig = Rig::new();
+        let op = sender("aa", false);
+        rig.run(Cmd::Spawn("Bob".into()), &op).unwrap();
+        rig.run(Cmd::Collect("Bob".into(), "Raw_Iron".into(), 3), &op)
+            .unwrap();
+        let Process::Mine(spec) = rig.process("Bob") else {
+            panic!("not mining");
+        };
+        assert_eq!(spec.blocks, ["iron_ore", "deepslate_iron_ore"]);
+        assert_eq!(spec.count, 3);
+        assert_eq!(spec.collect.as_deref(), Some("minecraft:raw_iron"));
+        assert_eq!(
+            rig.run(Cmd::Collect("Bob".into(), "bedrock".into(), 1), &op),
+            Err("nothing known drops bedrock".into())
+        );
+        for bad in [0, MAX_MINE_COUNT + 1] {
+            assert!(
+                rig.run(Cmd::Collect("Bob".into(), "raw_iron".into(), bad), &op)
+                    .is_err()
+            );
+        }
     }
 
     #[test]

@@ -653,6 +653,79 @@ async fn a_bot_mines_three_iron_ore_and_holds_raw_iron() {
 
 #[tuff_core::watchdog]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bot_collects_three_raw_iron() {
+    let Some(run) = Run::start(true).await else {
+        return;
+    };
+    run.server("forceload add -16 -16 31 31").await;
+    run.fill_loaded("fill -14 140 -14 14 149 14 stone").await;
+    for line in [
+        "fill -14 150 -14 14 160 14 air",
+        "setblock 3 150 0 iron_ore",
+        "setblock -3 150 2 iron_ore",
+        "setblock 0 150 -4 iron_ore",
+        "setblock 5 150 5 iron_ore",
+        "gamerule natural_health_regeneration false",
+    ] {
+        run.server(line).await;
+    }
+    run.ask("spawnat Botty 0 150 0", |a| a.contains("spawned 1"))
+        .await;
+    run.botty_online(true).await;
+    run.ask("goto 1 0 150 0", |a| a.contains("going 1")).await;
+    let settled = run.process_end(1, PATIENCE * 2).await;
+    assert!(settled.contains("done 1"), "{settled}");
+    run.server("give Botty iron_pickaxe").await;
+    run.server("give Botty raw_iron 2").await;
+    let given = run.ticks() + PATIENCE;
+    while run.ticks() < given
+        && !run
+            .server("clear Botty raw_iron 0")
+            .await
+            .contains("Found 2")
+    {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let seen = run.ticks() + 20;
+    while run.ticks() < seen {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    run.ask("collect 1 minecraft:raw_iron minecraft:iron_ore 3", |a| {
+        a.contains("collecting 1")
+    })
+    .await;
+    let mut held = String::new();
+    let end = run.ticks() + PATIENCE * 2;
+    while run.ticks() < end {
+        held = run.server("clear Botty raw_iron 0").await;
+        if held.contains("Found 5") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let state = run.ask("state 1", |a| a.contains("alive")).await;
+    assert!(
+        held.contains("Found 5"),
+        "{held} | {state} | {}",
+        run.say("events").await
+    );
+    let settled = run.process_end(1, PATIENCE).await;
+    assert!(settled.contains("done 1"), "{settled}");
+    let after = run.server("clear Botty raw_iron 0").await;
+    assert!(after.contains("Found 5"), "{after}");
+    let fourth = run.server("execute if block 5 150 5 iron_ore").await;
+    let held_now = run.server("clear Botty raw_iron 0").await;
+    let ore_items = run.server("clear Botty iron_ore 0").await;
+    assert!(
+        fourth.contains("passed"),
+        "{fourth} | {held_now} | {ore_items} | {}",
+        run.say("events").await
+    );
+    run.stop().await;
+}
+
+#[tuff_core::watchdog]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_bot_branch_mines_down_to_a_level_and_finds_ore() {
     let Some(run) = Run::start(true).await else {
         return;

@@ -574,6 +574,7 @@ fn a_miner_swaps_to_the_best_pickaxe_before_it_digs() {
         count: 1,
         radius: 6,
         branch: None,
+        collect: None,
     });
     bots.set_process("a", id, mine).unwrap();
     for _ in 0..10 {

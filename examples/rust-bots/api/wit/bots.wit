@@ -121,6 +121,8 @@ interface control {
         count: u32,
         radius: u32,
         branch: option<branch-spec>,
+        /// Wanted item id: `count` is then the inventory increase over the first tick's baseline and `blocks` lists blocks that can drop it.
+        collect: option<string>,
     }
 
     record get-to-block-spec {

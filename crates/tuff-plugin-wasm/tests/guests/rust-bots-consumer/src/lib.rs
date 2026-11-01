@@ -207,6 +207,7 @@ impl Plugin for Consumer {
                             count: int(&ctx, "count") as u32,
                             radius: 16,
                             branch: None,
+                            collect: None,
                         };
                         let line = match control::Control::any()
                             .set_process(id, control::Process::Mine(spec))
@@ -218,6 +219,28 @@ impl Plugin for Consumer {
                         answer(&ctx, line);
                     }),
                 ),
+            )))
+            .then(literal("collect").then(argument("id", parser::word()).then(
+                argument("item", parser::word()).then(argument("block", parser::word()).then(
+                    argument("count", parser::word()).executes_async(|ctx| async move {
+                        let id = int(&ctx, "id") as u32;
+                        let spec = control::MineSpec {
+                            blocks: vec![ctx.get::<String>("block").unwrap_or_default()],
+                            count: int(&ctx, "count") as u32,
+                            radius: 16,
+                            branch: None,
+                            collect: Some(ctx.get::<String>("item").unwrap_or_default()),
+                        };
+                        let line = match control::Control::any()
+                            .set_process(id, control::Process::Mine(spec))
+                            .await
+                        {
+                            Ok(()) => format!("collecting {id}"),
+                            Err(error) => describe(error),
+                        };
+                        answer(&ctx, line);
+                    }),
+                )),
             )))
             .then(literal("branchmine").then(argument("id", parser::word()).then(
                 argument("block", parser::word()).then(argument("level", parser::word()).then(
@@ -237,6 +260,7 @@ impl Plugin for Consumer {
                                 level: Some(int(&ctx, "level")),
                                 heading,
                             }),
+                            collect: None,
                         };
                         let line = match control::Control::any()
                             .set_process(id, control::Process::Mine(spec))

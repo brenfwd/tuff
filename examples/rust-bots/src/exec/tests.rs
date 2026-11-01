@@ -344,6 +344,7 @@ fn mine_spec(count: u32) -> Process {
         count,
         radius: 32,
         branch: None,
+        collect: None,
     })
 }
 
@@ -1056,10 +1057,10 @@ fn branch_walk(
         heading,
     };
     let names = vec!["iron_ore".to_owned()];
-    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, Some(&plan), &me);
+    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, Some(&plan), None, &me);
     let mut digs = Vec::new();
     for _ in 0..steps {
-        match miner.tick(&me, t) {
+        match miner.tick(&me, t, 0) {
             crate::mine::Mining::Dig(p) => {
                 digs.push(p);
                 t.dig(p);
@@ -1152,9 +1153,9 @@ fn a_buried_ore_in_reach_is_dug_toward_not_struck_through_stone() {
         y: 1.0,
         z: 76.5,
     };
-    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, None, &me);
+    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, None, None, &me);
     let step = (0..20)
-        .map(|_| miner.tick(&me, &mut t))
+        .map(|_| miner.tick(&me, &mut t, 0))
         .find(|s| *s != crate::mine::Mining::Wait);
     assert!(
         matches!(
@@ -1182,10 +1183,10 @@ fn branch_digs_an_ore_that_the_tunnel_comes_within_reach_of() {
         level: Some(-2),
         heading: Heading::North,
     };
-    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, Some(&plan), &me);
+    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, Some(&plan), None, &me);
     let mut dug = false;
     for _ in 0..400 {
-        match miner.tick(&me, &mut t) {
+        match miner.tick(&me, &mut t, 0) {
             crate::mine::Mining::Dig(p) => {
                 t.dig(p);
                 dug |= p == (3, -2, 60);
@@ -1202,4 +1203,220 @@ fn branch_digs_an_ore_that_the_tunnel_comes_within_reach_of() {
         }
     }
     assert!(dug);
+}
+
+fn collect_terrain(ores: &[(i32, i32, i32)]) -> Terrain {
+    let mut t = Terrain::new(32, 8);
+    for p in ores {
+        t.named_ore(*p, "minecraft:iron_ore");
+    }
+    t
+}
+
+const FOUR_ORES: [(i32, i32, i32); 4] = [(3, 1, 2), (6, 1, 3), (10, 1, 5), (12, 1, 6)];
+
+fn collect_run(
+    item: &str,
+    count: u32,
+    ores: &[(i32, i32, i32)],
+    hotbar: &[(u8, &str, u32)],
+    drop: Option<(&str, u32)>,
+) -> Run {
+    let process = Process::Mine(MineSpec {
+        blocks: vec!["iron_ore".into()],
+        count,
+        radius: 32,
+        branch: None,
+        collect: Some(item.into()),
+    });
+    let mut run = Run::with(collect_terrain(ores), (0.5, 1.0, 0.5), process);
+    run.host.hotbar = hotbar
+        .iter()
+        .map(|(s, i, n)| (*s, (*i).into(), *n))
+        .collect();
+    run.host.dig_drop = drop.map(|(i, n)| (i.into(), n));
+    run
+}
+
+fn held(run: &Run, item: &str) -> u32 {
+    run.host
+        .hotbar
+        .iter()
+        .filter(|(_, i, _)| i == item)
+        .map(|(_, _, n)| *n)
+        .sum()
+}
+
+const IRON_PICK: (u8, &str, u32) = (0, "minecraft:iron_pickaxe", 1);
+const DIAMOND_PICK: (u8, &str, u32) = (1, "minecraft:diamond_pickaxe", 1);
+
+fn silk(menu: u8) -> (u8, Vec<(String, u32)>) {
+    (menu, vec![("minecraft:silk_touch".into(), 1)])
+}
+
+fn failure(run: &Run) -> Option<&str> {
+    match run.last_event() {
+        Some(Event::ProcessFailed(why)) => Some(why),
+        _ => None,
+    }
+}
+
+#[test]
+fn collect_stops_when_the_item_count_rises_by_the_target() {
+    let raw = "minecraft:raw_iron";
+    let mut run = collect_run(
+        raw,
+        3,
+        &FOUR_ORES,
+        &[IRON_PICK, (2, raw, 2)],
+        Some((raw, 1)),
+    );
+    run.run(3000);
+    assert_eq!(
+        run.last_event(),
+        Some(&Event::ProcessDone),
+        "{}",
+        run.trace()
+    );
+    assert_eq!(held(&run, raw), 5);
+    assert_eq!(run.host.digs.len(), 3);
+    assert!(run.host.terrain.borrow().ores.contains(&(12, 1, 6)));
+}
+
+#[test]
+fn collect_counts_against_the_baseline_not_the_stack_held() {
+    let raw = "minecraft:raw_iron";
+    let mut run = collect_run(
+        raw,
+        2,
+        &FOUR_ORES,
+        &[IRON_PICK, (2, raw, 10)],
+        Some((raw, 1)),
+    );
+    run.run(3000);
+    assert_eq!(
+        run.last_event(),
+        Some(&Event::ProcessDone),
+        "{}",
+        run.trace()
+    );
+    assert_eq!(held(&run, raw), 12);
+    assert_eq!(run.host.digs.len(), 2);
+}
+
+#[test]
+fn collect_counts_multi_drops_from_fortune() {
+    let raw = "minecraft:raw_iron";
+    let mut run = collect_run(raw, 4, &FOUR_ORES, &[IRON_PICK], Some((raw, 2)));
+    run.run(3000);
+    assert_eq!(
+        run.last_event(),
+        Some(&Event::ProcessDone),
+        "{}",
+        run.trace()
+    );
+    assert_eq!(held(&run, raw), 4);
+    assert_eq!(run.host.digs.len(), 2);
+}
+
+#[test]
+fn collect_digs_a_drop_with_the_plain_pickaxe_not_the_silk_one() {
+    let raw = "minecraft:raw_iron";
+    let mut run = collect_run(
+        raw,
+        1,
+        &FOUR_ORES,
+        &[IRON_PICK, DIAMOND_PICK],
+        Some((raw, 1)),
+    );
+    run.host.enchanted = vec![silk(37)];
+    run.run(3000);
+    assert_eq!(
+        run.last_event(),
+        Some(&Event::ProcessDone),
+        "{}",
+        run.trace()
+    );
+    assert_eq!(run.host.selected, 0);
+}
+
+#[test]
+fn collect_fails_when_only_a_silk_pickaxe_is_held_for_a_drop() {
+    let raw = "minecraft:raw_iron";
+    let mut run = collect_run(raw, 1, &FOUR_ORES, &[DIAMOND_PICK], Some((raw, 1)));
+    run.host.enchanted = vec![silk(37)];
+    run.run(3000);
+    assert_eq!(
+        failure(&run),
+        Some("only a silk touch tool for iron_ore; cannot get raw_iron")
+    );
+    assert!(run.host.digs.is_empty());
+}
+
+#[test]
+fn collect_the_block_itself_digs_with_the_silk_pickaxe() {
+    let ore = "minecraft:iron_ore";
+    let mut run = collect_run(
+        ore,
+        2,
+        &FOUR_ORES,
+        &[IRON_PICK, DIAMOND_PICK],
+        Some((ore, 1)),
+    );
+    run.host.enchanted = vec![silk(37)];
+    run.run(3000);
+    assert_eq!(
+        run.last_event(),
+        Some(&Event::ProcessDone),
+        "{}",
+        run.trace()
+    );
+    assert_eq!(run.host.selected, 1);
+    assert_eq!(held(&run, ore), 2);
+}
+
+#[test]
+fn collect_the_block_itself_fails_without_a_silk_tool() {
+    let ore = "minecraft:iron_ore";
+    let mut run = collect_run(ore, 1, &FOUR_ORES, &[IRON_PICK], Some((ore, 1)));
+    run.run(3000);
+    assert_eq!(
+        failure(&run),
+        Some("no silk touch tool held to collect iron_ore")
+    );
+    assert!(run.host.digs.is_empty());
+}
+
+#[test]
+fn collect_gives_up_after_breaks_that_gave_nothing() {
+    let raw = "minecraft:raw_iron";
+    let ores = [
+        (3, 1, 2),
+        (4, 1, 3),
+        (5, 1, 2),
+        (6, 1, 3),
+        (7, 1, 2),
+        (8, 1, 3),
+        (9, 1, 2),
+        (10, 1, 3),
+    ];
+    let mut run = collect_run(raw, 3, &ores, &[IRON_PICK], None);
+    run.run(6000);
+    assert_eq!(failure(&run), Some("6 breaks gave no raw_iron"));
+    assert_eq!(run.host.digs.len(), 6);
+}
+
+#[test]
+fn collect_names_the_item_when_the_search_area_is_exhausted() {
+    let me = Vec3 {
+        x: 0.5,
+        y: 1.0,
+        z: 0.5,
+    };
+    let names = ["iron_ore".to_owned()];
+    let collecting =
+        crate::mine::Miner::new(&names, 1, 6, true, None, Some("minecraft:raw_iron"), &me);
+    let plain = crate::mine::Miner::new(&names, 1, 6, true, None, None, &me);
+    assert_eq!(collecting.exhausted(), "nothing nearby drops raw_iron");
+    assert_eq!(plain.exhausted(), "none found");
 }

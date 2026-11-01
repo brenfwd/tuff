@@ -75,6 +75,11 @@ impl Terrain {
         self.ores.insert(p);
     }
 
+    pub fn named_ore(&mut self, p: (i32, i32, i32), name: &'static str) {
+        self.block(p, name, Class::STANDABLE);
+        self.ores.insert(p);
+    }
+
     pub fn ores_in(&self, key: SectionKey) -> Vec<(i32, i32, i32)> {
         self.ores
             .iter()
