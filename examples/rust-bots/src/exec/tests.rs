@@ -1087,11 +1087,11 @@ fn branch_descends_a_two_high_stair_then_tunnels_north() {
         &digs[..6],
         &[
             (3, 0, 75),
-            (3, -1, 74),
             (3, 0, 74),
-            (3, -2, 73),
-            (3, -1, 73),
+            (3, -1, 74),
             (3, 0, 73),
+            (3, -1, 73),
+            (3, -2, 73),
         ],
         "{digs:?}"
     );
@@ -1108,11 +1108,7 @@ fn branch_above_the_start_digs_up() {
         t.set((3, y, 76), Class::PASSABLE);
     }
     let digs = branch_walk(&mut t, (3.5, 1.0, 76.5), 3, Heading::North, 60);
-    assert_eq!(
-        &digs[..2],
-        &[(3, 2, 75), (3, 3, 75)],
-        "{digs:?}"
-    );
+    assert_eq!(&digs[..2], &[(3, 2, 75), (3, 3, 75)], "{digs:?}");
     assert!(digs.contains(&(3, 3, 70)) && digs.contains(&(3, 4, 70)));
 }
 
@@ -1140,6 +1136,35 @@ fn branch_heads_west_and_the_tunnel_is_capped() {
     let digs = branch_walk(&mut t, (70.5, 1.0, 3.5), 1, Heading::West, 4000);
     assert!(digs.iter().all(|p| p.2 == 3), "{digs:?}");
     assert_eq!(digs.iter().map(|p| p.0).min(), Some(70 - 48), "{digs:?}");
+}
+
+#[test]
+fn a_buried_ore_in_reach_is_dug_toward_not_struck_through_stone() {
+    let mut t = Terrain::new(8, 80);
+    stone_mass(&mut t, -6..=4);
+    for y in 1..=2 {
+        t.set((3, y, 76), Class::PASSABLE);
+    }
+    t.ore((3, 1, 73));
+    let names = vec!["iron_ore".to_owned()];
+    let me = Vec3 {
+        x: 3.5,
+        y: 1.0,
+        z: 76.5,
+    };
+    let mut miner = crate::mine::Miner::new(&names, 1, 6, true, None, &me);
+    let step = (0..20)
+        .map(|_| miner.tick(&me, &mut t))
+        .find(|s| *s != crate::mine::Mining::Wait);
+    assert!(
+        matches!(
+            step,
+            Some(crate::mine::Mining::Goal(Goal::Leaf(LeafGoal::GetToBlock(
+                _
+            ))))
+        ),
+        "{step:?}"
+    );
 }
 
 #[test]
