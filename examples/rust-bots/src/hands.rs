@@ -107,9 +107,14 @@ impl Breaker {
         }
     }
 
-    /// A goal that brings a face of `pos` into clear view, `None` when it
-    /// is visible already or no stand shows it.
-    fn sighted(&mut self, me: &Vec3, world: &mut dyn Blocks, pos: Pos) -> Result<Option<Goal>, ()> {
+    /// An exposed face of `pos` in clear view, or else a goal that brings
+    /// one into view (`None` when no stand shows it).
+    fn sighted(
+        &mut self,
+        me: &Vec3,
+        world: &mut dyn Blocks,
+        pos: Pos,
+    ) -> Result<Result<Face, Option<Goal>>, ()> {
         let eye = (me.x, me.y + EYE, me.z);
         let mut faces = Vec::new();
         for face in Face::ALL {
@@ -123,9 +128,13 @@ impl Breaker {
             }
         }
         let dug = dug_face(eye, pos);
-        for &(against, face) in faces.iter().filter(|(_, face)| *face == dug) {
+        let order = faces
+            .iter()
+            .filter(|(_, face)| *face == dug)
+            .chain(faces.iter().filter(|(_, face)| *face != dug));
+        for &(against, face) in order {
             if clear_view(world, eye, against, face)? {
-                return Ok(None);
+                return Ok(Ok(face));
             }
         }
         let stand = match self.stand {
@@ -148,7 +157,7 @@ impl Breaker {
                 found
             }
         };
-        Ok(stand.map(|s| {
+        Ok(Err(stand.map(|s| {
             Goal::Leaf(LeafGoal::Near(NearGoal {
                 pos: BlockPos {
                     x: s.0,
@@ -157,7 +166,7 @@ impl Breaker {
                 },
                 radius: STAND_RADIUS,
             }))
-        }))
+        })))
     }
 
     pub fn tick(
@@ -201,14 +210,15 @@ impl Breaker {
                 if !in_reach(me, pos) {
                     return approach(me, pos);
                 }
-                match self.sighted(me, world, pos) {
+                let face = match self.sighted(me, world, pos) {
                     Err(()) => return Hands::Wait,
-                    Ok(Some(goal)) if !goal_reached(&goal, me) && self.chase < CHASE_TICKS => {
+                    Ok(Ok(face)) => Some(face),
+                    Ok(Err(Some(goal))) if !goal_reached(&goal, me) && self.chase < CHASE_TICKS => {
                         self.chase += 1;
                         return Hands::Goal(goal);
                     }
-                    Ok(_) => {}
-                }
+                    Ok(Err(_)) => None,
+                };
                 let Ok(state) = world.state_at(pos.0, pos.1, pos.2) else {
                     return Hands::Wait;
                 };
@@ -223,7 +233,7 @@ impl Breaker {
                 if let Some(tool) = tool {
                     actions.push(Action::Select(tool.slot));
                 }
-                actions.push(Action::Dig(pos));
+                actions.push(face.map_or(Action::Dig(pos), |face| Action::DigFace(pos, face)));
                 self.phase = Phase::Working {
                     pos,
                     ticks: 0,
@@ -972,6 +982,24 @@ mod stand_tests {
         assert_eq!(placer.tick(&me, &mut world, &carried), Hands::Wait);
         assert_eq!(placer.stand, None);
         assert!(placer.rejected.contains(&(2, 64, 5)));
+    }
+
+    #[test]
+    fn a_breaker_digs_through_a_face_it_sees_not_one_covered_by_a_neighbour() {
+        let mut world = Field {
+            solid: HashSet::from([(0, 64, 2), (1, 64, 2)]),
+        };
+        let mut breaker = Breaker::new(&[BlockPos { x: 0, y: 64, z: 2 }]);
+        let me = Vec3 {
+            x: 2.9935712535061123,
+            y: 66.86918708351305 - EYE,
+            z: 2.5955990558762343,
+        };
+        let hands = breaker.tick(&me, &mut world, None);
+        assert_eq!(
+            hands,
+            Hands::Act(vec![Action::DigFace((0, 64, 2), Face::Up)])
+        );
     }
 
     #[test]

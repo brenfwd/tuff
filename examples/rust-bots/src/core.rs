@@ -107,6 +107,10 @@ pub trait Host {
     fn blocks(&mut self, body: Body) -> Option<&mut dyn Blocks>;
     /// Starts digging the block at this position.
     fn dig(&mut self, _body: Body, _pos: (i32, i32, i32), _from: &Vec3) {}
+    /// Starts digging the block at this position through this face.
+    fn dig_face(&mut self, body: Body, pos: (i32, i32, i32), _face: Face, from: &Vec3) {
+        self.dig(body, pos, from);
+    }
     /// Selects a hotbar slot (0 to 8).
     fn select_slot(&mut self, _body: Body, _slot: u8) {}
     /// Shift-clicks a slot of the inventory window.
@@ -240,6 +244,7 @@ fn perform(host: &mut impl Host, body: Body, at: &Vec3, actions: Vec<Action>) {
         match action {
             Action::Select(slot) => host.select_slot(body, slot),
             Action::Dig(pos) => host.dig(body, pos, at),
+            Action::DigFace(pos, face) => host.dig_face(body, pos, face, at),
             Action::Place { against, face } => host.place(body, against, face),
             Action::PlaceAt {
                 against,
