@@ -77,6 +77,11 @@ debug = false
 [profile.dev.package.tuff]
 opt-level = 0
 
+# The world/server test crate likewise: a one-file edit rebuilds it in ~50 s
+# instead of ~145 s, for ~7% more test run time.
+[profile.dev.package.tuff-tests]
+opt-level = 0
+
 [profile.bench]
 debug = true
 
