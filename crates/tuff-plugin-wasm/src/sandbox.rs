@@ -128,16 +128,13 @@ pub struct Player {
     pub items: Option<Items>,
 }
 
-/// Enchantment ids and levels on a stack.
 pub type Enchants = Vec<(String, i32)>;
-/// Item id, count and enchantments.
-pub type HeldStack = (String, u8, Enchants);
 
 /// A player's inventory as of the start of a call.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Items {
     /// The selected hotbar slot's stack: item id and count.
-    pub held: Option<HeldStack>,
+    pub held: Option<(String, u8, Enchants)>,
     /// Every occupied slot: its index, item id, count and enchantments.
     pub slots: Vec<(u8, String, u8, Enchants)>,
     /// Every occupied slot's whole stack.
