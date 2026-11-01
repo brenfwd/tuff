@@ -789,7 +789,13 @@ impl Placer {
                     return Hands::Failed("nothing to place against".into());
                 };
                 if overlaps_body(me, pos) {
-                    return Hands::Failed("in the way".into());
+                    let Some(stand) = self.stand else {
+                        return Hands::Failed("in the way".into());
+                    };
+                    self.rejected.insert(stand);
+                    self.stand = None;
+                    self.settled = None;
+                    return Hands::Wait;
                 }
                 if let Some(stand) = self.stand
                     && !self.orient.aims((me.x, me.y + EYE, me.z), against, face)
@@ -966,5 +972,27 @@ mod stand_tests {
         assert_eq!(placer.tick(&me, &mut world, &carried), Hands::Wait);
         assert_eq!(placer.stand, None);
         assert!(placer.rejected.contains(&(2, 64, 5)));
+    }
+
+    #[test]
+    fn a_body_reaching_into_the_target_at_its_stand_picks_another_stand() {
+        let mut world = Field {
+            solid: HashSet::new(),
+        };
+        let target = BlockPos { x: 5, y: 64, z: 5 };
+        let mut placer = Placer::new(&target, "minecraft:stone");
+        placer.stand = Some((4, 64, 5));
+        let me = Vec3 {
+            x: 4.75,
+            y: 64.0,
+            z: 5.5,
+        };
+        let carried = vec![(36u8, "minecraft:stone".to_string(), 8u32)];
+        assert_eq!(placer.tick(&me, &mut world, &carried), Hands::Wait);
+        assert_eq!(placer.stand, None);
+        assert!(placer.rejected.contains(&(4, 64, 5)));
+        let next = placer.tick(&me, &mut world, &carried);
+        assert!(matches!(next, Hands::Goal(_)), "{next:?}");
+        assert!(placer.stand.is_some_and(|s| s != (4, 64, 5)));
     }
 }
