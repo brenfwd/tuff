@@ -61,6 +61,15 @@ async fn health(server: &TestServer, name: &str) -> f64 {
         .expect(&text)
 }
 
+async fn game_time(server: &TestServer) -> i64 {
+    let text = say(server, "time query gametime").await;
+    text.chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .expect(&text)
+}
+
 struct Rig {
     server: TestServer,
     _fake: FakeHandle,
@@ -126,7 +135,8 @@ const NETHER_HEIGHT: &str = "tuff.world.dimensions.nether.ceilingDamage.height";
 const OVERWORLD_HEIGHT: &str = "tuff.world.dimensions.overworld.ceilingDamage.height";
 
 async fn stays_unharmed(rig: &Rig) {
-    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    let start = game_time(&rig.server).await;
+    until(|| async { game_time(&rig.server).await >= start + 60 }).await;
     assert_eq!(health(&rig.server, "Roofer").await, 20.0);
 }
 

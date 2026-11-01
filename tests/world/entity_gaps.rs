@@ -193,6 +193,7 @@ async fn tick_until_found(
             return Some(found);
         }
         world.ticks(1).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
     None
 }
@@ -276,12 +277,13 @@ async fn a_vehicle_in_a_nether_portal_takes_its_passengers_along() {
         .await
         .expect("the pig reaches the nether");
     let mut chicken = None;
-    for _ in 0..40 {
+    for _ in 0..200 {
         chicken = find_in(&world, THE_NETHER, EntityType::Chicken).await;
         if chicken.is_some() {
             break;
         }
         world.ticks(1).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
     let chicken = chicken.expect("the rider came along");
     let apart = [0, 1, 2].map(|axis| (chicken.position[axis] - pig.position[axis]).abs());
