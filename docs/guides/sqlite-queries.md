@@ -135,8 +135,11 @@ before querying it. Run the same function to rebuild it at any time, or
 
 ## The panel's SQL console
 
-The web panel has an **SQL** page for worlds on the SQLite backend (a
-region-file world shows "SQLite backend only"). It needs the permission
+The web panel has an **SQL** page. On the SQLite backend it queries the
+world database; on a region-file world each fresh view imports `chunks`,
+`entities` and `pois` from the `.mca` files, and `documents` (level,
+saved data, players, stats, advancements) as NBT, into a temporary SQLite
+file kept for 5 seconds. It needs the permission
 `tuff.web.sql`, which owner-level operators hold by default. It has the
 functions and views above, autocomplete for tables, columns and functions,
 `Ctrl+Enter` (`Cmd+Enter`) to run, paging, a JSON viewer for `nbt_json`
@@ -180,12 +183,16 @@ commits only if the same number of rows change; **Rollback** discards it.
 A write that runs past the time limit is rolled back.
 
 The rows of `chunks`, `entities` and `pois` can be edited while the
-server runs. The preview reports which chunks the statement touches and
-refuses if the server has any of them loaded, since a later save would
-overwrite the edit; unload them first (move players away, remove forced
-chunks). A commit pauses saving, checks again, commits, and resumes, and
-warns if a touched chunk loaded in between. Their structure (`DROP`,
-`ALTER`, indexes) stays off limits.
+server runs, on either backend. The preview reports which chunks the
+statement touches. On commit the server saves and unloads the touched
+chunks that nothing holds, and refuses if any are still held (a player in
+view, a ticket, a forced chunk), since a later save would overwrite the
+edit; move players away or remove forced chunks first. A commit pauses
+saving, checks again, commits, and resumes, and warns if a touched chunk
+loaded in between. On a region-file world each write imports the world
+fresh and writes the touched rows back to the `.mca` files before it
+commits, all or nothing. Their structure (`DROP`, `ALTER`, indexes) stays
+off limits.
 
 The server keeps players, settings and lists in memory and writes them
 back later, so the console still refuses writes to `documents`, `meta`,
