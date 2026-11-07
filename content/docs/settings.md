@@ -124,7 +124,7 @@ command, its tab completion and the panel:
 | `prevent-proxy-connections` | live | next online-mode login |
 | `pvp` | live | sets the pvp game rule; players are spared player damage when off |
 | `query.port` | restart | the query socket is bound when the server starts |
-| `rate-limit` | live | online players and later joins |
+| `rate-limit` | live | online players and later joins; 0 turns off the total cap and the per-type budgets (recipes, suggestions, book edits, signs); independent of `tuff.anticheat.enforce` |
 | `rcon.password` | permanent | remote console is not planned |
 | `rcon.port` | permanent | remote console is not planned |
 | `region-file-compression` | permanent | region files are always written with deflate |
@@ -164,7 +164,58 @@ tuff keys sit next to a vanilla entry and cover something different:
 | `tuff.resourcePacks.enabled`, `tuff.customContent.prompt` | `resource-pack*` | Plugin-registered and generated packs, not the single vanilla pack |
 | `tuff.anticheat.*` | `player_movement_check`, `elytra_movement_check` | The rules switch vanilla's checks; these tune tuff's own |
 
+`tuff.anticheat.exemptOperators` (default `true`) skips the anti-cheat for
+operators; with it `false` they are checked like anyone, and
+`tuff.anticheat.kickOperators` (default `false`) decides whether that can
+kick them: off, their violations are counted, logged, alerted and set back
+but a kick is only logged as "would kick".
+
 Fill and clone limits come from the `max_block_modifications` game rule.
+
+## Security, backups and proxy
+
+Fuller explanations live in the Anti-cheat (`docs/anti-cheat.md`) and
+Running (`docs/running.md`) docs.
+
+Anti-xray (all live; changes apply to chunks sent afterwards):
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.antiXray.enabled` | `false` | Send chunks with hidden blocks replaced; the true blocks follow once exposed or mined towards |
+| `tuff.antiXray.mode` | `hide` | `hide` sends a neighbouring stone-like block; `fill` sends every enclosed hidden or replacement block as a random hidden block |
+| `tuff.antiXray.maxY` | `64` | Highest y at which blocks are hidden |
+| `tuff.antiXray.updateRadius` | `2` | Blocks (1 to 4, along the axes) around a changed or mined block whose true blocks are resent |
+| `tuff.antiXray.<dimension>.hiddenBlocks` | ores, chests and a few others in `overworld`; ancient debris, nether gold and quartz ore in `the_nether`; empty in `the_end` | Blocks to hide, comma or space separated; empty turns anti-xray off in that dimension |
+| `tuff.antiXray.<dimension>.replacementBlocks` | stone, deepslate and oak planks in `overworld`; netherrack, basalt, blackstone, gravel, soul sand and soul soil in `the_nether`; end stone in `the_end` | Blocks that stand in for hidden ones (the first is the fallback); `fill` also replaces them |
+
+`<dimension>` is `overworld`, `the_nether` or `the_end`.
+
+Login and operators:
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.offlineOps` | `false` | Honour `ops.json` for unverified names (offline mode without proxy forwarding); anyone can claim an operator's name |
+| `tuff.allowPublicOffline` | `false` | Start in offline mode on a non-loopback address without proxy forwarding; read at start-up |
+| `tuff.refuseDuplicateLogin` | `false` | Refuse a login whose player is already online instead of kicking the online player |
+
+Backups:
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.backup.directory` | empty | Folder backups go to (empty: `backups/` in the instance directory) |
+| `tuff.backup.keep` | `10` | Backups kept after a new one succeeds, oldest deleted first (`0` keeps all) |
+| `tuff.backup.maxAgeDays` | `0` | Delete backups older than this many days after a new one succeeds (`0` never) |
+| `tuff.backup.interval` | `0` | Minutes between automatic backups (`0` turns them off) |
+| `tuff.backup.staged` | `true` | Copy a folder world aside while saving is held and compress after it resumes (shortest pause; needs room for one uncompressed copy) |
+| `tuff.backup.compression` | `6` | Deflate level for folder world backups, `0` (store) to `9` |
+
+Velocity proxy (all read at start-up):
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `tuff.proxy.velocity.enabled` | `false` | Accept players only through a Velocity proxy with modern forwarding, taking identity and address from it |
+| `tuff.proxy.velocity.secret` | empty | The forwarding secret shared with the proxy; sensitive, so prefer `secretFile` |
+| `tuff.proxy.velocity.secretFile` | empty | File holding the secret (like Velocity's `forwarding.secret`), used when `secret` is empty |
 
 ## Dimensions
 
@@ -172,6 +223,23 @@ Fill and clone limits come from the `max_block_modifications` game rule.
 `.end.enabled` (default `true`) switch a vanilla dimension off from the
 next start: it is not loaded, ticked or sent to clients, portals into it
 do nothing, and its saved data stays for when it is switched back on.
+
+`tuff.world.dimensions.<overworld|nether|end>.ceilingDamage.height` (default
+`0`, off) hurts survival and adventure players at or above that y with void
+damage, for example `128` to stop nether roof travel; creative and spectator
+players are exempt. `.ceilingDamage.amount` (default `4`) is the health
+points taken per hurt tick. Both apply live.
+
+`tuff.world.scheduledTicks.maxBlockPerTick` and `.maxFluidPerTick` (default
+`65536` each, at least `1`) cap the scheduled block and fluid ticks one
+region runs per game tick; the excess keeps its order and runs on later
+ticks. Lower them to bound lag machines. Both apply live.
+
+`tuff.world.freezing.enabled` (default `true`) lets precipitation freeze
+water into ice and pile snow layers; `false` stops both (cauldrons still
+fill and rain still puts fires out). `tuff.world.fireTickDelay.min` and
+`.max` (default `30` and `39`) set the range in ticks, inclusive, until a
+fire ticks again; a `max` below `min` acts as `min`. All apply live.
 
 `tuff.world.spawnDimension` names the dimension new players spawn in and
 respawns fall back to (plugin dimensions allowed). When it is empty, the
@@ -193,6 +261,13 @@ chunks players have loaded. The categories and their vanilla defaults are
 `0` stops natural spawning of that category. Changes apply from the next
 tick.
 
+`tuff.mobs.spawnCap.perPlayer` (default `false`) caps spawns per player
+instead of by the chunks all players have loaded. A category then spawns
+near a player only while fewer than its cap of that category's mobs are
+within 128 blocks of them; mobs near two players count for both, and mobs
+far from a player do not count against them. This stops one player's AFK
+farm from taking spawns from other players.
+
 ## Crowd mode
 
 `tuff.mobs.crowd.enabled` (default `false`) is an opt-in for mob farms and
@@ -204,6 +279,20 @@ selection every 4 ticks (every 8 when no player is within 32 blocks)
 instead of every 2. Tempting, breeding, wandering and targeting still
 work, with a few ticks more latency. The server logs once when a region
 enters or leaves crowd mode. Off, behaviour is vanilla.
+
+`tuff.mobs.collisionCap` (default `0`, unlimited like vanilla) limits how
+many overlapping entities one mob pushes against per tick, keeping the
+nearest. It is never applied below `max_entity_cramming`, so cramming
+still triggers whatever the setting.
+
+## Map item frames
+
+`tuff.maps.frameReportInterval` (default `10`, range 1 to 1200) is how
+many ticks pass between a framed map refreshing its cursors for nearby
+players. Raise it on servers with walls of maps to cut the per-viewer
+update cost; cursors then lag by up to that many ticks. A viewer stays
+subscribed for twice the interval (at least 20 ticks), so a wall does not
+flicker between refreshes.
 
 ## Item conservation and save safety
 
@@ -230,6 +319,25 @@ that way.
 |-----|---------|--------|
 | `tuff.items.conservationChecks` | `true` | Check item moves in release builds and refuse, audit and quarantine on a violation |
 | `tuff.items.conservationKick` | `true` | Disconnect a player involved in a refused item operation |
+| `tuff.blocks.tntDuplication` | `true` | Keep vanilla's TNT duplication: a TNT block a piston lifts can still light where it stood, once, making one extra primed TNT |
+| `tuff.blocks.permanentBlockBreaking` | `true` | Keep vanilla's permanent block breaking: a piston retraction that outlived its piston (a headless piston, or one replaced in the same tick) still removes the unbreakable block (bedrock, End portal frame, command block, ...) in front of it. Off, such a retraction leaves unbreakable blocks standing |
+| `tuff.blocks.carpetRailDuplication` | `true` | Keep vanilla's carpet and rail duplication: a carpet or rail a piston lifts can still pop where it stood, once, making one extra drop |
+| `tuff.blocks.gravityBlockPortalDuplication` | `true` | Keep vanilla's gravity block duplication through End portals (takes effect with falling blocks owning their block) |
+
+Blocks are move-only like item stacks: a block exists once, in the world,
+inside a moving piston, inside an entity, or as its drops. The three
+`tuff.blocks.*Duplication` switches re-enable vanilla's own glitches
+through one named, counted door each; with a switch off, the glitch cannot
+happen. Tripwire hook duplication does not exist in 26.3 and has no switch.
+
+A block a piston is moving still stands in its old place while the
+destinations are written (vanilla clears the old places afterwards), so
+updates reach it. With `tuff.blocks.tntDuplication` or
+`tuff.blocks.carpetRailDuplication` on, such a block reacts to those
+updates as in vanilla, and only the TNT, carpet and rail outputs come
+through the glitch door. With both switches off the block is inert until
+it is gone: a contraption that relies on a moving observer, dust or note
+block reacting in its old place behaves differently than in vanilla.
 
 A world save lands whole or not at all. Before a save's first write to a
 chunk or player file, the previous contents go to a journal (a

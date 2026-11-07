@@ -1,6 +1,6 @@
 {
   "ref": "main",
-  "commit": "4c810777e6e0cc6ba0aba14689b4686d085260a2",
+  "commit": "41e75f951375cee0622aca7b12a1d98a7fe76ae6",
   "pages": [
     {
       "slug": "introduction",
@@ -79,6 +79,12 @@
       "title": "License",
       "group": "Reference",
       "description": "AGPL server, MIT plugin SDK, and what that means in practice."
+    },
+    {
+      "slug": "guides/bots",
+      "title": "Bots",
+      "group": "Guides",
+      "description": "The bots plugin (examples/rust-bots, plugin id bots) adds server-side players that walk, mine, farm, build and fight on their own. Operators drive them..."
     },
     {
       "slug": "guides/chase-side-by-side",

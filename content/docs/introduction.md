@@ -11,11 +11,11 @@ plugins are sandboxed WebAssembly modules. See `CONTRIBUTING.md` for
 development guidelines.
 
 
-## Release notes: v0.1.0-alpha.1
+## Support
 
-The first public alpha is a drop-in survival server for 26.3 with
-sandboxed WASM plugins. The tag is not cut yet; this is the support
-statement it will ship with:
+The 0.1 alpha series is a drop-in survival server for 26.3 with
+sandboxed WASM plugins. Release notes are on the
+[blog](https://tuff.bforward.me/blog).
 
 - tuff publishes no prebuilt binaries. You build the server on your own
   machine (see "Installing"), because the build downloads Mojang's server
