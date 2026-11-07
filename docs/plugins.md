@@ -233,7 +233,13 @@ backend that emits a core module can target it.
   `stash-mint`, `stash-split`, `stash-merge`, `stash-burn`) and moves them
   with `give-stash` and `take-into-stash`, so it can make, move and use up
   items but never copy one. Up to 1024 stashes at once; a stash still
-  holding items when the plugin unloads or faults is used up.
+  holding items when the plugin unloads or faults is used up. Stacks a
+  plugin reads carry their enchantments (id and level, up to 16).
+- Fake players: spawn, drive, inspect and remove server-side players the
+  plugin owns (`fake-player-spawn`, `fake-player-input`,
+  `fake-player-act`, `fake-player-state`, `fake-player-inventory`), up
+  to 64 per plugin with no grant needed, removed when the plugin unloads,
+  and hear a `fake-hurt` event, with the attacker, when one of them is hurt.
 - Messages to another loaded plugin, delivered after the call to its
   `tuff_message` with the sender's id, followed at most 8 deep when
   handlers answer each other.
